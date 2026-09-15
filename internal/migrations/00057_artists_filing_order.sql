@@ -1,0 +1,47 @@
+-- +goose Up
+-- The artists list is the grid of tiles behind the Artists destination. It is
+-- paged on the server, 48 at a time, and it sorts by the filing name — the
+-- "Robinson, Porter" that MusicBrainz supplies beside "Porter Robinson".
+--
+-- That sort changed. It used to lead with `(followed_at IS NULL)`, which put
+-- every followed artist before every artist the library merely holds, so the
+-- grid ran A to Z and then started at A again under a control that said
+-- "Name". Being followed is a tiebreaker now. The name is also folded before
+-- it is compared, because this database compares text by byte and every
+-- capital letter has a lower byte than every small one: unfolded, AZALEA came
+-- before American Football and nthng sat below Yung Lean at the end of the
+-- list.
+--
+-- artists_list_order_idx (00020) indexes the sort that was, exactly:
+-- ((followed_at IS NULL), sort_name, id). No prefix of it answers the sort
+-- that is, so without this index Postgres reads every artist, sorts the lot,
+-- and returns 48 of them — the same shape 00020 was written to stop.
+--
+-- The order here is the order the query states, so a page is a walk that stops
+-- at the page boundary. Measured on 20k artists, ordering alone:
+--
+--   first page   10.8ms -> 0.2ms
+--   page 200     38.5ms -> 7.5ms
+--
+-- Without it both plans are a sequential scan of every artist and a top-N sort;
+-- with it, an index scan that stops.
+--
+-- Not to be confused with artists_name_order_idx (00022), which is on the
+-- display name — "Porter Robinson" — and serves two other readers: the release
+-- browser sorted by artist, which walks artists in display-name order and takes
+-- each one's releases as they come, and ArtistMusicBrainzIDsByName, which looks
+-- a name up exactly. This one is on the filing name, folded. Two orders,
+-- two names, two indexes.
+--
+-- artists_list_order_idx is deliberately left in place. Its ORDER BY is gone,
+-- but the list also narrows by scope — `followed_at IS NOT NULL` for the
+-- artists you follow, `IS NULL` for the ones held for music you own — and that
+-- is its leading column. Whether the planner still prefers it for a scoped
+-- page, or filters through the new index instead, is a question for a
+-- catalogue with 20k artists in it and not for a guess: 00023 dropped two
+-- indexes from this table and measured six plans before it did.
+CREATE INDEX artists_filing_order_idx
+    ON artists (lower(sort_name), (followed_at IS NULL), id);
+
+-- +goose Down
+DROP INDEX IF EXISTS artists_filing_order_idx;

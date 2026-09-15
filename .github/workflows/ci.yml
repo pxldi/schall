@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref, and a new push cancels the one it supersedes: on main only
+# the head's image is worth building, and on a branch only the latest push is
+# worth testing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Integration tests skip themselves without SCHALL_TEST_DATABASE_URL, so
+    # without a database here they were compiled and never run. This database
+    # exists for the length of the job and is nothing but a scratch one, which
+    # is what the suite requires: it truncates every table it finds.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: schall_test
+          POSTGRES_USER: schall
+          POSTGRES_PASSWORD: schall
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U schall -d schall_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      # First, and before the toolchain it does not need: a knob added to the Go
+      # code and never written down is a deploy that runs with a feature quietly
+      # off, and this is the job that can still say so cheaply.
+      - run: ./scripts/check-env-example.sh
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+      - run: gofmt -w cmd internal
+      - run: git diff --exit-code
+      - run: go vet ./...
+      - run: make migrate
+        env:
+          SCHALL_DATABASE_URL: postgres://schall:schall@127.0.0.1:5432/schall_test?sslmode=disable
+      - run: go test ./...
+        env:
+          SCHALL_TEST_DATABASE_URL: postgres://schall:schall@127.0.0.1:5432/schall_test?sslmode=disable
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test
+      - run: npm run build
+
+  # The phone app: a typecheck against the web's API types and the token test
+  # that fails when app/src/design/tokens.ts is behind web/src/styles.css.
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+
+  # The browser tests, against the real API and a database seeded from
+  # internal/seed. Its own job rather than a step in `frontend`, because it needs
+  # both toolchains and a database, and because a UI failure that reads as a
+  # frontend failure sends somebody to the wrong half of the repository.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: schall_e2e
+          POSTGRES_USER: schall
+          POSTGRES_PASSWORD: schall
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U schall -d schall_e2e"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      # Only the browser this runs in, and the system libraries it needs. The
+      # other two engines would be three times the download for a suite that
+      # tests the application rather than the engines.
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      # The API server and the seeder are started by the Playwright config, which
+      # is also what applies the fixture: seeding has to happen before Schall
+      # reads the database at startup.
+      - run: npm run test:e2e
+        working-directory: web
+        env:
+          SCHALL_E2E_DATABASE_URL: postgres://schall:schall@127.0.0.1:5433/schall_e2e?sslmode=disable
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/test-results/
+          retention-days: 7
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: schall:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Publishes only from a green main. The tag carries a commit timestamp so a
+  # deployment tool can order releases numerically and always take the newest
+  # build.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, app, browser, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: |
+          echo "value=main-$(git log -1 --format=%ct)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$(git log -1 --date=format:%Y-%m-%d --format=%cd) $(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            SCHALL_VERSION=${{ steps.tag.outputs.version }}
+          # Two tags for one build. `main` is what a cluster follows during a
+          # fast development cycle, so a merge deploys on a pod restart without
+          # a commit to the manifests. The timestamped tag is immutable and is
+          # what makes going back possible: a mutable tag can say what is
+          # running now, never what was running an hour ago.
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.value }}
+            ghcr.io/${{ github.repository }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

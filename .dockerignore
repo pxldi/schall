@@ -1,0 +1,15 @@
+.git
+.github
+.env
+bin
+coverage.out
+music
+web/node_modules
+web/.svelte-kit
+web/build
+web/coverage
+web/e2e
+web/playwright.config.ts
+web/test-results
+web/playwright-report
+web/blob-report

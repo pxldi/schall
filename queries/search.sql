@@ -1,0 +1,276 @@
+-- name: SearchArtists :many
+-- One kind of answer to the one question asked of everything Schall holds; see
+-- Search in internal/db/search.go for why these are five queries and not one.
+--
+-- Artists are searched over the name and the sort name together, the pair the
+-- artists page searches (ListArtists), so "beatles" finds an artist filed as
+-- "Beatles, The". Followed or held is the distinction that page is scoped by,
+-- so a result says which it is rather than making the palette ask again.
+--
+-- Two numbers describe what the library holds of them: how many files, and how
+-- many of their releases at least one of those files sits on. Neither is the
+-- artists page's completeness fraction and neither approximates it — that
+-- fraction counts releases the library holds *entirely*, over a denominator the
+-- monitor level and every not-wanted decision narrow, and is deliberately not
+-- carried here (see Search). These count files and releases the library has
+-- something of, which is a different question with a different word for it.
+--
+-- They are computed after the limit rather than beside the search. The scan
+-- above finds every artist whose name answers; only five of them are shown, and
+-- walking a discography for the rest to throw the answer away is the difference
+-- between five lateral joins and one per artist in the collection.
+WITH matched AS (
+    SELECT
+        artists.id,
+        artists.name,
+        artists.sort_name,
+        (artists.followed_at IS NOT NULL)::boolean AS followed,
+        -- How many artists answered, not how many are being shown. The window
+        -- runs over everything the WHERE kept, before the LIMIT takes five of
+        -- them, which is the whole reason it is here: "All 24 in Artists"
+        -- cannot be written off a list that was already cut down to five.
+        (count(*) OVER ())::bigint AS total_count,
+        -- Kept as a column so the join below cannot lose the order the limit
+        -- was taken in.
+        (CASE WHEN lower(artists.name) = lower(sqlc.arg('query')::text)
+              THEN 0 ELSE 1 END)::int AS named_exactly
+    FROM artists
+    -- A search box is not a pattern language, so % and _ have to be escaped to
+    -- match themselves, and so does the escape character or it would eat the
+    -- escapes put in beside it. One regexp pass over all three is what keeps
+    -- that last part from depending on the order. The ordering below compares
+    -- against the query as typed, which is not a pattern at all.
+    WHERE concat_ws(' ', artists.name, artists.sort_name)
+          ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
+          ESCAPE '\'
+    ORDER BY
+        CASE WHEN lower(artists.name) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+        artists.sort_name,
+        artists.id
+    LIMIT sqlc.arg('limit')
+)
+SELECT
+    matched.id,
+    matched.name,
+    matched.sort_name,
+    matched.followed,
+    matched.total_count,
+    holding.file_count,
+    holding.release_count
+FROM matched
+JOIN LATERAL (
+    -- Still has, always: a file the last scan could not find is counted by
+    -- nothing else in Schall and is not counted here either, for the reason the
+    -- releases browser gives — a figure that includes it describes music that
+    -- cannot be played.
+    SELECT
+        count(*)::bigint AS file_count,
+        count(DISTINCT albums.id)::bigint AS release_count
+    FROM albums
+    JOIN tracks ON tracks.album_id = albums.id
+    JOIN track_mappings ON track_mappings.track_id = tracks.id
+    JOIN library_files ON library_files.id = track_mappings.library_file_id
+    WHERE albums.artist_id = matched.id
+      AND library_files.missing_at IS NULL
+) AS holding ON true
+ORDER BY matched.named_exactly, matched.sort_name, matched.id;
+
+-- name: SearchReleases :many
+-- Releases are searched over the title and the artist together, the pair the
+-- releases browser searches (albumFilter), because a release is remembered as
+-- "Portishead Dummy" at least as often as by either half alone. The date and
+-- the two counts are what a row on that page reads as underneath the title, and
+-- all three are columns, so carrying them costs nothing. So is what kind of
+-- release it is, which is the middle of the line that row reads as.
+SELECT
+    albums.id,
+    albums.title,
+    albums.artist_id,
+    artists.name AS artist_name,
+    albums.album_type,
+    albums.release_date,
+    albums.track_count,
+    albums.owned_track_count,
+    -- Counted over everything that answered rather than over the five that came
+    -- back; see SearchArtists above.
+    (count(*) OVER ())::bigint AS total_count
+FROM albums
+JOIN artists ON artists.id = albums.artist_id
+-- Escaped the same way as SearchArtists above.
+WHERE concat_ws(' ', albums.title, artists.name)
+      ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
+      ESCAPE '\'
+ORDER BY
+    CASE WHEN lower(albums.title) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+    artists.name,
+    albums.release_date,
+    albums.id
+LIMIT sqlc.arg('limit');
+
+-- name: SearchCatalogueTracks :many
+-- A catalogue track has no page of its own; it is a line on the release that
+-- holds it, so a result carries that release's identifier and the artist and
+-- title that name the line. The searched columns and the ordering are
+-- matching's SearchTracks, which is the same question asked for a different
+-- reason — that one offers candidates for a manual match, this one only says
+-- where a track lives.
+--
+-- Owned is the one thing a track says about itself, and it is the rule the rest
+-- of Schall reads by rather than a cheaper version of it: a mapping onto a
+-- present file, a present file whose proven identity names the recording, or a
+-- present file mapped onto another release's track that carries the same
+-- recording. All three, because the acquisition loop settles a want against any
+-- of them (OwnedFileForRecording), and a palette that called a track missing
+-- while the library plays it would be answering a question nobody asked.
+--
+-- Nothing here is evidence. This says the library has the recording somewhere;
+-- it never says which file is this track.
+WITH matched AS (
+    SELECT
+        tracks.id,
+        tracks.title,
+        tracks.disc_number,
+        tracks.track_number,
+        tracks.duration_ms,
+        tracks.musicbrainz_recording_id,
+        albums.id AS album_id,
+        albums.title AS album_title,
+        artists.id AS artist_id,
+        artists.name AS artist_name,
+        -- Counted over everything that answered; see SearchArtists above.
+        (count(*) OVER ())::bigint AS total_count,
+        (CASE WHEN lower(tracks.title) = lower(sqlc.arg('query')::text)
+              THEN 0 ELSE 1 END)::int AS named_exactly
+    FROM tracks
+    JOIN albums ON albums.id = tracks.album_id
+    JOIN artists ON artists.id = albums.artist_id
+    -- Escaped the same way as SearchArtists above.
+    WHERE concat_ws(' ', artists.name, albums.title, tracks.title)
+          ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
+          ESCAPE '\'
+    ORDER BY
+        CASE WHEN lower(tracks.title) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+        artists.name,
+        albums.title,
+        tracks.disc_number,
+        tracks.track_number NULLS LAST,
+        tracks.title,
+        tracks.id
+    LIMIT sqlc.arg('limit')
+)
+SELECT
+    matched.id,
+    matched.title,
+    matched.disc_number,
+    matched.track_number,
+    matched.duration_ms,
+    matched.album_id,
+    matched.album_title,
+    matched.artist_id,
+    matched.artist_name,
+    matched.total_count,
+    holding.owned
+FROM matched
+JOIN LATERAL (
+    -- A track with no recording answers false to both halves that compare one:
+    -- an absent identifier is silence, and it matches nothing here rather than
+    -- matching every other track that also has none.
+    SELECT (
+        EXISTS (
+            SELECT 1
+            FROM track_mappings
+            JOIN library_files ON library_files.id = track_mappings.library_file_id
+            WHERE track_mappings.track_id = matched.id
+              AND library_files.missing_at IS NULL
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM library_file_identities
+            JOIN library_files
+                ON library_files.id = library_file_identities.library_file_id
+            WHERE library_file_identities.musicbrainz_recording_id
+                    = matched.musicbrainz_recording_id
+              AND library_files.missing_at IS NULL
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM tracks AS carrying
+            JOIN track_mappings ON track_mappings.track_id = carrying.id
+            JOIN library_files ON library_files.id = track_mappings.library_file_id
+            WHERE carrying.musicbrainz_recording_id = matched.musicbrainz_recording_id
+              AND library_files.missing_at IS NULL
+        )
+    )::boolean AS owned
+) AS holding ON true
+ORDER BY
+    matched.named_exactly,
+    matched.artist_name,
+    matched.album_title,
+    matched.disc_number,
+    matched.track_number NULLS LAST,
+    matched.title,
+    matched.id;
+
+-- name: SearchLibraryFiles :many
+-- Files are searched over the path and the three tags, which is what the
+-- library list searches (ListLibraryFiles), because a file is looked for by
+-- where it sits as often as by what it claims to be. Match status comes back
+-- because it is the one thing that row shows about a file besides its tags, and
+-- whether the file is still there because a palette offering a file the last
+-- scan could not find should say so rather than lead somewhere empty. Size is
+-- the figure a file is counted in, and it is a column the scanner already
+-- wrote.
+SELECT
+    library_files.id,
+    library_files.path,
+    library_files.artist_tag,
+    library_files.album_tag,
+    library_files.title_tag,
+    library_files.size_bytes,
+    library_files.match_status,
+    (library_files.missing_at IS NOT NULL)::boolean AS missing,
+    -- Counted over everything that answered; see SearchArtists above.
+    (count(*) OVER ())::bigint AS total_count
+FROM library_files
+-- Escaped the same way as SearchArtists above.
+WHERE concat_ws(' ', library_files.path, library_files.artist_tag,
+                library_files.album_tag, library_files.title_tag)
+      ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
+      ESCAPE '\'
+-- A file the library still holds before one it has lost, then the order the
+-- library list is read in.
+ORDER BY
+    library_files.missing_at NULLS FIRST,
+    coalesce(library_files.artist_tag, ''),
+    coalesce(library_files.album_tag, ''),
+    coalesce(library_files.disc_number, 1),
+    library_files.track_number NULLS LAST,
+    library_files.path
+LIMIT sqlc.arg('limit');
+
+-- name: SearchPlaylists :many
+-- A playlist is remembered by its name and by whose it is, so both are searched
+-- even though the playlists page has no search box of its own yet — the front
+-- door does not wait for the room to grow one. The description is left out: it
+-- is prose nobody recalls a list by, and matching on it would answer a name
+-- with a list that only mentions it. Whose it is and when it last came in are
+-- the line that page reads under the name.
+SELECT
+    playlists.id,
+    playlists.name,
+    playlists.source,
+    playlists.owner_name,
+    playlists.track_count,
+    playlists.imported_at,
+    -- Counted over everything that answered; see SearchArtists above.
+    (count(*) OVER ())::bigint AS total_count
+FROM playlists
+-- Escaped the same way as SearchArtists above.
+WHERE concat_ws(' ', playlists.name, playlists.owner_name)
+      ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
+      ESCAPE '\'
+ORDER BY
+    CASE WHEN lower(playlists.name) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+    playlists.name,
+    playlists.id
+LIMIT sqlc.arg('limit');

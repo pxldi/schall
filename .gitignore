@@ -1,0 +1,72 @@
+.env
+.DS_Store
+
+# Go
+/bin/
+/coverage.out
+
+# A skill installer writes here as well as into .agents/. A tracked agent/
+# breaks `go vet ./...` on the example code inside it.
+/agent/
+/.agents/
+
+# Frontend. The two under web/src/ are not a second install: running vitest or
+# svelte-kit sync with the working directory inside src leaves a cache and a
+# generated tsconfig there, and both were staged once before this said so.
+/web/node_modules/
+/web/src/node_modules/
+/web/.svelte-kit/
+/web/src/.svelte-kit/
+/web/build/
+/web/coverage/
+
+# Browser tests: traces, screenshots and reports from a run. All of it is
+# evidence about one failure on one machine.
+/web/test-results/
+/web/playwright-report/
+/web/blob-report/
+
+# Local development music folder
+/music/*
+!/music/.gitkeep
+
+# Local development upload staging. Tracked as a folder so a fresh clone has one
+# owned by whoever cloned it; a bind mount the daemon has to create is created
+# owned by root, which the non-root container then cannot write to.
+/uploads/*
+!/uploads/.gitkeep
+
+# Editors
+.idea/
+.vscode/
+
+# Claude Code personal overrides
+.claude/settings.local.json
+
+# Things a tool leaves behind. Every one of these was committed at least once by
+# a `git add -A` that swept the working tree, and one of them — a browser
+# session's console logs and page snapshots — reached 200 files and 5.5 MB
+# before anybody noticed.
+/.playwright-mcp/
+/node_modules/
+/.svelte-kit/
+.claude/observations/
+
+# Design-review scratch: screenshots of a real library, and the notes on them.
+/sshots/
+/.impeccable/
+/REPORT.md
+/VISUAL_DESIGN.md
+
+# Working notes and personal agent configuration.
+/PROGRESS.md
+/CLAUDE.local.md
+/.claude/*
+!/.claude/rules/
+
+# Design-review scratch: screenshots of a real library, and the notes on them.
+/sshots/
+/.impeccable/
+/REPORT.md
+/VISUAL_DESIGN.md
+/app/.claude/

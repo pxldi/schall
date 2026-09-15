@@ -1,0 +1,92 @@
+services:
+  schall:
+    build: .
+    # Match the host owner of bind-mounted music so validated imports can be
+    # written without running the application as root.
+    user: "${SCHALL_UID:-1000}:${SCHALL_GID:-1000}"
+    environment:
+      SCHALL_HTTP_ADDRESS: ":8080"
+      SCHALL_DATABASE_URL: "postgres://schall:schall@postgres:5432/schall?sslmode=disable"
+      SCHALL_LOG_LEVEL: "info"
+      SCHALL_LIBRARY_ALLOWED_ROOTS: "/music"
+      SCHALL_DOWNLOAD_INBOX_PATH: "/downloads"
+      SCHALL_IMPORT_LIBRARY_PATH: "/music"
+      # Deliberately not under /music: a scan that caught a half-written upload
+      # would index a truncated file as music the library holds, and startup
+      # refuses to begin if this path is anywhere a scan would walk.
+      SCHALL_UPLOAD_STAGING_PATH: "/uploads"
+    # Loopback by default, because the API has no authentication: everything a
+    # browser can do to this library — settings, uploads, jobs, deletion — is
+    # available to anyone who can reach the port. Serving a LAN is a decision
+    # somebody makes by setting SCHALL_BIND_ADDRESS=0.0.0.0, ideally behind
+    # something that asks who is calling. The container still listens on :8080
+    # inside its own network namespace; only the host publish narrows.
+    ports:
+      - "${SCHALL_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    volumes:
+      - "${SCHALL_MUSIC_PATH:-./music}:/music"
+      # Read-only by default, so validation can never mutate a source file. Set
+      # SCHALL_DOWNLOADS_MODE=rw only to let the import retention policy remove
+      # the provider's copy of a release Schall has already imported.
+      - "${SCHALL_DOWNLOADS_PATH:-./downloads}:/downloads:${SCHALL_DOWNLOADS_MODE:-ro}"
+      # Where a browser upload waits to be validated. Writable, and bound rather
+      # than a named volume so it belongs to the same host user as the music
+      # folder. Scratch space: what is in it is either on its way into the
+      # library or a refusal somebody has not discarded yet.
+      - "${SCHALL_UPLOADS_PATH:-./uploads}:/uploads"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: schall
+      POSTGRES_USER: schall
+      POSTGRES_PASSWORD: schall
+    volumes:
+      - schall-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schall -d schall"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # The database the browser tests drive, and the one to point Schall at to
+  # click through a populated library without owning any music. It is a second
+  # PostgreSQL rather than a second schema because seeding empties every table
+  # it finds, and "every table it finds" must never be able to mean the
+  # development one.
+  #
+  # Under a profile, so `docker compose up` still starts exactly what it did.
+  # Naming it starts it: `docker compose up -d postgres-test`, which is what
+  # `make seed` does.
+  postgres-test:
+    profiles: ["test"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: schall_e2e
+      POSTGRES_USER: schall
+      POSTGRES_PASSWORD: schall
+    # Its own volume, and a persistent one. The fixture is rewritten by every
+    # seed rather than accumulated, so what persisting buys is not the data but
+    # the database: a stack brought up again is the same collection, already
+    # migrated, without a rebuild.
+    volumes:
+      - schall-e2e-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schall -d schall_e2e"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  schall-data:
+  schall-e2e-data:

@@ -1,0 +1,36 @@
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  // svelte-kit generates an include of src, test, tests and vite.config, and
+  // nothing else — so the browser suite, where the fixture's numbers live, was
+  // never typechecked at all. Naming an include here replaces the generated one
+  // rather than adding to it, so it is restated in full, relative to this file.
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/env.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "vite.config.js",
+    "vite.config.ts",
+    "src/**/*.js",
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "test/**/*.js",
+    "test/**/*.ts",
+    "test/**/*.svelte",
+    "tests/**/*.js",
+    "tests/**/*.ts",
+    "tests/**/*.svelte",
+    "e2e/**/*.ts"
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "moduleResolution": "bundler"
+  }
+}
