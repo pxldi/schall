@@ -343,13 +343,19 @@ func TestWarmingEncodesCopiesNobodyHasAskedForYet(t *testing.T) {
 	}
 
 	transcoder.Warm(sources)
+	transcoder.settle()
 
-	deadline := time.Now().Add(10 * time.Second)
-	for len(cachedNames(t, cacheDir)) < len(sources) && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if left := cachedNames(t, cacheDir); len(left) != len(sources) {
+	// Counting entries would count a .partial a worker is still writing, and
+	// then the test would return while that worker renames it into a directory
+	// being removed.
+	left := cachedNames(t, cacheDir)
+	if len(left) != len(sources) {
 		t.Fatalf("cache = %v, want every warmed copy encoded", left)
+	}
+	for _, name := range left {
+		if filepath.Ext(name) != ".mp3" {
+			t.Fatalf("cache = %v, want only finished copies", left)
+		}
 	}
 }
 
@@ -358,7 +364,9 @@ func TestWarmingEncodesCopiesNobodyHasAskedForYet(t *testing.T) {
 func TestWarmingNothingDoesNothing(t *testing.T) {
 	cacheDir := t.TempDir()
 
-	New(fakeTranscoder(t, "", 0, ""), cacheDir, zerolog.Nop()).Warm(nil)
+	transcoder := New(fakeTranscoder(t, "", 0, ""), cacheDir, zerolog.Nop())
+	transcoder.Warm(nil)
+	transcoder.settle()
 
 	if left := cachedNames(t, cacheDir); len(left) != 0 {
 		t.Fatalf("cache = %v, want nothing encoded", left)
@@ -376,8 +384,8 @@ func TestACopyThatCouldNotBeWarmedIsNotReported(t *testing.T) {
 	}
 
 	transcoder.Warm([]string{source})
+	transcoder.settle()
 
-	time.Sleep(100 * time.Millisecond)
 	if left := cachedNames(t, cacheDir); len(left) != 0 {
 		t.Fatalf("cache = %v, want the failed warm to leave nothing", left)
 	}
