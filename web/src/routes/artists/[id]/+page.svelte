@@ -674,15 +674,16 @@
             {#each visible as release (release.id)}
               {@const info = describe(release)}
               <a href={`/releases/${release.id}`} class="flex w-[7.5rem] min-w-0 flex-col gap-1.5">
-                <!-- Only what Schall already holds: a page of tiles asks this
-                     installation and never sets an archive working. A release
-                     nobody has pictured yet keeps the hatched square it always
-                     had, and the sweep fills it in its own time. -->
+                <!-- Only what Schall already holds, and only where the row
+                     says it holds one: a page of tiles asks this installation
+                     for the pictures it has and never sets an archive working.
+                     A release nobody has pictured yet keeps the hatched square
+                     it always had, and the sweep fills it in its own time. -->
                 <div
                   class="aspect-square w-[7.5rem] overflow-hidden rounded-row border border-line-thin bg-[repeating-linear-gradient(135deg,rgba(255,255,255,.05)_0_1px,transparent_1px_8px)]"
                 >
                   <Cover
-                    src={`/api/v1/albums/${release.id}/cover?cached=1`}
+                    src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
                     fallback="♪"
                     class="size-full object-cover"
                   />

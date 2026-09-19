@@ -546,9 +546,10 @@
         {initialsOf(artist.name)}
       </span>
       <!-- Over the initials rather than instead of them: an artist nobody has a
-           picture of keeps the letters, and one who has covers them. -->
+           picture of keeps the letters, and one who has covers them. Only a
+           card whose row says a picture is cached asks for it. -->
       <Cover
-        src={`/api/v1/artists/${artist.id}/image`}
+        src={artist.hasImage ? `/api/v1/artists/${artist.id}/image` : undefined}
         class="absolute inset-0 size-full object-cover"
       />
 

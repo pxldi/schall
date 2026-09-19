@@ -47,6 +47,7 @@ function releaseRow(overrides: Partial<Release> = {}): Release {
     artistMonitorLevel: 'everything',
     musicbrainzReleaseId: null,
     trackRefreshStatus: 'completed',
+    hasCover: true,
     ...overrides
   };
 }
@@ -520,6 +521,15 @@ describe('the cover slot', () => {
     // A missing cover answers 404: fire the same event the browser would.
     await fireEvent.error(container.querySelector('img')!);
 
+    expect(screen.getByRole('img', { name: 'Cover for Mothearth' })).toBeTruthy();
+  });
+
+  it('asks for no picture when the row says none is cached', async () => {
+    answering(releasePage([releaseRow({ hasCover: false })]));
+    const { container } = openedAt('');
+    await screen.findByText('Mothearth');
+
+    expect(container.querySelector('img')).toBeNull();
     expect(screen.getByRole('img', { name: 'Cover for Mothearth' })).toBeTruthy();
   });
 });

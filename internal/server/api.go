@@ -1802,6 +1802,9 @@ type artistListItemResponse struct {
 	InFlightCount  int64 `json:"inFlightCount"`
 	ReviewCount    int64 `json:"reviewCount"`
 	NeedsAttention bool  `json:"needsAttention"`
+	// HasImage says whether a picture of the artist is cached, so the index
+	// asks for the pictures that exist and not for every card once an hour.
+	HasImage bool `json:"hasImage"`
 }
 
 // listArtists returns the catalogue's artists. An explicit limit keeps API
@@ -1903,6 +1906,7 @@ func (api *API) listArtists(response http.ResponseWriter, request *http.Request)
 			InFlightCount:     artist.InFlightCount,
 			ReviewCount:       artist.ReviewCount,
 			NeedsAttention:    artist.NeedsAttention,
+			HasImage:          artist.HasImage,
 		})
 	}
 	// Both halves are reported whatever the scope is, so the page can always
@@ -2280,6 +2284,9 @@ type albumResponse struct {
 	MusicBrainzReleaseID   *uuid.UUID `json:"musicbrainzReleaseId"`
 	EditionSelectionReason string     `json:"editionSelectionReason,omitempty"`
 	TrackRefreshStatus     string     `json:"trackRefreshStatus"`
+	// HasCover says whether a picture is cached for this release, so a list
+	// asks for covers that exist and not for every row once an hour.
+	HasCover bool `json:"hasCover"`
 }
 
 // The shapes a release can be in, as the browser names them, and the orders it
@@ -2398,6 +2405,7 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 			MusicBrainzReleaseID:      nullableUUID(album.MusicbrainzReleaseID),
 			EditionSelectionReason:    album.EditionSelectionReason,
 			TrackRefreshStatus:        album.TrackRefreshStatus,
+			HasCover:                  album.HasCover,
 		})
 	}
 	body := map[string]any{

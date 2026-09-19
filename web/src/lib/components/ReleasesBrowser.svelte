@@ -876,18 +876,20 @@
                  ellipsis instead. -->
             <Table.Cell class="min-w-56">
               <a href={`/releases/${release.id}`} class="tap-tall flex min-w-0 items-center gap-2">
-                <!-- Cached covers only: a page of a hundred rows asks this
-                     installation and nobody else. A release with no picture
-                     yet simply has none, and the slot stays the size and
-                     border it would have held a picture in — a title beside a
-                     missing cover does not creep left to fill the gap. -->
+                <!-- Cached covers only, and only where the row says one is
+                     cached: a page of a hundred rows asks this installation
+                     for the pictures it holds and nobody for the rest. A
+                     release with no picture simply has none, and the slot
+                     stays the size and border it would have held a picture in
+                     — a title beside a missing cover does not creep left to
+                     fill the gap. -->
                 <span
                   role="img"
                   aria-label={`Cover for ${release.title}`}
                   class="grid size-7 shrink-0 place-items-center overflow-hidden rounded-row border border-line-thin"
                 >
                   <Cover
-                    src={`/api/v1/albums/${release.id}/cover?cached=1`}
+                    src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
                     class="size-full object-cover"
                   />
                 </span>

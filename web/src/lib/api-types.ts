@@ -137,6 +137,9 @@ export interface ArtistListItem extends Artist {
   /** Wants whose copy nothing could identify, held for you to listen to. */
   reviewCount: number;
   needsAttention: boolean;
+  /** Whether a picture of the artist is cached. The index asks for the
+   * pictures that exist and not for every card. */
+  hasImage: boolean;
 }
 
 /** One page of artists. `total` counts the current scope narrowed by
@@ -326,6 +329,10 @@ export interface Release {
   musicbrainzReleaseId: string | null;
   editionSelectionReason?: string;
   trackRefreshStatus: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
+  /** Whether a picture of the release is cached. A list asks for the covers
+   * that exist and not for every row; a release nobody has pictured yet, or
+   * one the archives have no sleeve for, has none. */
+  hasCover: boolean;
 }
 
 /** Which releases the browser is asking for. Scope is why a release is worth

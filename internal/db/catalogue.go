@@ -45,6 +45,10 @@ type AlbumRow struct {
 	MusicbrainzReleaseID   uuid.NullUUID
 	EditionSelectionReason string
 	TrackRefreshStatus     string
+	// HasCover says whether a picture of this release is cached. A list row
+	// asks for the picture only when it is, so a release nobody has pictured
+	// costs the browser no request. A recorded absence counts as no cover.
+	HasCover bool
 }
 
 type ListAlbumsParams struct {
@@ -322,7 +326,12 @@ var albumColumns = `
 			WHEN bool_or(jobs.status = 'queued') THEN 'queued'
 			WHEN bool_or(jobs.status = 'failed') THEN 'failed'
 			ELSE 'pending'
-		END::text AS track_refresh_status
+		END::text AS track_refresh_status,
+		EXISTS (
+			SELECT 1 FROM release_cover_art
+			WHERE release_cover_art.album_id = albums.id
+			  AND release_cover_art.image IS NOT NULL
+		)::boolean AS has_cover
 `
 
 const albumJoins = `
@@ -460,7 +469,7 @@ func (q *Queries) ListAlbums(ctx context.Context, params ListAlbumsParams) (Albu
 			&row.AlbumType, &row.FirstReleaseDate, &row.TrackCount,
 			&row.OwnedTrackCount, &row.DismissedTrackCount, &row.Monitored,
 			&row.MonitorLevel, &row.MusicbrainzReleaseID,
-			&row.EditionSelectionReason, &row.TrackRefreshStatus,
+			&row.EditionSelectionReason, &row.TrackRefreshStatus, &row.HasCover,
 		); err != nil {
 			return page, err
 		}

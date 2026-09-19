@@ -237,7 +237,15 @@ SELECT
             OR listed.refresh_status = 'failed'
             OR listed.release_count = 0
         )
-    )::boolean AS needs_attention
+    )::boolean AS needs_attention,
+    -- Whether a picture of the artist is cached. The index asks for the
+    -- pictures that exist and not for every card; a recorded absence is a row
+    -- with no image and counts as none.
+    EXISTS (
+        SELECT 1 FROM artist_images
+        WHERE artist_images.artist_id = listed.id
+          AND artist_images.image IS NOT NULL
+    )::boolean AS has_image
 FROM listed
 WHERE sqlc.arg('completeness')::text = ''
    OR (sqlc.arg('completeness')::text = 'incomplete'
