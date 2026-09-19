@@ -76,6 +76,11 @@ type Transcoder struct {
 	// this they would both run ffmpeg over the same file.
 	mu       sync.Mutex
 	encoding map[string]*sync.WaitGroup
+
+	// warming counts the workers Warm has running. Nothing in the server waits
+	// on it; the tests do, because a worker still renaming a copy into a
+	// directory the test is about to remove is a cleanup that fails.
+	warming sync.WaitGroup
 }
 
 // New prepares a transcoder. binary may be empty, meaning ffmpeg is looked for on
@@ -150,8 +155,11 @@ func (transcoder *Transcoder) Warm(sources []string) {
 		return
 	}
 	queue := make(chan string)
-	for range min(warmWorkers, len(sources)) {
+	workers := min(warmWorkers, len(sources))
+	transcoder.warming.Add(workers)
+	for range workers {
 		go func() {
+			defer transcoder.warming.Done()
 			for source := range queue {
 				ctx, cancel := context.WithTimeout(context.Background(), transcodeCap)
 				if _, err := transcoder.Playable(ctx, source); err != nil {
@@ -169,6 +177,10 @@ func (transcoder *Transcoder) Warm(sources []string) {
 		}
 	}()
 }
+
+// settle blocks until every warm started so far has finished, one way or the
+// other.
+func (transcoder *Transcoder) settle() { transcoder.warming.Wait() }
 
 // encode runs ffmpeg into a temporary name and renames it into place, so a
 // transcode interrupted halfway is never served as a complete one.
