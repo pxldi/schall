@@ -732,6 +732,21 @@ func TestListArtistsDefaultsToEveryArtist(t *testing.T) {
 	}
 }
 
+// The index asks for the pictures that exist and not for every card, so each
+// row says whether one is cached.
+func TestListArtistsSayWhetherAPictureIsCached(t *testing.T) {
+	store := &fakeStore{artists: []db.ListArtistsRow{
+		{ID: uuid.New(), Name: "Portishead", HasImage: true},
+		{ID: uuid.New(), Name: "Sewerslvt"},
+	}}
+
+	page := listArtistsPage(t, store, "/api/v1/artists")
+
+	if len(page.Items) != 2 || !page.Items[0].HasImage || page.Items[1].HasImage {
+		t.Errorf("items = %#v, want the first pictured and the second not", page.Items)
+	}
+}
+
 func TestListArtistsNarrowsToTheRequestedScope(t *testing.T) {
 	store := &fakeStore{}
 
@@ -920,6 +935,21 @@ func TestListAlbumsForArtist(t *testing.T) {
 	}
 	if len(body.Items) != 1 || body.Items[0].ID != albumID || body.Items[0].FirstReleaseDate != "1994-08" {
 		t.Errorf("response = %#v", body)
+	}
+}
+
+// A page of rows asks for the covers that exist and not for every row, so each
+// row says whether one is cached.
+func TestListAlbumsSayWhetherACoverIsCached(t *testing.T) {
+	store := &fakeStore{albums: db.AlbumPage{Items: []db.AlbumRow{
+		{ID: uuid.New(), Title: "Dummy", HasCover: true},
+		{ID: uuid.New(), Title: "Third"},
+	}}}
+
+	body := listAlbumsPage(t, store, "/api/v1/albums")
+
+	if len(body.Items) != 2 || !body.Items[0].HasCover || body.Items[1].HasCover {
+		t.Errorf("items = %#v, want the first pictured and the second not", body.Items)
 	}
 }
 

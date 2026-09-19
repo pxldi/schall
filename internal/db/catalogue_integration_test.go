@@ -225,6 +225,42 @@ func TestListArtistsPagesInSortOrder(t *testing.T) {
 	}
 }
 
+// A row says whether a picture of the artist is cached. A recorded absence is
+// a row with no image, and counts as no picture.
+func TestListArtistsSayWhetherAPictureIsCached(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedArtistRoster(t, ctx, pool)
+	queries := New(pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artist_images (artist_id, image, content_type, source)
+		SELECT id, '\x89504e47'::bytea, 'image/png', 'fanart' FROM artists WHERE name = 'Portishead'
+	`); err != nil {
+		t.Fatalf("seed picture: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artist_images (artist_id, image, content_type, source)
+		SELECT id, NULL, '', 'none' FROM artists WHERE name = 'Aphex Twin'
+	`); err != nil {
+		t.Fatalf("seed recorded absence: %v", err)
+	}
+
+	rows, err := queries.ListArtists(ctx, ListArtistsParams{})
+	if err != nil {
+		t.Fatalf("ListArtists() error = %v", err)
+	}
+
+	pictured := map[string]bool{}
+	for _, row := range rows {
+		pictured[row.Name] = row.HasImage
+	}
+	if !pictured["Portishead"] || pictured["Aphex Twin"] || pictured["The Knife"] {
+		t.Errorf("pictured = %v, want only Portishead", pictured)
+	}
+}
+
 // The list is read by a person, and a person reads A to Z once. PostgreSQL
 // compares text by byte in this database, and every capital letter has a lower
 // byte than every small one, so an unfolded sort put AZALEA before American
@@ -678,6 +714,39 @@ func TestListAlbumsPagesInReleaseOrder(t *testing.T) {
 	}
 	if strings.Join(paged, "|") != strings.Join(want, "|") {
 		t.Errorf("paged = %v, want %v", paged, want)
+	}
+}
+
+// A row says whether a picture of the release is cached. A recorded absence
+// is a row with no image, and counts as no cover: the list would otherwise ask
+// for a picture the archive already said does not exist.
+func TestListAlbumsSayWhetherACoverIsCached(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedReleaseShelf(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO release_cover_art (album_id, image, content_type, source)
+		SELECT id, '\x89504e47'::bytea, 'image/png', 'caa' FROM albums WHERE title = 'Dummy'
+	`); err != nil {
+		t.Fatalf("seed cover: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO release_cover_art (album_id, image, content_type, source)
+		SELECT id, NULL, '', 'none' FROM albums WHERE title = 'Third'
+	`); err != nil {
+		t.Fatalf("seed recorded absence: %v", err)
+	}
+
+	page := listReleases(t, ctx, pool, ListAlbumsParams{Sort: "artist", Limit: 10})
+
+	pictured := map[string]bool{}
+	for _, row := range page.Items {
+		pictured[row.Title] = row.HasCover
+	}
+	if !pictured["Dummy"] || pictured["Third"] || pictured["Geogaddi"] {
+		t.Errorf("pictured = %v, want only Dummy", pictured)
 	}
 }
 

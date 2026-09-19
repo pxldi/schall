@@ -395,6 +395,53 @@ describe('the releases still on their way', () => {
   });
 });
 
+describe('release tiles', () => {
+  it('ask only for the covers the rows say are cached', async () => {
+    const tile = (id: string, title: string, hasCover: boolean) => ({
+      id,
+      artistId: artistID,
+      artistName: 'Burial',
+      artistFollowed: true,
+      musicbrainzReleaseGroupId: null,
+      title,
+      firstReleaseDate: '2007-11-05',
+      albumType: 'album',
+      trackCount: 13,
+      ownedTrackCount: 13,
+      dismissedTrackCount: 0,
+      monitored: true,
+      artistMonitorLevel: 'everything',
+      musicbrainzReleaseId: null,
+      trackRefreshStatus: 'completed',
+      hasCover
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
+        if (url.pathname === '/api/v1/albums') {
+          const items = [
+            tile('r1', 'Untrue', true),
+            tile('r2', 'Burial', false)
+          ];
+          return body({ items, total: 2, limit: 24, offset: 0, scopeTotal: 2 });
+        }
+        return body({ items: [], total: 0, limit: 24, offset: 0 });
+      })
+    );
+
+    opened();
+    await screen.findByText('Untrue');
+
+    const covers = Array.from(document.querySelectorAll('img'))
+      .map((img) => img.getAttribute('src'))
+      .filter((src) => src?.includes('/cover'));
+    expect(covers).toEqual(['/api/v1/albums/r1/cover?cached=1']);
+  });
+});
+
 describe('the releases fail to load', () => {
   it('shows the failure instead of the empty "Nothing scanned yet" state', async () => {
     vi.stubGlobal(

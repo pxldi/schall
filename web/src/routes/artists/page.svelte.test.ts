@@ -118,6 +118,59 @@ describe('artist cards', () => {
   });
 });
 
+describe('artist pictures', () => {
+  it('asks only for the pictures the rows say are cached', async () => {
+    pageState.url = new URL('http://localhost/artists');
+    const card = (id: string, name: string, hasImage: boolean) => ({
+      id,
+      musicbrainzId: null,
+      name,
+      sortName: name,
+      followed: true,
+      followedAt: '2026-01-01T00:00:00Z',
+      lastRefreshedAt: '2026-01-01T00:00:00Z',
+      refreshStatus: 'completed',
+      releaseCount: 1,
+      ownedReleaseCount: 1,
+      trackCount: 1,
+      ownedTrackCount: 1,
+      inFlightCount: 0,
+      reviewCount: 0,
+      needsAttention: false,
+      hasImage
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === '/api/v1/artists') {
+          return body({
+            items: [card('a1', 'Burial', true), card('a2', 'Sewerslvt', false)],
+            total: 2,
+            limit: 50,
+            offset: 0,
+            followedCount: 2,
+            heldCount: 0,
+            allCount: 2,
+            incompleteCount: 0,
+            completeCount: 2,
+            attentionCount: 0,
+            refreshingCount: 0
+          });
+        }
+        return body({});
+      })
+    );
+
+    opened();
+    await screen.findByText('Sewerslvt');
+
+    const pictures = Array.from(document.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+    expect(pictures).toEqual(['/api/v1/artists/a1/image']);
+  });
+});
+
 describe('a 401 on the artist list', () => {
   it('says where to sign in instead of asking to reload', async () => {
     pageState.url = new URL('http://localhost/artists');

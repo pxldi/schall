@@ -1189,7 +1189,15 @@ SELECT
             OR listed.refresh_status = 'failed'
             OR listed.release_count = 0
         )
-    )::boolean AS needs_attention
+    )::boolean AS needs_attention,
+    -- Whether a picture of the artist is cached. The index asks for the
+    -- pictures that exist and not for every card; a recorded absence is a row
+    -- with no image and counts as none.
+    EXISTS (
+        SELECT 1 FROM artist_images
+        WHERE artist_images.artist_id = listed.id
+          AND artist_images.image IS NOT NULL
+    )::boolean AS has_image
 FROM listed
 WHERE $1::text = ''
    OR ($1::text = 'incomplete'
@@ -1249,6 +1257,7 @@ type ListArtistsRow struct {
 	InFlightCount     int64              `json:"in_flight_count"`
 	ReviewCount       int64              `json:"review_count"`
 	NeedsAttention    bool               `json:"needs_attention"`
+	HasImage          bool               `json:"has_image"`
 }
 
 // An explicit limit pages the list for callers that need it. A zero limit
@@ -1338,6 +1347,7 @@ func (q *Queries) ListArtists(ctx context.Context, arg ListArtistsParams) ([]Lis
 			&i.InFlightCount,
 			&i.ReviewCount,
 			&i.NeedsAttention,
+			&i.HasImage,
 		); err != nil {
 			return nil, err
 		}
