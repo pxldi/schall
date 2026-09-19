@@ -47,6 +47,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+      # Regenerate before the diff check: a models.go left behind by a
+      # migration is a checkout where make sqlc stops the build.
+      - run: make sqlc
       - run: gofmt -w cmd internal
       - run: git diff --exit-code
       - run: go vet ./...
