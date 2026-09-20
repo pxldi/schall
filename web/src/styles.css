@@ -107,7 +107,7 @@
                      is written at about forty call sites.
 
    --motion-surface  A surface opening or closing over the page: a menu, the
-                     bottom sheet, the command palette, the one modal, a
+                     command palette, the one modal, a
                      disclosure. Longer than a state change,
                      because a surface has to be seen to arrive. Still short,
                      because it stands between the reader and the thing they
@@ -815,33 +815,6 @@ a {
     border-left-color: var(--color-accent);
   }
 
-  /* A room in the phone bar: a label with its own 2px underline slot,
-     transparent until the room is the one open (the bar flips it to the top
-     edge). The underline is a border rather than a background wash, so the
-     bar carries one mark and not a tint competing with it. */
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0 0.125rem;
-    height: 100%;
-    border-bottom: 2px solid transparent;
-    color: var(--color-ink-2);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    transition: var(--motion-state) var(--motion-ease);
-  }
-
-  .nav-item:hover {
-    color: var(--color-ink);
-  }
-
-  .nav-item.active {
-    color: var(--color-ink);
-    border-bottom-color: var(--color-accent);
-    font-weight: 600;
-  }
-
   /* The wordmark's own face and case, nowhere else in the application. Syne is
      drawn tighter as it grows: -0.045em at hero size (the sign-in screen, the
      empty states), -0.02em at the mast's own nav size — a display face this
@@ -1159,9 +1132,9 @@ a {
    it is opacity alone, over two seconds, and a reader who has asked for less
    motion has not asked for a page that lies about what it is doing.
 
-   The mast itself has nothing to switch off here: it is a fixed rail
-   and a fixed phone bar, neither of which travels once drawn, which is what
-   the drawer they replaced used to have to answer for in this block. */
+   The mast itself has nothing to switch off here: it is a fixed rail that
+   does not travel once drawn, which is what the drawer it replaced used to
+   have to answer for in this block. */
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .turn,

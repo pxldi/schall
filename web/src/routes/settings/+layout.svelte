@@ -9,11 +9,6 @@
   // stays in view while the one before it scrolls past rather than sitting in
   // a strip that has to be found again after a jump.
   //
-  // Below `lg` there is no room for a 150px rail beside a form, so the same
-  // five links move above the content as a horizontally scrollable row
-  // instead: the rail and the row are the same list, drawn twice and shown
-  // one at a time by breakpoint.
-  //
   // Five categories, each an address of its own, grouped by what a card
   // configures rather than by service name: Sources holds the four things
   // with a connect-and-test cycle, Library holds everything that changes
@@ -39,32 +34,10 @@
 <svelte:head><title>{current?.name ?? 'Settings'} · Schall</title></svelte:head>
 
 <!-- No visible page title: the mast's own highlight already says this is
-     Settings, and the rail (or, below `lg`, the row above the content) says
-     which part of it. Each category page carries its own hidden h1, since
-     neither highlight is a document heading. -->
-<div class="flex flex-col gap-4 px-4 sm:px-6 py-5 lg:flex-row lg:gap-8">
-  <!-- Below `lg` the same links become a scrollable row above the content,
-       because there is no width left to give a fixed-width rail beside a
-       320px form. -->
-  <nav aria-label="Settings sections" class="no-scrollbar flex gap-5 overflow-x-auto lg:hidden">
-    {#each categories as category (category.href)}
-      {@const active = category.href === current?.href}
-      <a
-        href={category.href}
-        aria-current={active ? 'page' : undefined}
-        class="flex h-8 shrink-0 items-center border-b-2 px-0 text-body transition {active
-          ? 'border-accent text-ink'
-          : 'border-transparent text-ink-2 hover:text-ink'}"
-      >
-        {category.name}
-      </a>
-    {/each}
-  </nav>
-
-  <nav
-    aria-label="Settings sections"
-    class="hidden w-[9.375rem] shrink-0 flex-col gap-0.5 lg:flex"
-  >
+     Settings, and the rail says which part of it. Each category page carries
+     its own hidden h1, since neither highlight is a document heading. -->
+<div class="flex flex-row gap-8 px-4 sm:px-6 py-5">
+  <nav aria-label="Settings sections" class="flex w-[9.375rem] shrink-0 flex-col gap-0.5">
     {#each categories as category (category.href)}
       {@const active = category.href === current?.href}
       <a

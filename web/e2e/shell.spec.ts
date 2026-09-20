@@ -3,8 +3,7 @@ import { expect, test } from '@playwright/test';
 // The shell is the chrome every screen is drawn inside: one 208px mast down
 // the left edge holding the wordmark across the top, the seven destinations
 // as icon-and-name rows, and search at the foot, beside one full-width
-// scrolling column of content. Below the breakpoint five tabs move to a fixed
-// bar along the bottom, with the other four destinations in More.
+// scrolling column of content. There is no phone form of it.
 //
 // The component tests can drive most of that in a document built in Node.
 // What they cannot do is ask a real browser what width it is drawn at, which
@@ -12,8 +11,6 @@ import { expect, test } from '@playwright/test';
 
 /** The seven, in the order the mast draws them. */
 const seven = ['Overview', 'Artists', 'Playlists', 'Downloads', 'Review', 'Library', 'Settings'];
-const five = ['Overview', 'Artists', 'Review', 'Search', 'More'];
-const four = ['Playlists', 'Downloads', 'Library', 'Settings'];
 
 test.describe('the mast', () => {
   test('names every destination down the left edge on a wide screen', async ({ page }) => {
@@ -77,56 +74,3 @@ test.describe('the mast', () => {
   });
 });
 
-// A phone: narrower than the breakpoint the mast appears at.
-// Five tabs are in the bottom bar; the other four destinations are in More.
-test.describe('the phone bar', () => {
-  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-
-  test('names five tabs along the bottom, by icon and label', async ({ page }) => {
-    await page.goto('/');
-
-    const bottom = page.getByRole('navigation', { name: 'Sections, compact' });
-    for (const name of five) {
-      await expect(
-        bottom.getByRole(
-          name === 'Overview' || name === 'Artists' || name === 'Review' ? 'link' : 'button',
-          { name }
-        )
-      ).toBeVisible();
-    }
-  });
-
-  test('marks the open destination current', async ({ page }) => {
-    await page.goto('/review');
-
-    const bottom = page.getByRole('navigation', { name: 'Sections, compact' });
-    await expect(bottom.getByRole('link', { name: 'Review' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    );
-  });
-
-  test('opens the other destinations and carries More active after navigation', async ({ page }) => {
-    await page.goto('/');
-
-    const bottom = page.getByRole('navigation', { name: 'Sections, compact' });
-    await bottom.getByRole('button', { name: 'More' }).click();
-
-    const sheet = page.getByRole('dialog', { name: 'More' });
-    for (const name of four) {
-      await expect(sheet.getByRole('link', { name })).toBeVisible();
-    }
-    await expect(bottom.getByRole('button', { name: 'More' })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    );
-
-    await sheet.getByRole('link', { name: 'Library' }).click();
-    await expect(page).toHaveURL(/\/library$/);
-    await expect(page.getByRole('dialog', { name: 'More' })).toHaveCount(0);
-    await expect(bottom.getByRole('button', { name: 'More' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    );
-  });
-});

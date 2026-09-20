@@ -427,7 +427,7 @@ in full and in an ordinary size, something shown nearby.
 **The Costume Rule.** Monospace is for data — identifiers, paths, durations,
 sizes, rates — and never for prose that happens to be technical. A sentence set
 in the monospace role is a sentence wearing a costume, and it is also how this
-interface has twice overflowed a phone.
+interface has twice overflowed a narrow window.
 
 **The One Vocabulary Rule.** Two questions, and a screen may never invent a
 sixth word for either. `holding` — Complete, Partial, Missing — answers how much
@@ -448,8 +448,8 @@ the build's date and commit at the foot — beside one full-width scrolling
 column of content. There is no boot splash; a cold load paints the ground
 until the bundle runs. There is no top
 bar, no readout and no per-room mark: what is waiting is read on the
-pages themselves: Review's rail chips carry the counts. Below the breakpoint five tabs move to a
-fixed bar along the bottom of the screen, with Playlists, Downloads, Library and Settings in More.
+pages themselves: Review's rail chips carry the counts. There is no phone form
+of the mast: the phone is served by the native app.
 
 The Overview draws nine panels from one read (`GET /api/v1/overview?tz=`), counted
 in the browser's zone. Listens is the anchor: the 30-day total as the main
@@ -524,8 +524,8 @@ state.
 **Desktop width policy.** The shared `layout-width` container caps tables and
 split-pane workspaces at 1400px and centers them in the available content area.
 Playlists, Downloads and Library use it for their tables or list content.
-Artist grids and the artist hero stay full-bleed. The container has no effect on
-phone layouts. Review's rail and card grid do not use it: the card grid caps
+Artist grids and the artist hero stay full-bleed. Review's rail and card grid do
+not use it: the card grid caps
 itself at 64rem and left-aligns, so a want with one copy and a want with three
 read alike, and two cards sit side by side well before the shared cap would
 let them. Settings does not use it either: its own section rail and 760px
@@ -536,9 +536,9 @@ Page padding is 1.5rem, card padding 1rem, and the gap inside a row 0.625rem.
 Tight groups, generous separation: the space above a heading is always larger
 than the space below it.
 
-**The Phone Gutter Rule.** A page-level container's horizontal padding is
-`px-4 sm:px-6 lg:px-8`: 21px on a phone, 32px from `sm` up, unchanged from
-before. `ControlRail` and `PageHeader` carry the same three steps. A dialog or
+**The Gutter Rule.** A page-level container's horizontal padding is
+`px-4 sm:px-6 lg:px-8`: 21px in a narrow window, 32px from `sm` up, unchanged
+from before. `ControlRail` and `PageHeader` carry the same three steps. A dialog or
 a card keeps its own padding regardless — the rule is for the box the page
 itself sits in, not for what floats or sits above it.
 
@@ -553,9 +553,9 @@ A Library link with a file id opens the Files view with that row expanded.
 Density is deliberate and touch is handled by the pointer rather than by the
 width of the window. Where `pointer: coarse`, controls that sit alone on a row
 grow to 44px and controls inside a line of text keep their drawn size and take
-an invisible 44px box, so a phone gets bigger targets without a laptop losing
-its density. Safe-area insets are added at the left of the mast and the
-bottom of the phone bar and the answer bar.
+an invisible 44px box, so a touchscreen gets bigger targets without a laptop
+losing its density. Safe-area insets are added at the left of the mast and
+the bottom of Review's answer bar.
 
 The Jobs page's Sweeps section is a growing list, not a fixed panel. Each row
 keeps the pass name, its work, and its last and next times in the desktop grid;
@@ -610,8 +610,8 @@ says what a step is for and a number does not.
   read as deliberate at a small size: the checkbox answering a hover, and the
   dashed outline standing in for a release the library does not hold.
 - **Shell Line** — `#2c2233`, the shell/rail line, held apart from the card
-  line above it. It is the mast's own border and the phone bar's, and it
-  never appears on a card.
+  line above it. It is the mast's own border, and it never appears on a
+  card.
 
 Blur exists in exactly two budgets, held apart on purpose. The one gradient in
 the application, "Die Blende", is a flat colour transition and carries no
@@ -652,7 +652,7 @@ with; Artists put a heading, a search field and a select on one line and none of
 the three agreed with the others. One rail per page sticks, and it is the outer
 one: two rails pinned to the same edge are drawn on top of each other.
 
-When a control row is wider than a phone, it scrolls horizontally. The clipped
+When a control row is wider than the window, it scrolls horizontally. The clipped
 edge fades into the rail and the scrollbar stays hidden.
 
 **The Rem Box Rule.** `html` sets `font-size: 133%`, so every rem-based size in
@@ -711,7 +711,7 @@ shipped four durations and three curves.
 | Token | Value | Its job |
 | --- | --- | --- |
 | `state` | 150ms | A thing already on screen changing how it looks, in place: hover, focus, a row being selected, a border strengthening, a chevron turning over. Nothing travels and nothing arrives, so this is the shortest step. |
-| `surface` | 200ms | A surface opening or closing over the page: the More sheet, a menu, the command palette, the one modal, a disclosure. |
+| `surface` | 200ms | A surface opening or closing over the page: a menu, the command palette, the one modal, a disclosure. |
 | `enter` | 280ms | A thing arriving into the page or leaving it: a card, a message where a list would have been, a mark that has changed what it says, a figure that has changed. |
 | `stagger` | 60ms | The gap between one arrival and the next, where a small fixed set arrives in order. |
 | `ambient` | 1000ms | One turn of a loop that says work is still in flight. A spinner turns once per step; a skeleton breathes over two. |
@@ -859,10 +859,6 @@ stopped.
   the same row. Render the feedback reason as text, including
   `you asked for more like this` or `you asked for less like this`; hue cannot
   carry this distinction under the Glyph Rule.
-- **Mobile:** Let the recording details occupy the first line. Put the paired
-  feedback controls on a wrap-safe action line with Want it and Not interested,
-  then give the reason line the full row width. The existing recommendation
-  list widths must not force a control or reason fragment below the next row.
 
 ### Buttons
 
@@ -1034,15 +1030,6 @@ and a table column of tags sixty rows tall does not want that much colour.
   the mast — the owner scrapped them all on 2026-09-01 to keep it clean. What
   is waiting is read in Review and Library; the slskd
   connection is read at `/settings/sources`.
-- **Phone:** Overview, Artists, Review, Search and More sit in a fixed bar along
-  the bottom of the screen, with small labels under the icons. The active tab has
-  the same 2px Accent mark, this time on its top edge. More opens a sheet above
-  the bar with Playlists, Downloads, Library and Settings as full-width rows.
-  The sheet is modal: opening it moves focus to the first row and traps Tab
-  inside, the page behind goes `inert`, and Escape, the backdrop or a
-  destination link close it and hand focus back to the More button. A
-  destination reached through More carries a small title bar above the
-  content, naming it, because the tab bar for it only ever says "More".
 - **Heading:** The mast's own highlight is not a document heading — a screen
   reader does not read `class="active"`. Every page carries exactly one
   `<h1>`: visible where the design already names the page (an artist, a
@@ -1105,7 +1092,7 @@ label column: Length and Format carry the decision, so their values are set
 in `text-body text-ink`; Size, Credit, Title and Album stay `text-quiet-meta`.
 The played part of the waveform is Accent, the rest Line Thick. The grid runs
 `repeat(auto-fill, minmax(17rem, 1fr))` inside a 64rem cap, so two cards sit
-side by side at 1440px and one card takes the full width on a phone. A version
+side by side at 1440px and one card takes the full width in a narrow window. A version
 question is a row per candidate instead — Recording, Release, Length, and a
 column of agree/differ chips built from the grader's own verdict lists, with
 no disclosure and no meaning sentence under any of it. ISRC and the
@@ -1189,7 +1176,7 @@ value may not because it marks nothing but a value.
 - **Don't** add a radius, a side-accent stripe, a decorative grid, or a
   hairline paired with a wide shadow. Flat 1px borders only.
 - **Don't** set prose in the monospace role because it is technical. It reads
-  as a costume and it overflows phones.
+  as a costume and it overflows a narrow window.
 - **Don't** write a pixel value for text at a call site.
 - **Don't** nest a card inside a card, or draw a list as a stack of cards.
 - **Don't** put a state below 12px, or a label below 11px.

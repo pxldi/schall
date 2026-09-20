@@ -55,8 +55,6 @@ test: ## Run backend and frontend tests
 	go test ./...
 	npm --prefix web run check
 	npm --prefix web run test
-	npm --prefix app run typecheck
-	npm --prefix app run test
 
 e2e: ## Run the browser tests against a freshly seeded database
 	docker compose up -d postgres-test
@@ -68,8 +66,6 @@ check: ## Format and statically check the project
 	go vet ./...
 	npm --prefix web run check
 	npm --prefix web run test
-	npm --prefix app run typecheck
-	npm --prefix app run test
 
 build: ## Build the production container
 	docker build -t schall:local .

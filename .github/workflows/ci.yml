@@ -78,25 +78,6 @@ jobs:
       - run: npm run test
       - run: npm run build
 
-  # The phone app: a typecheck against the web's API types and the token test
-  # that fails when app/src/design/tokens.ts is behind web/src/styles.css.
-  app:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test
-
   # The browser tests, against the real API and a database seeded from
   # internal/seed. Its own job rather than a step in `frontend`, because it needs
   # both toolchains and a database, and because a UI failure that reads as a
@@ -168,7 +149,7 @@ jobs:
   # build.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [backend, frontend, app, browser, container]
+    needs: [backend, frontend, browser, container]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

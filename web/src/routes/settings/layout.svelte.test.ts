@@ -36,23 +36,19 @@ afterEach(() => {
 });
 
 describe('the settings category navigation', () => {
-  it('names every category, in the row above the content and in the rail', () => {
+  it('names every category once, in the rail', () => {
     opened();
 
     for (const name of categories) {
-      expect(screen.getAllByRole('link', { name }).length).toBe(2);
+      expect(screen.getAllByRole('link', { name }).length).toBe(1);
     }
   });
 
-  it('marks the open category current in both layouts and no other', () => {
+  it('marks the open category current and no other', () => {
     address = 'http://localhost/settings/library';
     opened();
 
-    for (const link of screen.getAllByRole('link', { name: 'Library' })) {
-      expect(link.getAttribute('aria-current')).toBe('page');
-    }
-    for (const link of screen.getAllByRole('link', { name: 'Sources' })) {
-      expect(link.getAttribute('aria-current')).toBe(null);
-    }
+    expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Sources' }).getAttribute('aria-current')).toBe(null);
   });
 });
