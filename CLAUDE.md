@@ -65,7 +65,6 @@ Live AcoustID tests are opt-in: `SCHALL_ACOUSTID_API_KEY` set and `fpcalc` insta
 - `internal/sources/`, `internal/slskd/`, `internal/musicbrainz/`, `internal/acoustid/`, `internal/anchor/` — providers and clients
 - `internal/library/` — scanner, tagging pass, layout moves; `internal/jobs/` — PostgreSQL job worker; `internal/events/` — SSE (invalidations only)
 - `web/src/routes/` — pages; `web/src/lib/api.ts` — the API client; `web/e2e/` — Playwright
-- `app/` — the Expo phone app
 
 ## Conventions
 

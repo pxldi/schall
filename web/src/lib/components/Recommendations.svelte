@@ -551,7 +551,6 @@
               trigger="labelled"
               label="Not interested"
               heading="Never suggest again"
-              subject={name(recommendation)}
               items={scopes(recommendation)}
             />
             {#if why(recommendation)}

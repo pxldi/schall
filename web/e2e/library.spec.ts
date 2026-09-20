@@ -123,35 +123,3 @@ test('the column names stay put while the rows run under them', async ({ page })
   expect(firstRowAfter!.y).toBeLessThan(firstRowBefore!.y);
 });
 
-// Desktop first: the table is not redrawn for a phone. What has to hold at
-// 390px and under is that the table's own box scrolls sideways rather than
-// the page — a column of numbers a phone has no room for is a box a thumb can
-// drag, not a page that grows wider than its screen.
-test.describe('the files list on a phone', () => {
-  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
-
-  test('scrolls its own box sideways rather than the page', async ({ page }) => {
-    await page.goto('/library?view=files');
-    const table = shownTable(page);
-    await expect(table.locator('tbody tr').first()).toBeVisible();
-
-    const pageOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-    );
-    expect(pageOverflow).toBeLessThanOrEqual(1);
-
-    const wrapper = table.locator('xpath=..');
-    const boxOverflow = await wrapper.evaluate((node) => node.scrollWidth - node.clientWidth);
-    expect(boxOverflow).toBeGreaterThan(0);
-  });
-
-  test('shows the play control without a hover event', async ({ page }) => {
-    await page.goto('/library?view=files');
-    const table = shownTable(page);
-    const play = table.getByRole('button', { name: /^Play / }).first();
-    await expect(play).toBeVisible();
-
-    const opacity = await play.evaluate((node) => getComputedStyle(node).opacity);
-    expect(opacity).toBe('1');
-  });
-});

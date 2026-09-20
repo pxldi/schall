@@ -34,7 +34,6 @@
     label,
     heading,
     items,
-    subject,
     trigger = 'overflow',
     class: className
   }: {
@@ -44,9 +43,6 @@
     /** The line above the items, saying what the list is choosing between. */
     heading: string;
     items: MenuItem[];
-    /** What the menu was opened on. The bottom sheet says it beside the
-     * heading, because a sheet covers the row it came from. */
-    subject?: string;
     /** `overflow` is the three-dot square that sits at the end of a row;
      * `labelled` is the 32px button that carries the words. The panel grows
      * away from the page edge its trigger is nearest, so the first opens with
@@ -59,23 +55,12 @@
   // opens upwards instead. Nothing else about it changes.
   const flipRoom = 200;
 
-  // Below this the panel becomes a bottom sheet. An anchored 272px panel beside
-  // the right edge of a 360px screen has nowhere to grow, and 30px items are
-  // under the 44px a finger needs.
-  const phone = '(max-width: 640px)';
-
-  // How far the sheet has to be dragged down before letting go means "close".
-  const dragOut = 48;
-
   let open = $state(false);
   // Where the keyboard caret is. A pointer resting on another item does not
   // move it: the ring says which item Enter will take, and hover never draws
   // one.
   let at = $state(0);
   let above = $state(false);
-  let sheet = $state(false);
-  let dragFrom = $state<number | null>(null);
-  let dragBy = $state(0);
 
   // Handles, not content. `root` is the anchor the panel is positioned against
   // and the region a press counts as inside; the trigger is found under it
@@ -85,48 +70,6 @@
   let panel = $state<HTMLElement | null>(null);
   let itemEls = $state<(HTMLButtonElement | null)[]>([]);
 
-  interface Entry {
-    label: string;
-    detail?: string;
-    disabled: boolean;
-    /** The sheet's own way out. It is an item so that the keys reach it. */
-    cancel: boolean;
-    choose: () => void;
-  }
-
-  // The sheet keeps the identical items, order and wording, and adds one: on
-  // touch there is no keyboard way out and the scrim is not self-evident. The
-  // desktop panel has neither Cancel nor scrim.
-  const entries = $derived<Entry[]>([
-    ...items.map((item) => ({
-      label: item.label,
-      detail: item.detail,
-      disabled: item.disabled ?? false,
-      cancel: false,
-      choose: item.onchoose
-    })),
-    ...(sheet ? [{ label: 'Cancel', disabled: false, cancel: true, choose: () => {} }] : [])
-  ]);
-
-  // Which form to draw, asked of the window rather than of a breakpoint class,
-  // because the two are not the same markup: one is anchored to the trigger and
-  // the other covers the page. A document without matchMedia — a test, a server
-  // render — is the panel.
-  $effect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const media = window.matchMedia(phone);
-    sheet = media.matches;
-
-    const follow = (event: MediaQueryListEvent) => {
-      sheet = event.matches;
-      // The open menu is a different object on the other side of the change,
-      // and the item the caret was on has been unmounted with it.
-      hide();
-    };
-    media.addEventListener('change', follow);
-    return () => media.removeEventListener('change', follow);
-  });
-
   function triggerButton() {
     return root?.querySelector<HTMLElement>('[aria-haspopup="menu"]') ?? null;
   }
@@ -134,16 +77,16 @@
   // The index of the next item that can be chosen, `by` steps from `from`.
   // Movement wraps and steps over refused items; -1 means there are none.
   function stepTo(from: number, by: number) {
-    const count = entries.length;
+    const count = items.length;
     for (let taken = 1; taken <= count; taken++) {
       const index = (((from + by * taken) % count) + count) % count;
-      if (!entries[index].disabled) return index;
+      if (!items[index].disabled) return index;
     }
     return -1;
   }
 
   const firstItem = () => stepTo(-1, 1);
-  const lastItem = () => stepTo(entries.length, -1);
+  const lastItem = () => stepTo(items.length, -1);
 
   async function show(index: number) {
     // Measured before the panel exists, off the trigger, because the answer is
@@ -163,8 +106,6 @@
     if (!open) return;
     open = false;
     at = 0;
-    dragFrom = null;
-    dragBy = 0;
     if (!restore) return;
     const back = triggerButton();
     if (back?.isConnected) back.focus();
@@ -179,12 +120,10 @@
     itemEls[index]?.focus();
   }
 
-  async function choose(entry: Entry) {
-    if (entry.disabled) return;
+  async function choose(item: MenuItem) {
+    if (item.disabled) return;
     open = false;
-    dragFrom = null;
-    dragBy = 0;
-    entry.choose();
+    item.onchoose();
     // The trigger usually leaves the page with the row the choice removed, and
     // then where focus lands is the page's to say. It is only taken back when
     // the trigger is still standing after the choice has been applied.
@@ -248,9 +187,7 @@
   }
 
   // Nothing behind the panel is blocked, so a press outside it reaches the page
-  // as it always would and closes the menu on the way. The sheet's scrim is
-  // inside this region and answers for itself, because it is there to catch the
-  // press rather than let it through.
+  // as it always would and closes the menu on the way.
   function onWindowPointerdown(event: PointerEvent) {
     if (!open || !root) return;
     if (!root.contains(event.target as Node)) hide();
@@ -258,24 +195,6 @@
 
   function onWindowResize() {
     if (open) hide();
-  }
-
-  function gripDown(event: PointerEvent) {
-    dragFrom = event.clientY;
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-  }
-
-  function gripMove(event: PointerEvent) {
-    if (dragFrom === null) return;
-    // Down only. A sheet does not go up.
-    dragBy = Math.max(0, event.clientY - dragFrom);
-  }
-
-  function gripUp() {
-    const travelled = dragBy;
-    dragFrom = null;
-    dragBy = 0;
-    if (travelled >= dragOut) hide();
   }
 
   // The floating surface: Schall's whole glass budget, spent here because a
@@ -315,8 +234,8 @@
     <!-- 24px is the row's content height at row.html's 8px padding, so the
          trigger column costs the row no height. It is quiet at rest and lifts
          with the row, but it is never revealed by hover: a control that only
-         exists under a pointer does not exist on a phone and cannot be tabbed
-         to. The row it sits in carries `group` for the lift. -->
+         exists under a pointer cannot be tabbed to. The row it sits in carries
+         `group` for the lift. -->
     <Button
       variant="ghost"
       size="xs"
@@ -333,7 +252,7 @@
     </Button>
   {/if}
 
-  {#if open && !sheet}
+  {#if open}
     <!-- 4px below the trigger, and above it instead when the trigger is near
          the foot of the window. There is no scrim: this is a menu, not a
          modal, and the page behind it is neither dimmed nor blocked. -->
@@ -353,108 +272,41 @@
       )}
     >
       <span class="label block px-2.5 pb-1.5 pt-2">{heading}</span>
-      {#each entries as entry, index (index)}
-        {@render item(entry, index)}
-      {/each}
-    </div>
-  {/if}
-
-  {#if open && sheet}
-    <!-- The sheet covers the page, so a tap outside has to be caught rather
-         than reach a row underneath. That is what the scrim is for, and it is
-         the one the modal uses: black at 55% behind an 8px blur. -->
-    <div
-      class="menu-in fixed inset-0 z-40 bg-black/55 backdrop-blur-[8px]"
-      role="presentation"
-      data-scrim="true"
-      onmousedown={() => hide()}
-    ></div>
-    <div
-      bind:this={panel}
-      role="menu"
-      aria-label={label}
-      tabindex="-1"
-      data-placement="bottom-sheet"
-      data-side="full"
-      onkeydown={onMenuKeydown}
-      style:transform={dragBy > 0 ? `translateY(${dragBy}px)` : undefined}
-      class={cn(
-        'sheet-in fixed inset-x-0 bottom-0 z-50 rounded-t-panel border-t border-[rgba(232,233,231,0.09)] px-2 pt-1.5',
-        'pb-[calc(8px+env(safe-area-inset-bottom))]',
-        frosted
-      )}
-    >
-      <!-- Dragged down far enough, letting go closes the sheet. It is one of
-           three ways out, with the scrim and Esc. -->
-      <div
-        role="presentation"
-        data-grip="true"
-        class="-mx-2 -mt-1.5 px-2 pb-1 pt-1.5 touch-none"
-        onpointerdown={gripDown}
-        onpointermove={gripMove}
-        onpointerup={gripUp}
-        onpointercancel={gripUp}
-      >
-        <div class="mx-auto h-1 w-8 rounded-full bg-white/24"></div>
-      </div>
-      <span class="label block px-3 pb-1.5 pt-1">
-        {subject ? `${heading} · ${subject}` : heading}
-      </span>
-      {#each entries as entry, index (index)}
-        {#if entry.cancel}
-          <hr class="my-1 border-0 border-t border-line-thin" />
-        {/if}
-        {@render item(entry, index)}
+      {#each items as item, index (index)}
+        <button
+          bind:this={itemEls[index]}
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          aria-disabled={item.disabled || undefined}
+          onclick={() => void choose(item)}
+          class={cn(itemBase, 'px-2.5 py-[7px] text-body leading-[1.35]')}
+        >
+          <span class="min-w-0">
+            {item.label}
+            {#if item.detail}
+              <span class="mt-0.5 block text-micro font-normal leading-[1.4] text-ink-3">
+                {item.detail}
+              </span>
+            {/if}
+          </span>
+        </button>
       {/each}
     </div>
   {/if}
 </span>
 
-{#snippet item(entry: Entry, index: number)}
-  <button
-    bind:this={itemEls[index]}
-    type="button"
-    role="menuitem"
-    tabindex="-1"
-    aria-disabled={entry.disabled || undefined}
-    onclick={() => void choose(entry)}
-    class={cn(
-      itemBase,
-      sheet
-        ? cn(
-            'rounded-control px-3 py-2.5 text-body',
-            entry.detail ? 'min-h-[56px] items-start' : 'min-h-[48px] items-center'
-          )
-        : 'px-2.5 py-[7px] text-body leading-[1.35]',
-      entry.cancel && 'text-ink-2'
-    )}
-  >
-    <span class="min-w-0">
-      {entry.label}
-      {#if entry.detail}
-        <span class="mt-0.5 block text-micro font-normal leading-[1.4] text-ink-3">
-          {entry.detail}
-        </span>
-      {/if}
-    </span>
-  </button>
-{/snippet}
-
 <style>
-  /* Both surfaces open over the surface step — no scale, no bounce, and nothing
+  /* The panel opens over the surface step — no scale, no bounce, and nothing
      at all for a reader who asked for less motion. There is no way out to
      animate: a menu that lingers after a choice is a menu the reader is still
      being shown.
 
-     They were drawn at 120ms, which was a fourth duration the scale did not
+     It was drawn at 120ms, which was a fourth duration the scale did not
      have. 200ms is what the drawer, the modal and the palette all take now, so
      every surface in the application opens at one speed. */
   .menu-in {
     animation: menu-in var(--motion-surface) var(--motion-ease-arrive);
-  }
-
-  .sheet-in {
-    animation: sheet-in var(--motion-surface) var(--motion-ease-arrive);
   }
 
   @keyframes menu-in {
@@ -466,18 +318,8 @@
     }
   }
 
-  @keyframes sheet-in {
-    from {
-      transform: translateY(12px);
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .menu-in,
-    .sheet-in {
+    .menu-in {
       animation: none;
     }
   }

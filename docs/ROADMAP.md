@@ -863,6 +863,8 @@ the rest in its own repository and blocks nothing here.
 
 ## 13. The web stops serving phones, the Expo app goes
 
+**Status:** shipped 2026-09-20.
+
 **What:** Delete `app/` and `docs/app-plan.md`, take the app job out of CI and
 `make check`, and remove the phone layouts from `web/src/routes` and the
 responsive rules in `DESIGN.md` that only served them. The backend built for

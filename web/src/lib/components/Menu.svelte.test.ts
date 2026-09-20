@@ -11,7 +11,6 @@ import Menu, { type MenuItem } from '$lib/components/Menu.svelte';
 
 afterEach(() => {
   cleanup();
-  restoreWidth();
 });
 
 describe('Menu', () => {
@@ -223,75 +222,6 @@ describe('Menu', () => {
     }
   });
 
-  describe('on a phone', () => {
-    // Below 640px the same menu is re-laid as a bottom sheet: identical items,
-    // order and wording, plus a scrim to catch a tap and an explicit way out,
-    // because on touch there is no Escape key and the scrim is not self-evident.
-    it('adds a way out that the desktop panel does not have', async () => {
-      narrow();
-      const chosen: string[] = [];
-      await opened({
-        items: [{ label: 'This track only', onchoose: () => chosen.push('recording') }]
-      });
-
-      const items = screen.getAllByRole('menuitem');
-
-      expect(items.map((item) => item.textContent?.trim())).toEqual([
-        'This track only',
-        'Cancel'
-      ]);
-
-      await fireEvent.click(items[1]);
-      await tick();
-
-      expect(chosen).toEqual([]);
-      expect(screen.queryByRole('menu')).toBeNull();
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Not interested' }));
-    });
-
-    it('closes when the scrim is pressed', async () => {
-      narrow();
-      const { container } = await openedIn();
-
-      const scrim = container.querySelector('[data-scrim]');
-      expect(scrim).toBeTruthy();
-      await fireEvent.mouseDown(scrim as Element);
-
-      expect(screen.queryByRole('menu')).toBeNull();
-    });
-
-    // The grip is the third way out, beside the scrim and Esc. Dragged far
-    // enough down, letting go closes the sheet; short of that it springs back,
-    // because a finger that moved a little was scrolling, not dismissing.
-    it('closes when the grip is dragged down and let go', async () => {
-      narrow();
-      const { container } = await openedIn();
-
-      const followed = await drag(grip(container), 60);
-
-      expect(followed).toBe('translateY(60px)');
-      expect(screen.queryByRole('menu')).toBeNull();
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Not interested' }));
-    });
-
-    it('stays open when the grip barely moved', async () => {
-      narrow();
-      const { container } = await openedIn();
-
-      const followed = await drag(grip(container), 12);
-
-      expect(followed).toBe('translateY(12px)');
-      // Still here, and back where it was rather than left sitting low.
-      expect(screen.getByRole('menu').style.transform).toBe('');
-    });
-
-    it('says what the sheet was opened on, because it covers the row', async () => {
-      narrow();
-      await opened({ subject: 'Weightless' });
-
-      expect(screen.getByText("Don't recommend · Weightless")).toBeTruthy();
-    });
-  });
 });
 
 // The three scopes of the first menu Schall has, as the Recommended view will
@@ -326,49 +256,3 @@ async function openedIn(over: Partial<Record<string, unknown>> = {}) {
   return { container, panel: screen.getByRole('menu') };
 }
 
-// The bar at the top of the sheet, which is the only part of it a drag is read
-// from.
-function grip(container: HTMLElement) {
-  const found = container.querySelector('[data-grip]');
-  expect(found).toBeTruthy();
-  return found as HTMLElement;
-}
-
-// A press, a move and a release, `by` pixels down the screen, answering with
-// how far the sheet had followed the finger before it was let go. jsdom has no
-// PointerEvent, so these are mouse events under the pointer names: all the
-// component reads of one is where it happened, and a MouseEvent carries that.
-async function drag(target: HTMLElement, by: number) {
-  const from = 400;
-  const press = (name: string, y: number) =>
-    target.dispatchEvent(new MouseEvent(name, { bubbles: true, clientY: y }));
-
-  press('pointerdown', from);
-  press('pointermove', from + by);
-  await tick();
-  const followed = (screen.getByRole('menu') as HTMLElement).style.transform;
-
-  press('pointerup', from + by);
-  await tick();
-  return followed;
-}
-
-// jsdom has no matchMedia, so the component draws the panel unless a test says
-// the window is a narrow one. The stub answers the one question the component
-// asks and reports no later change.
-function narrow() {
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: true,
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {}
-    }))
-  });
-}
-
-function restoreWidth() {
-  delete (window as { matchMedia?: unknown }).matchMedia;
-}
