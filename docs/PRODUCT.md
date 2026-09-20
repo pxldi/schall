@@ -17,13 +17,26 @@ artist, title, album, and duration — and, where Spotify supplies it, an
 **ISRC**, which resolves most entries to a concrete recording by identifier
 rather than by text.
 
+An entry can be widened to a want for its whole release, acquired through the
+whole-release path. A playlist can leave again: written as M3U over library
+paths, or pushed to a Spotify playlist by ISRC, with the entries that could not
+be written listed rather than dropped.
+
+**The end state is reached when** a playlist imported today is owned within a
+month with no wrong file in the library and no review question older than a
+week, a followed artist's release arrives without anyone asking for it, and
+music MusicBrainz has never heard of is named, wanted and fetched all the same.
+
 ## Acquisition
 
-Songs are acquired two ways:
+Songs are acquired three ways:
 
 1. **Automatically**, by requesting and downloading through slskd.
 2. **Manually**, by the user supplying their own files — ripped, purchased
    from Bandcamp, etc. — which are matched and imported through the same path.
+3. **From a Bandcamp purchase**, read from the user's collection with their
+   own credentials and imported through the upload path below, because the
+   receipt is the user's and proves what an upload proves.
 
 Manual supply is an **upload**, not a folder the user is expected to have put
 somewhere. The library lives wherever Schall is deployed and the purchase lands
@@ -42,9 +55,9 @@ copy (ADR 0002). The asymmetry is the point — a stranger's tags prove nothing
 and the user's receipt does, so the provenance the upload carries is the user's
 own word, which is exactly what a manual decision is worth everywhere else.
 
-An upload of a recording the library already owns is subject to the duplicate
-rule below, and until that rule is implemented it raises a duplicate question
-rather than replacing anything.
+An upload of a recording the library already owns is judged by the duplicate
+rule below: a better copy replaces the owned file, a worse one is refused, and
+a tie is not better.
 
 **Granularity.** A playlist target acquires a **single file** — the matching
 file out of a peer's folder, verified on its own against the target recording.
@@ -70,8 +83,15 @@ Automatic acquisition is a retry loop, not a single attempt:
   proved exactly like any other file.
 
 The requeue behaviour means targets have a long-lived pending state, not a
-terminal failure state. **Retry cadence and backoff still need a rule** — this
-is the one acquisition parameter deliberately left open.
+terminal failure state. **The retry cadence is a ladder, and a want never
+expires.** A want with a recording and no copy is asked about again after 15
+minutes, then 1, 3, 6, 12 and 24 hours, and holds at a day, because who is
+sharing what changes hour by hour. A want MusicBrainz holds no recording for is
+asked about after 1, 3, 7 and 30 days and holds at a month, because a
+catalogue gains a recording when a person writes it in. A want that only ever
+sees copies below the user's bit-rate floor is parked and looked at weekly.
+The numbers live in one place in `internal/acquisition/service.go` so
+retuning them is never a migration.
 
 **A want is visible for the whole of that state.** A want with a question is in
 the review queue and a want with a copy on the way is among the transfers, but a
@@ -109,6 +129,18 @@ a concrete ID, or the entry goes to the user.
 **A. File → MusicBrainz recording** (a file exists)
 Evidence: AcoustID fingerprint, recording ID, ISRC, exact tag agreement. Runs
 on both user-supplied files and slskd downloads.
+
+**A second key.** MusicBrainz does not hold the edits, bootlegs and remixes
+published only on SoundCloud or YouTube; one of the user's playlists measured
+252 of 314 entries without a recording (docs/decisions/0024). So a file, and a
+want, can be keyed instead by a **source identity**: the track at an address on
+a service, under that service's own identifier (docs/decisions/0026). It proves
+nothing about any recording and is never turned into one. A source-keyed want
+is proven the way the anchor proves anything: the copy reproduces the audio the
+source itself publishes. Sources are SoundCloud, YouTube and Bandcamp, each
+behind one interface that says what the track at an address is and hands over
+thirty seconds of its audio. Acquisition looks on Soulseek first and fetches
+from the source itself when nothing there proves out.
 
 **Verification.** After a download, run A on the file and ask whether it is the
 target from B. A's answer is read at AcoustID's **leading fingerprint cluster
@@ -272,10 +304,11 @@ copy that only ranks low is picked the moment it is the only one on offer; a
 want whose every offer was refused says so and names the preference. An
 installation that says nothing ranks as Schall always has.
 
-Still needing rules:
-
-- **Naming** — the default layout and the escaping rules for artist and title
-  strings that are not filesystem-safe.
+**Naming.** The layout is a folder template, `{artist}/{album} [{id}]` unless
+the user sets another, and it names folders only: a file keeps the name it
+arrived with. A path separator inside an artist or album name becomes an
+underscore. Nothing in matching or identity reads a path, so a change of layout
+changes what a file is called and never what it is.
 
 ## Following artists — the feed
 
@@ -287,6 +320,16 @@ This matters because followed artists are suppressed from recommendations (see
 below). If the feed is not built, new releases by followed artists surface
 nowhere at all — suppressed from recommendations and never fetched. The feed
 and the suppression rule must be built as a pair.
+
+A label is followed the same way. Its new releases raise wants, and its
+recordings are suppressed from recommendations with the label reason.
+
+## Listening
+
+Schall keeps a local copy of the user's listening history from ListenBrainz.
+The Overview counts it in the user's time zone: what was listened to most by
+period, how much of it the library owns, and what was listened to and is not
+owned, each with a control to raise a want.
 
 ## Navidrome integration
 
@@ -328,9 +371,15 @@ is still waiting for.
 
 Two sources, in order of ambition:
 
-1. **External** — Last.fm / MusicBrainz, driven by the user's scrobbling
-   history.
-2. **Own engine** — later, larger, built in-house.
+1. **External** — ListenBrainz, driven by the user's listening history.
+   Chosen over Last.fm because it answers with MusicBrainz IDs, and a source
+   that answers with names cannot be suppressed honestly (docs/decisions/0015).
+2. **Own engine** — built in-house over the listens Schall keeps locally, the
+   library, the wants and the More/Less feedback. It walks MusicBrainz
+   relationships (label, credit, remixer), ListenBrainz artist similarity, and
+   co-occurrence in the user's own listens and playlists. It emits recording
+   IDs with reason codes into the same candidate stores as the external
+   source, so every rule below applies to it unchanged.
 
 Never recommend an item if any of the following holds:
 
@@ -426,10 +475,22 @@ means "this *file* is not that recording." It says nothing about whether the
 user wants the recording. Treating it as disinterest silently abandons music
 the user explicitly asked for. The two decision stores stay separate.
 
+## People
+
+An installation serves more than one person. Each signs in through the
+forward-auth in front of Schall, sees their own playlists, follows and
+recommendations, and every decision names who took it. The library and its
+files are shared.
+
 ## UI
 
-Modern, clean, fast, fully usable in a mobile browser. The review queue must
-be operable entirely by keyboard on desktop.
+Modern, clean, fast, for a desktop browser. The review queue must be operable
+entirely by keyboard. The web keeps no phone layouts.
+
+The phone is a native Android app in Material Design, in its own repository.
+It signs in with an app token minted in Settings (docs/decisions/0033) and
+covers review with the preview player, downloads, wants, search and follow,
+with live updates over the same event stream as the web.
 
 The design source of truth is **`DESIGN.md`** at the root of this repository:
 the colour tokens, the two type scales, the corner radii, the spacing steps,

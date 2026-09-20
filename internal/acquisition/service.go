@@ -66,7 +66,7 @@ const sweepBatch = 40
 const huntWorkers = 8
 
 // attemptDelays is how long a target waits before each further attempt. This is
-// the retry cadence PRODUCT.md deliberately leaves open, so it lives here as
+// the retry cadence PRODUCT.md states, and it lives here as
 // a handful of numbers in one place rather than as a column default or a
 // constraint — retuning it is a one-line change and never a migration.
 //
