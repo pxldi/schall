@@ -17,6 +17,9 @@ library — is built, across items 1, 2, 3 and 4. What it has not done is run
 against real music for long enough to say how often it decides, which is what
 the risk under item 4 now asks for.
 
+Items 1 to 12 are shipped. What is next starts at item 13, from the
+2026-09-20 gap analysis at the end of this file.
+
 ## 1. Acquisition-target entity and lifecycle
 
 **Status:** shipped 2026-07-29 (#67).
@@ -842,3 +845,183 @@ on covers and review audio, and a deep link in the ntfy notification.
 
 **Done when:** the owner answers a review question on the phone with the
 audio preview, and a request without a credential gets 401 in production.
+
+## 2026-09-20 gap analysis
+
+Every item above is shipped, so this is the second ordering of the gap between
+docs/PRODUCT.md and what exists. Four decisions were taken the same day and
+PRODUCT.md was changed to match: the web keeps no phone layouts and the Expo
+app under `app/` is replaced by a native Android app in its own repository;
+the own recommendation engine is built; the source identity of
+[0026](decisions/0026-a-source-is-an-identity.md) is extended to wants and to
+more services, because MusicBrainz holds none of the music the queue is full
+of; and the six smaller features under items 18 to 23 are in the target.
+
+The order is the order of dependency. Item 15 is the first code change,
+because item 16 cannot search a want without it. The Android app runs beside
+the rest in its own repository and blocks nothing here.
+
+## 13. The web stops serving phones, the Expo app goes
+
+**What:** Delete `app/` and `docs/app-plan.md`, take the app job out of CI and
+`make check`, and remove the phone layouts from `web/src/routes` and the
+responsive rules in `DESIGN.md` that only served them. The backend built for
+item 12 stays: app tokens ([0033](decisions/0033-an-app-token-is-minted-behind-the-forward-auth.md)),
+`/me`, the event stream, caching headers on covers and review audio, the ntfy
+deep link.
+
+**Unblocks:** 14, which needs one phone client to maintain and not two.
+
+**Depends on:** nothing.
+
+**Done when:** CI is green with no app job, `make check` passes without an
+`app/` install, `web/src/lib/design-system.test.ts` passes, and PRODUCT.md no
+longer promises a phone browser.
+
+## 14. A native Android app
+
+**What:** Kotlin, Jetpack Compose, Material 3, in a separate public
+repository so Gradle stays out of this one's CI. The same screens item 12
+built: sign in by QR or typed token against `/me`, Review with the preview
+player and the web's three answers in the web's words, Downloads, Wants with
+Stop looking and Look again, Search with Follow, Settings. Live updates over
+the event stream with the Bearer header and the 15 s refetch as the safety
+net. Material's own colour and type; the Schall tokens are not carried over.
+
+**Unblocks:** answering review questions away from a desk, which item 12 did
+and 13 removes.
+
+**Depends on:** 13 for the deep link scheme, nothing else here.
+
+**Done when:** the owner answers a review question on the phone with the audio
+preview from an APK built from the new repository, and the ntfy notification
+opens Review there.
+
+## 15. A want with an anchor and no recording is searched
+
+**What:** Rule 4 of item 10a. A want that holds an anchor
+([0024](decisions/0024-a-distributors-preview-is-an-audio-anchor.md),
+[0029](decisions/0029-a-popular-upload-found-by-name-is-an-audio-anchor.md))
+but no MusicBrainz recording is searched, and its copies are judged against
+the anchor alone. It starts as an ADR, because a recording-less want sits on
+the resolution schedule and the search schedule at once and they share one
+`next_attempt_at` column.
+
+**Unblocks:** 16. Without it a source-keyed want has nothing to run on.
+
+**Depends on:** nothing; 10a to 10d are built.
+
+**Done when:** a want with an anchor and no recording gets searched, a copy
+reproducing a Topic upload or a distributor preview is admitted and one
+reproducing another upload is held, and a test pins that a copy failing the
+anchor is never admitted on tags.
+
+## 16. A want keyed by a source
+
+**What:** Phases 3 and 4 of [0026](decisions/0026-a-source-is-an-identity.md).
+`acquisition_targets` can carry a source identity instead of a recording: the
+track at an address on a service, under that service's own identifier. One
+source interface, each service saying what the track at an address is and
+handing over thirty seconds of its audio as the want's anchor;
+`internal/soundcloud` and `internal/youtube` exist, Bandcamp is new. The
+loop looks on Soulseek first and fetches from the source itself through
+yt-dlp when nothing there proves out. A schema decision, so it starts as an
+ADR.
+
+**Unblocks:** the 252 of 314 entries [0024](decisions/0024-a-distributors-preview-is-an-audio-anchor.md)
+measured as unresolvable; the review queue's Version question gains an answer
+that is an address rather than a recording.
+
+**Depends on:** 15.
+
+**Done when:** a playlist entry MusicBrainz holds nothing for can be turned
+into a source-keyed want from the review queue, is acquired, and lands in the
+library carrying the source identity; a test pins that a copy is admitted only
+by reproducing the source's audio.
+
+## 17. The own recommendation engine
+
+**What:** Source 2 of the Recommendations section. It reads the `listens`
+table (`00094_listens.sql`), the library, the wants and the More/Less
+feedback ([0028](decisions/0028-more-like-this.md)), walks MusicBrainz
+relationships, ListenBrainz artist similarity and co-occurrence in the owner's
+listens and playlists, and writes recording IDs with reason codes into the
+candidate stores of [0016](decisions/0016-recommendation-signals-and-candidates-have-their-own-lifetimes.md).
+The graph it walks is chosen in a design note first.
+
+**Unblocks:** suggestions that do not depend on ListenBrainz being up or
+knowing the account.
+
+**Depends on:** nothing; the sweep, the six rules and the weekly playlist
+apply unchanged.
+
+**Done when:** Playlists → Recommended shows rows whose reason names the own
+engine, and `TestReviewQueueRejectionDoesNotAffectRecommendations` still
+passes.
+
+## 18. Bandcamp purchases import themselves
+
+**What:** Read the owner's Bandcamp collection with their own credentials,
+fetch each purchase's download, and import it through the upload path, where
+AcoustID can only object.
+
+**Depends on:** nothing.
+
+**Done when:** a new purchase appears in the library after the next sweep
+with its Bandcamp address as provenance.
+
+## 19. Album wants from a playlist entry
+
+**What:** A control on a playlist entry raises a want for the entry's whole
+release, acquired through the whole-release path.
+
+**Depends on:** nothing.
+
+**Done when:** the release is acquired and the entry's own want is satisfied
+by the file that lands.
+
+## 20. Playlist export
+
+**What:** A playlist written as M3U over library paths, and pushed to a
+Spotify playlist by ISRC, with the entries that could not be written listed
+rather than dropped.
+
+**Depends on:** nothing.
+
+**Done when:** both exports exist and an unresolved entry is listed, not
+silently left out.
+
+## 21. Label follows
+
+**What:** Follow a label from a release page; its new releases join the feed
+and its recordings are suppressed from recommendations with the label reason
+the sweep already names. `internal/labels` exists.
+
+**Depends on:** nothing.
+
+**Done when:** a followed label's new release raises a want and its
+recordings carry the label suppression reason.
+
+## 22. Listening analytics on the Overview
+
+**What:** From the local `listens` table: what was listened to most by
+period, how much of it the library owns, what was listened to and is not
+owned, each with a control to raise a want.
+
+**Depends on:** nothing.
+
+**Done when:** the three answers are on the Overview and the control raises a
+want with origin `listens`.
+
+## 23. A second person
+
+**What:** Two people on one installation, each signed in through the
+forward-auth, each with their own playlists, follows and recommendations,
+every decision naming who took it, the library shared. A schema decision, so
+it starts as an ADR.
+
+**Depends on:** nothing, though 17 and 22 are simpler if built per person from
+the start.
+
+**Done when:** two people sign in, each sees their own lists, and a review
+decision records who took it.
