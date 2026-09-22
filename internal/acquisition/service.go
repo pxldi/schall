@@ -492,12 +492,15 @@ func (service *Service) Sweep(ctx context.Context) error {
 		return fmt.Errorf("list due acquisition targets: %w", err)
 	}
 	// Read after resolution ran, so a want resolved this pass is looked for on
-	// its recording and not on its anchor.
-	anchored, err := service.store.DueSearchTargets(ctx, service.now(), sweepBatch)
-	if err != nil {
-		return fmt.Errorf("list the wants due a search on their anchor: %w", err)
+	// its recording and not on its anchor. The two share one batch: a search on
+	// an anchor is a Soulseek search like any other.
+	if spare := sweepBatch - len(targets); spare > 0 {
+		anchored, err := service.store.DueSearchTargets(ctx, service.now(), int32(spare))
+		if err != nil {
+			return fmt.Errorf("list the wants due a search on their anchor: %w", err)
+		}
+		targets = append(targets, anchored...)
 	}
-	targets = append(targets, anchored...)
 	// Attempted a few at a time. Every want in the pass is independent — its own
 	// row, its own request, its own copy — and almost all of the time an attempt
 	// takes is spent waiting for peers to answer a search, so waiting for several
