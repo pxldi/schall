@@ -17,7 +17,8 @@ type SourceVerification struct {
 	// Admitted says the copy reproduces an anchor that can admit it and
 	// nothing holds it back.
 	Admitted bool
-	// Refused says a Deezer preview was measured and the copy is other audio.
+	// Refused says a Deezer preview or a keyed address's excerpt was measured
+	// and the copy is other audio.
 	Refused bool
 	// Contradicted says the copy's own tags or measured length disagree with
 	// the entry.
@@ -39,12 +40,14 @@ type SourceVerification struct {
 // recording names, by its anchor alone.
 //
 // The anchor is the only thing here that can admit. It admits when it is a
-// Deezer preview or the artist's Topic upload and the copy reproduces it under
-// the chromaprint thresholds. The rest can only hold the copy back: a title,
+// Deezer preview, the artist's Topic upload or the excerpt from the address a
+// person keyed the want to (ADR 0038), and the copy reproduces it under the
+// chromaprint thresholds. The rest can only hold the copy back: a title,
 // artist, ISRC or length that contradicts the entry holds it whatever the
 // audio says, and a MusicBrainz recording ID on the copy holds it too. Tags
-// that agree admit nothing. A Deezer preview the copy fails to reproduce
-// refuses it, before anything else is read, as it does on the recording path.
+// that agree admit nothing. A Deezer preview or a keyed excerpt the copy fails
+// to reproduce refuses it, before anything else is read, as it does on the
+// recording path.
 //
 // file.Anchor carries no recording: it was fetched for the entry.
 func VerifyAgainstAnchor(file, entry Evidence) SourceVerification {
@@ -52,7 +55,8 @@ func VerifyAgainstAnchor(file, entry Evidence) SourceVerification {
 	if file.Anchor != nil {
 		anchor, source = readAnchorComparison(file.Anchor), file.Anchor.Source
 	}
-	admitting := source == AnchorSourceDeezer || source == AnchorByNameTopic
+	admitting := source == AnchorSourceDeezer || source == AnchorByNameTopic ||
+		source == AnchorSourceKeyed
 
 	pair := comparison{
 		isrc:   tagmatch.Identifier(file.ISRC, entry.ISRC),
@@ -80,6 +84,9 @@ func VerifyAgainstAnchor(file, entry Evidence) SourceVerification {
 	case verification.AnchorSaysOtherwise:
 		verification.Refused = true
 		verification.Summary = "The audio is not the sample Deezer publishes for this track."
+		if source == AnchorSourceKeyed {
+			verification.Summary = "The audio is not the track at the address this want is keyed to."
+		}
 	case verification.NamesARecording:
 		verification.Summary = "The file carries a MusicBrainz recording ID, and this entry " +
 			"has not been resolved to a recording yet."
@@ -90,9 +97,12 @@ func VerifyAgainstAnchor(file, entry Evidence) SourceVerification {
 		verification.Admitted = true
 		verification.Summary = "The audio matches the sample Deezer publishes for this track. " +
 			"MusicBrainz has no recording for it."
-		if source == AnchorByNameTopic {
+		switch source {
+		case AnchorByNameTopic:
 			verification.Summary = "The audio matches the artist's Topic upload on YouTube. " +
 				"MusicBrainz has no recording for it."
+		case AnchorSourceKeyed:
+			verification.Summary = "The audio matches the track at the address this want is keyed to."
 		}
 	default:
 		verification.Summary = "Nothing could decide whether this copy is the track the entry names."
@@ -109,6 +119,10 @@ func describeAgainstEntry(
 	switch {
 	case source == AnchorByNameTopic:
 		audio = "audio (matches the artist's Topic upload)"
+	case source == AnchorSourceKeyed && anchor == tagmatch.Differs:
+		audio = "audio (not the track at the keyed address)"
+	case source == AnchorSourceKeyed:
+		audio = "audio (matches the track at the keyed address)"
 	case anchor == tagmatch.Differs:
 		audio = "audio (not the published sample of this track)"
 	}

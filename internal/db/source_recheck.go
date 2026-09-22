@@ -50,6 +50,8 @@ func (q *Queries) DueSourceRechecks(
 			WHERE targets.acquired_library_file_id = identities.library_file_id
 			  AND targets.status = 'acquired'
 			  AND targets.musicbrainz_recording_id IS NULL
+			  -- A keyed want is never resolved (ADR 0038 §1).
+			  AND targets.source IS NULL
 			ORDER BY targets.acquired_at, targets.id
 			LIMIT 1
 		) want ON true

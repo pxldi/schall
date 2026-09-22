@@ -255,6 +255,21 @@ type TargetImportRow struct {
 	// was measured against (ADR 0029 §4).
 	AnchorLabel string
 	AnchorViews int64
+	// SourceKey is the address a person keyed the want to, nil on every other
+	// want (ADR 0038). A copy admitted on its excerpt is written this key.
+	// MinimumBitrate is the want's floor in kbit/s, zero where it has none.
+	SourceKey      *ImportSource
+	MinimumBitrate int
+}
+
+// SourceKeyOf is the source identity key a copy for a want with no recording
+// is written: the want's own address when a person keyed it, and otherwise the
+// one its admitting anchor names (ADR 0037 §4, ADR 0038 §5).
+func SourceKeyOf(row TargetImportRow) (ImportSource, bool) {
+	if row.SourceKey != nil {
+		return *row.SourceKey, true
+	}
+	return SourceOfAnchor(row.AnchorSource, row.AnchorReference)
 }
 
 // ErrNotATargetImport reports a request that is not one file fetched for a want.
@@ -344,6 +359,7 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 		album            uuid.NullUUID
 		track            uuid.NullUUID
 		searchedOnAnchor bool
+		sourceKey        ImportSource
 	)
 	if err := q.db.QueryRow(ctx, `
 		SELECT targets.musicbrainz_recording_id, targets.musicbrainz_release_group_id,
@@ -362,6 +378,8 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 		       coalesce(targets.anchor_seconds, 0),
 		       coalesce(targets.anchor_label, ''),
 		       coalesce(targets.anchor_views, 0),
+		       coalesce(targets.source, ''), coalesce(targets.external_id, ''),
+		       coalesce(targets.external_url, ''), coalesce(targets.minimum_bitrate, 0),
 		       -- The one genre written into this file: the leading community
 		       -- vote on the release group the want was resolved through, or
 		       -- the artist's where that release group has none. Empty where
@@ -395,9 +413,14 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 		&result.DiscNumber, &result.TrackNumber, &track,
 		&result.AnchorFingerprint, &result.AnchorSource,
 		&result.AnchorReference, &result.AnchorSeconds,
-		&result.AnchorLabel, &result.AnchorViews, &result.Genre,
+		&result.AnchorLabel, &result.AnchorViews,
+		&sourceKey.Source, &sourceKey.ExternalID, &sourceKey.ExternalURL, &result.MinimumBitrate,
+		&result.Genre,
 	); err != nil {
 		return result, err
+	}
+	if sourceKey.Source != "" {
+		result.SourceKey = &sourceKey
 	}
 	// The credit comes off that same album and that same track, and off nothing
 	// else. A recording is credited one way on the release it was written for
@@ -2444,6 +2467,16 @@ func completeSourceCopy(
 	if method == "" {
 		return fmt.Errorf("the accepted accepted of want %s records nothing that admitted it", accepted.targetID)
 	}
+	// A copy judged on the want's earlier anchor can land after a person keyed
+	// the want to an address. It proves the earlier anchor, not the address, so
+	// the want stops for the person instead of settling on it (ADR 0038 §3).
+	var keyedTo string
+	if err := tx.QueryRow(ctx, `
+		SELECT coalesce(external_id, '') FROM acquisition_targets WHERE id = $1
+	`, accepted.targetID).Scan(&keyedTo); err != nil {
+		return err
+	}
+	provesTheKey := keyedTo == "" || keyedTo == key.ExternalID
 	proof := append([]string{}, accepted.evidence.Agrees...)
 	if anchor := accepted.evidence.Anchor; anchor != nil {
 		proof = append(proof, fmt.Sprintf("anchor: %s %s", anchor.Source, anchor.Reference))
@@ -2463,8 +2496,11 @@ func completeSourceCopy(
 	// address is registered under it. It is kept on the identity, because it is
 	// what a recording MusicBrainz later names has to carry for the file to move
 	// onto it (ADR 0037 §6). An automatic identity is asked about again after
-	// the first rung of the unfound ladder, a day; a person's never is.
-	if _, err := tx.Exec(ctx, `
+	// the first rung of the unfound ladder, a day; a person's never is. A keyed
+	// want's key came from a person, so its file's identity is a person's too,
+	// and the audio proof only ties the file to it (ADR 0038 §5).
+	if provesTheKey {
+		if _, err := tx.Exec(ctx, `
 		INSERT INTO library_file_identities (
 			library_file_id, kind, provider, source, external_id, external_url,
 			isrc, method, confidence, is_manual, summary, evidence,
@@ -2472,8 +2508,9 @@ func completeSourceCopy(
 		)
 		SELECT $1, 'source', $2, $2, $3, $4,
 		       CASE WHEN $2 = 'deezer' THEN nullif(btrim(targets.entry_isrc), '') END,
-		       $5, $6, $7, $8, $9::jsonb,
-		       CASE WHEN $7 THEN NULL ELSE now() + interval '24 hours' END
+		       $5, $6, $7 OR targets.source IS NOT NULL, $8, $9::jsonb,
+		       CASE WHEN $7 OR targets.source IS NOT NULL THEN NULL
+		            ELSE now() + interval '24 hours' END
 		FROM acquisition_targets targets
 		WHERE targets.id = $10
 		ON CONFLICT (library_file_id) DO UPDATE
@@ -2490,8 +2527,9 @@ func completeSourceCopy(
 		WHERE library_file_identities.kind = 'local_only'
 		  AND NOT library_file_identities.is_manual
 	`, accepted.fileID, key.Source, key.ExternalID, key.ExternalURL, method, confidence,
-		accepted.byHand, accepted.proven, encoded, accepted.targetID); err != nil {
-		return fmt.Errorf("record %s as %s: %w", accepted.fileID, key.ExternalID, err)
+			accepted.byHand, accepted.proven, encoded, accepted.targetID); err != nil {
+			return fmt.Errorf("record %s as %s: %w", accepted.fileID, key.ExternalID, err)
+		}
 	}
 
 	var stored string
@@ -2510,7 +2548,7 @@ func completeSourceCopy(
 	}
 	outcome.LibraryFileID = uuid.NullUUID{UUID: accepted.fileID, Valid: true}
 
-	if stored != key.ExternalID {
+	if !provesTheKey || stored != key.ExternalID {
 		outcome.Disagreed = true
 		_, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
@@ -3123,7 +3161,9 @@ func (q *Queries) copiesToJudgeAgain(
 		JOIN acquisition_targets targets ON targets.id = copies.acquisition_target_id
 		JOIN download_requests requests ON requests.id = copies.download_request_id
 		WHERE copies.decided_by = 'schall'
-		  AND targets.status = 'pending'
+		  -- An unresolved want searched on its anchor holds copies too, and a
+		  -- keyed want's are judged again when its excerpt lands (ADR 0038 §3).
+		  AND `+searchedWant("targets.")+`
 		  AND (targets.anchor_fingerprint IS NOT NULL
 		       OR copies.summary LIKE '`+unaskedRegistrationSummary+`%'
 		       OR ($1::uuid IS NOT NULL AND`+libraryCanSpeakForTheWant+`))

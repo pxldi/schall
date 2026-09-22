@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pxldi/schall/internal/anchor"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/identity"
@@ -230,6 +231,9 @@ type Store interface {
 	// whose copy nobody has asked about yet waits for the answer rather than
 	// stopping on the silence.
 	QueueFileResolution(context.Context, uuid.UUID) (db.LibraryScanJobRow, error)
+	// Keying a want to an address and setting its floor (ADR 0038).
+	KeyAcquisitionTargetToSource(context.Context, db.KeySourceParams) (db.AcquisitionTargetRow, error)
+	SetAcquisitionTargetMinimumBitrate(ctx context.Context, id uuid.UUID, kbps int) (db.AcquisitionTargetRow, error)
 }
 
 // Entry is what somebody asked for, in their own words. Everything except the
@@ -275,6 +279,13 @@ type Service struct {
 	// moves it onto a recording once one is proven (ADR 0037 §6). Optional:
 	// without it such a file keeps its source identity.
 	sources SourceRechecker
+	// tracks reads an address a person keys a want to, and prints fingerprints
+	// its excerpt (ADR 0038). Optional: without them no want can be keyed.
+	tracks TrackSources
+	prints anchor.Fingerprinter
+	// namer names a file admitted for a keyed want. Optional: without it the
+	// file keeps the tags it arrived with.
+	namer SourceNamer
 	// notices tells connected interfaces that the wants changed. Optional:
 	// without it the views go back to asking on a timer.
 	notices *events.Hub
@@ -804,6 +815,9 @@ func (service *Service) completeAcquired(
 				Msg("offer an acquired file to the catalogue")
 		}
 	}
+	if outcome.Settled {
+		service.nameKeyedFile(ctx, target)
+	}
 	// An upgrade want settling is the moment this feature exists for: a copy
 	// was proven — by exactly the same rules as any other want, and the floor
 	// already refused any candidate under it — and now stands beside the file
@@ -876,10 +890,12 @@ func (service *Service) nextUnfoundAttempt(attempts int32) time.Time {
 }
 
 // anchorAdmits reports an anchor source that can admit a copy on its own: a
-// Deezer preview or the artist's Topic upload (ADR 0024, 0034). A want with no
+// Deezer preview, the artist's Topic upload (ADR 0024, 0034) or the excerpt
+// from the address a person keyed the want to (ADR 0038). A want with no
 // recording is searched only on one of these (ADR 0037 §1).
 func anchorAdmits(source string) bool {
-	return source == identity.AnchorSourceDeezer || source == identity.AnchorByNameTopic
+	return source == identity.AnchorSourceDeezer || source == identity.AnchorByNameTopic ||
+		source == identity.AnchorSourceKeyed
 }
 
 // nextLook is when a search that found nothing comes back. A want with no

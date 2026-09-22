@@ -228,6 +228,8 @@ func (service *Service) moveOntoRecording(
 		    WHERE acquired_library_file_id = $1
 		      AND status = 'acquired'
 		      AND musicbrainz_recording_id IS NULL
+		      -- A keyed want is never resolved, even through its file (ADR 0038 §1).
+		      AND source IS NULL
 		    ORDER BY acquired_at, id
 		    LIMIT 1
 		)
