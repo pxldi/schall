@@ -937,6 +937,14 @@ func compareAnchor(anchor *AnchorComparison, recording musicbrainz.Recording) ta
 		!recording.Answers(anchor.RecordingID) {
 		return tagmatch.Unknown
 	}
+	return readAnchorComparison(anchor)
+}
+
+// readAnchorComparison is what one measured anchor comparison says, with the
+// window and coverage checks applied to an agreement. It does not ask which
+// recording the anchor names. compareAnchor asks that first, and the
+// anchor-only check has no recording to ask about (ADR 0037).
+func readAnchorComparison(anchor *AnchorComparison) tagmatch.Verdict {
 	verdict := ReadAnchor(anchor.Source, anchor.Rate)
 	if verdict == tagmatch.Agrees && anchor.Comparison != nil {
 		if !anchor.Comparison.WindowsAgree() ||

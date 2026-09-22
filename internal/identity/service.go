@@ -128,8 +128,9 @@ type fileRow struct {
 	fingerprint string
 	missing     bool
 	matched     bool
-	// decided marks a file whose identity a person settled. A manual decision
-	// is permanent: the user should never be asked the same question twice.
+	// decided marks a file whose identity a person settled, or whose source
+	// identity its want's anchor proved. A manual decision is permanent: the
+	// user should never be asked the same question twice.
 	decided bool
 	// proven marks a file that already carries an identity and whose resolution
 	// is settled — the shape acquisition leaves behind when the audio proved a
@@ -293,9 +294,14 @@ func (service *Service) load(ctx context.Context, fileID uuid.UUID) (fileRow, er
 		       library_files.missing_at IS NOT NULL,
 		       EXISTS (SELECT 1 FROM track_mappings
 		               WHERE track_mappings.library_file_id = library_files.id),
+		       -- A source identity is decided whoever wrote it. A person pastes
+		       -- the address, or the want's anchor proved the audio (ADR 0026,
+		       -- 0037), and asking MusicBrainz about the file's tags could only
+		       -- replace that with a weaker answer.
 		       EXISTS (SELECT 1 FROM library_file_identities
 		               WHERE library_file_identities.library_file_id = library_files.id
-		                 AND library_file_identities.is_manual),
+		                 AND (library_file_identities.is_manual
+		                      OR library_file_identities.kind = 'source')),
 		       library_files.resolution_status = 'resolved'
 		       AND EXISTS (SELECT 1 FROM library_file_identities
 		                   WHERE library_file_identities.library_file_id = library_files.id)

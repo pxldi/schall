@@ -2883,9 +2883,15 @@ func TestACopyIsNotGivenAnIdentityOnceTheWantNamesNoRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := queries.CompleteAcquiredFile(ctx, targetID,
-		"A copy was imported.", "Proven by its audio."); err == nil {
-		t.Fatal("a copy was completed against a want that names no recording")
+	// The copy was proven against a recording, not against an anchor, so it
+	// carries no source key either (ADR 0037). Nothing is completed.
+	outcome, err := queries.CompleteAcquiredFile(ctx, targetID,
+		"A copy was imported.", "Proven by its audio.")
+	if err != nil {
+		t.Fatalf("CompleteAcquiredFile() error = %v", err)
+	}
+	if outcome.Settled || outcome.LibraryFileID.Valid {
+		t.Fatalf("outcome = %+v, want a copy nothing names left uncompleted", outcome)
 	}
 
 	var identities int

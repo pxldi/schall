@@ -66,6 +66,13 @@ type AcquisitionTargetRow struct {
 	BelowFloorStreak int16
 	BelowFloorSince  pgtype.Timestamptz
 	FloorWaivedAt    pgtype.Timestamptz
+	// NextSearchAt is when an unresolved want is next searched for on its
+	// anchor, and SearchAttempts is the rung that search is on (ADR 0037).
+	// NextAttemptAt stays resolution's schedule on such a want. AnchorSource
+	// is who published the want's anchor, empty when it has none.
+	NextSearchAt   pgtype.Timestamptz
+	SearchAttempts int32
+	AnchorSource   string
 	// HoldsAnImportedCopy says a copy of this want was accepted and has become a
 	// file in the library. Only ListAcquisitionTargets reads it, because only the
 	// list of wants has to tell a want that is being looked for from one that has
@@ -121,7 +128,10 @@ const acquisitionTargetColumns = `
 	acquisition_targets.recheck_attempts,
 	acquisition_targets.below_floor_streak,
 	acquisition_targets.below_floor_since,
-	acquisition_targets.floor_waived_at
+	acquisition_targets.floor_waived_at,
+	acquisition_targets.next_search_at,
+	acquisition_targets.search_attempts,
+	coalesce(acquisition_targets.anchor_source, '') AS anchor_source
 `
 
 func scanAcquisitionTarget(row pgx.Row) (AcquisitionTargetRow, error) {
@@ -146,6 +156,7 @@ func scanAcquisitionTargetInto(row pgx.Row, target *AcquisitionTargetRow, rest .
 		&target.UpgradeOfLibraryFileID,
 		&target.RecheckReason, &target.RecheckAfter, &target.RecheckAttempts,
 		&target.BelowFloorStreak, &target.BelowFloorSince, &target.FloorWaivedAt,
+		&target.NextSearchAt, &target.SearchAttempts, &target.AnchorSource,
 	}, rest...)
 	return row.Scan(columns...)
 }
@@ -335,6 +346,7 @@ func (q *Queries) StopPursuingAcquisitionTarget(
 		SET status = 'not_wanted',
 		    not_wanted_at = now(),
 		    next_attempt_at = NULL,
+		    next_search_at = NULL,
 		    review_reason = NULL,
 		    summary = $2,
 		    updated_at = now()
@@ -363,6 +375,7 @@ func (q *Queries) PursueAcquisitionTargetAgain(
 		    END,
 		    not_wanted_at = NULL,
 		    next_attempt_at = $4,
+		    `+armSearch(`CASE WHEN musicbrainz_recording_id IS NULL THEN 'unresolved' END`)+`,
 		    last_error = NULL,
 		    summary = CASE
 		        WHEN musicbrainz_recording_id IS NULL THEN $2
@@ -382,11 +395,11 @@ func (q *Queries) TakeBestAvailableAcquisitionTarget(
 	return scanAcquisitionTarget(q.db.QueryRow(ctx, `
 		UPDATE acquisition_targets
 		SET floor_waived_at = now(),
-		    next_attempt_at = now(),
+		    `+scheduleLook("now()")+`,
 		    below_floor_streak = 0,
 		    below_floor_since = NULL,
 		    updated_at = now()
-		WHERE id = $1 AND status = 'pending'
+		WHERE id = $1 AND `+searchedWant("")+`
 		RETURNING`+acquisitionTargetColumns, id))
 }
 
@@ -398,11 +411,11 @@ func (q *Queries) KeepAcquisitionTargetFloor(
 	return scanAcquisitionTarget(q.db.QueryRow(ctx, `
 		UPDATE acquisition_targets
 		SET floor_waived_at = NULL,
-		    next_attempt_at = now(),
+		    `+scheduleLook("now()")+`,
 		    below_floor_streak = 0,
 		    below_floor_since = NULL,
 		    updated_at = now()
-		WHERE id = $1 AND status = 'pending' AND floor_waived_at IS NOT NULL
+		WHERE id = $1 AND `+searchedWant("")+` AND floor_waived_at IS NOT NULL
 		RETURNING`+acquisitionTargetColumns, id))
 }
 
@@ -466,6 +479,7 @@ func (q *Queries) RejectAcquisitionTargetResolution(
 			    summary = $2,
 			    last_error = NULL,
 			    next_attempt_at = $4,
+			    `+armSearch("'unresolved'")+`,
 			    updated_at = now()
 			WHERE id = (SELECT id FROM rejected)
 			RETURNING`+acquisitionTargetColumns+`
@@ -605,6 +619,98 @@ func (q *Queries) NextAcquisitionTargetDue(ctx context.Context) (pgtype.Timestam
 	return q.nextTargetDue(ctx, "pending")
 }
 
+// AdmittingAnchorSources are the anchors that can admit a copy on their own:
+// the Deezer preview fetched by the entry's ISRC, and the artist's Topic
+// upload (ADR 0024, 0034). A want MusicBrainz has no recording for is searched
+// only when its anchor is one of these (ADR 0037).
+const AdmittingAnchorSources = `('deezer', 'youtube-topic')`
+
+// anchorAdmits is the SQL condition for a want whose stored anchor can admit
+// a copy. table names the acquisition_targets row, with its trailing dot.
+func anchorAdmits(table string) string {
+	return table + `anchor_fingerprint IS NOT NULL AND ` +
+		table + `anchor_source IN ` + AdmittingAnchorSources
+}
+
+// searchedWant is the SQL condition for a want the search may write to: a
+// pending want, or an unresolved one searched on its anchor (ADR 0037). table
+// names the acquisition_targets row, with its trailing dot.
+func searchedWant(table string) string {
+	return `(` + table + `status = 'pending' OR (` + table + `status = 'unresolved' AND ` +
+		anchorAdmits(table) + `))`
+}
+
+// scheduleLook sets the schedule the search reads for the want's state: an
+// unresolved want's next_search_at, and a pending want's next_attempt_at. An
+// unresolved want's next_attempt_at is resolution's, and the search leaves it
+// alone. value is an SQL expression of type timestamptz.
+func scheduleLook(value string) string {
+	return `next_attempt_at = CASE WHEN status = 'unresolved' THEN next_attempt_at ELSE ` + value + ` END,
+	    next_search_at = CASE WHEN status = 'unresolved' THEN ` + value + ` ELSE next_search_at END`
+}
+
+// countLook counts one search on the counter the want's ladder reads.
+const countLook = `attempts = attempts + CASE WHEN status = 'unresolved' THEN 0 ELSE 1 END,
+	    search_attempts = search_attempts + CASE WHEN status = 'unresolved' THEN 1 ELSE 0 END`
+
+// lookCounted is the attempt number that countLook just wrote, for the attempt
+// row. It reads the row after the update, so it is only valid in RETURNING.
+const lookCounted = `CASE WHEN status = 'unresolved' THEN search_attempts ELSE attempts END`
+
+// armSearch schedules the search of an unresolved want whose anchor can admit a
+// copy, and clears it on any other want. It is written wherever a want becomes
+// unresolved, so a want that already holds its anchor is searched without
+// waiting for a second one to land. It reads the row as the update found it, so
+// status is the state the want is moving to only where the caller sets it in
+// the same statement; newStatus names that state.
+func armSearch(newStatus string) string {
+	return `next_search_at = CASE WHEN ` + newStatus + ` = 'unresolved' AND ` +
+		anchorAdmits("") + ` THEN now() ELSE NULL END,
+	    search_attempts = 0`
+}
+
+// DueSearchTargets returns the unresolved wants whose search on their anchor is
+// due, oldest schedule first (ADR 0037).
+func (q *Queries) DueSearchTargets(
+	ctx context.Context, now time.Time, limit int32,
+) ([]AcquisitionTargetRow, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT`+acquisitionTargetColumns+`
+		FROM acquisition_targets
+		WHERE status = 'unresolved' AND next_search_at <= $1
+		  AND `+anchorAdmits("acquisition_targets.")+`
+		ORDER BY acquisition_targets.next_search_at, acquisition_targets.created_at
+		LIMIT $2
+	`, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list the wants due a search on their anchor: %w", err)
+	}
+	defer rows.Close()
+
+	targets := make([]AcquisitionTargetRow, 0)
+	for rows.Next() {
+		target, err := scanAcquisitionTarget(rows)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	return targets, rows.Err()
+}
+
+// NextSearchTargetDue reports when the earliest search of an unresolved want on
+// its anchor is due. An invalid timestamp means none is scheduled.
+func (q *Queries) NextSearchTargetDue(ctx context.Context) (pgtype.Timestamptz, error) {
+	var due pgtype.Timestamptz
+	err := q.db.QueryRow(ctx, `
+		SELECT min(next_search_at)
+		FROM acquisition_targets
+		WHERE status = 'unresolved' AND next_search_at IS NOT NULL
+		  AND `+anchorAdmits("")+`
+	`).Scan(&due)
+	return due, err
+}
+
 // NextUnresolvedTargetDue reports when the earliest entry waiting to be resolved
 // is due.
 //
@@ -722,16 +828,16 @@ func (q *Queries) RequeueAcquisitionTarget(
 	tag, err := q.db.Exec(ctx, `
 		WITH requeued AS (
 			UPDATE acquisition_targets
-			SET attempts = attempts + 1,
+			SET `+countLook+`,
 			    last_attempt_at = now(),
-			    next_attempt_at = $2,
+			    `+scheduleLook("$2::timestamptz")+`,
 			    summary = $3,
 			    last_error = nullif($6, ''),
 			    below_floor_streak = 0,
 			    below_floor_since = NULL,
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending'
-			RETURNING id, attempts
+			WHERE id = $1 AND `+searchedWant("")+`
+			RETURNING id, `+lookCounted+` AS attempts
 		)
 		INSERT INTO acquisition_target_attempts (
 			acquisition_target_id, attempt, outcome, detail
@@ -757,7 +863,7 @@ func (q *Queries) RequeueBelowFloor(
 	tag, err := q.db.Exec(ctx, `
 		WITH requeued AS (
 			UPDATE acquisition_targets
-			SET attempts = attempts + 1,
+			SET `+countLook+`,
 			    last_attempt_at = now(),
 			    below_floor_streak = below_floor_streak + 1,
 			    below_floor_since = CASE
@@ -765,18 +871,18 @@ func (q *Queries) RequeueBelowFloor(
 			        THEN coalesce(below_floor_since, now()::timestamptz)
 			        ELSE NULL
 			    END,
-			    next_attempt_at = CASE
+			    `+scheduleLook(`CASE
 			        WHEN below_floor_streak + 1 >= 3 THEN $3::timestamptz
 			        ELSE $2::timestamptz
-			    END,
+			    END`)+`,
 			    summary = CASE
 			        WHEN below_floor_streak + 1 >= 3 THEN $4
 			        ELSE $5
 			    END,
 			    last_error = NULL,
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending'
-			RETURNING id, attempts
+			WHERE id = $1 AND `+searchedWant("")+`
+			RETURNING id, `+lookCounted+` AS attempts
 		)
 		INSERT INTO acquisition_target_attempts (
 			acquisition_target_id, attempt, outcome, detail
@@ -802,14 +908,14 @@ func (q *Queries) RequeueParkedAcquisitionTarget(
 	tag, err := q.db.Exec(ctx, `
 		WITH requeued AS (
 			UPDATE acquisition_targets
-			SET attempts = attempts + 1,
+			SET `+countLook+`,
 			    last_attempt_at = now(),
-			    next_attempt_at = $2,
+			    `+scheduleLook("$2::timestamptz")+`,
 			    summary = $3,
 			    last_error = nullif($6, ''),
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending' AND below_floor_since IS NOT NULL
-			RETURNING id, attempts
+			WHERE id = $1 AND `+searchedWant("")+` AND below_floor_since IS NOT NULL
+			RETURNING id, `+lookCounted+` AS attempts
 		)
 		INSERT INTO acquisition_target_attempts (
 			acquisition_target_id, attempt, outcome, detail
@@ -995,6 +1101,10 @@ func (q *Queries) resolveTarget(
 			    attempts = 0,
 			    last_attempt_at = now(),
 			    next_attempt_at = $6,
+			    -- The want continues on the recording path. Its search on the
+			    -- anchor is over (ADR 0037 §2).
+			    next_search_at = NULL,
+			    search_attempts = 0,
 			    updated_at = now()
 			WHERE id = (SELECT id FROM before) AND status = $8
 			RETURNING`+acquisitionTargetColumns+`
@@ -1057,6 +1167,7 @@ func (q *Queries) supersedeAcquisitionTarget(
 			    last_error = NULL,
 			    last_attempt_at = now(),
 			    next_attempt_at = NULL,
+			    next_search_at = NULL,
 			    updated_at = now()
 			WHERE id = (SELECT id FROM before)
 			  AND status = $8
@@ -1170,6 +1281,7 @@ func (q *Queries) SendAcquisitionTargetToReview(
 			    attempts = attempts + 1,
 			    last_attempt_at = now(),
 			    next_attempt_at = NULL,
+			    next_search_at = NULL,
 			    updated_at = now()
 			WHERE id = (SELECT id FROM before) AND status = 'unresolved'
 			RETURNING`+acquisitionTargetColumns+`
@@ -1703,24 +1815,44 @@ type AnchorParams struct {
 }
 
 // RecordAnchor writes a fetched preview onto the want and takes the want off the
-// schedule. Nothing else about the want moves: an anchor is evidence added to a
-// want, never an answer about it.
+// anchor schedule. An anchor is evidence added to a want, never an answer about
+// it. One thing else moves: an unresolved want whose new anchor can admit a copy
+// is due a search now, and a sweep is asked for in the same transaction
+// (ADR 0037 §2).
 func (q *Queries) RecordAnchor(ctx context.Context, params AnchorParams) error {
-	_, err := q.db.Exec(ctx, `
-		UPDATE acquisition_targets
-		SET anchor_fingerprint = $2,
-		    anchor_source = $3,
-		    anchor_reference = $4,
-		    anchor_seconds = $5,
-		    anchor_label = nullif($6, ''),
-		    anchor_views = nullif($7, 0::bigint),
-		    anchor_fetched_at = now(),
-		    anchor_unavailable = NULL,
-		    anchor_next_attempt_at = NULL,
-		    updated_at = now()
-		WHERE id = $1
-	`, params.TargetID, params.Fingerprint, params.Source, params.Reference,
-		params.Seconds, params.Label, params.Views)
+	err := q.inTransaction(ctx, "recording an anchor", func(tx pgx.Tx) error {
+		var searchable bool
+		if err := tx.QueryRow(ctx, `
+			UPDATE acquisition_targets
+			SET anchor_fingerprint = $2,
+			    anchor_source = $3,
+			    anchor_reference = $4,
+			    anchor_seconds = $5,
+			    anchor_label = nullif($6, ''),
+			    anchor_views = nullif($7, 0::bigint),
+			    anchor_fetched_at = now(),
+			    anchor_unavailable = NULL,
+			    anchor_next_attempt_at = NULL,
+			    next_search_at = CASE
+			        WHEN status = 'unresolved' AND $3 IN `+AdmittingAnchorSources+` THEN now()
+			        ELSE next_search_at
+			    END,
+			    updated_at = now()
+			WHERE id = $1
+			RETURNING status = 'unresolved' AND $3 IN `+AdmittingAnchorSources+`
+		`, params.TargetID, params.Fingerprint, params.Source, params.Reference,
+			params.Seconds, params.Label, params.Views).Scan(&searchable); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if !searchable {
+			return nil
+		}
+		_, err := tx.Exec(ctx, queueAcquisitionSweep, time.Now())
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("record the anchor for want %s: %w", params.TargetID, err)
 	}

@@ -276,7 +276,7 @@ func (q *Queries) TakeBackAcceptedCopy(
 		_, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
 			SET summary = $2, updated_at = now()
-			WHERE id = $1 AND status = 'pending'
+			WHERE id = $1 AND `+searchedWant("")+`
 		`, targetID, targetSummary)
 		return err
 	})
@@ -391,7 +391,7 @@ func (q *Queries) TakeBackRefusedCopies(
 		_, err = tx.Exec(ctx, `
 			UPDATE acquisition_targets
 			SET summary = $2, updated_at = now()
-			WHERE id = $1 AND status = 'pending'
+			WHERE id = $1 AND `+searchedWant("")+`
 		`, targetID, targetSummary)
 		return err
 	})
@@ -452,6 +452,7 @@ func (q *Queries) TakeBackNotWanted(
 		    END,
 		    not_wanted_at = NULL,
 		    next_attempt_at = $4,
+		    `+armSearch(`CASE WHEN musicbrainz_recording_id IS NULL THEN 'unresolved' END`)+`,
 		    last_error = NULL,
 		    summary = CASE
 		        WHEN musicbrainz_recording_id IS NULL THEN $2
@@ -562,6 +563,8 @@ func (q *Queries) TakeBackWrongRecording(
 			    summary = $2,
 			    last_error = NULL,
 			    next_attempt_at = $3,
+			    next_search_at = NULL,
+			    search_attempts = 0,
 			    updated_at = now()
 			-- The condition is repeated here, and not only in the row this
 			-- statement selected above. A second undo of the same rejection waits

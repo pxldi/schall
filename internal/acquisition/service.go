@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
+	"github.com/pxldi/schall/internal/identity"
 	"github.com/rs/zerolog"
 )
 
@@ -161,8 +162,12 @@ type Store interface {
 	RequeueParkedAcquisitionTarget(ctx context.Context, id uuid.UUID, outcome, summary, detail, lastError string,
 		nextAttemptAt time.Time) error
 	DueAcquisitionTargets(context.Context, time.Time, int32) ([]db.AcquisitionTargetRow, error)
+	// DueSearchTargets and NextSearchTargetDue are the unresolved wants searched
+	// on their anchor (ADR 0037).
+	DueSearchTargets(context.Context, time.Time, int32) ([]db.AcquisitionTargetRow, error)
 	NextAcquisitionTargetDue(context.Context) (pgtype.Timestamptz, error)
 	NextUnresolvedTargetDue(context.Context) (pgtype.Timestamptz, error)
+	NextSearchTargetDue(context.Context) (pgtype.Timestamptz, error)
 	OwnedFileForRecording(context.Context, uuid.UUID) (uuid.NullUUID, error)
 	SettleAcquiredTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
 	RequeueAcquisitionTarget(
@@ -471,6 +476,13 @@ func (service *Service) Sweep(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list due acquisition targets: %w", err)
 	}
+	// Read after resolution ran, so a want resolved this pass is looked for on
+	// its recording and not on its anchor.
+	anchored, err := service.store.DueSearchTargets(ctx, service.now(), sweepBatch)
+	if err != nil {
+		return fmt.Errorf("list the wants due a search on their anchor: %w", err)
+	}
+	targets = append(targets, anchored...)
 	// Attempted a few at a time. Every want in the pass is independent — its own
 	// row, its own request, its own copy — and almost all of the time an attempt
 	// takes is spent waiting for peers to answer a search, so waiting for several
@@ -538,6 +550,13 @@ func (service *Service) NextDue(ctx context.Context) (time.Time, error) {
 	if due.Valid {
 		next = due.Time
 	}
+	searched, err := service.store.NextSearchTargetDue(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("read the next search on an anchor: %w", err)
+	}
+	if searched.Valid && (next.IsZero() || searched.Time.Before(next)) {
+		next = searched.Time
+	}
 	if service.resolver == nil {
 		return next, nil
 	}
@@ -569,7 +588,11 @@ func (service *Service) NextDue(ctx context.Context) (time.Time, error) {
 func (service *Service) attempt(
 	ctx context.Context, target db.AcquisitionTargetRow, pass *passRefusal,
 ) (bool, error) {
-	if !target.MusicBrainzRecordingID.Valid {
+	// A want with no recording is looked for only when it is unresolved and
+	// searched on its anchor, which is the only way DueSearchTargets returns one
+	// (ADR 0037).
+	onAnchor := !target.MusicBrainzRecordingID.Valid
+	if onAnchor && (target.Status != "unresolved" || !anchorAdmits(target.AnchorSource)) {
 		return false, nil
 	}
 	if done, err := service.completeAcquired(ctx, target); err != nil || done {
@@ -581,7 +604,8 @@ func (service *Service) attempt(
 	// and nothing would ever be looked for. Skipping this one question admits
 	// nothing: the proof a copy is judged by is unchanged, and a copy that
 	// arrives still has to pass it.
-	if target.Origin != "upgrade" {
+	// The library holds files by recording, and this want has none to ask about.
+	if target.Origin != "upgrade" && !onAnchor {
 		held, err := service.heldAlready(ctx, target)
 		if err != nil || held {
 			return false, err
@@ -686,6 +710,12 @@ func (service *Service) answeredAlready(
 	}
 	if !accepted {
 		return false, nil
+	}
+	// A want with no recording whose accepted copy is a library file and still
+	// not settled is one completing stopped: the file already carried another
+	// identity. It stays stopped. Searching would fetch the music again.
+	if !target.MusicBrainzRecordingID.Valid {
+		return true, service.store.StopLookingForAcquisitionTarget(ctx, target.ID, disagreedSummary)
 	}
 	return true, service.resolveFiling(ctx, target)
 }
@@ -816,6 +846,23 @@ func (service *Service) nextAttempt(attempts int32) time.Time {
 // recording for.
 func (service *Service) nextUnfoundAttempt(attempts int32) time.Time {
 	return service.now().Add(rungOf(unfoundDelays, attempts))
+}
+
+// anchorAdmits reports an anchor source that can admit a copy on its own: a
+// Deezer preview or the artist's Topic upload (ADR 0024, 0034). A want with no
+// recording is searched only on one of these (ADR 0037 §1).
+func anchorAdmits(source string) bool {
+	return source == identity.AnchorSourceDeezer || source == identity.AnchorByNameTopic
+}
+
+// nextLook is when a search that found nothing comes back. A want with no
+// recording climbs the unfound ladder on its own search count, and never stops
+// (ADR 0037 §2): a track can appear years later.
+func (service *Service) nextLook(target db.AcquisitionTargetRow) time.Time {
+	if target.Status == "unresolved" {
+		return service.nextUnfoundAttempt(target.SearchAttempts)
+	}
+	return service.nextAttempt(target.Attempts)
 }
 
 // rungOf picks the delay for an attempt, holding at the last one once the ladder
