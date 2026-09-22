@@ -32,6 +32,11 @@ type Config struct {
 	// that caught a half-written upload would index a truncated file as music
 	// the library holds, so startup checks the paths rather than trusting this.
 	UploadStagingPath string
+	// SourceFetchPath is where a keyed want's track is fetched from its address
+	// when no peer shares a copy (ADR 0038 §6). It has to be writable, which the
+	// download inbox usually is not, and outside every library root, for the
+	// same reason staging is. Empty means no track is fetched that way.
+	SourceFetchPath string
 	// FpcalcPath is the Chromaprint binary that turns audio into a fingerprint.
 	// It is configurable because the image may carry it anywhere, and empty
 	// means "find fpcalc on PATH".
@@ -95,6 +100,7 @@ func Load() (Config, error) {
 		DownloadInboxPath:   strings.TrimSpace(os.Getenv("SCHALL_DOWNLOAD_INBOX_PATH")),
 		ImportLibraryPath:   strings.TrimSpace(os.Getenv("SCHALL_IMPORT_LIBRARY_PATH")),
 		UploadStagingPath:   strings.TrimSpace(os.Getenv("SCHALL_UPLOAD_STAGING_PATH")),
+		SourceFetchPath:     strings.TrimSpace(os.Getenv("SCHALL_SOURCE_FETCH_PATH")),
 		FpcalcPath:          strings.TrimSpace(os.Getenv("SCHALL_FPCALC_PATH")),
 		YtdlpPath:           strings.TrimSpace(os.Getenv("SCHALL_YTDLP_PATH")),
 		FFmpegPath:          strings.TrimSpace(os.Getenv("SCHALL_FFMPEG_PATH")),
@@ -144,10 +150,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf(
 			"SCHALL_IMPORT_LIBRARY_PATH is only used by SCHALL_DOWNLOAD_INBOX_PATH and SCHALL_UPLOAD_STAGING_PATH; set one of them")
 	}
+	// A fetched track is imported by the same importer a peer's copy is, and
+	// that importer exists only beside a download inbox.
+	if cfg.SourceFetchPath != "" && cfg.DownloadInboxPath == "" {
+		return Config{}, fmt.Errorf("SCHALL_SOURCE_FETCH_PATH requires SCHALL_DOWNLOAD_INBOX_PATH")
+	}
 	for name, path := range map[string]string{
 		"SCHALL_DOWNLOAD_INBOX_PATH": cfg.DownloadInboxPath,
 		"SCHALL_IMPORT_LIBRARY_PATH": cfg.ImportLibraryPath,
 		"SCHALL_UPLOAD_STAGING_PATH": cfg.UploadStagingPath,
+		"SCHALL_SOURCE_FETCH_PATH":   cfg.SourceFetchPath,
 	} {
 		if path != "" && !filepath.IsAbs(path) {
 			return Config{}, fmt.Errorf("%s must be absolute", name)

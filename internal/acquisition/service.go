@@ -234,6 +234,9 @@ type Store interface {
 	// Keying a want to an address and setting its floor (ADR 0038).
 	KeyAcquisitionTargetToSource(context.Context, db.KeySourceParams) (db.AcquisitionTargetRow, error)
 	SetAcquisitionTargetMinimumBitrate(ctx context.Context, id uuid.UUID, kbps int) (db.AcquisitionTargetRow, error)
+	// Fetching a keyed want's track from its address, once (ADR 0038 §6).
+	SourceCopyFetched(ctx context.Context, targetID uuid.UUID) (bool, error)
+	RecordSourceFetch(ctx context.Context, params db.SourceFetchParams) (uuid.UUID, error)
 }
 
 // Entry is what somebody asked for, in their own words. Everything except the
@@ -286,6 +289,11 @@ type Service struct {
 	// namer names a file admitted for a keyed want. Optional: without it the
 	// file keeps the tags it arrived with.
 	namer SourceNamer
+	// fetches takes a keyed want's track from its address into fetchRoot when a
+	// search finds nothing (ADR 0038 §6). Optional: without it a keyed want is
+	// only searched for.
+	fetches   SourceFetcher
+	fetchRoot string
 	// notices tells connected interfaces that the wants changed. Optional:
 	// without it the views go back to asking on a timer.
 	notices *events.Hub

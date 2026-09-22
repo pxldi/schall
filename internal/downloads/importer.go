@@ -106,8 +106,11 @@ type AcousticIdentifier interface {
 }
 
 type Importer struct {
-	store       ImportStore
-	inboxPath   string
+	store     ImportStore
+	inboxPath string
+	// fetchPath is the folder a keyed want's track is fetched into from its
+	// address (ADR 0038 §6). Empty when nothing is fetched that way.
+	fetchPath   string
 	libraryPath string
 	inspect     func(string) library.AudioMetadata
 	// properties reads the bit rate a file itself reports, which a keyed
@@ -144,6 +147,14 @@ func NewImporter(store ImportStore, inboxPath, libraryPath string, logger zerolo
 		libraryPath: filepath.Clean(libraryPath), inspect: library.InspectAudio,
 		properties: tagging.ReadProperties, logger: logger, now: time.Now,
 	}
+}
+
+// WithFetchFolder registers the folder a keyed want's track is fetched into
+// from its address. A copy fetched that way is read from it, and every other
+// copy from the download inbox.
+func (importer *Importer) WithFetchFolder(path string) *Importer {
+	importer.fetchPath = filepath.Clean(path)
+	return importer
 }
 
 // WithClock sets the clock used for delayed re-judges.

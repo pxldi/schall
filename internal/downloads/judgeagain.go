@@ -162,7 +162,7 @@ func (importer *Importer) judgeCopies(
 // way. A second derivation that disagreed by one component would pass here and
 // fail there, which is the same lost question by a longer route.
 func (importer *Importer) candidatePresent(copied db.JudgeAgainRow) bool {
-	_, present := inboxFile(importer.inboxPath, copied.SourceDirectory, copied.FileName)
+	_, present := importer.deliveredFile(copied.Provider, copied.SourceDirectory, copied.FileName)
 	return present
 }
 

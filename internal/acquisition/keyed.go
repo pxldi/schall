@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 	"github.com/pxldi/schall/internal/anchor"
 	"github.com/pxldi/schall/internal/chromaprint"
 	"github.com/pxldi/schall/internal/db"
+	"github.com/pxldi/schall/internal/library"
 	"github.com/pxldi/schall/internal/tracksource"
 )
 
@@ -25,6 +28,12 @@ type TrackSources interface {
 // keyed want, with its artwork and its uploader (ADR 0038 §5).
 type SourceNamer interface {
 	NameKeyedFile(ctx context.Context, targetID uuid.UUID) error
+}
+
+// SourceFetcher takes the whole track from a keyed want's address and writes it
+// into a folder (ADR 0038 §6). internal/tracksource is the one implementation.
+type SourceFetcher interface {
+	Fetch(ctx context.Context, track tracksource.Track, directory string) (tracksource.Fetched, error)
 }
 
 var (
@@ -44,6 +53,9 @@ var (
 const (
 	keyedSummary         = "Keyed to an address. Looking for a copy that matches its audio."
 	keyedAcquiredSummary = "Keyed to an address. The library already holds this track."
+	// sourceFetchedSummary is what a keyed want says while the track fetched
+	// from its address waits to be checked.
+	sourceFetchedSummary = "No peer is sharing a copy. The track was fetched from its address and is being checked."
 )
 
 // WithTrackSources registers what reads an address, and the fingerprinter its
@@ -61,6 +73,92 @@ func (service *Service) WithTrackSources(
 func (service *Service) WithSourceNamer(namer SourceNamer) *Service {
 	service.namer = namer
 	return service
+}
+
+// WithSourceFetches registers what fetches a keyed want's track from its
+// address, and the folder it writes into. The importer reads fetched copies
+// from the same folder. Without them a keyed want is only searched for.
+func (service *Service) WithSourceFetches(fetcher SourceFetcher, directory string) *Service {
+	service.fetches = fetcher
+	service.fetchRoot = directory
+	return service
+}
+
+// fetchFromSource takes a keyed want's track from its own address when a search
+// round found nothing it could fetch, once per want (ADR 0038 §6). It reports
+// whether a copy was recorded.
+//
+// The copy is recorded as a finished transfer and imported like a peer's: it
+// admits only by reproducing the excerpt and meeting the floor. A fetch that
+// fails writes nothing, so the next round asks again. It is never recorded as
+// the source having no copy.
+func (service *Service) fetchFromSource(
+	ctx context.Context, target db.AcquisitionTargetRow,
+) (bool, error) {
+	if target.Source == "" || service.fetches == nil || service.fetchRoot == "" {
+		return false, nil
+	}
+	fetched, err := service.store.SourceCopyFetched(ctx, target.ID)
+	if err != nil {
+		return false, fmt.Errorf("read whether want %s was fetched from its address: %w", target.ID, err)
+	}
+	if fetched {
+		return false, nil
+	}
+
+	track := tracksource.Track{
+		Source: target.Source, ExternalID: target.ExternalID, URL: target.ExternalURL,
+		ID: strings.TrimPrefix(target.ExternalID, target.Source+":"),
+	}
+	// One folder per want, named by the want, so a copy's folder is never a
+	// name a service chose.
+	directory := filepath.Join(service.fetchRoot, target.ID.String())
+	got, err := service.fetches.Fetch(ctx, track, directory)
+	if err != nil {
+		service.logger.Warn().Err(err).
+			Str("acquisition_target_id", target.ID.String()).
+			Str("external_id", target.ExternalID).
+			Msg("could not fetch a keyed want's track from its address; the next search round asks again")
+		return false, nil
+	}
+	if !library.CanHold(got.Name) {
+		service.logger.Warn().
+			Str("acquisition_target_id", target.ID.String()).
+			Str("file", got.Name).
+			Msg("the track fetched from an address is in a format the library cannot hold; the next search round asks again")
+		discardFetch(got.Path, directory)
+		return false, nil
+	}
+
+	requestID, err := service.store.RecordSourceFetch(ctx, db.SourceFetchParams{
+		TargetID: target.ID, Source: target.Source, ExternalID: target.ExternalID,
+		Directory: target.ID.String(), FileName: got.Name, Extension: got.Extension,
+		SizeBytes: got.SizeBytes,
+		Reasons:   []string{"Fetched from " + target.ExternalURL},
+		Summary:   "Fetched from " + target.ExternalURL + ". Being checked against the excerpt.",
+	})
+	if errors.Is(err, db.ErrWantHasMovedOn) || errors.Is(err, db.ErrSourceAlreadyFetched) {
+		service.logger.Info().Err(err).
+			Str("acquisition_target_id", target.ID.String()).
+			Msg("a keyed want was answered while its track was fetched")
+		// A pass that already recorded the fetch wrote the same file name, so
+		// that file is kept. Otherwise no row will ever name this one.
+		if errors.Is(err, db.ErrWantHasMovedOn) {
+			discardFetch(got.Path, directory)
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	service.logger.Info().
+		Str("acquisition_target_id", target.ID.String()).
+		Str("download_request_id", requestID.String()).
+		Str("external_id", target.ExternalID).
+		Str("file", got.Name).
+		Int64("size_bytes", got.SizeBytes).
+		Msg("fetched a keyed want's track from its address")
+	return true, nil
 }
 
 // LookUpSource says what an address holds, and changes nothing. The person
@@ -141,6 +239,14 @@ func (service *Service) KeyToSource(
 		Msg("keyed a want to an address")
 	service.announce()
 	return keyed, nil
+}
+
+// discardFetch removes a fetched file no row records, and its folder when that
+// leaves it empty. Nothing cleans the fetch folder otherwise. The file never
+// reached the library.
+func discardFetch(path, directory string) {
+	_ = os.Remove(path)
+	_ = os.Remove(directory)
 }
 
 // keyable refuses a want that cannot take a key, in the sentences the

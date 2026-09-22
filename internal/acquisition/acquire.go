@@ -346,6 +346,16 @@ func (service *Service) hunt(
 		if heldBack {
 			return service.deferForPeers(ctx, target)
 		}
+		// Nothing a peer shares can be fetched this round, so a keyed want takes
+		// the track from its own address, once (ADR 0038 §6). The copy is then
+		// on its way like any other.
+		fetched, err := service.fetchFromSource(ctx, target)
+		if err != nil {
+			return err
+		}
+		if fetched {
+			return service.waitOut(ctx, target, sourceFetchedSummary)
+		}
 		// Copies were on offer and the user's own format preference is what
 		// turned every one of them away. Saying nobody is sharing it would be
 		// untrue, and it would point at the network instead of at the one

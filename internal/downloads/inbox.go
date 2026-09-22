@@ -6,6 +6,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/pxldi/schall/internal/tracksource"
 )
 
 // errUnsafeFolderName reports a provider folder whose name cannot be turned
@@ -27,10 +29,27 @@ func inboxFolder(inboxPath, sourceDirectory string) (string, error) {
 	return containedDirectory(inboxPath, filepath.Join(inboxPath, folderName))
 }
 
-// inboxFile is where one downloaded file is, and whether its bytes are still
-// there.
-func inboxFile(inboxPath, sourceDirectory, fileName string) (string, bool) {
-	folder, err := inboxFolder(inboxPath, sourceDirectory)
+// errNoFetchFolder reports a copy fetched from an address on an installation
+// that names no folder for such copies.
+var errNoFetchFolder = errors.New("the copy was fetched from its address and no fetch folder is configured")
+
+// deliveredFolder is where one copy of a want was delivered: the fetch folder
+// for a track taken from a keyed want's address (ADR 0038 §6), and the download
+// inbox for a peer's copy. Both are resolved by inboxFolder, so the two roots
+// follow one derivation.
+func (importer *Importer) deliveredFolder(provider, sourceDirectory string) (string, error) {
+	if !tracksource.Serves(provider) {
+		return inboxFolder(importer.inboxPath, sourceDirectory)
+	}
+	if importer.fetchPath == "" || importer.fetchPath == "." {
+		return "", errNoFetchFolder
+	}
+	return inboxFolder(importer.fetchPath, sourceDirectory)
+}
+
+// deliveredFile is where one copy's file is, and whether its bytes are still there.
+func (importer *Importer) deliveredFile(provider, sourceDirectory, fileName string) (string, bool) {
+	folder, err := importer.deliveredFolder(provider, sourceDirectory)
 	if err != nil {
 		return "", false
 	}

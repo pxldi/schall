@@ -4,7 +4,8 @@
 // A person keys a want to such an address when MusicBrainz has no recording
 // for it. Lookup says what the address holds, in the service's own words, and
 // Excerpt takes thirty seconds of its audio, which becomes the want's anchor.
-// Nothing here decides anything about a copy.
+// Fetch takes the whole track, which becomes one more copy of the want
+// (ADR 0038 §6). Nothing here decides anything about a copy.
 package tracksource
 
 import (
@@ -41,8 +42,21 @@ const (
 	defaultPath           = "yt-dlp"
 	defaultLookupTimeout  = 45 * time.Second
 	defaultExcerptTimeout = 120 * time.Second
-	excerptSeconds        = 30
+	// A whole track can be an hour-long mix, served at the service's own pace.
+	defaultFetchTimeout = 15 * time.Minute
+	excerptSeconds      = 30
 )
+
+// Serves reports whether a copy's provider is one of the services Fetch takes
+// a track from. A fetched copy records its service as its provider, so this is
+// how the importer and the review player tell it from a peer's copy.
+func Serves(provider string) bool {
+	switch provider {
+	case SoundCloud, YouTube, Bandcamp:
+		return true
+	}
+	return false
+}
 
 // Track is what yt-dlp said about one address.
 type Track struct {
@@ -72,12 +86,14 @@ type Options struct {
 	Path           string
 	LookupTimeout  time.Duration
 	ExcerptTimeout time.Duration
+	FetchTimeout   time.Duration
 }
 
 type Client struct {
 	path           string
 	lookupTimeout  time.Duration
 	excerptTimeout time.Duration
+	fetchTimeout   time.Duration
 	run            func(ctx context.Context, path string, args ...string) ([]byte, []byte, error)
 	real           bool
 }
@@ -91,6 +107,10 @@ func NewClient(options Options) *Client {
 	if excerptTimeout <= 0 {
 		excerptTimeout = defaultExcerptTimeout
 	}
+	fetchTimeout := options.FetchTimeout
+	if fetchTimeout <= 0 {
+		fetchTimeout = defaultFetchTimeout
+	}
 	path := strings.TrimSpace(options.Path)
 	if path == "" {
 		path = defaultPath
@@ -99,6 +119,7 @@ func NewClient(options Options) *Client {
 		path:           path,
 		lookupTimeout:  lookupTimeout,
 		excerptTimeout: excerptTimeout,
+		fetchTimeout:   fetchTimeout,
 		run:            runCommand,
 		real:           true,
 	}
@@ -192,6 +213,81 @@ func (client *Client) Excerpt(ctx context.Context, track Track) ([]byte, error) 
 		return nil, fmt.Errorf("read yt-dlp excerpt: %w", err)
 	}
 	return data, nil
+}
+
+// Fetched is one whole track Fetch wrote to disk, as the service served it.
+type Fetched struct {
+	Path string
+	// Name is the file's name inside the folder Fetch was given, and Extension
+	// its extension, lower case and without the dot.
+	Name      string
+	Extension string
+	SizeBytes int64
+}
+
+// Fetch takes the whole track from its address and writes it into directory
+// (ADR 0038 §6). It takes the best audio the service serves and keeps it as
+// served: nothing is re-encoded. A WebM stream is copied into an Ogg container
+// because the library does not hold WebM files, and the Opus audio inside is
+// the same bytes either way.
+//
+// yt-dlp writes into a folder of its own inside directory, and the finished
+// file is moved out of it, so directory never holds half a track.
+func (client *Client) Fetch(ctx context.Context, track Track, directory string) (Fetched, error) {
+	if !client.enabled() {
+		return Fetched{}, fmt.Errorf("%w: no binary configured", ErrUnavailable)
+	}
+	if strings.TrimSpace(track.URL) == "" {
+		return Fetched{}, ErrNotATrack
+	}
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		return Fetched{}, fmt.Errorf("create the fetch folder %s: %w", directory, err)
+	}
+	staging, err := os.MkdirTemp(directory, ".fetching-")
+	if err != nil {
+		return Fetched{}, fmt.Errorf("create a yt-dlp folder in %s: %w", directory, err)
+	}
+	defer os.RemoveAll(staging)
+
+	ctx, cancel := context.WithTimeout(ctx, client.fetchTimeout)
+	defer cancel()
+	output := filepath.Join(staging, "%(id)s.%(ext)s")
+	_, stderr, runErr := client.run(ctx, client.path,
+		"-f", "bestaudio", "--remux-video", "webm>opus",
+		"--no-warnings", "--no-playlist", "--no-mtime", "-o", output, track.URL)
+	if err := client.commandError(ctx, stderr, runErr); err != nil {
+		return Fetched{}, err
+	}
+
+	entries, err := os.ReadDir(staging)
+	if err != nil {
+		return Fetched{}, fmt.Errorf("read yt-dlp output: %w", err)
+	}
+	var name string
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		if name != "" {
+			return Fetched{}, fmt.Errorf("yt-dlp wrote more than one file for %s", track.URL)
+		}
+		name = entry.Name()
+	}
+	if name == "" {
+		return Fetched{}, fmt.Errorf("yt-dlp wrote no audio for %s", track.URL)
+	}
+	destination := filepath.Join(directory, name)
+	if err := os.Rename(filepath.Join(staging, name), destination); err != nil {
+		return Fetched{}, fmt.Errorf("move the fetched track into %s: %w", directory, err)
+	}
+	info, err := os.Stat(destination)
+	if err != nil {
+		return Fetched{}, fmt.Errorf("read the fetched track %s: %w", destination, err)
+	}
+	return Fetched{
+		Path: destination, Name: name, SizeBytes: info.Size(),
+		Extension: strings.ToLower(strings.TrimPrefix(filepath.Ext(name), ".")),
+	}, nil
 }
 
 // answer is the part of yt-dlp's info document Schall reads.

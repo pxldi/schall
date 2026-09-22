@@ -362,6 +362,10 @@ type API struct {
 	// inboxPath is the completed-download folder, known here only so the import
 	// retention policy can be checked against the filesystem it would act on.
 	inboxPath string
+	// fetchPath is the folder a keyed want's track is fetched into from its
+	// address, so a copy fetched that way can be played in review
+	// (ADR 0038 §6). Empty when nothing is fetched that way.
+	fetchPath string
 	// cleanups asks for and reports the passes that delete what the inbox no
 	// longer needs. Optional: without it that block reports itself unavailable
 	// and nothing is ever deleted from the inbox.
@@ -558,6 +562,14 @@ func WithPeerChallenges(challenges PeerChallenges) Option {
 func WithDownloadInbox(path string) Option {
 	return func(api *API) {
 		api.inboxPath = path
+	}
+}
+
+// WithSourceFetchFolder registers the folder a keyed want's track is fetched
+// into from its address. A copy fetched that way is played from it.
+func WithSourceFetchFolder(path string) Option {
+	return func(api *API) {
+		api.fetchPath = path
 	}
 }
 
