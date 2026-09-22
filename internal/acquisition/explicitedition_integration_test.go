@@ -16,7 +16,7 @@ import (
 // An entry for a censored track finds two MusicBrainz rows that fit it equally
 // well: the explicit master and the clean edition. That used to stop 11 wants on
 // the deployed instance with a question nobody wanted asked. The owner takes the
-// explicit edition, so the clean row stops being an answer (docs/decisions/0032).
+// explicit edition, so the clean row stops being an answer (ADR 0032).
 
 // The two rows of "Timeless" by The Weeknd, as the provider returns them, with
 // the editors' comment on the clean one.

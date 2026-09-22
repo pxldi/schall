@@ -680,7 +680,7 @@ export function describeError(error: unknown): ErrorNotice {
 }
 
 /** Whether a failure is the browser's sign-in not being accepted. A direct
- * connection never carries the forward-auth session (`docs/decisions/0033`),
+ * connection never carries the forward-auth session (ADR 0033),
  * so reloading or retrying asks the same unauthenticated request again. A
  * screen that sees this stops offering to ask again and stops polling. */
 export function isAuthError(error: unknown): boolean {

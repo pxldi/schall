@@ -16,7 +16,7 @@
 // fetched by ISRC, or a library file AcoustID has already settled — and the
 // other side is a copy whose identity is in question.
 //
-// See docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md. Nothing
+// See ADR 0024. Nothing
 // in this package decides anything on its own; it measures, and the caller
 // applies the rule.
 package chromaprint
@@ -432,7 +432,7 @@ const (
 )
 
 // Verdict is what a measured rate means. It is the three outcomes of
-// docs/decisions/0024 and there is deliberately no fourth and no score: a
+// ADR 0024 and there is deliberately no fourth and no score: a
 // number between the thresholds is a question for a person, not a weaker yes.
 type Verdict int
 

@@ -240,7 +240,7 @@ type ImportAnchor struct {
 	// many views it had when it was chosen. Both are empty for a keyed excerpt.
 	// They are here because such a reference can be another version of the song,
 	// and the person reading the row is the one who can tell
-	// (docs/decisions/0029 §4).
+	// (ADR 0029 §4).
 	Label string `json:"label,omitempty"`
 	Views int64  `json:"views,omitempty"`
 	// Rate is the measured bit error rate, and Measured says the comparison ran.

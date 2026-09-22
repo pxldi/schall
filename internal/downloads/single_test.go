@@ -297,7 +297,7 @@ func TestACandidateTheAudioRefusesIsDiscarded(t *testing.T) {
 
 // The audio named another MusicBrainz row and MusicBrainz could not be asked
 // whether the two rows are one track entered twice. That answer is what the
-// refusal rests on, so the copy is kept as a question (docs/decisions/0031).
+// refusal rests on, so the copy is kept as a question (ADR 0031).
 func TestACandidateWithAnUncheckedRegistrationIsHeld(t *testing.T) {
 	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
 	importer := candidateImporter(store, inbox, libraryPath,

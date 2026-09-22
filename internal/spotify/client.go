@@ -212,7 +212,7 @@ type Entry struct {
 	ISRC       string
 	// Explicit is Spotify's own flag for the track. It is the one thing the
 	// source says that separates the explicit recording from the clean edition
-	// MusicBrainz holds beside it (docs/decisions/0032).
+	// MusicBrainz holds beside it (ADR 0032).
 	Explicit bool
 	Unusable bool
 }

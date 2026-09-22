@@ -13,7 +13,7 @@ import (
 
 // The classes one pass over the download inbox sorts a file into. The four that
 // delete come first, in the order a real run works through them, and the five
-// that keep follow. docs/decisions/0035 is the rule; the CHECK constraint in
+// that keep follow. ADR 0035 is the rule; the CHECK constraint in
 // migration 00100 is the same list.
 const (
 	InboxImported        = "imported"

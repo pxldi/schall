@@ -151,7 +151,7 @@ func (uses *tokenUses) due(id uuid.UUID, now time.Time) bool {
 // trusted-network check reads the TCP peer address, and RealIP replaces it
 // with whatever X-Forwarded-For said.
 //
-// Only /api/ is covered, which is what docs/app-plan.md asks for. The frontend
+// Only /api/ is covered (ADR 0033). The frontend
 // files are served without a credential: in production Traefik's forward-auth
 // stands in front of everything that is not a Bearer request to /api/, so the
 // pages are already behind Authentik, and the shell holds no collection data —

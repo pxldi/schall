@@ -20,7 +20,7 @@ import (
 //
 // Both fingerprints below are real. They were computed by fpcalc 1.6.1 over two
 // pieces of generated audio, thirty seconds each and deliberately unalike, and
-// they measure 0.47 apart: the range the calibration in docs/decisions/0024
+// they measure 0.47 apart: the range the calibration in ADR 0024
 // found for audio that is not the same audio.
 
 const anchorFingerprint = "AQAA3dGkaEzEJPjyo1r0oEmaD2fQ5jd-aE_xoeGJPidyNai4o3lMnIbVIN7xaQukKieaqCwYdxfO4C" +
@@ -293,7 +293,7 @@ func TestAWantWithNoSampleIsJudgedAsBefore(t *testing.T) {
 // to read. Real, from the same fpcalc run as the others.
 const shortCopyFingerprint = "AQAAC9GkaEzEJPjyo1r0oEmaD2fQ5jd-aE_xoeGJPicAYgBiVgAQiDoIAA"
 
-// The gate minus refusal, as the importer sees it (docs/decisions/0029 §3).
+// The gate minus refusal, as the importer sees it (ADR 0029 §3).
 //
 // The grader concludes nothing from an upload found by name that reads as other
 // audio, so the copy arrives here with nothing decided about it. It must be held

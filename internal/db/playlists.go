@@ -381,7 +381,7 @@ type UpsertPlaylistEntryParams struct {
 	EntryISRC       pgtype.Text
 	// EntryExplicit is the source saying this track is the explicit recording.
 	// Null is silence. It is written and never read back here: what reads it is
-	// the want the entry created (docs/decisions/0032).
+	// the want the entry created (ADR 0032).
 	EntryExplicit pgtype.Bool
 }
 

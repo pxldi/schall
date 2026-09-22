@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// The four things docs/app-plan.md says proxy mode has to do, against a real
+// The four things proxy mode has to do (ADR 0033), against a real
 // table: no credential is refused, a token minted in Settings is served, a
 // token that was removed is refused afterwards, and a token cannot mint
 // another one.

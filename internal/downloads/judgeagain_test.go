@@ -192,7 +192,7 @@ func TestTheCreditRefusalPassReadsItsOwnOffers(t *testing.T) {
 
 // An anchor landing on a want is a witness its copies were judged without, so
 // that want's copies go back through the same validation without anybody asking
-// (docs/decisions/0029 §5). It reaches that want's copies and no others.
+// (ADR 0029 §5). It reaches that want's copies and no others.
 func TestANewlyAnchoredWantsCopiesAreJudgedAgain(t *testing.T) {
 	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
 	elsewhere := offered(store, uuid.New())

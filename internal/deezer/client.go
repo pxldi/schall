@@ -17,7 +17,7 @@
 //
 // Nothing here identifies anything. It returns a track and its preview audio;
 // internal/chromaprint measures, and the caller applies the rule in
-// docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md.
+// ADR 0024.
 package deezer
 
 import (

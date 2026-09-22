@@ -149,15 +149,10 @@ goose migrations in `internal/migrations/`.
 
 ## Documentation
 
-- [docs/api.md](docs/api.md) — HTTP surface, import and duplicate handling,
-  identity resolution, followed vs held artists
-- [docs/PRODUCT.md](docs/PRODUCT.md) — intended behaviour, and the source of
-  truth for it: target state rather than current state
-- [docs/ROADMAP.md](docs/ROADMAP.md) — what is next, and what each item was
-  signed off against
-- [docs/decisions/](docs/decisions/) — the ADRs behind the spec, including the
-  rules that decide what may enter the library
-- [DESIGN.md](DESIGN.md) — how the interface looks, and the rules it obeys
+The product spec, the roadmap, the design rules and the ADRs live outside this
+repository, with the owner. A comment that cites `ADR 0024` means decision
+record 0024 there. `web/src/design-tokens.yaml` lists the interface's tokens
+and `web/src/lib/design-system.test.ts` checks it against `web/src/styles.css`.
 
 ## Licence
 

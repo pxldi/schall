@@ -8,14 +8,14 @@ import (
 	"github.com/pxldi/schall/internal/tagmatch"
 )
 
-// How many results the choice is made from. Ten is what docs/decisions/0029
+// How many results the choice is made from. Ten is what ADR 0029
 // fixes, and it is a cap on how far down a ranking Schall will look rather than
 // a target: a want whose upload is not in the first ten has no upload here.
 const uploadResults = 10
 
 // chooseUpload picks the upload a want is anchored to.
 //
-// The rule is docs/decisions/0029 §2 and it chooses rather than scores: an
+// The rule is ADR 0029 §2 and it chooses rather than scores: an
 // upload is a candidate only when its length is within the tag grader's
 // tolerance of the want's and its title agrees with the want's under that same
 // grader, and a matching Topic candidate wins over any other candidate. Views

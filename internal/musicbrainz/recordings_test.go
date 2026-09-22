@@ -782,7 +782,7 @@ func TestARecordingKeepsEveryArtistItIsCreditedTo(t *testing.T) {
 // The credited name is not always the artist's own, and neither is always what a
 // tagger writes. Both, and the provider's other names for the artist, travel
 // with the credit so a credit can be compared as the set of artists it is
-// (docs/decisions/0030).
+// (ADR 0030).
 func TestARecordingKeepsTheOtherNamesItsArtistsAnswerTo(t *testing.T) {
 	client := testClient(t, func(response http.ResponseWriter, _ *http.Request) {
 		_, _ = response.Write([]byte(`{

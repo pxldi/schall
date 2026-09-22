@@ -425,7 +425,7 @@ var recommendationSubjects = map[string]recommendations.DismissalSubject{
 // statement about taste, and it is kept apart from every store that holds a
 // statement about audio identity — a review-queue rejection says a file is not
 // the recording it was fetched for, which is not an opinion about the music
-// (docs/decisions/0005).
+// (ADR 0005).
 func (api *API) dismissRecommendation(response http.ResponseWriter, request *http.Request) {
 	if api.recommendationList == nil {
 		api.problem(response, http.StatusServiceUnavailable, "recommendations are unavailable", nil)

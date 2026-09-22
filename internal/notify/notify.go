@@ -3,7 +3,7 @@
 // The review queue is the one screen in Schall where a person answers something
 // no rule could: which of two copies of a recording to keep, or what an
 // unidentified file actually is. Everything else runs on its own. The queue is
-// the deliberate exception, and docs/PRODUCT.md is blunt about why its speed
+// the deliberate exception, and the product spec is blunt about why its speed
 // matters: a queue nobody empties is eventually emptied by somebody accepting
 // everything in it, and the promise that Schall never guesses dies there while
 // the code still looks like it keeps it.

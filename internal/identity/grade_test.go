@@ -729,7 +729,7 @@ func TestAWeakLikenessSaysSoInTheEvidence(t *testing.T) {
 
 // A differing artist credit does not void a pair the leading cluster identified.
 // AcoustID named the audio, and a credit typed into a file by whoever encoded it
-// does not overrule that (docs/decisions/0030). This test asserted the opposite
+// does not overrule that (ADR 0030). This test asserted the opposite
 // until then.
 func TestADifferingCreditKeepsAnAudioIdentification(t *testing.T) {
 	outcome := decide(Evidence{

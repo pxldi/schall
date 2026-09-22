@@ -407,7 +407,7 @@ func heldByOthers(top []candidateMatch) bool {
 // the mapping.
 //
 // ISRC is excluded on purpose. MusicBrainz sometimes enters one performance as
-// two recordings it never merges (docs/decisions/0025), each keeping the same
+// two recordings it never merges (ADR 0025), each keeping the same
 // ISRC, so two files agreeing on the tag are not proven to be one recording
 // the way two files agreeing on a musicbrainz_recording_id are. Telling the
 // two apart needs the distributor's sample and AcoustID's leading cluster, and

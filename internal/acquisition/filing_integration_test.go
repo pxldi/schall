@@ -47,7 +47,7 @@ func (provider *catalogueProvider) SearchRecordings(
 	return nil, nil
 }
 
-// twoRowsOf is the case docs/decisions/0025 is about: one performance entered
+// twoRowsOf is the case ADR 0025 is about: one performance entered
 // twice under one registration code, differing only in which release each row
 // hangs off. Neither row carries an artist list, so the code is the only thing
 // that can speak about them: 0031's test compares the set of artists a row
@@ -76,7 +76,7 @@ func credited(base musicbrainz.Recording, artists ...string) musicbrainz.Recordi
 	return base
 }
 
-// twoRowsOfOneName is the case docs/decisions/0031 is about: one performance
+// twoRowsOfOneName is the case ADR 0031 is about: one performance
 // entered twice with a registration code on one of the rows only, which is how
 // MusicBrainz holds about half of these pairs. Both rows of "Robber" by Playboi
 // Carti run 163 seconds.
@@ -269,7 +269,7 @@ func TestARefiledIdentityRecordsWhatProvedTheCopy(t *testing.T) {
 // its distributor publishes, and the library then filed the imported file under
 // the other row from the peer's tags. Both rows carry the same registration
 // code, so the file is the music that was asked for and the want is finished
-// against it (docs/decisions/0025).
+// against it (ADR 0025).
 func TestAWantIsSettledByACopyFiledUnderTheSameRegistration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -306,7 +306,7 @@ func TestAWantIsSettledByACopyFiledUnderTheSameRegistration(t *testing.T) {
 // about half of these pairs, so nothing about a code can speak. The two rows
 // name one artist, hold one title and run one length, and the file on the disc
 // was proven and imported before the library filed it under the second row. It
-// is the music the want asked for (docs/decisions/0031), and no excerpt is
+// is the music the want asked for (ADR 0031), and no excerpt is
 // asked for on this branch.
 func TestAWantIsSettledByACopyFiledUnderARowOfOneNameAndOneLength(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -475,7 +475,7 @@ func TestAWantStopsWhenTheFiledRecordingSharesNoRegistration(t *testing.T) {
 // The registration code alone never settles it. MusicBrainz puts one ISRC on
 // genuinely different audio too, so without the excerpt saying this copy is the
 // wanted music there is nothing here that could establish one registration, and
-// the want waits for a person (docs/decisions/0025).
+// the want waits for a person (ADR 0025).
 func TestASharedRegistrationCodeAloneDoesNotSettleTheWant(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -24,8 +24,8 @@
 // the reference instead. It is chosen rather than scored, by the rule in
 // choose.go, and an anchor found that way may prove a copy and may leave one a
 // question — it never refuses one. See
-// docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md and
-// docs/decisions/0029-a-popular-upload-found-by-name-is-an-audio-anchor.md.
+// ADR 0024 and
+// ADR 0029.
 //
 // This package fetches that excerpt, once per want, and stores its fingerprint.
 // It decides nothing: it neither admits a copy nor refuses one, and a want with
@@ -77,7 +77,7 @@ const minimumFrames = 80
 // The sentences a want keeps when there is no anchor. They are two different
 // facts and never one: the first is silence, which no rule may read as
 // agreement, and the second is a check that could not run and is asked again
-// (docs/decisions/0002).
+// (ADR 0002).
 const (
 	noPreviewPublished = "Deezer publishes no preview for this recording's ISRC."
 	noISRCToAskBy      = "This entry carries no ISRC, and a preview is only ever fetched by ISRC."
@@ -117,7 +117,7 @@ type Store interface {
 	DeferAnchor(ctx context.Context, targetID uuid.UUID, at time.Time, reason string) error
 	// QueueWantCopyJudging asks for the want's held copies to be measured against
 	// the anchor that just landed, which is the one thing this package causes to
-	// happen outside itself (docs/decisions/0029 §5).
+	// happen outside itself (ADR 0029 §5).
 	QueueWantCopyJudging(ctx context.Context, targetID uuid.UUID, runAfter time.Time) error
 }
 
@@ -252,7 +252,7 @@ func (service *Service) fetch(ctx context.Context, want db.AnchorDueRow) error {
 }
 
 // fromUploads anchors a want to a YouTube upload, for the wants a distributor's
-// preview cannot reach (docs/decisions/0029 §1).
+// preview cannot reach (ADR 0029 §1).
 //
 // keyedSilence is why the preview path had nothing. It is kept and written
 // alongside whatever this path finds, because the two are separate facts about

@@ -302,7 +302,7 @@ func TestAPassStopsWhenTheDistributorIsRateLimiting(t *testing.T) {
 
 // The distributor is still only ever asked by code. A want with no code goes to
 // the upload search instead, which is the one place a text query is allowed
-// (docs/decisions/0029).
+// (ADR 0029).
 func TestAWantWithNoISRCIsNeverAskedTheDistributorByName(t *testing.T) {
 	one := want("")
 	store := newStore(one)
@@ -412,7 +412,7 @@ func TestTheWaitGrowsWithEveryFailedAttempt(t *testing.T) {
 	}
 }
 
-// The wants docs/decisions/0029 exists for: no ISRC anywhere, so the preview
+// The wants ADR 0029 exists for: no ISRC anywhere, so the preview
 // path has nothing and the upload search is the only thing that can speak.
 
 func TestAWantWithNoISRCIsAnchoredToTheUploadItNames(t *testing.T) {

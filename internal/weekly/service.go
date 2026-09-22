@@ -948,7 +948,7 @@ func take(taken map[string]struct{}, artist string) bool {
 // chooseFromLibrary puts songs the collection already holds on the list.
 //
 // No want and no lease. The lease is the only licence to delete
-// (docs/decisions/0021), so a song that arrives this way cannot be removed by
+// (ADR 0021), so a song that arrives this way cannot be removed by
 // any later refresh whatever the mode says, and no code has to know that rule.
 func (service *Service) chooseFromLibrary(
 	ctx context.Context,

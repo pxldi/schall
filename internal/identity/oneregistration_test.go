@@ -11,7 +11,7 @@ import (
 
 // OneRegistration is the same question secondRowOfSameRegistration asks, put
 // about a pair: a want's copy was proven, imported, and then filed by the
-// library under a second MusicBrainz row. It used to read docs/decisions/0025's
+// library under a second MusicBrainz row. It used to read ADR 0025's
 // registration code alone, which left 32 wants stopped on 2026-09-05 with their
 // own music on the disc. These tests pin what the two tests of 0031 answer here.
 //
@@ -64,7 +64,7 @@ func TestAFiledRowOfOneNameAndOneLengthIsOneRegistration(t *testing.T) {
 // An excerpt found by searching for the want's name never carries the
 // registration-code test. A search by name returns the sibling edit that shares
 // the code as readily as the original, so reading it there would answer a want
-// for "1992" with the sped-up mixes (docs/decisions/0029, 0031).
+// for "1992" with the sped-up mixes (ADR 0029, 0031).
 func TestASharedCodeWithAnUploadFoundByNameIsNotOneRegistration(t *testing.T) {
 	wanted, filed := twoRowsUnderOneCode()
 	anchor := &AnchorComparison{
@@ -248,7 +248,7 @@ func TestRowsAlikeWithNothingProvingTheCopyAreNotFiled(t *testing.T) {
 
 // The tags are not the audio. A copy admitted because its own tags carried a
 // recording ID says nothing a stranger could not have written, so it cannot
-// carry the second row either (docs/decisions/0002).
+// carry the second row either (ADR 0002).
 func TestATagMethodDoesNotFileACopyUnderASecondRow(t *testing.T) {
 	wanted, filed := twoRowsOfOneName()
 

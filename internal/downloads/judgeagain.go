@@ -44,7 +44,7 @@ type JudgedAgain struct {
 // exists because the rules changed underneath copies that were already decided:
 // wants gained an audio anchor, and an identification naming another MusicBrainz
 // row of the same registered track stopped being read as a refusal
-// (docs/decisions/0024 and 0025). The files are still in the inbox, so they can
+// (ADR 0024 and 0025). The files are still in the inbox, so they can
 // be answered rather than argued about.
 //
 // Nothing here decides anything. Each copy goes through ImportOne, which is the
@@ -64,7 +64,7 @@ func (importer *Importer) JudgeAgain(ctx context.Context) error {
 //
 // It is the same pass over a different set. A credit is now compared as the set
 // of artists it names, and a credit that disagrees no longer voids a pair the
-// audio already identified (docs/decisions/0030), so the copies those two rules
+// audio already identified (ADR 0030), so the copies those two rules
 // refused can be answered rather than left standing.
 func (importer *Importer) JudgeCreditRefusalsAgain(ctx context.Context) error {
 	_, err := importer.judgeCreditRefusalsAgain(ctx)
@@ -182,7 +182,7 @@ func (importer *Importer) releaseFromJudging(ctx context.Context, copied db.Judg
 // just landed on it.
 //
 // Nobody asks for this. An anchor arriving is a witness the copies never had
-// when they were judged, and docs/decisions/0029 §5 says they are measured
+// when they were judged, and ADR 0029 §5 says they are measured
 // against it without anybody pressing anything. The bounds are JudgeAgain's, so
 // a pass nothing asked for cannot reach further than the pass a person asks for.
 //

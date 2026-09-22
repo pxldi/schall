@@ -442,7 +442,7 @@ func TestAStarIsReadThroughTheMountMapping(t *testing.T) {
 
 // The song is found by comparing the path Navidrome reports with the path
 // Schall holds, and a player row created under "schall" reports a made-up
-// display path forever (docs/decisions/0010).
+// display path forever (ADR 0010).
 func TestAReadingIntroducesItselfUnderTheSyncClientName(t *testing.T) {
 	server, asked := keepsPlayer(t, oneSong(false))
 

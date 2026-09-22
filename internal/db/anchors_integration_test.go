@@ -78,7 +78,7 @@ func TestAWantWithAnISRCCanBeScheduledForAPreview(t *testing.T) {
 // exact key to ask by, and a text search returns the wrong recording often
 // enough to be refused outright, so it is never put in line at all.
 // A want without an ISRC is in line too: the distributor has nothing for it,
-// and the upload search of docs/decisions/0029 is what answers then.
+// and the upload search of ADR 0029 is what answers then.
 func TestAWantWithNoISRCIsScheduledForAnAnchor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

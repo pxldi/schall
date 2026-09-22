@@ -50,7 +50,7 @@ const (
 	// rescan trigger has already created a row under "schall" — from before
 	// anybody needed real paths. Sync is the half that reads paths back, so it
 	// asks under a name of its own and gets a row created after the setting was
-	// turned on (docs/decisions/0010).
+	// turned on (ADR 0010).
 	SyncClientName = "schall-sync"
 
 	defaultHTTPTimeout = 10 * time.Second
@@ -311,7 +311,7 @@ var ErrNotFound = errors.New("navidrome does not have what was asked for")
 // id stopped resolving" from every other reason the request failed, without
 // knowing what a Subsonic error code is.
 //
-// It matters because docs/decisions/0010 reads exactly that difference as
+// It matters because ADR 0010 reads exactly that difference as
 // evidence: an id that no longer resolves is an identity that broke, which is
 // never a track the user removed. Sorting the two apart is the whole reason
 // this code has a name outside the switch in describe.

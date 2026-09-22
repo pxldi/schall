@@ -197,7 +197,7 @@ func run() error {
 	// by the want's own ISRC — an exact key, never a text search — so the audio
 	// that comes back is the audio of exactly the recording the want names. The
 	// fingerprint of it is kept on the want. Nothing reads it to admit or refuse
-	// a copy yet (docs/decisions/0024).
+	// a copy yet (ADR 0024).
 	//
 	// It shares the fpcalc path with the listener and nothing else: that one
 	// fingerprints a file to ask AcoustID who it is and reads the opening two
@@ -205,7 +205,7 @@ func run() error {
 	// middle of a song is not inside the opening two minutes of a copy of it.
 	//
 	// A want the distributor cannot answer for is anchored from YouTube through
-	// yt-dlp (docs/decisions/0029). With no yt-dlp on the machine such a want
+	// yt-dlp (ADR 0029). With no yt-dlp on the machine such a want
 	// waits on the retry ladder rather than being written off as having no
 	// anchor, so nothing is lost until the program is installed.
 	anchorService := anchor.NewService(store,
@@ -481,7 +481,7 @@ func run() error {
 		transferService.WithImportQueue()
 		jobWorker.WithDownloadImporter(importer)
 		// What deletes the downloaded files nothing needs any more, by the rule
-		// in docs/decisions/0035. It is wired beside the importer because it
+		// in ADR 0035. It is wired beside the importer because it
 		// works on the same folder, and it runs only when somebody asks.
 		//
 		// It is given the managed library and the allowed roots so it can refuse

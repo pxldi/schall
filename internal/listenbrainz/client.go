@@ -2,7 +2,7 @@
 // ListenBrainz has built from it.
 //
 // It answers in MusicBrainz recording IDs and nothing else, which is the whole
-// reason it is the source (docs/decisions/0015): every one of the five
+// reason it is the source (ADR 0015): every one of the five
 // suppression rules is a promise phrased in identifiers, and a promise kept by a
 // name resolver is kept at the resolver's accuracy rather than absolutely.
 //

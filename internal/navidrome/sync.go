@@ -217,7 +217,7 @@ type SweepResult struct {
 // settings are the operator's to change while Schall is running. The client is
 // built under SyncClientName and never the default, because this is the half
 // that reads paths back and needs a player row created after
-// Subsonic.DefaultReportRealPath was turned on (docs/decisions/0010).
+// Subsonic.DefaultReportRealPath was turned on (ADR 0010).
 type Syncer struct {
 	store  SyncStore
 	paths  PathMap
@@ -470,7 +470,7 @@ func newSongSets(snapshotTracks []db.NavidromePlaylistSnapshotTrackRow) songSets
 	return sets
 }
 
-// syncOne is the pass over one playlist, in the order docs/decisions/0004,
+// syncOne is the pass over one playlist, in the order ADR 0004,
 // 0010 and 0012 put it: pair what is acquired, tell a removal from a break,
 // repair what broke, take in what the user added, push, and write down what was
 // pushed.
