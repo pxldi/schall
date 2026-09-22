@@ -15,7 +15,7 @@ import (
 //
 // "edit" is deliberately absent. A radio edit runs a different length and is a
 // different recording, and reading it as a censored edition would let the wrong
-// audio answer for a want (docs/decisions/0032).
+// audio answer for a want (ADR 0032).
 var cleanEditionWords = []string{"clean", "censored", "edited"}
 
 // editionQualifiers may stand beside a marker inside a title group without
@@ -51,7 +51,7 @@ func cleanEdition(recording musicbrainz.Recording) bool {
 // explicitEditionOf reports other holding the explicit edition of the track the
 // clean row wanted names.
 //
-// The two rows are one registration under docs/decisions/0031's first three
+// The two rows are one registration under ADR 0031's first three
 // tests and fail only its fourth: both carry registration codes and share none,
 // which is how a label registers a censored edition beside its master. Exactly
 // one of them is marked clean, and this answers only where that one is the row

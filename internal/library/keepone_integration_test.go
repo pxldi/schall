@@ -166,7 +166,7 @@ func TestKeepingOneCopyDeletesTheOtherCopiesOfThatRecording(t *testing.T) {
 	}
 }
 
-// The licence, per docs/decisions/0021. A row saying what went, what it was a
+// The licence, per ADR 0021. A row saying what went, what it was a
 // copy of and what stayed, written in the same transaction as the delete.
 func TestKeepingOneCopyRecordsWhyEachFileWent(t *testing.T) {
 	ctx := context.Background()

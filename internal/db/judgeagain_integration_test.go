@@ -12,7 +12,7 @@ import (
 )
 
 // A verdict Schall reached is normally permanent. One pass re-opens them,
-// because two rules changed under copies already decided (docs/decisions/0024
+// because two rules changed under copies already decided (ADR 0024
 // and 0025), and what that pass is allowed to offer is the whole of its safety.
 // These tests are that list.
 
@@ -53,7 +53,7 @@ func anchored(ctx context.Context, t *testing.T, queries *Queries, targetID uuid
 }
 
 // The evidence of a copy discarded because the audio was identified as some
-// other recording. That is the refusal docs/decisions/0025 changed.
+// other recording. That is the refusal ADR 0025 changed.
 const namedOtherMusic = `{"acoustic": {"recordingIds": ["f0a32851-2df8-4643-8649-f33f9a82c19d"]}}`
 
 // A copy refused because the audio named another recording is offered again.

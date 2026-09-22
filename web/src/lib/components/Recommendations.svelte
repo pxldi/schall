@@ -18,7 +18,7 @@
   // "Not interested" is permanent, is said about the recording, its release or
   // its artist, and is kept in the recommendation store alone: what somebody
   // thinks of a piece of music is not the same fact as whether a downloaded
-  // file is the recording it claims to be (docs/decisions/0005).
+  // file is the recording it claims to be (ADR 0005).
   import {
     createMutation,
     createQuery,
@@ -147,7 +147,7 @@
   // Saying no, at the level the reader meant it. The store has held all three
   // since it was designed and the suppression rules read all three, so a
   // dismissal of an artist takes every suggestion crediting them off the list on
-  // the next read (docs/decisions/0016).
+  // the next read (ADR 0016).
   //
   // A credit can name several artists. The words say so, and every one of them
   // is dismissed, because a reader who says no to the row in front of them has

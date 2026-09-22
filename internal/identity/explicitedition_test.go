@@ -14,7 +14,7 @@ import (
 // 0031's fourth test reads both codes and no code in common as two registered
 // tracks, which they are, so every such pair was a person's question. The owner
 // takes the explicit edition wherever there is one, so the clean row stops being
-// an answer. See docs/decisions/0032.
+// an answer. See ADR 0032.
 
 // The two rows of "Timeless" by The Weeknd, as MusicBrainz holds them: 256
 // seconds each, USUG12406537 on one and USUG12406536 on the other, and the

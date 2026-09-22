@@ -113,7 +113,7 @@ type Evidence struct {
 	// Explicit is the source saying this entry is the explicit recording of the
 	// track. It only excludes: an entry flagged explicit is never resolved to a
 	// row MusicBrainz marks as the clean edition, and the flag admits nothing on
-	// its own (docs/decisions/0032). False is silence, which is what a file and
+	// its own (ADR 0032). False is silence, which is what a file and
 	// every source but Spotify carry.
 	Explicit bool
 	// Witness is this audio measured against a file the library already holds
@@ -177,7 +177,7 @@ type WitnessComparison struct {
 //
 // It carries the number and not a conclusion. What the number means is decided
 // in one place, by chromaprint's calibrated thresholds
-// (docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md), so no
+// (ADR 0024), so no
 // caller can set its own bar.
 //
 // RecordingID is the recording the excerpt was published for, and it is what
@@ -203,7 +203,7 @@ type AnchorComparison struct {
 
 // AnchorSourceDeezer names the one anchor keyed by the recording's own ISRC:
 // the excerpt Deezer publishes, fetched by that ISRC (internal/anchor,
-// docs/decisions/0024). An anchor from anywhere else was found some other way,
+// ADR 0024). An anchor from anywhere else was found some other way,
 // and it does not stand in for an identification where the credit disagrees.
 const AnchorSourceDeezer = "deezer"
 
@@ -213,7 +213,7 @@ const AnchorSourceDeezer = "deezer"
 //
 // A reference nobody keyed can be a sibling version of the song with the same
 // name and the same length, so it never proves a copy and it never refuses one:
-// a wrong reference must not make the right copy unfillable (docs/decisions/0029
+// a wrong reference must not make the right copy unfillable (ADR 0029
 // §3). A Topic upload is the exception because YouTube generates that channel
 // from the distributor's delivery for the artist's recording.
 const AnchorByName = "youtube"
@@ -415,7 +415,7 @@ func (pair comparison) identifiedAcoustically() bool {
 // Audio that fails to reproduce the recording's own published excerpt says the
 // same thing by a different route, and it says it whatever else agrees: a
 // contradiction voids a pair however good the rest of it looked
-// (docs/decisions/0024, rule 3).
+// (ADR 0024, rule 3).
 func (pair comparison) contradicted() bool {
 	return pair.recording == tagmatch.Differs || pair.isrc == tagmatch.Differs ||
 		pair.creditContradicts() || pair.duration == tagmatch.Differs ||
@@ -435,12 +435,12 @@ func (pair comparison) contradicted() bool {
 // typed into a file by whoever encoded it does not overrule them. The difference
 // stays on the record either way: the verdict goes on listing the artist as
 // disagreeing, so the copy is admitted with its disagreement in front of anybody
-// reading it (docs/decisions/0030).
+// reading it (ADR 0030).
 //
 // Those two witnesses and no others. A library witness is one copy of the music
 // rather than anybody who published it, and it never refuses anything, so it is
 // not asked to clear a refusal either. Neither is an excerpt found under this
-// recording's name instead of by its ISRC (docs/decisions/0029).
+// recording's name instead of by its ISRC (ADR 0029).
 func (pair comparison) creditContradicts() bool {
 	return pair.artist == tagmatch.Differs &&
 		!pair.identifiedAcoustically() && !pair.identifiedBySample()
@@ -574,7 +574,7 @@ const singledOutByRelease = "-and-release"
 
 // singledOutByExplicitEdition is the token resolvedOutcome appends when several
 // recordings were all proven and every one but this was the clean edition of it
-// (docs/decisions/0032). The method carries it as well as the sentence, because
+// (ADR 0032). The method carries it as well as the sentence, because
 // "the one recording the tags name" and "one of two, taken because MusicBrainz
 // marks the other as clean" are different things to have concluded.
 const singledOutByExplicitEdition = "explicit-edition"
@@ -583,7 +583,7 @@ const singledOutByExplicitEdition = "explicit-edition"
 // carries. No grade produces it: it is written where MusicBrainz merged the row
 // the library used into the want's, or where something proved the copy is the
 // want's recording and the row the library used is the same registered track
-// (docs/decisions/0025, 0031). Which of the two it was, and what proved the copy,
+// (ADR 0025, 0031). Which of the two it was, and what proved the copy,
 // are on the identity's evidence rather than in this name.
 const MethodSameRegistration = "same-registration"
 
@@ -653,7 +653,7 @@ func MethodSentence(method string) string {
 // excerpt a distributor publishes for this recording, or a file the library
 // already holds and has proven — or a person listened and said so. Nothing else
 // does: a tag method is what the file says about itself, which never admits a
-// copy a stranger sent (docs/decisions/0002), and an empty method is a copy
+// copy a stranger sent (ADR 0002), and an empty method is a copy
 // nothing is recorded about.
 //
 // It is Verification.Audio read back off a method written down earlier, for a
@@ -778,7 +778,7 @@ func compare(evidence Evidence, recording musicbrainz.Recording) comparison {
 // fingerprint names the row the want is not keyed to. Verify establishes when
 // that has happened, by a proof rather than by resemblance, and the names it
 // establishes are passed here so that the audio is not read as naming other
-// music. See secondRowOfSameRegistration and docs/decisions/0025.
+// music. See secondRowOfSameRegistration and ADR 0025.
 func compareAgainst(
 	evidence Evidence, recording musicbrainz.Recording, sameRegistration []uuid.UUID,
 ) comparison {
@@ -821,7 +821,7 @@ func compareAgainst(
 // credits.
 //
 // MusicBrainz sends the credit as the list of artists it is, and where it did
-// the comparison is made over that set (docs/decisions/0030). A recording that
+// the comparison is made over that set (ADR 0030). A recording that
 // arrived without the list falls back to the printed credit, which is the
 // comparison this always made.
 func compareCredit(observed string, recording musicbrainz.Recording) tagmatch.Verdict {
@@ -966,7 +966,7 @@ func ReadAnchor(source string, rate float64) tagmatch.Verdict {
 		// Other audio refuses, except where the reference was found by name. That
 		// reference may be another version of the same song, and reading it as a
 		// refusal would throw the right copy away against the wrong upload, for
-		// good (docs/decisions/0029 §3).
+		// good (ADR 0029 §3).
 		if source == AnchorByName || source == AnchorByNameTopic {
 			return tagmatch.Unknown
 		}
@@ -1021,7 +1021,7 @@ func compareRecordingID(observed uuid.UUID, recording musicbrainz.Recording) tag
 // nor other music: the audio was identified, and what it was identified as says
 // nothing about which of two rows to key an answer on. Setting it aside is
 // deliberately not the same as reading it as agreement — see
-// docs/decisions/0025.
+// ADR 0025.
 func compareAcoustic(
 	acoustic *Acoustic, recording musicbrainz.Recording, sameRegistration []uuid.UUID,
 ) (tagmatch.Verdict, int) {
@@ -1067,7 +1067,7 @@ func compareAcoustic(
 	}
 	if setAside {
 		// The cluster names this recording under another row of the same
-		// registration (docs/decisions/0025, 0031), so whatever else it carries
+		// registration (ADR 0025, 0031), so whatever else it carries
 		// it is not naming other music. The set-aside row admits nothing on its
 		// own, so this is silence and the anchor decides.
 		return tagmatch.Unknown, len(named)
@@ -1140,15 +1140,15 @@ type registrationProof int
 
 const (
 	notOneRegistration registrationProof = iota
-	// byRegistrationCode is docs/decisions/0025: the two rows carry an ISRC in
+	// byRegistrationCode is ADR 0025: the two rows carry an ISRC in
 	// common, which is the catalogue's own statement that one track is entered
 	// twice.
 	byRegistrationCode
-	// byNameAndLength is docs/decisions/0031: the two rows name the same artists,
+	// byNameAndLength is ADR 0031: the two rows name the same artists,
 	// hold the same title and run the same length. Most of the rows MusicBrainz
 	// enters twice carry no ISRC at all, and this is what says so about them.
 	byNameAndLength
-	// byExplicitEdition is docs/decisions/0032: the row the want names is the
+	// byExplicitEdition is ADR 0032: the row the want names is the
 	// clean edition and the other row is the explicit one. They are two
 	// registered tracks and the audio does differ, and the explicit edition is
 	// the one the owner keeps, so the other row answers for the want. It holds in
@@ -1179,7 +1179,7 @@ const rowLengthToleranceMS = 2000
 // Codes that disagree end it before either test is asked, with one exception:
 // where the codes are all that separates the clean edition from the explicit
 // one, and the row asked about is the clean one, the explicit row answers for it
-// (docs/decisions/0032). A name and a length cannot outvote the label having
+// (ADR 0032). A name and a length cannot outvote the label having
 // registered the two rows separately in any other case.
 //
 // copyDurationMS is how long the copy in hand actually runs, and it is read only
@@ -1474,7 +1474,7 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 		// MusicBrainz marks as the clean edition is not what was asked for. It is
 		// dropped before grading, the way a recording somebody rejected is: it must
 		// not be the one conclusive answer and must not be offered as a candidate
-		// either (docs/decisions/0032).
+		// either (ADR 0032).
 		if evidence.Explicit && cleanEdition(recording) {
 			continue
 		}
@@ -1530,7 +1530,7 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 			evidence, conclusive[0].recording, conclusive[0].pair, conclusive[0].level, "")
 	case len(conclusive) > 1:
 		// MusicBrainz holds the clean edition beside the explicit one, and the
-		// explicit one is what the owner wants (docs/decisions/0032). Asked of an
+		// explicit one is what the owner wants (ADR 0032). Asked of an
 		// entry alone: an entry is a request for a piece of music, and a file is a
 		// piece of music in hand, for which the clean edition is a true answer.
 		if evidence.subject() == SubjectEntry {

@@ -41,8 +41,8 @@ type Resolver interface {
 	// OneRegistration reports what the recording a want names and the recording
 	// the library filed that want's copy under came to: rows MusicBrainz has
 	// merged, one registered track it holds twice with the copy proven against
-	// the want's row (docs/decisions/0025, 0031), the explicit edition of a clean
-	// row the want names (docs/decisions/0032), or two recordings only a person
+	// the want's row (ADR 0025, 0031), the explicit edition of a clean
+	// row the want names (ADR 0032), or two recordings only a person
 	// can separate. It is asked at one moment: a want about to stop for ever with
 	// its own music on the disc. The evidence is what the want's own record says
 	// about the copy on its disc.
@@ -117,7 +117,7 @@ func (service *Service) resolve(
 		Title:      target.EntryTitle,
 		DurationMS: int(target.EntryDurationMS.Int32),
 		// What the source said about the edition, and only where it said it. It
-		// excludes a clean row and admits nothing (docs/decisions/0032).
+		// excludes a clean row and admits nothing (ADR 0032).
 		Explicit: target.EntryExplicit.Valid && target.EntryExplicit.Bool,
 	}
 

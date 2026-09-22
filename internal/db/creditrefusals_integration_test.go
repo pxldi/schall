@@ -9,7 +9,7 @@ import (
 )
 
 // A credit is compared as the set of artists it names, and a credit that
-// disagrees no longer voids a pair the audio identified (docs/decisions/0030).
+// disagrees no longer voids a pair the audio identified (ADR 0030).
 // Both bear on the copies refused on the artist tag alone, and what that pass is
 // allowed to offer is the whole of its safety. These tests are that list.
 

@@ -3,7 +3,7 @@
 /* Served from the image rather than a font CDN: a self-hosted tool should not
    make a third-party request on every page load. Latin subsets.
 
-   Three faces now, one job each (docs/decisions/0017, its monospace amended by
+   Three faces now, one job each (ADR 0017, its monospace amended by
    0020, the serif voice retired by 0022). Schibsted Grotesk carries everything
    that is read, headings included — hierarchy is weight and size, not a change
    of face. Azeret Mono carries every identifier, path, label, chip and figure,
@@ -420,7 +420,7 @@ html {
      the default (2026-09-01). A percentage rather than a px value keeps a
      browser accessibility font-size in play. Every size and space in the
      application is rem-based, so this scales all of it together; the px
-     names in DESIGN.md and the type-scale comments are the design-time
+     names in the design spec and the type-scale comments are the design-time
      values at a 16px root, drawn a third larger here. */
   font-size: 133%;
 }

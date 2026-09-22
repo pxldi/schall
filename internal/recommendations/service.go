@@ -6,7 +6,7 @@
 // changed in the interface takes effect on the next call rather than on the next
 // restart. What comes back is identifiers and the material a reason is written
 // from — nothing here decides what may be shown, which is the suppression
-// engine's job against Schall's own tables (docs/decisions/0005).
+// engine's job against Schall's own tables (ADR 0005).
 package recommendations
 
 import (
@@ -33,7 +33,7 @@ import (
 // ErrNotConfigured means nobody has named a ListenBrainz account yet. It is
 // what every path through this service refuses with when there is no settings
 // row, so that "the source was never set up" is never reported as "the source
-// had nothing to say" (docs/decisions/0002).
+// had nothing to say" (ADR 0002).
 var ErrNotConfigured = errors.New("ListenBrainz is not configured")
 
 // ErrDisabled means the account remains stored but automatic recommendation

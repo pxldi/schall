@@ -2,7 +2,7 @@ package anchor
 
 import "testing"
 
-// The rule these tests pin is docs/decisions/0029 §2. It is the whole of what
+// The rule these tests pin is ADR 0029 §2. It is the whole of what
 // keeps a text search honest: an upload is chosen by length and by name, a
 // matching Topic upload wins, and views choose within one kind. A ranking is
 // not evidence and a view count breaks a tie between uploads that already agree
@@ -198,7 +198,7 @@ func TestUploaderLabelsComeOffAndVersionWordsStay(t *testing.T) {
 		{"Vela Nine - Watchfire (sped up)", "Vela Nine", "Watchfire (sped up)"},
 		{"Vela Nine - Watchfire [Instrumental]", "Vela Nine", "Watchfire [Instrumental]"},
 		// A producer credit names who made the track, so it comes off with the
-		// uploader's own labels (docs/decisions/0031). It has to open the group:
+		// uploader's own labels (ADR 0031). It has to open the group:
 		// a group that merely ends with the word is kept.
 		{"Vela Nine - Watchfire [Prod. Halden Rowe]", "Vela Nine", "Watchfire"},
 		{"Vela Nine - Watchfire (Produced by Halden Rowe)", "Vela Nine", "Watchfire"},

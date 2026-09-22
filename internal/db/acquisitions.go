@@ -1625,7 +1625,7 @@ func (q *Queries) WantsSharingAReleaseWith(
 // publishes for the recording the want names, fetched by the want's own ISRC and
 // kept on the want. It is what lets a copy a stranger sent be proven, or
 // refused, for music MusicBrainz has never heard of. See
-// docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md.
+// ADR 0024.
 //
 // Only what the fetch needs is read: the code to ask by, the words to search by
 // and to say which want this was in a log, the length that keys an upload, and
@@ -1638,7 +1638,7 @@ type AnchorDueRow struct {
 	// DurationMS is what the entry says the recording runs for. It is half of
 	// what chooses an upload found by name — the other half is the title — and a
 	// want without it cannot be anchored that way at all
-	// (docs/decisions/0029 §2).
+	// (ADR 0029 §2).
 	DurationMS int
 	Attempts   int32
 }
@@ -1696,7 +1696,7 @@ type AnchorParams struct {
 	// reference has neither — its identifier is the whole of what there is to
 	// say about it — and they exist because an upload chosen by name can be the
 	// wrong version, and the person who can see that is the person reading the
-	// row (docs/decisions/0029 §4).
+	// row (ADR 0029 §4).
 	Label   string
 	Views   int64
 	Seconds int
@@ -1733,7 +1733,7 @@ func (q *Queries) RecordAnchor(ctx context.Context, params AnchorParams) error {
 // This is silence, not disagreement. A want with no anchor is judged by whatever
 // else can speak about its copies, exactly as it is today, and the sentence kept
 // here is what a person reads instead of finding an empty field
-// (docs/decisions/0002).
+// (ADR 0002).
 func (q *Queries) RecordAnchorAbsent(
 	ctx context.Context, targetID uuid.UUID, reason string,
 ) error {
@@ -1778,7 +1778,7 @@ func (q *Queries) DeferAnchor(
 // created, and does nothing to a want that already has an anchor, has been
 // found to have none, or is already waiting for one. A want without an ISRC is
 // scheduled too: the distributor has nothing for it, and the upload search of
-// docs/decisions/0029 is what answers then.
+// ADR 0029 is what answers then.
 func (q *Queries) ScheduleAnchor(
 	ctx context.Context, targetID uuid.UUID, at time.Time,
 ) error {

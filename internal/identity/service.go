@@ -639,7 +639,7 @@ func (service *Service) AcceptAsWanted(ctx context.Context, fileID, recordingID 
 // not call the file the recording the want names. Three things reach it, and the
 // proof says which. MusicBrainz merged the two rows. Or something proved the
 // copy is the want's recording and the row the library used turned out to be the
-// same registered track (docs/decisions/0025, 0031). Or the library wrote nothing
+// same registered track (ADR 0025, 0031). Or the library wrote nothing
 // down at all, and the hole is filled with the recording the copy was proven to
 // be. The caller establishes all three with the resolver, which is the only thing
 // entitled to; this writes the answer down.

@@ -139,7 +139,7 @@ func TestARecordingTheReaderDismissedIsNotOfferedAgain(t *testing.T) {
 
 // The review queue is where somebody decides whether a fetched file is the
 // recording it was fetched for. Rejecting a copy there is a statement about
-// audio identity, not about taste, and docs/decisions/0005 keeps the two
+// audio identity, not about taste, and ADR 0005 keeps the two
 // apart: the recording stays on offer.
 func TestAReviewQueueRejectionLeavesTheSuggestionOnOffer(t *testing.T) {
 	ctx := context.Background()

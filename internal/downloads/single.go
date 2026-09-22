@@ -272,7 +272,7 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 		// The audio named another MusicBrainz row and nobody could ask whether that
 		// row is this track entered twice. The refusal below rests on that answer,
 		// so without it there is a question and not a verdict
-		// (docs/decisions/0031).
+		// (ADR 0031).
 		//
 		// The want is waiting for evidence rather than for a person, and it is
 		// asked again on a schedule that runs out. The hold is written first
@@ -305,7 +305,7 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 // uploadSaidOtherAudio reports a comparison that ran against an upload found by
 // name and came back reading other audio.
 //
-// The grader draws no conclusion from that (docs/decisions/0029 §3), so the copy
+// The grader draws no conclusion from that (ADR 0029 §3), so the copy
 // is held exactly as one nothing spoke about is. This is only what the person
 // reading it is told, and it is asked here rather than in the grader because the
 // grader's job was to conclude nothing.
@@ -744,9 +744,9 @@ func (importer *Importer) drawWaveform(ctx context.Context, source, name string)
 //
 // anchorSource is who published that excerpt. It travels too, because how the
 // excerpt was found decides what the number may answer: an excerpt found by
-// searching for the want's name never refuses a copy (docs/decisions/0029), and
+// searching for the want's name never refuses a copy (ADR 0029), and
 // only one fetched by the recording's ISRC stands in for an identification where
-// the credit disagrees (docs/decisions/0030).
+// the credit disagrees (ADR 0030).
 func candidateEvidence(
 	file inspected, evidence *db.AcquiredFileEvidence, measuredMS int,
 	anchoredTo uuid.UUID, anchorSource string,

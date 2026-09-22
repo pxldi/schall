@@ -220,7 +220,7 @@ func artistIDs(credited []CreditedArtist) (map[string]struct{}, bool) {
 const maxCreditParts = 24
 
 // Artists compares an observed artist tag with the artists a recording credits,
-// as the set of artists it is rather than as a string (docs/decisions/0030).
+// as the set of artists it is rather than as a string (ADR 0030).
 //
 // Two credits are the same credit when they name the same artists, whatever
 // order they print them in and whichever of each artist's names they use. So a

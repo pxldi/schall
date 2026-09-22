@@ -197,7 +197,7 @@ type TargetImportRow struct {
 	//
 	// Empty means the want has no anchor, which is silence and never a verdict:
 	// most wants have none, and a copy is judged exactly as it was before.
-	// See docs/decisions/0024-a-distributors-preview-is-an-audio-anchor.md.
+	// See ADR 0024.
 	AnchorFingerprint string
 	// AnchorSource names who published the excerpt and AnchorReference is their
 	// own identifier for the track. They describe where the proof came from,
@@ -210,7 +210,7 @@ type TargetImportRow struct {
 	// want's name: the upload's own title and channel, and how many views it had
 	// when it was chosen. A keyed excerpt has neither. They are carried onto the
 	// copy's evidence so a person reading the row can see which upload the copy
-	// was measured against (docs/decisions/0029 §4).
+	// was measured against (ADR 0029 §4).
 	AnchorLabel string
 	AnchorViews int64
 }
@@ -1479,12 +1479,12 @@ type AcquiredCopyFiling struct {
 	// the publisher it was made against are one record, and a want re-anchored
 	// since would otherwise lend its source to an older number. An excerpt
 	// fetched by a registration code and one found by searching for the want's
-	// name mean different things (docs/decisions/0029).
+	// name mean different things (ADR 0029).
 	AnchorSource string
 	// CopyDurationMS is how long the file on the disc runs, as the scanner read
 	// it. Zero is unknown, and unknown agrees with nothing. It stands in for a
 	// length MusicBrainz does not hold for one of two rows
-	// (docs/decisions/0031).
+	// (ADR 0031).
 	CopyDurationMS int
 	// ProvenMethod is what admitted the copy: the grader's own name for it, or
 	// "manual" where a person listened and said so. It is empty where nothing is
@@ -2469,7 +2469,7 @@ func (q *Queries) QueueJudgeCopiesAgain(ctx context.Context, runAfter time.Time)
 }
 
 // QueueWantCopyJudging asks for one want's held copies to be measured against
-// the anchor that has just landed on it (docs/decisions/0029 §5).
+// the anchor that has just landed on it (ADR 0029 §5).
 //
 // Nobody presses this. An anchor arriving is a new witness for copies that were
 // already questions, and leaving them as questions until somebody asked for a
@@ -2814,7 +2814,7 @@ type JudgeAgainRow struct {
 // under copies already decided: a want gained an audio anchor it did not have
 // when its copies were judged, and an identification naming another MusicBrainz
 // row of the same registered track stopped being read as a refusal
-// (docs/decisions/0024 and 0025). The copies are still on disk, so the honest
+// (ADR 0024 and 0025). The copies are still on disk, so the honest
 // answer is to put them through the same validation again rather than to leave
 // wrong answers standing.
 //
@@ -2960,7 +2960,7 @@ func (q *Queries) copiesToJudgeAgain(
 // It exists for the same reason CopiesToJudgeAgain does and offers a different
 // set. A credit is now compared as the set of artists it names, and a credit
 // that disagrees no longer voids a pair the audio already identified
-// (docs/decisions/0030). Both changes bear on exactly these copies: 308 of them
+// (ADR 0030). Both changes bear on exactly these copies: 308 of them
 // were refused on the artist tag alone, and the audio had already named the
 // wanted recording in 110.
 //

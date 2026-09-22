@@ -4,20 +4,20 @@ Self-hosted music collection manager. Go 1.25 API (chi, pgx/v5, sqlc, goose,
 zerolog) + PostgreSQL + SvelteKit frontend (Svelte 5, TypeScript, Tailwind 4,
 TanStack Query), shipped as one Docker image.
 
-**docs/PRODUCT.md** is the target behaviour, not the current one;
-**docs/ROADMAP.md** orders what's next; **docs/decisions/** holds the ADRs;
-**DESIGN.md** is how the interface looks. Keep them truthful in the same commit
-as the change. DESIGN.md once drifted from `styles.css` through two ADRs and
-named seventeen tokens that did not exist; `web/src/lib/design-system.test.ts`
-fails on that now.
+The spec lives outside this repository: the product end state, the roadmap,
+the ADRs and the design rules. `CLAUDE.local.md` says where. Read it before
+changing behaviour, and keep it truthful in the same session as the change.
+`ADR NNNN` in a comment names a decision record there.
+`web/src/design-tokens.yaml` lists the interface tokens, and
+`web/src/lib/design-system.test.ts` fails when it disagrees with `styles.css`.
 
 ## The one rule that matters
 
 Matching never guesses. A file is a recording only when something proves it:
 MusicBrainz recording ID or ISRC agreement, exact tag agreement (the
 enumerated combinations in `internal/identity/grade.go`), AcoustID read at the
-leading cluster (`docs/decisions/0011`, `0018`), or the distributor's preview
-sample (`internal/anchor`, `docs/decisions/0024`, thresholds in
+leading cluster (ADR 0011, 0018), or the distributor's preview
+sample (`internal/anchor`, ADR 0024, thresholds in
 `internal/chromaprint`). A contradiction voids a pair whatever else agrees. An
 absent tag is silence, not agreement. Anything unproven is surfaced to the
 person with its evidence — never resolved by similarity, string distance, a
@@ -78,10 +78,10 @@ Live AcoustID tests are opt-in: `SCHALL_ACOUSTID_API_KEY` set and `fpcalc` insta
 
 - The seeded fixture must leave the job queue nothing to do, now and a year from now (`internal/seed`'s integration test asserts both). A fixture row startup would act on breaks the browser tests as flakiness.
 - Soulseek bans an account ~30 min for fast or repeated searches, and a banned search reports "nothing on offer". Speed up by waiting less, never by asking more. slskd's `Queued` state means the search never reached Soulseek.
-- AcoustID: validating a folder somebody chose it can only object; acquiring one file for a want it is the only thing that admits, read at the leading cluster alone. Tags alone never admit a downloaded file (`docs/decisions/0002`).
+- AcoustID: validating a folder somebody chose it can only object; acquiring one file for a want it is the only thing that admits, read at the leading cluster alone. Tags alone never admit a downloaded file (ADR 0002).
 - One open download request per want (`download_requests_open_target_idx`).
 - Identities are MusicBrainz-keyed end to end; a second key (e.g. SoundCloud) is a schema decision — raise it before building.
-- Deleting music needs a licence: a lease or an explicit person's decision, recorded before the unlink (`docs/decisions/0021`).
+- Deleting music needs a licence: a lease or an explicit person's decision, recorded before the unlink (ADR 0021).
 - Navidrome sync calls as the client `schall-sync`. Subsonic `DefaultReportRealPath` has to be on for that client name, or path pairing returns nothing.
 
 ## How to write

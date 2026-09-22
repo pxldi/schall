@@ -784,7 +784,7 @@ func TestAMergedAwayIDInALowerClusterIsNotReconciled(t *testing.T) {
 
 // The credit no longer refuses a copy AcoustID identified. The leading cluster
 // named the wanted recording, so the copy is that recording, and the artist tag
-// stays on the record as disagreeing (docs/decisions/0030).
+// stays on the record as disagreeing (ADR 0030).
 func TestVerifyingAdmitsACopyTheAudioNamedAndTheCreditDoesNot(t *testing.T) {
 	provider := &stubProvider{recording: creditedTo(
 		recording(firstID, "SICKO MODE", "Travi$ Scott", 312000),
@@ -808,7 +808,7 @@ func TestVerifyingAdmitsACopyTheAudioNamedAndTheCreditDoesNot(t *testing.T) {
 
 // A length this recording cannot have refuses the copy whatever the audio said.
 // A contradiction voids a pair however good the rest of it looked
-// (docs/decisions/0007).
+// (ADR 0007).
 func TestVerifyingStillRefusesACopyWhoseLengthDisagrees(t *testing.T) {
 	provider := &stubProvider{recording: creditedTo(
 		recording(firstID, "SICKO MODE", "Travi$ Scott", 312000),
@@ -849,7 +849,7 @@ func TestVerifyingAdmitsACopyTheSampleNamedAndTheCreditDoesNot(t *testing.T) {
 }
 
 // An excerpt found under this recording's name is not this recording's own
-// excerpt, so it does not clear a credit that disagrees (docs/decisions/0029).
+// excerpt, so it does not clear a credit that disagrees (ADR 0029).
 func TestVerifyingKeepsTheCreditRefusalForAnExcerptFoundByName(t *testing.T) {
 	provider := &stubProvider{recording: creditedTo(
 		recording(firstID, "SICKO MODE", "Travi$ Scott", 312000),

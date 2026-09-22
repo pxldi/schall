@@ -207,7 +207,7 @@ func TestBackpressureIsNamedWithoutLosingTheStatus(t *testing.T) {
 }
 
 // A failure is an error, never an empty answer: could-not-ask is not
-// nothing-there (docs/decisions/0002).
+// nothing-there (ADR 0002).
 func TestAServerFaultIsAnErrorRatherThanAnEmptyList(t *testing.T) {
 	client := newTestClient(t, func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusInternalServerError)

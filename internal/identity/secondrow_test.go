@@ -16,7 +16,7 @@ import (
 // Read as a difference that is the audio naming other music, which is final and
 // throws the right copy away. These tests pin when it is not read that way, and
 // they matter most where they refuse to help: the rule turns on a proof, and
-// without that proof the refusal stands. See docs/decisions/0025.
+// without that proof the refusal stands. See ADR 0025.
 
 // Both rows of "Racks" by 88GLAM, as MusicBrainz actually holds them: one on
 // "88GLAM 2.5" and one on "88GLAM2", under one ISRC and with nothing else
@@ -149,9 +149,9 @@ func TestASharedISRCAloneDoesNotSetTheOtherRowAside(t *testing.T) {
 // code alone. It is audio a search returned under this name, and the sibling
 // edit that shares the ISRC is exactly what such a search returns, so reading it
 // here would cancel the fingerprint's refusal with the audio being refused
-// (docs/decisions/0029). The other test, on the two rows' own names and lengths,
+// (ADR 0029). The other test, on the two rows' own names and lengths,
 // does admit such an upload, and it is the length agreement that separates the
-// two cases (docs/decisions/0031).
+// two cases (ADR 0031).
 func TestAnUploadFoundByNameDoesNotSetTheOtherRowAside(t *testing.T) {
 	resolver := NewResolver(oneCodeProvider(twoRowsUnderOneCode()))
 	copied := copyUnderOneCode()

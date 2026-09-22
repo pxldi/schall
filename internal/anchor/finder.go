@@ -9,7 +9,7 @@ import (
 //
 // It is what the search says about the video and nothing more: no relevance
 // rank travels with it, because the rank answers to the query and the choice
-// has to answer to the song (docs/decisions/0029). Seconds is the video's
+// has to answer to the song (ADR 0029). Seconds is the video's
 // length, which is the key the want is matched on. Topic status takes priority,
 // and Views decides between videos of the same kind.
 type Upload struct {

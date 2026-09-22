@@ -47,7 +47,7 @@ var (
 // A move Schall performs updates the row it already has, so nothing is
 // re-linked: the identity, the mappings, the provenance and the acquisition
 // links are not carried across because they were never disturbed
-// (docs/decisions/0014). What the rename needs to keep consistent is the
+// (ADR 0014). What the rename needs to keep consistent is the
 // handful of places a path is stored as a lookup key rather than held as a
 // foreign key, and those move inside the same transaction as the rename.
 type Mover struct {
@@ -426,7 +426,7 @@ func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
 
 // template is the stored layout, or the default when nothing has departed from
 // it. There is no column default: an absent row means DefaultTemplate, so the
-// answer has one home (docs/decisions/0014).
+// answer has one home (ADR 0014).
 func (mover *Mover) template(ctx context.Context) (Template, error) {
 	var text string
 	err := mover.pool.QueryRow(ctx, `
@@ -814,7 +814,7 @@ func (mover *Mover) check(ctx context.Context, tx pgx.Tx, move claimedMove) (str
 // Two places deliberately do not follow, and both are records of what was
 // agreed at the time rather than of where a file is:
 // navidrome_playlist_snapshot_tracks.library_path is the path Schall pushed to
-// the player (docs/decisions/0010), and download_import_reviews.detail is the
+// the player (ADR 0010), and download_import_reviews.detail is the
 // audited line saying where an import landed.
 func followPath(ctx context.Context, tx pgx.Tx, from, to string) error {
 	if _, err := tx.Exec(ctx, `

@@ -61,7 +61,7 @@ type Recording struct {
 	// Disambiguation is the comment MusicBrainz editors write to tell two rows
 	// of one title apart: "live", "clean", "instrumental". It is the provider's
 	// own words about the row and never a resemblance, which is why the clean
-	// edition is read from it (docs/decisions/0032).
+	// edition is read from it (ADR 0032).
 	Disambiguation string
 	// ArtistCredit is the credit as the provider prints it, join phrases and
 	// all; Credits is the same credit as the list it was printed from. Neither
@@ -143,7 +143,7 @@ func (client *Client) Recording(ctx context.Context, id uuid.UUID) (Recording, e
 		// aliases costs no extra request and arrives on the credited artists as
 		// well as on the recording. It is what lets a file tagged "Travis Scott"
 		// be read against a credit printed "Travi$ Scott" as the one artist
-		// MusicBrainz says they are (docs/decisions/0030).
+		// MusicBrainz says they are (ADR 0030).
 		"inc": []string{"artist-credits+aliases+isrcs+releases+release-groups"},
 	}, &payload)
 	var httpErr *HTTPError

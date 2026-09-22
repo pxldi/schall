@@ -88,7 +88,7 @@ const (
 	JudgeCreditRefusals = "judge_credit_refusals"
 	// JudgeWantCopies is the same second look at one want alone, queued by the
 	// anchor sweep when a want gains a reference its copies were judged without
-	// (docs/decisions/0029 §5). Its payload names the want.
+	// (ADR 0029 §5). Its payload names the want.
 	JudgeWantCopies = "judge_want_copies"
 	// RefreshWeeklyPlaylist is fixed by migration 00052, whose partial unique
 	// index is keyed on this exact string.
@@ -120,7 +120,7 @@ const (
 	AnswerPeerChallenges = "answer_peer_challenges"
 	// CleanInbox is asked for by a person and never scheduled. It walks the
 	// download inbox once and deletes the files nothing needs any more
-	// (docs/decisions/0035).
+	// (ADR 0035).
 	CleanInbox = "clean_inbox"
 )
 
@@ -608,7 +608,7 @@ type DownloadImporter interface {
 	JudgeAgain(context.Context) error
 	// JudgeCreditRefusalsAgain does the same for the copies refused on the
 	// artist tag alone, which is a different set and a different rule change
-	// (docs/decisions/0030).
+	// (ADR 0030).
 	JudgeCreditRefusalsAgain(context.Context) error
 	// JudgeWantCopies does the same for one want that has just been anchored. The
 	// copies whose bytes are still there go back through validation; the ones

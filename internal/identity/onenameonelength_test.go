@@ -11,11 +11,11 @@ import (
 )
 
 // Most of the rows MusicBrainz enters twice carry no ISRC on one side, so
-// docs/decisions/0025's test cannot speak about them: 1244 copies on 83 wants
+// ADR 0025's test cannot speak about them: 1244 copies on 83 wants
 // were discarded because the audio named the catalogue's other row and nothing
 // could say the two rows were one track. These tests pin the second test, on the
 // rows' own names and lengths, and they matter most where they refuse to help.
-// See docs/decisions/0031.
+// See ADR 0031.
 
 // Both rows of "Dónde" by Souly, as MusicBrainz holds them: one on the release
 // "Dónde" with no ISRC, one on "traence" with one. The names, the credits and

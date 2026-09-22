@@ -294,7 +294,7 @@ type Verification struct {
 	// row and MusicBrainz could not be asked whether that row holds this same
 	// registered track. The refusal that would otherwise be final rests on that
 	// answer, so without it the copy is a question rather than a verdict
-	// (docs/decisions/0031).
+	// (ADR 0031).
 	SameRegistrationUnchecked bool
 	// AudioSetAside reports that the leading AcoustID cluster named another
 	// MusicBrainz row that was established as the same registration. The
@@ -412,7 +412,7 @@ type registrationCheck struct {
 	rows        []musicbrainz.Recording
 	unavailable bool
 	// explicit are the named rows that hold the explicit edition of the clean
-	// row this want names (docs/decisions/0032). They are kept apart from rows
+	// row this want names (ADR 0032). They are kept apart from rows
 	// because they are a different fact: two registered tracks, not one entered
 	// twice, and what settles the copy is that the explicit edition is the one
 	// the owner keeps.
@@ -468,16 +468,16 @@ func (check registrationCheck) sentence() string {
 //     Both, because a shared code alone admits something wrong: MusicBrainz puts
 //     one ISRC on genuinely different audio too, so the code alone would let a
 //     fingerprint of the sped-up edit answer for a want for the original
-//     (docs/decisions/0025).
+//     (ADR 0025).
 //   - The two rows name the same set of artists, hold the same title once the
 //     bracketed labels are dropped, and run the same length. That is
-//     docs/decisions/0031, and it needs no excerpt: equal lengths are what the
+//     ADR 0031, and it needs no excerpt: equal lengths are what the
 //     excerpt was there to rule out, and the sped-up edit fails both the title
 //     and the length.
 //
 // A third case is not that question. Where MusicBrainz marks this recording as
 // the clean edition of the named row, the two are two registered tracks, and the
-// audio is the explicit edition the owner keeps (docs/decisions/0032). The
+// audio is the explicit edition the owner keeps (ADR 0032). The
 // identification is set aside there for the same reason and with the same
 // effect: it stops being a refusal, and the copy still needs an anchor to be
 // admitted.
@@ -485,7 +485,7 @@ func (check registrationCheck) sentence() string {
 // The excerpt read on the first test has to be the one fetched by this
 // recording's own ISRC. An upload found by the want's name can be the sibling
 // edit that shares the code, and reading it there would cancel the fingerprint's
-// refusal with the very audio the fingerprint was refusing (docs/decisions/0029,
+// refusal with the very audio the fingerprint was refusing (ADR 0029,
 // 0030). The second test admits an upload found by name, because a row-to-row
 // length agreement excludes the edit that made the first one strict.
 //
@@ -564,11 +564,11 @@ const (
 	// stops and a person decides which of them this file is.
 	FilingOtherRecording FilingVerdict = iota
 	// FilingOneRegistration is one registered track MusicBrainz entered twice
-	// (docs/decisions/0025, 0031). The file holds the music the want asked for,
+	// (ADR 0025, 0031). The file holds the music the want asked for,
 	// so it is filed under the want's recording and the want settles.
 	FilingOneRegistration
 	// FilingExplicitEdition is the want naming the clean edition of the track the
-	// file holds (docs/decisions/0032). The want settles against the file as the
+	// file holds (ADR 0032). The want settles against the file as the
 	// library has it, and the file keeps the recording the library gave it:
 	// re-filing it under the clean row would write down that this audio is a
 	// recording it is not.
@@ -662,12 +662,12 @@ type FilingProof struct {
 // The ISRC branch keeps its excerpt on top of that. A shared code alone admits
 // other music — MusicBrainz puts the ISRC of "1992" on "1992 (sped Up + slowed
 // mixes)" as well — and only the excerpt this recording's own distributor
-// published for that code separates them (docs/decisions/0025).
+// published for that code separates them (ADR 0025).
 //
 // A fourth answer is not this question at all. Where the two rows differ only in
 // that MusicBrainz marks the want's row as the clean edition of the filed one,
 // the file holds the explicit edition and the owner keeps that one, so the want
-// settles against it (docs/decisions/0032). The file keeps the recording the
+// settles against it (ADR 0032). The file keeps the recording the
 // library gave it, and nothing is filed anywhere. The other direction never
 // settles: a want for the explicit edition goes on looking when its copy was
 // filed as the clean one.

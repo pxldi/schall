@@ -114,7 +114,7 @@ func (service *Service) WithFiler(filer Filer) *Service {
 //     recording, because MusicBrainz merged the two, or with a second row of the
 //     same registered track for a copy something else already proved to be the
 //     want's music. One performance entered twice is not other music
-//     (docs/decisions/0025, 0031), so the want has exactly what it asked for.
+//     (ADR 0025, 0031), so the want has exactly what it asked for.
 //   - The library answered with a different recording that happens to share this
 //     audio. Only a person can separate those, so the want stops and says which
 //     two they are.
@@ -178,7 +178,7 @@ func (service *Service) resolveFiling(
 		return service.stopOnFiling(ctx, target, filedElsewhereSummary(filing))
 	}
 	// The want names the clean edition of the track on the disc, and the owner
-	// keeps the explicit one (docs/decisions/0032). The want settles against the
+	// keeps the explicit one (ADR 0032). The want settles against the
 	// file as the library has it: the two rows are two recordings, so re-filing
 	// the file under the want's row would write down that this audio is a
 	// recording it is not.
@@ -193,7 +193,7 @@ func (service *Service) resolveFiling(
 	}
 	// What the want settles on. Usually it is what admitted the copy, read off the
 	// copy's own row. The registration-code branch is the exception: it is carried
-	// by the excerpt this recording's distributor published (docs/decisions/0025),
+	// by the excerpt this recording's distributor published (ADR 0025),
 	// and reaching here without a proof on the row means that branch answered.
 	provenBy := filing.ProvenMethod
 	if verdict == identity.FilingOneRegistration && !identity.ProvenForItsWant(provenBy) {

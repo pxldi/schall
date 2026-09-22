@@ -2,26 +2,21 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// DESIGN.md is the record of what this interface is made of, and its frontmatter
-// is the machine-readable half of that record: the colours, the type steps, the
-// components. `web/src/styles.css` is where those values actually live, so the
-// record is only worth having while the two agree.
+// `web/src/design-tokens.yaml` names the colours, type steps and components this
+// interface is made of. `web/src/styles.css` is where those values actually
+// live, so the list is only worth having while the two agree.
 //
-// They had stopped agreeing. docs/decisions/0022 retired the serif and 0023
-// lifted the ground, added a surface below it, renamed all eight surface and
-// line steps, recomputed the whole ink ramp and split one type scale into two.
-// None of it reached DESIGN.md. Seventeen tokens named there did not exist, four
-// that existed were not named, and an agent generating a screen from the file
-// would have written `bg-surface-raised`, which resolves to nothing at all.
-//
-// A document nobody can tell is wrong goes wrong quietly. This makes it loud.
+// They once stopped agreeing. ADR 0022 retired the serif and ADR 0023 lifted
+// the ground, renamed all eight surface and line steps, recomputed the ink ramp
+// and split one type scale into two. None of it reached the token list, which
+// was then the frontmatter of DESIGN.md. Seventeen tokens named there did not
+// exist, and an agent generating a screen from it would have written
+// `bg-surface-raised`, which resolves to nothing at all.
 const read = (path: string) =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url).href), 'utf8');
 
 const css = read('../styles.css');
-const design = read('../../../DESIGN.md');
-
-const frontmatter = design.split('\n---\n')[0];
+const frontmatter = read('../design-tokens.yaml');
 
 /** Every `--<prefix>-<name>: <value>` in the stylesheet, less the Tailwind
  *  companions that hang off a size token and the aliases pointing at another. */
@@ -37,7 +32,7 @@ function declared(prefix: string) {
   return found;
 }
 
-/** The `key: "value"` pairs of one frontmatter block, at one level of indent. */
+/** The `key: "value"` pairs of one token group, at one level of indent. */
 function frontmatterBlock(name: string) {
   const block = frontmatter.split(`\n${name}:\n`)[1]?.split(/\n[a-z]/)[0] ?? '';
   return new Map(
@@ -45,7 +40,7 @@ function frontmatterBlock(name: string) {
   );
 }
 
-describe('the colours DESIGN.md records', () => {
+describe('the colours design-tokens.yaml records', () => {
   const documented = frontmatterBlock('colors');
   const shipped = declared('color');
 
@@ -60,7 +55,7 @@ describe('the colours DESIGN.md records', () => {
   });
 });
 
-describe('the type steps DESIGN.md records', () => {
+describe('the type steps design-tokens.yaml records', () => {
   const typography = frontmatter.split('\ntypography:\n')[1]?.split(/\n[a-z]/)[0] ?? '';
   const documented = new Set(
     [...typography.matchAll(/^ {2}([a-z0-9-]+):$/gm)].map(([, k]) => k)
@@ -159,13 +154,13 @@ describe('the six state colours, tinted at 14% on Surface Regular', () => {
   });
 });
 
-describe('the frontmatter itself', () => {
+describe('the token file itself', () => {
   it('holds only the token groups the DESIGN.md schema accepts', () => {
     const groups = [...frontmatter.matchAll(/^([a-z]+):$/gm)].map(([, g]) => g);
     // Motion, breakpoints and shadows are not groups this schema has. They are
-    // declared in `styles.css` and described in DESIGN.md's own Motion section,
-    // where the prose can say what each one is for; a second copy of the values
-    // in the frontmatter would be a second thing to keep true.
+    // declared in `styles.css` and described in the design spec's Motion
+    // section, where the prose can say what each one is for; a second copy of
+    // the values here would be a second thing to keep true.
     expect(groups).toEqual(['colors', 'typography', 'rounded', 'spacing', 'components']);
   });
 

@@ -8,7 +8,7 @@
   import { formatBytes, relativeTime } from '$lib/utils';
 
   // Clean the inbox: the pass that deletes the downloaded files nothing needs
-  // any more. The rule is docs/decisions/0035 and it lives on the server; this
+  // any more. The rule is ADR 0035 and it lives on the server; this
   // block asks for a count, shows what the count came to, and asks for the
   // deletion.
   //

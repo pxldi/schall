@@ -594,7 +594,7 @@ func TestASecondFileNamingTheSameRecordingIsADuplicate(t *testing.T) {
 
 // The counter-case for the same fixture: MusicBrainz can enter one
 // performance as two recordings it never merges, both carrying the same ISRC
-// (docs/decisions/0025). A second file sharing the ISRC tag is not proven to
+// (ADR 0025). A second file sharing the ISRC tag is not proven to
 // be the first file's recording the way a shared musicbrainz_recording_id
 // would be, and reconcile has no sample or AcoustID cluster on hand to tell
 // the two apart, so this stays a question rather than becoming a duplicate.

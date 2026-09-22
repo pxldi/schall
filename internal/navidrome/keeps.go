@@ -82,7 +82,7 @@ type KeepsStore interface {
 // finding the song for a file is done by comparing the path Navidrome reports
 // against the path Schall holds, and a player row created before
 // Subsonic.DefaultReportRealPath was turned on reports a made-up display path
-// forever (docs/decisions/0010).
+// forever (ADR 0010).
 type Keeps struct {
 	store  KeepsStore
 	paths  PathMap

@@ -37,7 +37,7 @@ type Config struct {
 	// means "find fpcalc on PATH".
 	FpcalcPath string
 	// YtdlpPath is the yt-dlp binary that searches YouTube and cuts an excerpt
-	// from an upload, for the anchors of docs/decisions/0029. Empty means no
+	// from an upload, for the anchors of ADR 0029. Empty means no
 	// want is anchored from YouTube.
 	YtdlpPath string
 	// FFmpegPath is what turns a fetched copy into something a browser will play,

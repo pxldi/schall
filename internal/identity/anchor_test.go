@@ -110,7 +110,7 @@ func TestASampleAdmitsAFileNothingElseCouldPlace(t *testing.T) {
 }
 
 // A sample the audio reproduces is still not enough while something else says
-// this is different music. Rule 3 of docs/decisions/0024: evidence is never
+// this is different music. Rule 3 of ADR 0024: evidence is never
 // summed, and a contradiction voids a pair whatever agrees with it.
 func TestASampleThatAgreesIsStillVoidedByAContradiction(t *testing.T) {
 	file := Evidence{
@@ -249,7 +249,7 @@ func TestSampleVerdictsTravelSeparately(t *testing.T) {
 // direction. A plain name-found upload leaves a copy a question, a Topic upload
 // admits a copy on the same threshold, and neither may refuse
 // one: the upload can be a sibling version of the song, and a wrong reference
-// must not throw the right copy away for good (docs/decisions/0029 §3).
+// must not throw the right copy away for good (ADR 0029 §3).
 func TestAnUploadFoundByNameAdmitsButNeverRefuses(t *testing.T) {
 	for _, want := range []struct {
 		name    string

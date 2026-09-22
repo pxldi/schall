@@ -108,7 +108,7 @@ type acquisitionTargetResponse struct {
 	DurationMS    *int32     `json:"durationMs"`
 	ISRC          *string    `json:"isrc"`
 	// EntryExplicit is the source saying the track somebody asked for is the
-	// explicit recording. Absent where no source said (docs/decisions/0032).
+	// explicit recording. Absent where no source said (ADR 0032).
 	EntryExplicit   *bool      `json:"entryExplicit,omitempty"`
 	RecordingID     *uuid.UUID `json:"recordingId"`
 	ReleaseGroupID  *uuid.UUID `json:"releaseGroupId,omitempty"`

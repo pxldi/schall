@@ -113,7 +113,7 @@ type Store interface {
 	CreateAcquisitionTarget(context.Context, db.CreateAcquisitionTargetParams) (uuid.UUID, bool, error)
 	// ScheduleAnchor puts a want in line for the distributor's excerpt of the
 	// recording it names, which a copy a stranger sends can then be compared
-	// against (docs/decisions/0024). It is a note that something is owed, not an
+	// against (ADR 0024). It is a note that something is owed, not an
 	// answer about the want, and it does nothing to a want with no ISRC.
 	ScheduleAnchor(ctx context.Context, id uuid.UUID, at time.Time) error
 	AcquisitionTarget(context.Context, uuid.UUID) (db.AcquisitionTargetRow, error)
@@ -278,7 +278,7 @@ type Matcher interface {
 // Upgrader carries out what an upgrade want exists for once its copy is
 // proven and imported: comparing the new file against the old one it names,
 // and — only when the new one is genuinely better — replacing the old file
-// with it under a recorded deletion licence (docs/decisions/0021). It reports
+// with it under a recorded deletion licence (ADR 0021). It reports
 // whether it replaced the file. When the new copy is not better it leaves both
 // files exactly where they are and reports false; nothing here ever refuses a
 // proof or admits one that was not already proven.
@@ -360,7 +360,7 @@ func (service *Service) Create(ctx context.Context, entry Entry) (db.Acquisition
 	}
 	// Every new want goes in line for an audio anchor: the distributor's preview
 	// when the entry has an ISRC, a YouTube upload found by name when it has not
-	// (docs/decisions/0029). Failing to note that is not a reason to fail the
+	// (ADR 0029). Failing to note that is not a reason to fail the
 	// creation: the want exists, and an anchor is evidence it may gain later
 	// rather than anything it depends on.
 	if created {
@@ -920,7 +920,7 @@ const (
 	acquiredCopyDetail = "A copy was fetched, proven by its audio, and imported."
 	// What an attempt records when the want named the clean edition and the file
 	// on the disc holds the explicit one. The two are different recordings, so
-	// the detail says which one the library has (docs/decisions/0032).
+	// the detail says which one the library has (ADR 0032).
 	explicitEditionDetail = "A copy was fetched, proven by its audio, and imported. " +
 		"Your library files it as the explicit edition of this track, which is the one Schall keeps."
 	waitingDetail = "No file in the library is proven to be this recording."

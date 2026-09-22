@@ -378,7 +378,7 @@ func TestASweepAgainstNoPlayerDoesNothing(t *testing.T) {
 
 // Navidrome copies DefaultReportRealPath onto a player row the first time a
 // client calls under a name and never re-reads it, and "schall" was created by
-// the rescan trigger before anybody needed real paths (docs/decisions/0010).
+// the rescan trigger before anybody needed real paths (ADR 0010).
 func TestSyncIntroducesItselfUnderItsOwnClientName(t *testing.T) {
 	var names []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +478,7 @@ func TestAPassOverAListNoFileIsHeldForCreatesNothing(t *testing.T) {
 	}
 }
 
-// docs/decisions/0010: the id still means the file it was pushed for, so the
+// ADR 0010: the id still means the file it was pushed for, so the
 // track leaving the listing is the user having taken it out.
 func TestAnAbsentTrackStillReportingItsPushedPathIsARemoval(t *testing.T) {
 	store, playlistID, entryID, _ := joinedList(t)
@@ -537,7 +537,7 @@ func TestAnAbsentTrackWhoseIdNoLongerResolvesIsNotARemoval(t *testing.T) {
 	}
 }
 
-// docs/decisions/0012: the file is found at exactly its path, so the snapshot
+// ADR 0012: the file is found at exactly its path, so the snapshot
 // is re-pointed at the id it answers to now. The path it was pushed at is the
 // evidence and is not rewritten.
 func TestABreakIsRepairedFromThePath(t *testing.T) {

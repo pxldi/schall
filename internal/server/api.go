@@ -168,7 +168,7 @@ type TranscodeSweepStore interface {
 }
 
 // InboxCleanups asks for and reports the passes that delete the downloaded
-// files nothing needs any more (docs/decisions/0035). Optional, and the only
+// files nothing needs any more (ADR 0035). Optional, and the only
 // thing in Schall that deletes anything from the download inbox on request:
 // without it these routes report themselves unavailable.
 type InboxCleanups interface {

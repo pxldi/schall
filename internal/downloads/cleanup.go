@@ -56,7 +56,7 @@ type InboxCleanupStore interface {
 }
 
 // InboxCleaner deletes the files in the download inbox that nothing needs any
-// more, by the rule in docs/decisions/0036.
+// more, by the rule in ADR 0036.
 //
 // Nothing here is decided by similarity, by a name or by a score. A file is kept
 // when a record says something still needs it, deleted when a record says

@@ -1,6 +1,6 @@
 // Every exported type and interface the API surface uses, apart from the
-// fetch client itself. No `fetch`, no SvelteKit, no I/O: the phone app imports
-// this file directly (docs/app-plan.md, "Types out of the client").
+// fetch client itself. It holds no `fetch`, no SvelteKit and no I/O, so code
+// can import the types without pulling in the client.
 
 export interface OverviewDay {
   date: string;

@@ -14,7 +14,7 @@ import (
 //
 // Entries are only filled in by Playlist, which asks for one by id. The listing
 // answers with songCount and no tracks, and that count is worth keeping even
-// though it is not evidence of anything: docs/decisions/0010 watched it fall
+// though it is not evidence of anything: ADR 0010 watched it fall
 // from 3 to 2 while the row it stopped counting was still in the database, so
 // it says how many tracks Navidrome can currently show and nothing about how
 // many the playlist has.
@@ -33,7 +33,7 @@ type Playlist struct {
 // the file is at. By default Navidrome answers with a display path composed
 // from the album's first folder and the track's own tags; real paths need
 // Subsonic.DefaultReportRealPath to have been true when this client's player
-// row was created (docs/decisions/0010). A display path can equal the real one
+// row was created (ADR 0010). A display path can equal the real one
 // and stop equalling it later, so a caller that joins on it against a server
 // that reports display paths will find nothing here and mis-join nowhere else.
 //
@@ -280,7 +280,7 @@ func (client *Client) UpdatePlaylist(ctx context.Context, update PlaylistUpdate)
 // Song reads one song by the id it was last known under.
 //
 // An id that no longer resolves comes back as ErrNotFound, and that is the
-// whole reason this exists: docs/decisions/0010 found that a track whose
+// whole reason this exists: ADR 0010 found that a track whose
 // identity broke disappears from getPlaylist while getSong still answers "ok",
 // so the id resolving is not evidence that it still means the same file. This
 // call reports what the id resolves to, or that it resolves to nothing, and
