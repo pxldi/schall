@@ -21,6 +21,7 @@
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import ImportEvidence from '$lib/components/ImportEvidence.svelte';
   import VersionCandidates from '$lib/components/VersionCandidates.svelte';
+  import UseAddress from '$lib/components/UseAddress.svelte';
   import { relativeTime } from '$lib/utils';
 
   const client = useQueryClient();
@@ -603,6 +604,12 @@
               chosen = index;
               saidWhich = true;
             }}
+          />
+          <UseAddress
+            targetId={current.want.target.id}
+            entryTitle={current.want.target.title}
+            entryArtist={current.want.target.artist}
+            entryDurationMs={current.want.target.durationMs}
           />
         {:else if current.kind === 'folder' && current.download}
           {@const request = current.download}

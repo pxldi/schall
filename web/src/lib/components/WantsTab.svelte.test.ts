@@ -14,6 +14,7 @@ import type { AcquisitionTarget, AcquisitionTargets } from '$lib/api';
 // The only boundary stubbed is `fetch`.
 
 const clock = new Date('2026-08-13T21:00:00Z').getTime();
+const keyedAddress = 'https://soundcloud.com/artist/track';
 
 function want(overrides: Partial<AcquisitionTarget> = {}): AcquisitionTarget {
   return {
@@ -302,6 +303,26 @@ describe('the wants being looked for', () => {
 
     await screen.findByText('Talk Talk — Ascension Day');
     expect(screen.queryByText('looking for a copy')).toBeNull();
+  });
+
+  it('offers an address only for an unresolved want without a source key', async () => {
+    answering({ looking: [want({ status: 'unresolved' })] });
+
+    opened();
+
+    expect(await screen.findByText('Use address')).toBeTruthy();
+  });
+
+  it('does not offer an address for a settled or already keyed want', async () => {
+    answering({
+      looking: [want({ status: 'pending' })],
+      stopped: [want({ status: 'unresolved', source: 'soundcloud', externalUrl: keyedAddress })]
+    });
+
+    opened();
+
+    await screen.findByText('Talk Talk — Ascension Day');
+    expect(screen.queryByText('Use address')).toBeNull();
   });
 });
 

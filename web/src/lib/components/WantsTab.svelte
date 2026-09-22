@@ -18,6 +18,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import UseAddress from '$lib/components/UseAddress.svelte';
 
   // A want is a recording somebody asked Schall to find. Between being asked
   // for and either arriving or raising a question it appears on no other
@@ -195,9 +196,11 @@
         : (origins[want.origin] ?? 'asked for by hand')
     ];
     if (want.album) parts.push(want.album);
-    if (want.status === 'unresolved') parts.push('waiting to be matched to a recording');
+    if (want.externalUrl) parts.push('keyed');
+    else if (want.status === 'unresolved') parts.push('waiting to be matched to a recording');
     else if (want.attempts === 0) parts.push('no copy looked at yet');
     else parts.push(want.attempts === 1 ? 'one copy looked at' : `${want.attempts} copies looked at`);
+    if (want.minimumBitrate) parts.push(`${want.minimumBitrate} kbit/s`);
     return parts.join(' · ');
   }
 
@@ -298,7 +301,13 @@
                 {name(want)}
               </span>
               <span class="mt-0.5 block truncate text-meta text-ink-3" title={detail(want)}>
-                {detail(want)}
+                {#if want.externalUrl}
+                  <a href={want.externalUrl} class="hover:text-ink underline-offset-2 hover:underline">
+                    {detail(want)}
+                  </a>
+                {:else}
+                  {detail(want)}
+                {/if}
               </span>
               <span
                 class="mt-0.5 block min-h-4 truncate text-meta text-ink-3"
@@ -361,6 +370,17 @@
               {/if}
             </span>
           </div>
+
+          {#if want.status === 'unresolved' && !want.source}
+            <div class="px-3 pb-2">
+              <UseAddress
+                targetId={want.id}
+                entryTitle={want.title}
+                entryArtist={want.artist}
+                entryDurationMs={want.durationMs}
+              />
+            </div>
+          {/if}
 
           <!-- Both actions are pressed on a row, so their failures are reported
                against the row they were pressed on and no other. -->

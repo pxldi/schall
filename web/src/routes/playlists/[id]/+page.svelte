@@ -10,6 +10,7 @@
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
+  import UseAddress from '$lib/components/UseAddress.svelte';
   import { entryState, ownedOf, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
 
@@ -375,7 +376,14 @@
                   {length(entry)}
                 </td>
                 <td class="px-4 py-1.5">
-                  {#if state.role === 'ok'}
+                  {#if entry.externalUrl}
+                    <a
+                      href={entry.externalUrl}
+                      class="text-meta text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+                    >
+                      Keyed{#if entry.minimumBitrate} · {entry.minimumBitrate} kbit/s{/if}
+                    </a>
+                  {:else if state.role === 'ok'}
                     <span
                       class="inline-flex text-ok"
                       title={state.label}
@@ -418,6 +426,19 @@
                         <AddToMusicBrainz seed={entry.musicbrainzSeed} />
                       {/if}
                     </span>
+                  </td>
+                </tr>
+              {/if}
+              {#if entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
+                <tr class="border-b border-line-thin last:border-b-0">
+                  <td></td>
+                  <td class="px-3 pb-2" colspan="5">
+                    <UseAddress
+                      targetId={entry.targetId}
+                      entryTitle={entry.title}
+                      entryArtist={entry.artist}
+                      entryDurationMs={entry.durationMs}
+                    />
                   </td>
                 </tr>
               {/if}

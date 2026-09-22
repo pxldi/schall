@@ -284,17 +284,20 @@ func toPlaylistResponse(row db.PlaylistRow) playlistResponse {
 }
 
 type playlistEntryResponse struct {
-	ID            uuid.UUID  `json:"id"`
-	Position      int32      `json:"position"`
-	Artist        string     `json:"artist"`
-	Title         string     `json:"title"`
-	Album         string     `json:"album"`
-	DurationMS    *int32     `json:"durationMs,omitempty"`
-	ISRC          *string    `json:"isrc,omitempty"`
-	OwnedFileID   *uuid.UUID `json:"ownedFileId,omitempty"`
-	TargetID      *uuid.UUID `json:"targetId,omitempty"`
-	TargetStatus  *string    `json:"targetStatus,omitempty"`
-	TargetSummary *string    `json:"targetSummary,omitempty"`
+	ID             uuid.UUID  `json:"id"`
+	Position       int32      `json:"position"`
+	Artist         string     `json:"artist"`
+	Title          string     `json:"title"`
+	Album          string     `json:"album"`
+	DurationMS     *int32     `json:"durationMs,omitempty"`
+	ISRC           *string    `json:"isrc,omitempty"`
+	OwnedFileID    *uuid.UUID `json:"ownedFileId,omitempty"`
+	TargetID       *uuid.UUID `json:"targetId,omitempty"`
+	TargetStatus   *string    `json:"targetStatus,omitempty"`
+	TargetSummary  *string    `json:"targetSummary,omitempty"`
+	Source         *string    `json:"source,omitempty"`
+	ExternalURL    *string    `json:"externalUrl,omitempty"`
+	MinimumBitrate *int32     `json:"minimumBitrate,omitempty"`
 	// MusicBrainzSeed is the release editor filled in for this entry, and it is
 	// here only for the entries MusicBrainz has had nothing for. Its presence is
 	// the whole signal: a reader cannot tell an entry waiting for its first
@@ -405,6 +408,12 @@ func (api *API) getPlaylist(response http.ResponseWriter, request *http.Request)
 			item.TargetID = &target
 			item.TargetStatus = textPointer(entry.TargetStatus)
 			item.TargetSummary = textPointer(entry.TargetSummary)
+			item.Source = textPointer(entry.TargetSource)
+			item.ExternalURL = textPointer(entry.TargetExternalURL)
+			if entry.TargetMinimumBitrate.Valid {
+				minimumBitrate := entry.TargetMinimumBitrate.Int32
+				item.MinimumBitrate = &minimumBitrate
+			}
 			item.MusicBrainzSeed = seedFor(entry, playlist.Source, artistIDs)
 		}
 		items = append(items, item)
