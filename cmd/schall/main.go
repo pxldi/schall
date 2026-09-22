@@ -262,6 +262,9 @@ func run() error {
 		// and the review screen write through, so there is one place a file's
 		// identity is decided and one place it is replaced.
 		WithFiler(identityService).
+		// What asks again about a file an anchor proved, and moves it onto a
+		// recording once MusicBrainz proves one (ADR 0037 §6).
+		WithSourceRechecker(identityService).
 		// What carries out a proven upgrade want: comparing the copy that
 		// arrived against the file below the floor it was raised for, and
 		// replacing the file when the new copy is genuinely better. The same

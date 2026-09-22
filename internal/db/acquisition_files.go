@@ -2459,24 +2459,38 @@ func completeSourceCopy(
 	if accepted.evidence.Confidence > 0 {
 		confidence = accepted.evidence.Confidence
 	}
+	// A Deezer preview was fetched by the entry's ISRC, so the track at that
+	// address is registered under it. It is kept on the identity, because it is
+	// what a recording MusicBrainz later names has to carry for the file to move
+	// onto it (ADR 0037 §6). An automatic identity is asked about again after
+	// the first rung of the unfound ladder, a day; a person's never is.
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO library_file_identities (
 			library_file_id, kind, provider, source, external_id, external_url,
-			method, confidence, is_manual, summary, evidence
+			isrc, method, confidence, is_manual, summary, evidence,
+			source_recheck_after
 		)
-		VALUES ($1, 'source', $2, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+		SELECT $1, 'source', $2, $2, $3, $4,
+		       CASE WHEN $2 = 'deezer' THEN nullif(btrim(targets.entry_isrc), '') END,
+		       $5, $6, $7, $8, $9::jsonb,
+		       CASE WHEN $7 THEN NULL ELSE now() + interval '24 hours' END
+		FROM acquisition_targets targets
+		WHERE targets.id = $10
 		ON CONFLICT (library_file_id) DO UPDATE
 		SET kind = 'source', provider = EXCLUDED.provider, source = EXCLUDED.source,
 		    external_id = EXCLUDED.external_id, external_url = EXCLUDED.external_url,
 		    musicbrainz_release_group_id = NULL, artist_name = NULL,
-		    release_title = NULL, track_title = NULL, duration_ms = NULL, isrc = NULL,
+		    release_title = NULL, track_title = NULL, duration_ms = NULL,
+		    isrc = EXCLUDED.isrc,
 		    method = EXCLUDED.method, confidence = EXCLUDED.confidence,
 		    is_manual = EXCLUDED.is_manual, summary = EXCLUDED.summary,
-		    evidence = EXCLUDED.evidence, decided_at = now(), updated_at = now()
+		    evidence = EXCLUDED.evidence,
+		    source_recheck_after = EXCLUDED.source_recheck_after,
+		    decided_at = now(), updated_at = now()
 		WHERE library_file_identities.kind = 'local_only'
 		  AND NOT library_file_identities.is_manual
 	`, accepted.fileID, key.Source, key.ExternalID, key.ExternalURL, method, confidence,
-		accepted.byHand, accepted.proven, encoded); err != nil {
+		accepted.byHand, accepted.proven, encoded, accepted.targetID); err != nil {
 		return fmt.Errorf("record %s as %s: %w", accepted.fileID, key.ExternalID, err)
 	}
 

@@ -184,20 +184,40 @@ func TestACopyProvenByTheAnchorSettlesAWantWithNoRecording(t *testing.T) {
 			}
 
 			var (
-				kind, source, externalID, externalURL, method, status string
-				manual                                                bool
-				recording                                             uuid.NullUUID
+				kind, source, externalID, externalURL, method, status, isrc string
+				manual                                                      bool
+				recording                                                   uuid.NullUUID
+				recheck                                                     *time.Time
 			)
 			if err := pool.QueryRow(ctx, `
 				SELECT identities.kind, identities.source, identities.external_id,
 				       identities.external_url, identities.method, identities.is_manual,
-				       identities.musicbrainz_recording_id, files.resolution_status
+				       identities.musicbrainz_recording_id, files.resolution_status,
+				       coalesce(identities.isrc, ''), identities.source_recheck_after
 				FROM library_file_identities identities
 				JOIN library_files files ON files.id = identities.library_file_id
 				WHERE identities.library_file_id = $1
 			`, fileID).Scan(&kind, &source, &externalID, &externalURL, &method, &manual,
-				&recording, &status); err != nil {
+				&recording, &status, &isrc, &recheck); err != nil {
 				t.Fatalf("read the identity: %v", err)
+			}
+			// The preview's ISRC is what a recording has to carry for the file to
+			// move onto it, and only an automatic identity is asked about again,
+			// a day on (ADR 0037 §6).
+			wantISRC := ""
+			if test.anchor == "deezer" {
+				wantISRC = "QZES82415069"
+			}
+			if isrc != wantISRC {
+				t.Errorf("isrc = %q, want %q", isrc, wantISRC)
+			}
+			if test.byHand != (recheck == nil) {
+				t.Errorf("next look = %v, want one only for an automatic identity", recheck)
+			}
+			if recheck != nil {
+				if wait := time.Until(*recheck); wait < 23*time.Hour || wait > 25*time.Hour {
+					t.Errorf("next look in %v, want a day", wait)
+				}
 			}
 			if kind != "source" || source != test.source || externalID != test.key ||
 				externalURL != test.url || recording.Valid || status != "source" {

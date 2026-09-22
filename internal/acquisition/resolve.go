@@ -289,6 +289,112 @@ func (service *Service) settleResolution(
 	return nil
 }
 
+// SourceRechecker asks again what a file with an automatic source identity is
+// (ADR 0037 §6). It is the identity service, which owns what a file is.
+type SourceRechecker interface {
+	RecheckSource(
+		ctx context.Context, fileID uuid.UUID, want *identity.SourceWant,
+	) (identity.SourceRecheck, error)
+}
+
+// WithSourceRechecker registers what asks again about files with an automatic
+// source identity.
+func (service *Service) WithSourceRechecker(sources SourceRechecker) *Service {
+	service.sources = sources
+	return service
+}
+
+// recheckSources asks again about the files with an automatic source identity
+// whose turn it is, on the unfound ladder: a day, three days, a week, then
+// every thirty days (ADR 0037 §6). A file that moves onto a recording loses
+// its schedule with its source identity. Every other answer is recorded, with
+// whatever it found against the identity, and the file climbs a rung.
+//
+// It is bounded like resolution, because it asks the same rate-limited
+// provider, and a refusal for load stands the rest of the pass down without
+// spending a rung.
+func (service *Service) recheckSources(ctx context.Context) error {
+	if service.sources == nil {
+		return nil
+	}
+	due, err := service.store.DueSourceRechecks(ctx, service.now(), resolveBatch)
+	if err != nil {
+		return fmt.Errorf("list the source files due another look: %w", err)
+	}
+	busy := false
+	for _, file := range due {
+		if busy {
+			if err := service.store.RescheduleSourceRecheck(
+				ctx, file.LibraryFileID, service.now().Add(throttleDelay), false, "",
+			); err != nil {
+				return err
+			}
+			continue
+		}
+		want := sourceWant(file)
+		if want != nil {
+			if want.Excluded, err = service.store.RejectedTargetResolutions(ctx, file.TargetID.UUID); err != nil {
+				return fmt.Errorf("read rejected resolutions for acquisition target %s: %w",
+					file.TargetID.UUID, err)
+			}
+		}
+		result, err := service.sources.RecheckSource(ctx, file.LibraryFileID, want)
+		if errors.Is(err, musicbrainz.ErrThrottled) {
+			busy = true
+			if err := service.store.RescheduleSourceRecheck(
+				ctx, file.LibraryFileID, service.now().Add(throttleDelay), false, "",
+			); err != nil {
+				return err
+			}
+			continue
+		}
+		if err != nil {
+			// A provider nobody could reach says nothing about the file, so the
+			// rung and what was last found stay as they were.
+			service.logger.Warn().Err(err).
+				Str("library_file_id", file.LibraryFileID.String()).
+				Msg("ask again what a source file is")
+			if err := service.store.RescheduleSourceRecheck(
+				ctx, file.LibraryFileID, service.nextUnfoundAttempt(file.Attempts), false, "",
+			); err != nil {
+				return err
+			}
+			continue
+		}
+		if result.Moved {
+			service.logger.Info().
+				Str("library_file_id", file.LibraryFileID.String()).
+				Str("musicbrainz_recording_id", result.RecordingID.String()).
+				Msg("a source file moved onto the recording MusicBrainz proved")
+			continue
+		}
+		if err := service.store.RescheduleSourceRecheck(
+			ctx, file.LibraryFileID, service.nextUnfoundAttempt(file.Attempts+1),
+			true, result.Contradiction,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sourceWant is the want a source file's copy was fetched for, in the words
+// resolution reads, or nil where there is none.
+func sourceWant(file db.SourceRecheckRow) *identity.SourceWant {
+	if !file.TargetID.Valid {
+		return nil
+	}
+	return &identity.SourceWant{Entry: identity.Evidence{
+		Subject:    identity.SubjectEntry,
+		ISRC:       file.EntryISRC,
+		Artist:     tagmatch.PrimaryCredit(file.EntryArtist),
+		Album:      file.EntryAlbum,
+		Title:      file.EntryTitle,
+		DurationMS: file.EntryDurationMS,
+		Explicit:   file.EntryExplicit,
+	}}
+}
+
 func nullableUUID(value uuid.UUID) uuid.NullUUID {
 	if value == uuid.Nil {
 		return uuid.NullUUID{}

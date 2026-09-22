@@ -37,6 +37,26 @@ CREATE INDEX acquisition_targets_search_due_idx
     ON acquisition_targets (next_search_at, created_at)
     WHERE status = 'unresolved' AND next_search_at IS NOT NULL;
 
+-- A file with an automatic source identity is asked about again on the unfound
+-- ladder, until MusicBrainz proves a recording for it (ADR 0037 §6). The
+-- schedule sits on the identity because only that kind of identity has one: a
+-- person's source identity is never asked about again. source_contradiction is
+-- what the last time it was asked found against it, empty when nothing did.
+ALTER TABLE library_file_identities
+    ADD COLUMN source_recheck_after TIMESTAMPTZ,
+    ADD COLUMN source_recheck_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN source_contradiction TEXT;
+
+ALTER TABLE library_file_identities
+    ADD CONSTRAINT library_file_identities_source_recheck_automatic
+        CHECK (source_recheck_after IS NULL OR (kind = 'source' AND NOT is_manual)),
+    ADD CONSTRAINT library_file_identities_source_recheck_attempts_nonnegative
+        CHECK (source_recheck_attempts >= 0);
+
+CREATE INDEX library_file_identities_source_recheck_idx
+    ON library_file_identities (source_recheck_after)
+    WHERE source_recheck_after IS NOT NULL;
+
 -- The wants that already hold an admitting anchor were anchored before there
 -- was a search to schedule, so nothing would ever make them due.
 UPDATE acquisition_targets
@@ -69,6 +89,14 @@ SET status = 'unresolved',
 WHERE status = 'acquired' AND musicbrainz_recording_id IS NULL;
 
 DROP INDEX IF EXISTS acquisition_targets_search_due_idx;
+DROP INDEX IF EXISTS library_file_identities_source_recheck_idx;
+
+ALTER TABLE library_file_identities
+    DROP CONSTRAINT IF EXISTS library_file_identities_source_recheck_attempts_nonnegative,
+    DROP CONSTRAINT IF EXISTS library_file_identities_source_recheck_automatic,
+    DROP COLUMN IF EXISTS source_contradiction,
+    DROP COLUMN IF EXISTS source_recheck_attempts,
+    DROP COLUMN IF EXISTS source_recheck_after;
 
 ALTER TABLE acquisition_targets
     DROP CONSTRAINT IF EXISTS acquisition_targets_acquired_identified,

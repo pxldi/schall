@@ -168,6 +168,14 @@ type Store interface {
 	NextAcquisitionTargetDue(context.Context) (pgtype.Timestamptz, error)
 	NextUnresolvedTargetDue(context.Context) (pgtype.Timestamptz, error)
 	NextSearchTargetDue(context.Context) (pgtype.Timestamptz, error)
+	// DueSourceRechecks, NextSourceRecheckDue and RescheduleSourceRecheck are
+	// the files with an automatic source identity asked about again on the
+	// unfound ladder (ADR 0037 §6).
+	DueSourceRechecks(context.Context, time.Time, int32) ([]db.SourceRecheckRow, error)
+	NextSourceRecheckDue(context.Context) (pgtype.Timestamptz, error)
+	RescheduleSourceRecheck(
+		ctx context.Context, fileID uuid.UUID, next time.Time, counted bool, contradiction string,
+	) error
 	OwnedFileForRecording(context.Context, uuid.UUID) (uuid.NullUUID, error)
 	SettleAcquiredTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
 	RequeueAcquisitionTarget(
@@ -263,6 +271,10 @@ type Service struct {
 	// proven to be. Optional: without it a want whose copy the library files
 	// under a second row of the same registration stops for a person.
 	filer Filer
+	// sources asks again what a file with an automatic source identity is, and
+	// moves it onto a recording once one is proven (ADR 0037 §6). Optional:
+	// without it such a file keeps its source identity.
+	sources SourceRechecker
 	// notices tells connected interfaces that the wants changed. Optional:
 	// without it the views go back to asking on a timer.
 	notices *events.Hub
@@ -472,6 +484,9 @@ func (service *Service) Sweep(ctx context.Context) error {
 	if err := service.resolveDue(ctx); err != nil {
 		return err
 	}
+	if err := service.recheckSources(ctx); err != nil {
+		return err
+	}
 	targets, err := service.store.DueAcquisitionTargets(ctx, service.now(), sweepBatch)
 	if err != nil {
 		return fmt.Errorf("list due acquisition targets: %w", err)
@@ -556,6 +571,15 @@ func (service *Service) NextDue(ctx context.Context) (time.Time, error) {
 	}
 	if searched.Valid && (next.IsZero() || searched.Time.Before(next)) {
 		next = searched.Time
+	}
+	if service.sources != nil {
+		recheck, err := service.store.NextSourceRecheckDue(ctx)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("read the next look at a source file: %w", err)
+		}
+		if recheck.Valid && (next.IsZero() || recheck.Time.Before(next)) {
+			next = recheck.Time
+		}
 	}
 	if service.resolver == nil {
 		return next, nil
