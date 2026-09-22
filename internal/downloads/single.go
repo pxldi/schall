@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/identity"
 	"github.com/pxldi/schall/internal/library"
+	"github.com/pxldi/schall/internal/sources"
 	"github.com/pxldi/schall/internal/spectrum"
 	"github.com/pxldi/schall/internal/tagging"
 )
@@ -131,8 +133,11 @@ const (
 	// MusicBrainz recording ID. MusicBrainz knows the file, and resolution has
 	// not caught up with it yet.
 	unresolvedRecordingSummary = "MusicBrainz knows this file, but this entry has no recording yet. Kept as a question."
-	undeliveredSummary         = "The bytes did not arrive as offered, so there was nothing to check."
-	waitingNextSummary         = "Not in your library yet. The next copy will be tried."
+	// What a copy the audio proved for a keyed want is told when it falls below
+	// the want's minimum bit rate (ADR 0038 §7). The want keeps searching.
+	belowWantFloorSummary = "This copy is the track, but below this want's minimum bit rate. Accept it, or wait for a better copy."
+	undeliveredSummary    = "The bytes did not arrive as offered, so there was nothing to check."
+	waitingNextSummary    = "Not in your library yet. The next copy will be tried."
 	// What a copy is told when MusicBrainz has deleted or merged away the
 	// recording it was fetched to be checked against. Not a judgement about the
 	// file: verification never ran, because there was nothing left to check it
@@ -864,7 +869,7 @@ func (importer *Importer) admitByHand(
 	// anchor names one.
 	anchored := row.MusicBrainzRecordingID == uuid.Nil
 	if anchored {
-		key, ok := db.SourceOfAnchor(row.AnchorSource, row.AnchorReference)
+		key, ok := db.SourceKeyOf(row)
 		if !ok {
 			return fmt.Errorf("%w: want %s names no recording and its anchor names no track",
 				db.ErrNotATargetImport, row.AcquisitionTargetID)
@@ -1153,9 +1158,12 @@ func (importer *Importer) importOnAnchor(
 		agrees := verification.AnchorAgrees
 		evidence.Anchor.Agrees = &agrees
 	}
-	key, keyed := db.SourceOfAnchor(row.AnchorSource, row.AnchorReference)
+	key, keyed := db.SourceKeyOf(row)
 	switch {
 	case verification.Admitted && keyed:
+		if below, reason := importer.belowFloor(row, file.source); below {
+			return importer.hold(ctx, row, file.source, evidence, belowWantFloorSummary, reason)
+		}
 		return importer.admitOnAnchor(ctx, row, file, evidence, key, verification.Summary)
 	case verification.Refused:
 		return importer.refuse(ctx, row, evidence,
@@ -1172,6 +1180,29 @@ func (importer *Importer) importOnAnchor(
 			uploadUnmatchedSummary, verification.Summary)
 	}
 	return importer.hold(ctx, row, file.source, evidence, undecidedSummary, verification.Summary)
+}
+
+// belowFloor reports whether a copy falls below its want's minimum bit rate,
+// and says so with both numbers (ADR 0038 §7). Only a keyed want has a floor.
+//
+// The bit rate is the one the file reports, never what the peer claimed. A
+// lossless file meets any floor. A file whose bit rate cannot be read has not
+// shown it meets the floor, so it is held too.
+func (importer *Importer) belowFloor(row db.TargetImportRow, source string) (bool, string) {
+	floor := row.MinimumBitrate
+	if floor <= 0 || sources.Lossless(filepath.Ext(source)) {
+		return false, ""
+	}
+	properties, err := importer.properties(source)
+	if err != nil || properties.BitRateKbps <= 0 {
+		return true, fmt.Sprintf("The audio is the track at the keyed address. Its bit rate could not "+
+			"be read, so it is not shown to meet this want's %d kbit/s minimum.", floor)
+	}
+	if properties.BitRateKbps < floor {
+		return true, fmt.Sprintf("The audio is the track at the keyed address. It is %d kbit/s, "+
+			"below this want's %d kbit/s minimum.", properties.BitRateKbps, floor)
+	}
+	return false, ""
 }
 
 // admitOnAnchor imports a copy its want's anchor proved, and records the

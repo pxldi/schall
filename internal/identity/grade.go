@@ -221,6 +221,11 @@ const AnchorByName = "youtube"
 // AnchorByNameTopic is the source for an artist-matching YouTube Topic upload.
 const AnchorByNameTopic = "youtube-topic"
 
+// AnchorSourceKeyed is the source for the excerpt fetched from the address a
+// person keyed a want to (ADR 0038 §3). The address defines the want, so other
+// audio refuses a copy as it does for a Deezer preview.
+const AnchorSourceKeyed = "source"
+
 // Acoustic is the one thing a file does not claim about itself. Every tag is the
 // file's own account of what it is; this is what it sounds like, which is why it
 // is the only evidence that may admit a file a stranger sent (ADR 0002).

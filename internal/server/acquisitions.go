@@ -138,6 +138,15 @@ type acquisitionTargetResponse struct {
 	// only when Origin is "upgrade". Empty once the replacement has already
 	// happened and the old file is gone.
 	UpgradeOfPath string `json:"upgradeOfPath,omitempty"`
+	// Source, ExternalID and ExternalURL are the address a person keyed the
+	// want to, absent on every other want. SourceLookup is what the address
+	// said when they confirmed it, and MinimumBitrate the want's floor in
+	// kbit/s (ADR 0038).
+	Source         string           `json:"source,omitempty"`
+	ExternalID     string           `json:"externalId,omitempty"`
+	ExternalURL    string           `json:"externalUrl,omitempty"`
+	SourceLookup   *db.SourceLookup `json:"sourceLookup,omitempty"`
+	MinimumBitrate *int32           `json:"minimumBitrate,omitempty"`
 	// WaitingOnYou says nothing is looking for this want and nothing will: it
 	// holds a copy that is already a file, and the library calls that file a
 	// different recording. Only the list of wants works it out, because only that
@@ -268,6 +277,11 @@ func acquisitionTargetResponseFrom(row db.AcquisitionTargetRow) acquisitionTarge
 		AnchorAttempts:      row.AnchorAttempts,
 		AnchorNextAttemptAt: nullableTime(row.AnchorNextAttemptAt.Valid, row.AnchorNextAttemptAt.Time),
 		UpgradeOfPath:       row.UpgradeOfPath,
+		Source:              row.Source,
+		ExternalID:          row.ExternalID,
+		ExternalURL:         row.ExternalURL,
+		SourceLookup:        row.SourceLookup,
+		MinimumBitrate:      int32Pointer(row.MinimumBitrate),
 	}
 }
 

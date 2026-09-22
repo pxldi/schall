@@ -145,10 +145,13 @@ const (
 	// A rejected resolution, while the entry has not been resolved again. An
 	// entry that went back to the queue of questions without an answer has not
 	// been re-resolved: resolution ran and produced nothing, which is not a new
-	// recording being pursued.
+	// recording being pursued. An entry a person has since keyed to an address
+	// has been answered another way, and a key and a recording exclude each
+	// other (ADR 0038 §1).
 	reversibleWrongRecording = `
 		acquisition_targets.musicbrainz_recording_id IS NULL
 		AND acquisition_targets.status IN ('unresolved', 'awaiting_review')
+		AND acquisition_targets.source IS NULL
 	`
 )
 
@@ -451,10 +454,11 @@ func (q *Queries) TakeBackNotWanted(
 		        ELSE 'pending'
 		    END,
 		    not_wanted_at = NULL,
-		    next_attempt_at = $4,
+		    `+resolutionSchedule("$4::timestamptz")+`,
 		    `+armSearch(`CASE WHEN musicbrainz_recording_id IS NULL THEN 'unresolved' END`)+`,
 		    last_error = NULL,
 		    summary = CASE
+		        WHEN source IS NOT NULL THEN $3
 		        WHEN musicbrainz_recording_id IS NULL THEN $2
 		        ELSE $3
 		    END,

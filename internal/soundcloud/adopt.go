@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
+	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/tagging"
 )
 
@@ -242,24 +243,8 @@ func refuseIfAlreadyMatched(ctx context.Context, transaction pgx.Tx, fileID uuid
 // for the same reason a catalogue artist is, because the library holds their
 // music, and catalogue_summary is the sentence that says so.
 func uploaderArtist(ctx context.Context, transaction pgx.Tx, track Track) (uuid.UUID, error) {
-	name := track.Uploader
-	if strings.TrimSpace(name) == "" {
-		name = "Unknown uploader"
-	}
-	summary := "In the library because a track they uploaded to SoundCloud is."
-
-	var artistID uuid.UUID
-	err := transaction.QueryRow(ctx, `
-		INSERT INTO artists (name, sort_name, followed_at, catalogue_summary, source, external_id)
-		VALUES ($1, $1, NULL, $2, $3, $4)
-		ON CONFLICT (source, external_id) WHERE source IS NOT NULL AND external_id IS NOT NULL
-		DO UPDATE SET name = EXCLUDED.name, sort_name = EXCLUDED.sort_name, updated_at = now()
-		RETURNING id
-	`, name, summary, Source, uploaderID(track)).Scan(&artistID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("record the SoundCloud uploader %s: %w", name, err)
-	}
-	return artistID, nil
+	return db.UpsertSourceUploader(ctx, transaction, Source, uploaderID(track), track.Uploader,
+		"In the library because a track they uploaded to SoundCloud is.")
 }
 
 // uploaderID identifies the account. SoundCloud's oEmbed answer does not carry
@@ -339,19 +324,7 @@ func writeCover(
 	ctx context.Context, transaction pgx.Tx,
 	fileID uuid.UUID, image []byte, contentType string,
 ) error {
-	if len(image) == 0 {
-		image, contentType = nil, ""
-	}
-	if _, err := transaction.Exec(ctx, `
-		INSERT INTO file_cover_art (library_file_id, image, content_type, source, fetched_at)
-		VALUES ($1, $2, $3, $4, now())
-		ON CONFLICT (library_file_id) DO UPDATE
-		SET image = EXCLUDED.image, content_type = EXCLUDED.content_type,
-		    source = EXCLUDED.source, fetched_at = EXCLUDED.fetched_at
-	`, fileID, image, contentType, Source); err != nil {
-		return fmt.Errorf("record the artwork for the file %s: %w", fileID, err)
-	}
-	return nil
+	return db.WriteFileCoverArt(ctx, transaction, fileID, image, contentType, Source)
 }
 
 // writeTags puts what SoundCloud said into the file itself, so that a player

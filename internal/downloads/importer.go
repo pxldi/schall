@@ -18,6 +18,7 @@ import (
 	"github.com/pxldi/schall/internal/identity"
 	"github.com/pxldi/schall/internal/library"
 	"github.com/pxldi/schall/internal/loudness"
+	"github.com/pxldi/schall/internal/tagging"
 	"github.com/pxldi/schall/internal/tagmatch"
 	"github.com/pxldi/schall/internal/transcode"
 	"github.com/rs/zerolog"
@@ -109,9 +110,12 @@ type Importer struct {
 	inboxPath   string
 	libraryPath string
 	inspect     func(string) library.AudioMetadata
-	acoustic    AcousticIdentifier
-	verifier    Verifier
-	prints      Fingerprinter
+	// properties reads the bit rate a file itself reports, which a keyed
+	// want's floor is held against (ADR 0038 §7).
+	properties func(string) (tagging.AudioProperties, error)
+	acoustic   AcousticIdentifier
+	verifier   Verifier
+	prints     Fingerprinter
 	// quality measures what a copy's audio is rather than what it claims. It
 	// decides nothing: see AudioMeasurer.
 	quality AudioMeasurer
@@ -138,7 +142,7 @@ func NewImporter(store ImportStore, inboxPath, libraryPath string, logger zerolo
 	return &Importer{
 		store: store, inboxPath: filepath.Clean(inboxPath),
 		libraryPath: filepath.Clean(libraryPath), inspect: library.InspectAudio,
-		logger: logger, now: time.Now,
+		properties: tagging.ReadProperties, logger: logger, now: time.Now,
 	}
 }
 

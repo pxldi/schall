@@ -110,3 +110,35 @@ func TestARecordingIDOnTheCopyHoldsIt(t *testing.T) {
 		t.Errorf("verdict = %+v, want the copy held", verdict)
 	}
 }
+
+// The excerpt from an address a person keyed the want to admits the same audio
+// and refuses other audio, as a Deezer preview does (ADR 0038 §3). Tags that
+// agree admit nothing.
+func TestAKeyedExcerptAdmitsOnlyTheAudioItReproduces(t *testing.T) {
+	same := VerifyAgainstAnchor(copyMeasuredAt(AnchorSourceKeyed, 0.04), entryForAnchor)
+	if !same.Admitted || !same.AnchorAgrees {
+		t.Fatalf("verdict = %+v, want the same audio admitted", same)
+	}
+
+	other := VerifyAgainstAnchor(copyMeasuredAt(AnchorSourceKeyed, 0.45), entryForAnchor)
+	if other.Admitted || !other.Refused {
+		t.Fatalf("verdict = %+v, want other audio refused although every tag agrees", other)
+	}
+
+	between := VerifyAgainstAnchor(copyMeasuredAt(AnchorSourceKeyed, 0.25), entryForAnchor)
+	if between.Admitted || between.Refused {
+		t.Fatalf("verdict = %+v, want the band between the thresholds held", between)
+	}
+
+	unmeasured := copyMeasuredAt(AnchorSourceKeyed, 0.04)
+	unmeasured.Anchor = nil
+	if verdict := VerifyAgainstAnchor(unmeasured, entryForAnchor); verdict.Admitted {
+		t.Fatalf("verdict = %+v, want agreeing tags alone to admit nothing", verdict)
+	}
+
+	contradicted := copyMeasuredAt(AnchorSourceKeyed, 0.04)
+	contradicted.Title = "worry"
+	if verdict := VerifyAgainstAnchor(contradicted, entryForAnchor); verdict.Admitted || !verdict.Contradicted {
+		t.Fatalf("verdict = %+v, want a contradiction to hold the copy", verdict)
+	}
+}

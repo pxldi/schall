@@ -359,10 +359,17 @@ func (service *Service) record(
 	return nil
 }
 
-// measure writes the excerpt to a file and fingerprints it, because fpcalc reads
-// a path and not a stream. The file is removed whatever happens: the fingerprint
-// is the thing kept, and the audio itself is somebody else's to publish.
+// measure fingerprints one excerpt with the service's fingerprinter.
 func (service *Service) measure(ctx context.Context, audio []byte) (string, int, error) {
+	return Measure(ctx, service.prints, audio)
+}
+
+// Measure writes an excerpt to a file and fingerprints it, because fpcalc reads
+// a path and not a stream. The file is removed whatever happens: the fingerprint
+// is the thing kept, and the audio itself is somebody else's to publish. A want
+// keyed to an address is anchored through this too (ADR 0038 §3), so every
+// excerpt passes the same checks.
+func Measure(ctx context.Context, prints Fingerprinter, audio []byte) (string, int, error) {
 	file, err := os.CreateTemp("", "schall-preview-*.mp3")
 	if err != nil {
 		return "", 0, fmt.Errorf("make room for a preview: %w", err)
@@ -378,7 +385,7 @@ func (service *Service) measure(ctx context.Context, audio []byte) (string, int,
 		return "", 0, fmt.Errorf("close %s: %w", name, err)
 	}
 
-	value, seconds, err := service.prints.Compute(ctx, name, chromaprint.ReferenceLengthSeconds)
+	value, seconds, err := prints.Compute(ctx, name, chromaprint.ReferenceLengthSeconds)
 	if err != nil {
 		return "", 0, err
 	}

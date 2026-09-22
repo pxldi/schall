@@ -47,6 +47,7 @@ import (
 	"github.com/pxldi/schall/internal/slskd"
 	"github.com/pxldi/schall/internal/soundcloud"
 	"github.com/pxldi/schall/internal/spectrum"
+	"github.com/pxldi/schall/internal/tracksource"
 	"github.com/pxldi/schall/internal/transcode"
 	"github.com/pxldi/schall/internal/upgrade"
 	"github.com/pxldi/schall/internal/uploads"
@@ -271,6 +272,13 @@ func run() error {
 		// remover the duplicates screen uses, so there is one deletion licence
 		// and one deletion path rather than a second one for this feature.
 		WithUpgrader(libraryRemover).
+		// What reads the address a person keys a want to, and fingerprints
+		// the excerpt taken from it as the want's anchor (ADR 0038). It uses
+		// the yt-dlp the YouTube anchor uses; the artwork of the admitted file
+		// is fetched through the SoundCloud client's plain image GET.
+		WithTrackSources(tracksource.NewClient(tracksource.Options{Path: cfg.YtdlpPath}),
+			chromaprint.NewFingerprinter(chromaprint.Options{FpcalcPath: cfg.FpcalcPath})).
+		WithSourceNamer(tracksource.NewNamer(store, soundCloudClient, logger)).
 		WithEvents(eventHub)
 	playlistService := playlists.NewService(store, logger).
 		WithEvents(eventHub)
@@ -778,6 +786,7 @@ func run() error {
 		server.WithTransferController(transferService),
 		server.WithPeerChallenges(peerChallenges),
 		server.WithAcquisitionTargets(acquisitionService),
+		server.WithSourceKeys(acquisitionService),
 		server.WithPlaylists(playlistService),
 		server.WithPlayerPairing(playerSyncer),
 		server.WithPlaybackNotifier(playbackNotifier),

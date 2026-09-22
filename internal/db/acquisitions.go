@@ -73,6 +73,15 @@ type AcquisitionTargetRow struct {
 	NextSearchAt   pgtype.Timestamptz
 	SearchAttempts int32
 	AnchorSource   string
+	// Source, ExternalID and ExternalURL are the address a person keyed the
+	// want to, empty on every other want (ADR 0038 §1). SourceLookup is what
+	// yt-dlp said about it when they confirmed, and MinimumBitrate the lowest
+	// bit rate in kbit/s an admitted copy may have (§7).
+	Source         string
+	ExternalID     string
+	ExternalURL    string
+	SourceLookup   *SourceLookup
+	MinimumBitrate pgtype.Int4
 	// HoldsAnImportedCopy says a copy of this want was accepted and has become a
 	// file in the library. Only ListAcquisitionTargets reads it, because only the
 	// list of wants has to tell a want that is being looked for from one that has
@@ -131,7 +140,12 @@ const acquisitionTargetColumns = `
 	acquisition_targets.floor_waived_at,
 	acquisition_targets.next_search_at,
 	acquisition_targets.search_attempts,
-	coalesce(acquisition_targets.anchor_source, '') AS anchor_source
+	coalesce(acquisition_targets.anchor_source, '') AS anchor_source,
+	coalesce(acquisition_targets.source, '') AS source,
+	coalesce(acquisition_targets.external_id, '') AS external_id,
+	coalesce(acquisition_targets.external_url, '') AS external_url,
+	acquisition_targets.source_lookup,
+	acquisition_targets.minimum_bitrate
 `
 
 func scanAcquisitionTarget(row pgx.Row) (AcquisitionTargetRow, error) {
@@ -157,6 +171,8 @@ func scanAcquisitionTargetInto(row pgx.Row, target *AcquisitionTargetRow, rest .
 		&target.RecheckReason, &target.RecheckAfter, &target.RecheckAttempts,
 		&target.BelowFloorStreak, &target.BelowFloorSince, &target.FloorWaivedAt,
 		&target.NextSearchAt, &target.SearchAttempts, &target.AnchorSource,
+		&target.Source, &target.ExternalID, &target.ExternalURL, &target.SourceLookup,
+		&target.MinimumBitrate,
 	}, rest...)
 	return row.Scan(columns...)
 }
@@ -374,10 +390,11 @@ func (q *Queries) PursueAcquisitionTargetAgain(
 		        ELSE 'pending'
 		    END,
 		    not_wanted_at = NULL,
-		    next_attempt_at = $4,
+		    `+resolutionSchedule("$4::timestamptz")+`,
 		    `+armSearch(`CASE WHEN musicbrainz_recording_id IS NULL THEN 'unresolved' END`)+`,
 		    last_error = NULL,
 		    summary = CASE
+		        WHEN source IS NOT NULL THEN $3
 		        WHEN musicbrainz_recording_id IS NULL THEN $2
 		        ELSE $3
 		    END,
@@ -593,6 +610,10 @@ func (q *Queries) dueTargets(
 		SELECT`+acquisitionTargetColumns+`
 		FROM acquisition_targets
 		WHERE status = $1 AND next_attempt_at <= $2
+		  -- A want a person keyed to an address is never resolved (ADR 0038 §1).
+		  -- The key and a recording exclude each other, so this is true of every
+		  -- pending want and bites only on the unresolved ones.
+		  AND source IS NULL
 		ORDER BY acquisition_targets.next_attempt_at, acquisition_targets.created_at
 		LIMIT $3
 	`, status, now, limit)
@@ -620,10 +641,11 @@ func (q *Queries) NextAcquisitionTargetDue(ctx context.Context) (pgtype.Timestam
 }
 
 // AdmittingAnchorSources are the anchors that can admit a copy on their own:
-// the Deezer preview fetched by the entry's ISRC, and the artist's Topic
-// upload (ADR 0024, 0034). A want MusicBrainz has no recording for is searched
-// only when its anchor is one of these (ADR 0037).
-const AdmittingAnchorSources = `('deezer', 'youtube-topic')`
+// the Deezer preview fetched by the entry's ISRC, the artist's Topic upload
+// (ADR 0024, 0034), and the excerpt fetched from the address a person keyed the
+// want to (ADR 0038). A want MusicBrainz has no recording for is searched only
+// when its anchor is one of these (ADR 0037).
+const AdmittingAnchorSources = `('deezer', 'youtube-topic', 'source')`
 
 // anchorAdmits is the SQL condition for a want whose stored anchor can admit
 // a copy. table names the acquisition_targets row, with its trailing dot.
@@ -667,6 +689,14 @@ func armSearch(newStatus string) string {
 	return `next_search_at = CASE WHEN ` + newStatus + ` = 'unresolved' AND ` +
 		anchorAdmits("") + ` THEN now() ELSE NULL END,
 	    search_attempts = 0`
+}
+
+// resolutionSchedule sets next_attempt_at on a want coming back to be resolved
+// or looked for, and leaves it empty on a want keyed to an address, which
+// resolution never asks about (ADR 0038 §1). value is an SQL expression of type
+// timestamptz.
+func resolutionSchedule(value string) string {
+	return `next_attempt_at = CASE WHEN source IS NULL THEN ` + value + ` END`
 }
 
 // DueSearchTargets returns the unresolved wants whose search on their anchor is
@@ -727,7 +757,7 @@ func (q *Queries) nextTargetDue(ctx context.Context, status string) (pgtype.Time
 	err := q.db.QueryRow(ctx, `
 		SELECT min(next_attempt_at)
 		FROM acquisition_targets
-		WHERE status = $1
+		WHERE status = $1 AND source IS NULL
 	`, status).Scan(&due)
 	return due, err
 }
@@ -1086,7 +1116,7 @@ func (q *Queries) resolveTarget(
 		WITH before AS (
 			SELECT id, attempts
 			FROM acquisition_targets
-			WHERE id = $1 AND status = $8
+			WHERE id = $1 AND status = $8 AND source IS NULL
 		),
 		resolved AS (
 			UPDATE acquisition_targets
@@ -1141,7 +1171,7 @@ func (q *Queries) supersedeAcquisitionTarget(
 		WITH before AS (
 			SELECT id, attempts
 			FROM acquisition_targets
-			WHERE id = $1 AND status = $8
+			WHERE id = $1 AND status = $8 AND source IS NULL
 		),
 		survivor AS (
 			SELECT id, status
@@ -1270,7 +1300,7 @@ func (q *Queries) SendAcquisitionTargetToReview(
 		WITH before AS (
 			SELECT id, attempts
 			FROM acquisition_targets
-			WHERE id = $1 AND status = 'unresolved'
+			WHERE id = $1 AND status = 'unresolved' AND source IS NULL
 		),
 		reviewed AS (
 			UPDATE acquisition_targets
@@ -1355,7 +1385,7 @@ func (q *Queries) RequeueUnresolvedTarget(
 			    summary = $3,
 			    last_error = nullif($4, ''),
 			    updated_at = now()
-			WHERE id = $1 AND status = 'unresolved'
+			WHERE id = $1 AND status = 'unresolved' AND source IS NULL
 			RETURNING id, attempts
 		)
 		INSERT INTO acquisition_target_attempts (
@@ -1390,7 +1420,7 @@ func (q *Queries) DeferUnresolvedTarget(
 		UPDATE acquisition_targets
 		SET summary = $2, last_error = nullif($3, ''), next_attempt_at = $4,
 		    updated_at = now()
-		WHERE id = $1 AND status = 'unresolved'
+		WHERE id = $1 AND status = 'unresolved' AND source IS NULL
 	`, id, summary, reason, nextAttemptAt)
 	if err != nil {
 		return fmt.Errorf("defer unresolved want %s: %w", id, err)
@@ -1771,6 +1801,9 @@ func (q *Queries) DueAnchors(
 		WHERE anchor_fingerprint IS NULL
 		  AND anchor_next_attempt_at IS NOT NULL
 		  AND anchor_next_attempt_at <= $1
+		  -- A keyed want's anchor is the excerpt from its address, and nothing
+		  -- found another way may speak for it (ADR 0038 §3).
+		  AND source IS NULL
 		ORDER BY anchor_next_attempt_at, created_at
 		LIMIT $2
 	`, now, limit)
@@ -1838,7 +1871,7 @@ func (q *Queries) RecordAnchor(ctx context.Context, params AnchorParams) error {
 			        ELSE next_search_at
 			    END,
 			    updated_at = now()
-			WHERE id = $1
+			WHERE id = $1 AND source IS NULL
 			RETURNING status = 'unresolved' AND $3 IN `+AdmittingAnchorSources+`
 		`, params.TargetID, params.Fingerprint, params.Source, params.Reference,
 			params.Seconds, params.Label, params.Views).Scan(&searchable); err != nil {
@@ -1875,7 +1908,7 @@ func (q *Queries) RecordAnchorAbsent(
 		    anchor_attempts = anchor_attempts + 1,
 		    anchor_next_attempt_at = NULL,
 		    updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND source IS NULL
 	`, targetID, reason)
 	if err != nil {
 		return fmt.Errorf("record that want %s has no anchor: %w", targetID, err)
@@ -1898,7 +1931,7 @@ func (q *Queries) DeferAnchor(
 		    anchor_attempts = anchor_attempts + 1,
 		    anchor_next_attempt_at = $2,
 		    updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND source IS NULL
 	`, targetID, at, reason)
 	if err != nil {
 		return fmt.Errorf("defer the anchor for want %s: %w", targetID, err)
@@ -1921,6 +1954,7 @@ func (q *Queries) ScheduleAnchor(
 		  AND anchor_fingerprint IS NULL
 		  AND anchor_unavailable IS NULL
 		  AND anchor_next_attempt_at IS NULL
+		  AND source IS NULL
 	`, targetID, at)
 	if err != nil {
 		return fmt.Errorf("schedule the anchor for want %s: %w", targetID, err)

@@ -258,6 +258,7 @@ type API struct {
 	editionStore EditionStore
 	covers       CoverArtStore
 	soundcloud   SoundCloudTracks
+	sourceKeys   SourceKeys
 	// labels holds the record labels a person follows, and labelSearch is what
 	// asks MusicBrainz about labels Schall does not hold. Both optional and
 	// separate, the way artists and search already are: an installation
@@ -720,6 +721,11 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Delete("/acquisition-targets/{targetID}/take-best-available", api.keepAcquisitionTargetFloor)
 			router.Post("/acquisition-targets/{targetID}/wrong-recording", api.rejectAcquisitionTargetResolution)
 			router.Post("/acquisition-targets/{targetID}/resolution", api.chooseAcquisitionTargetResolution)
+			// Keying a want to the address of a track, and that want's floor
+			// (ADR 0038). The lookup changes nothing; the key is permanent.
+			router.Get("/source-tracks", api.lookUpSourceTrack)
+			router.Post("/acquisition-targets/{targetID}/source", api.keyAcquisitionTargetToSource)
+			router.Put("/acquisition-targets/{targetID}/minimum-bitrate", api.setAcquisitionTargetMinimumBitrate)
 			router.Get("/review-queue", api.reviewQueue)
 			router.Get("/review-queue/copies/{copyID}/audio", api.reviewCopyAudio)
 			router.Get("/review-queue/copies/{copyID}/waveform", api.reviewCopyWaveform)
