@@ -289,7 +289,7 @@ func (service *Service) hunt(
 	if len(rungs) == 0 || rungs[0].Text == "" {
 		return service.store.RequeueAcquisitionTarget(
 			ctx, target.ID, "none", unsearchableSummary, unsearchableDetail, "",
-			service.nextAttempt(target.Attempts),
+			service.nextLook(target),
 		)
 	}
 
@@ -1236,7 +1236,7 @@ func (service *Service) settleBelowFloor(
 	parkedSummary := fmt.Sprintf(
 		"Only copies below your %d kbps minimum were found. Looked at again weekly.", floor)
 	err := service.store.RequeueBelowFloor(ctx, target.ID, belowBitRateFloorSummary,
-		parkedSummary, detail, service.nextAttempt(target.Attempts),
+		parkedSummary, detail, service.nextLook(target),
 		service.now().Add(7*24*time.Hour))
 	return service.settleError(target, err)
 }
@@ -1269,7 +1269,7 @@ func (service *Service) settleAttempt(
 	}
 	err := service.store.RequeueAcquisitionTarget(
 		ctx, target.ID, outcome, summary, detail, lastError,
-		service.nextAttempt(target.Attempts),
+		service.nextLook(target),
 	)
 	return service.settleError(target, err)
 }

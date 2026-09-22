@@ -1206,3 +1206,54 @@ func TestAScanIndexesAPathOnceItsRemovalIsUnlinked(t *testing.T) {
 		t.Fatalf("updated = %d, want 1: a file whose removal already unlinked was skipped", result.Updated)
 	}
 }
+
+// A file whose want's anchor proved it keeps its source identity through a
+// retag. Its tags did not name it, so bytes changing under them is no reason to
+// hand it back to the resolver, which would delete an identity nobody wrote by
+// hand (ADR 0037 §4).
+func TestAFileWithAnAutomaticSourceIdentityStaysOutOfTheResolutionQueueWhenItChanges(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	path := writeAudio(t, rootPath, "01.mp3")
+
+	scanner := NewScanner(pool)
+	if _, err := scanner.Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO library_file_identities (
+		    library_file_id, kind, provider, source, external_id, external_url,
+		    method, confidence, is_manual, summary
+		)
+		SELECT id, 'source', 'deezer', 'deezer', 'deezer:2178654',
+		       'https://www.deezer.com/track/2178654', 'published-sample', 1, false,
+		       'Proven by the anchor.'
+		FROM library_files WHERE path = $1
+	`, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_files SET resolution_status = 'source' WHERE path = $1
+	`, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("a fixture of another length"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := scanner.Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx, `
+		SELECT resolution_status FROM library_files WHERE path = $1
+	`, path).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "source" {
+		t.Fatalf("resolution status = %q, want the source identity to keep the file out of the queue",
+			status)
+	}
+}

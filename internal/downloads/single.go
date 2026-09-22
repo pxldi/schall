@@ -123,8 +123,16 @@ const (
 	// left to do.
 	registrationUnanswerableSummary = "The audio names another recording and MusicBrainz will not say whether that is this track entered twice. Listen to the copy and decide."
 	undecidedSummary                = "Nothing could decide whether this copy is the wanted recording. It is kept as a question."
-	undeliveredSummary              = "The bytes did not arrive as offered, so there was nothing to check."
-	waitingNextSummary              = "Not in your library yet. The next copy will be tried."
+	// What a copy for a want with no recording is told when its own tags
+	// disagree with the entry. The audio may match; a contradiction still holds
+	// it (ADR 0037 §3).
+	entryContradictedSummary = "This file's own tags disagree with the entry. Listen to it and decide."
+	// What a copy for a want with no recording is told when it carries a
+	// MusicBrainz recording ID. MusicBrainz knows the file, and resolution has
+	// not caught up with it yet.
+	unresolvedRecordingSummary = "MusicBrainz knows this file, but this entry has no recording yet. Kept as a question."
+	undeliveredSummary         = "The bytes did not arrive as offered, so there was nothing to check."
+	waitingNextSummary         = "Not in your library yet. The next copy will be tried."
 	// What a copy is told when MusicBrainz has deleted or merged away the
 	// recording it was fetched to be checked against. Not a judgement about the
 	// file: verification never ran, because there was nothing left to check it
@@ -199,6 +207,12 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 	// of the audio, and it is the only cost any of them has: the excerpt and the
 	// library files were fingerprinted long ago.
 	audio := importer.fingerprintCopy(ctx, file.source, evidence)
+
+	// A want MusicBrainz has no recording for was searched on its anchor, and
+	// its copies are judged on that anchor alone (ADR 0037).
+	if row.MusicBrainzRecordingID == uuid.Nil {
+		return importer.importOnAnchor(ctx, row, file, evidence, audio)
+	}
 
 	// The library speaks first, and it is asked before anything leaves the
 	// machine. A copy that holds the same music as a file already proven to be
@@ -845,6 +859,18 @@ func (importer *Importer) admitByHand(
 ) error {
 	evidence.Method = "manual"
 	evidence.Observed = file.tags
+	// A want with no recording has its anchor's address to write instead
+	// (ADR 0037 §5). ClaimTargetImport returns such a want only when its
+	// anchor names one.
+	anchored := row.MusicBrainzRecordingID == uuid.Nil
+	if anchored {
+		key, ok := db.SourceOfAnchor(row.AnchorSource, row.AnchorReference)
+		if !ok {
+			return fmt.Errorf("%w: want %s names no recording and its anchor names no track",
+				db.ErrNotATargetImport, row.AcquisitionTargetID)
+		}
+		evidence.Source = &key
+	}
 
 	files := []validatedFile{{request: row.File, source: file.source}}
 	// Filed by the release, exactly as a proven copy is. A copy somebody
@@ -879,7 +905,11 @@ func (importer *Importer) admitByHand(
 		Str("path", destination).
 		Msg("a held candidate was accepted by hand and imported")
 	importer.releaseSource(ctx, row.RequestID, files, placed, localPaths)
-	importer.tagCopy(ctx, row, nil, localPaths)
+	// Nothing proved the names of a track MusicBrainz does not know, so the file
+	// keeps the tags it arrived with (ADR 0037).
+	if !anchored {
+		importer.tagCopy(ctx, row, nil, localPaths)
+	}
 	return nil
 }
 
@@ -1044,10 +1074,7 @@ func (importer *Importer) settle(
 	verdict, summary, detail, importStatus, outcome string,
 ) error {
 	if evidence.Wanted == nil {
-		evidence.Wanted = &db.ImportTags{
-			Artist: row.EntryArtist, Title: row.EntryTitle,
-			MusicBrainzRecordingID: row.MusicBrainzRecordingID.String(),
-		}
+		evidence.Wanted = entryTags(row)
 	}
 	if err := importer.store.SettleAcquiredFile(ctx, db.SettleAcquiredFileParams{
 		RecordAcquiredFileParams: db.RecordAcquiredFileParams{
@@ -1087,6 +1114,111 @@ func (importer *Importer) endTheProviderWait(ctx context.Context, targetID uuid.
 		return fmt.Errorf("end the provider wait on want %s: %w", targetID, err)
 	}
 	return nil
+}
+
+// entryTags is the want as its entry states it, in the shape the evidence
+// stores. A want with no recording names none, rather than the zero UUID.
+func entryTags(row db.TargetImportRow) *db.ImportTags {
+	tags := &db.ImportTags{Artist: row.EntryArtist, Title: row.EntryTitle}
+	if row.MusicBrainzRecordingID != uuid.Nil {
+		tags.MusicBrainzRecordingID = row.MusicBrainzRecordingID.String()
+	}
+	return tags
+}
+
+// importOnAnchor judges a copy for a want MusicBrainz has no recording for,
+// against the want's anchor and its entry (ADR 0037 §3). The library holds no
+// file proven to be a recording nobody has named, and AcoustID answers in
+// recordings, so neither is asked. Only the anchor admits.
+func (importer *Importer) importOnAnchor(
+	ctx context.Context, row db.TargetImportRow, file inspected,
+	evidence *db.AcquiredFileEvidence, audio copyAudio,
+) error {
+	importer.measureAgainstAnchor(ctx, row, audio, evidence)
+	importer.measureQuality(ctx, file.source, evidence)
+
+	measuredMS := audio.milliseconds()
+	verification := identity.VerifyAgainstAnchor(
+		candidateEvidence(file, evidence, measuredMS, uuid.Nil, row.AnchorSource),
+		identity.Evidence{
+			Subject: identity.SubjectEntry, ISRC: row.EntryISRC, Artist: row.EntryArtist,
+			Title: row.EntryTitle, DurationMS: row.EntryDurationMS,
+		})
+	evidence.Agrees, evidence.Differs = verification.Agrees, verification.Differs
+	evidence.Wanted = &db.ImportTags{
+		Artist: row.EntryArtist, Album: row.EntryAlbum, Title: row.EntryTitle,
+		ISRC: row.EntryISRC, DurationMS: row.EntryDurationMS,
+	}
+	if evidence.Anchor != nil && (verification.AnchorSaysOtherwise || verification.AnchorAgrees) {
+		agrees := verification.AnchorAgrees
+		evidence.Anchor.Agrees = &agrees
+	}
+	key, keyed := db.SourceOfAnchor(row.AnchorSource, row.AnchorReference)
+	switch {
+	case verification.Admitted && keyed:
+		return importer.admitOnAnchor(ctx, row, file, evidence, key, verification.Summary)
+	case verification.Refused:
+		return importer.refuse(ctx, row, evidence,
+			db.AcquiredFileDiscardedAudio, anchorRefusedSummary, verification.Summary)
+	case verification.NamesARecording:
+		return importer.hold(ctx, row, file.source, evidence,
+			unresolvedRecordingSummary, verification.Summary)
+	case verification.Contradicted:
+		return importer.hold(ctx, row, file.source, evidence,
+			entryContradictedSummary, verification.Summary)
+	}
+	if uploadSaidOtherAudio(evidence.Anchor) {
+		return importer.hold(ctx, row, file.source, evidence,
+			uploadUnmatchedSummary, verification.Summary)
+	}
+	return importer.hold(ctx, row, file.source, evidence, undecidedSummary, verification.Summary)
+}
+
+// admitOnAnchor imports a copy its want's anchor proved, and records the
+// anchor's address as what the copy is. Completing the copy once the scan has
+// made a library file of it writes that address as a source identity
+// (ADR 0037 §4).
+//
+// The file keeps the tags it arrived with. Nothing proved the names, and
+// tagging writes only what was proven.
+func (importer *Importer) admitOnAnchor(
+	ctx context.Context, row db.TargetImportRow, file inspected,
+	evidence *db.AcquiredFileEvidence, key db.ImportSource, summary string,
+) error {
+	evidence.Method = identity.MethodPublishedSample
+	evidence.Confidence = 1
+	evidence.Source = &key
+
+	files := []validatedFile{{request: row.File, source: file.source}}
+	destination := importer.releaseFolder(ctx, wantFields(row, nil))
+	localPaths, placed, err := importer.copyRelease(ctx, destination, files)
+	if err != nil {
+		return err
+	}
+	importer.recordPlacements(ctx, row.RequestID, placed, localPaths, files)
+	if err := importer.store.CompleteTargetImport(ctx, db.RecordAcquiredFileParams{
+		AcquisitionTargetID: row.AcquisitionTargetID,
+		Provider:            row.Provider,
+		SourceUsername:      row.SourceUsername,
+		RemotePath:          row.File.Path,
+		FileName:            row.File.Name,
+		SizeBytes:           row.File.SizeBytes,
+		Verdict:             db.AcquiredFileAccepted,
+		Summary:             acceptedSummary + " " + summary,
+		Evidence:            evidence,
+		DownloadRequestID:   uuid.NullUUID{UUID: row.RequestID, Valid: true},
+	}, importedTargetSummary, importer.libraryPath, destination, localPaths); err != nil {
+		return err
+	}
+	importer.logger.Info().
+		Str("request_id", row.RequestID.String()).
+		Str("acquisition_target_id", row.AcquisitionTargetID.String()).
+		Str("anchor_source", row.AnchorSource).
+		Str("external_id", key.ExternalID).
+		Str("path", destination).
+		Msg("a fetched candidate was proven by its want's anchor and imported")
+	importer.releaseSource(ctx, row.RequestID, files, placed, localPaths)
+	return importer.endTheProviderWait(ctx, row.AcquisitionTargetID)
 }
 
 // wantFields is the release one fetched copy belongs to, in the shape the

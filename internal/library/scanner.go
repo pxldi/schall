@@ -513,11 +513,14 @@ func (scanner *Scanner) upsertFile(
 		    -- changed with them, so it goes back into the resolution queue. A
 		    -- decision a person made is never undone by a retag: they decided
 		    -- about the music, not about the tags.
+		    -- A source identity stays too, automatic or not: its tags are not
+		    -- what named it (ADR 0026, 0037).
 		    resolution_status = CASE
 		        WHEN library_files.resolution_status = 'pending' OR EXISTS (
 		            SELECT 1 FROM library_file_identities
 		            WHERE library_file_identities.library_file_id = library_files.id
-		              AND library_file_identities.is_manual
+		              AND (library_file_identities.is_manual
+		                   OR library_file_identities.kind = 'source')
 		        ) THEN library_files.resolution_status
 		        ELSE 'pending'
 		    END,
@@ -525,7 +528,8 @@ func (scanner *Scanner) upsertFile(
 		        WHEN library_files.resolution_status = 'pending' OR EXISTS (
 		            SELECT 1 FROM library_file_identities
 		            WHERE library_file_identities.library_file_id = library_files.id
-		              AND library_file_identities.is_manual
+		              AND (library_file_identities.is_manual
+		                   OR library_file_identities.kind = 'source')
 		        ) THEN library_files.resolution_summary
 		    END,
 		    updated_at = now()

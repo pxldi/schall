@@ -98,9 +98,16 @@ var stillness = []quiet{
 	{"downloads waiting to be imported", `
 		SELECT count(*) FROM download_requests
 		WHERE status = 'completed' AND import_status = 'pending'`},
-	// The acquisition sweeper picks up anything with a due attempt.
+	// The acquisition sweeper picks up anything with a due attempt, and an
+	// unresolved want with a due search on its anchor (ADR 0037).
 	{"wants due for another attempt", `
-		SELECT count(*) FROM acquisition_targets WHERE next_attempt_at IS NOT NULL`},
+		SELECT count(*) FROM acquisition_targets
+		WHERE next_attempt_at IS NOT NULL OR next_search_at IS NOT NULL`},
+	// The sweeper asks MusicBrainz again about every file an anchor proved,
+	// once its turn comes (ADR 0037 §6). Nothing in the fixture was proven that
+	// way, so this is zero at any clock.
+	{"source files due another look", `
+		SELECT count(*) FROM library_file_identities WHERE source_recheck_after IS NOT NULL`},
 	// The preview sweep fetches a thirty-second excerpt from Deezer for every
 	// want that is due one, which is a request to somebody else's service in the
 	// middle of a browser test. No want in the fixture carries an ISRC, and a

@@ -97,6 +97,43 @@ type AcquiredFileEvidence struct {
 	// or refused by what is written here.
 	AudioFingerprint        string `json:"-"`
 	AudioFingerprintSeconds int    `json:"-"`
+	// Source is the address a copy for a want with no recording was admitted or
+	// accepted as: the want's anchor, written as a source identity key
+	// (ADR 0037 §4). It is set only on that path, and it is what completing the
+	// copy reads to write a source identity instead of a recording.
+	Source *ImportSource `json:"source,omitempty"`
+}
+
+// ImportSource is a source identity key: the service, its own identifier for
+// the track, and the page the track is published at.
+type ImportSource struct {
+	Source      string `json:"source"`
+	ExternalID  string `json:"externalId"`
+	ExternalURL string `json:"externalUrl"`
+}
+
+// SourceOfAnchor is the source identity key an admitting anchor names
+// (ADR 0037 §4). A Deezer anchor's reference is the Deezer track id, and a
+// Topic upload's is the YouTube video id. Any other anchor names no key, which
+// is why a name-found upload's copy cannot be written a source identity.
+func SourceOfAnchor(anchorSource, reference string) (ImportSource, bool) {
+	reference = strings.TrimSpace(reference)
+	if reference == "" {
+		return ImportSource{}, false
+	}
+	switch anchorSource {
+	case "deezer":
+		return ImportSource{
+			Source: "deezer", ExternalID: "deezer:" + reference,
+			ExternalURL: "https://www.deezer.com/track/" + reference,
+		}, true
+	case "youtube-topic":
+		return ImportSource{
+			Source: "youtube", ExternalID: "youtube:" + reference,
+			ExternalURL: "https://www.youtube.com/watch?v=" + reference,
+		}, true
+	}
+	return ImportSource{}, false
 }
 
 // ImportAudioQuality is what one look at a copy's audio found. Absent means
@@ -147,6 +184,11 @@ type TargetImportRow struct {
 	// It is the entry's own account of where the track comes from, no better
 	// and no worse than the artist and the title beside it.
 	EntryAlbum string
+	// EntryISRC and EntryDurationMS are the rest of the entry. A copy for a
+	// want with no recording is checked against the entry itself, and these can
+	// contradict it (ADR 0037 §3). Empty and zero are silence.
+	EntryISRC       string
+	EntryDurationMS int
 	// AlbumTitle, ReleaseID and ReleaseDate are the release the want was
 	// resolved through, as the catalogue holds it: the album for that release
 	// group, and the edition chosen for it. They are the same answer a whole
@@ -298,13 +340,16 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 	// ways — because two positions are not one position, and picking whichever
 	// row came back first would be inventing the answer.
 	var (
-		recording uuid.NullUUID
-		album     uuid.NullUUID
-		track     uuid.NullUUID
+		recording        uuid.NullUUID
+		album            uuid.NullUUID
+		track            uuid.NullUUID
+		searchedOnAnchor bool
 	)
 	if err := q.db.QueryRow(ctx, `
 		SELECT targets.musicbrainz_recording_id, targets.musicbrainz_release_group_id,
 		       targets.entry_artist, targets.entry_title, targets.entry_album,
+		       coalesce(targets.entry_isrc, ''), coalesce(targets.entry_duration_ms, 0),
+		       targets.status = 'unresolved' AND `+anchorAdmits("targets.")+`,
 		       albums.id, coalesce(albums.title, ''),
 		       coalesce(artists.name, ''),
 		       release_editions.musicbrainz_release_id,
@@ -344,6 +389,7 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 	`, result.AcquisitionTargetID).Scan(
 		&recording, &result.MusicBrainzReleaseGroupID,
 		&result.EntryArtist, &result.EntryTitle, &result.EntryAlbum,
+		&result.EntryISRC, &result.EntryDurationMS, &searchedOnAnchor,
 		&album, &result.AlbumTitle, &result.AlbumArtist,
 		&result.ReleaseID, &result.ReleaseDate,
 		&result.DiscNumber, &result.TrackNumber, &track,
@@ -371,11 +417,16 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 			return result, fmt.Errorf("read the credit on track %s: %w", track.UUID, err)
 		}
 	}
-	// A want with no recording has nothing to verify against. It cannot happen
-	// while a request exists — the target had to be resolved to be looked for —
-	// but a resolution the review queue replaces could clear it, and guessing
-	// what the file was supposed to be is exactly what must not happen.
+	// A want with no recording is checked against its anchor alone, and only
+	// where that anchor can admit a copy (ADR 0037). Any other want with no
+	// recording has nothing to verify against: a resolution the review queue
+	// replaces can clear one, and guessing what the file was supposed to be is
+	// exactly what must not happen. MusicBrainzRecordingID stays uuid.Nil for
+	// the first.
 	if !recording.Valid {
+		if searchedOnAnchor {
+			return result, nil
+		}
 		return result, fmt.Errorf("%w: the want no longer names a recording", ErrNotATargetImport)
 	}
 	result.MusicBrainzRecordingID = recording.UUID
@@ -551,11 +602,11 @@ func requeueForNextCandidate(
 	var attempts int32
 	err := tx.QueryRow(ctx, `
 		UPDATE acquisition_targets
-		SET summary = $2, next_attempt_at = $3, last_attempt_at = now(),
+		SET summary = $2, `+scheduleLook("$3::timestamptz")+`, last_attempt_at = now(),
 		    below_floor_streak = 0, below_floor_since = NULL,
 		    updated_at = now()
-		WHERE id = $1 AND status = 'pending'
-		RETURNING attempts
+		WHERE id = $1 AND `+searchedWant("")+`
+		RETURNING `+lookCounted+`
 	`, params.AcquisitionTargetID, params.TargetSummary, params.NextAttemptAt).Scan(&attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -645,6 +696,7 @@ func (q *Queries) SettleAcquiredFileForGoneRecording(
 			    summary = CASE WHEN resolution_method = 'manual' THEN $4 ELSE $3 END,
 			    last_error = NULL,
 			    next_attempt_at = $5,
+			    `+armSearch("'unresolved'")+`,
 			    last_attempt_at = now(),
 			    below_floor_streak = 0,
 			    below_floor_since = NULL,
@@ -706,10 +758,10 @@ func (q *Queries) CompleteTargetImport(
 		}
 		_, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
-			SET summary = $2, next_attempt_at = now(),
+			SET summary = $2, `+scheduleLook("now()")+`,
 			    below_floor_streak = 0, below_floor_since = NULL,
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending'
+			WHERE id = $1 AND `+searchedWant("")+`
 		`, params.AcquisitionTargetID, targetSummary)
 		return err
 	})
@@ -1085,6 +1137,12 @@ func (q *Queries) AcceptHeldCopy(
 			      WHERE acquisition_targets.id = acquisition_target_files.acquisition_target_id
 			        AND acquisition_targets.status
 			            NOT IN ('acquired', 'not_wanted', 'superseded')
+			        -- Accepting a copy writes what it is. A want with no recording
+			        -- has only its anchor's address to write, and a name-found
+			        -- upload's address names no track (ADR 0037 §5).
+			        AND (acquisition_targets.musicbrainz_recording_id IS NOT NULL
+			             OR (acquisition_targets.status = 'unresolved'
+			                 AND `+anchorAdmits("acquisition_targets.")+`))
 			  )
 			  AND NOT EXISTS (
 			      -- One answer per want. The status guard above only bites once the
@@ -1200,10 +1258,10 @@ func (q *Queries) RefuseHeldCopies(
 		}
 		_, err = tx.Exec(ctx, `
 			UPDATE acquisition_targets
-			SET summary = $2, next_attempt_at = $3,
+			SET summary = $2, `+scheduleLook("$3::timestamptz")+`,
 			    below_floor_streak = 0, below_floor_since = NULL,
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending'
+			WHERE id = $1 AND `+searchedWant("")+`
 		`, targetID, targetSummary, nextAttemptAt)
 		return err
 	})
@@ -1597,9 +1655,12 @@ func (q *Queries) StopLookingForAcquisitionTarget(
 ) error {
 	_, err := q.db.Exec(ctx, `
 		UPDATE acquisition_targets
-		SET summary = $2, next_attempt_at = NULL, updated_at = now(),
-		    recheck_reason = $3, recheck_after = NULL
-		WHERE id = $1 AND status = 'pending'
+		SET summary = $2, `+scheduleLook("NULL::timestamptz")+`, updated_at = now(),
+		    -- An unresolved want has no library identity to be rechecked
+		    -- against: its copy was judged on the anchor alone (ADR 0037).
+		    recheck_reason = CASE WHEN status = 'pending' THEN $3 END,
+		    recheck_after = NULL
+		WHERE id = $1 AND `+searchedWant("")+`
 	`, id, summary, RecheckForLibraryIdentity)
 	if err != nil {
 		return fmt.Errorf("stop looking for want %s: %w", id, err)
@@ -1848,8 +1909,8 @@ func (q *Queries) RescheduleAcquisitionTarget(
 ) error {
 	_, err := q.db.Exec(ctx, `
 		UPDATE acquisition_targets
-		SET summary = $2, next_attempt_at = $3, updated_at = now()
-		WHERE id = $1 AND status = 'pending'
+		SET summary = $2, `+scheduleLook("$3::timestamptz")+`, updated_at = now()
+		WHERE id = $1 AND `+searchedWant("")+`
 	`, id, summary, nextAttemptAt)
 	if err != nil {
 		return fmt.Errorf("reschedule want %s: %w", id, err)
@@ -1873,10 +1934,10 @@ func (q *Queries) RescheduleFailedTransfer(
 	return q.inTransaction(ctx, "rescheduling a want after a failed transfer", func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
-			SET summary = $2, next_attempt_at = now(),
+			SET summary = $2, `+scheduleLook("now()")+`,
 			    below_floor_streak = 0, below_floor_since = NULL,
 			    updated_at = now()
-			WHERE id = $1 AND status = 'pending'
+			WHERE id = $1 AND `+searchedWant("")+`
 		`, targetID, summary)
 		if err != nil {
 			return fmt.Errorf("reschedule want %s after a failed transfer: %w", targetID, err)
@@ -1906,12 +1967,12 @@ func (q *Queries) DeferAcquisitionTarget(
 	_, err := q.db.Exec(ctx, `
 		UPDATE acquisition_targets
 		SET summary = $2, last_error = nullif($3, ''),
-		    next_attempt_at = CASE
+		    `+scheduleLook(`CASE
 		        WHEN below_floor_since IS NOT NULL THEN now() + interval '7 days'
-		        ELSE $4
-		    END,
+		        ELSE $4::timestamptz
+		    END`)+`,
 		    updated_at = now()
-		WHERE id = $1 AND status = 'pending'
+		WHERE id = $1 AND `+searchedWant("")+`
 	`, id, summary, reason, nextAttemptAt)
 	if err != nil {
 		return fmt.Errorf("defer want %s: %w", id, err)
@@ -1956,7 +2017,7 @@ func (q *Queries) DeferAcquiredFetch(
 		if _, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
 			SET summary = $2, updated_at = now()
-			WHERE status = 'pending'
+			WHERE `+searchedWant("")+`
 			  AND id = (SELECT acquisition_target_id FROM download_requests WHERE id = $1)
 		`, requestID, targetSummary); err != nil {
 			return fmt.Errorf("say why the want of request %s is waiting: %w", requestID, err)
@@ -2068,7 +2129,7 @@ func (q *Queries) FetchAcquiredFile(
 			       $6::text, nullif($7::integer, 0), $8::double precision,
 			       $9::text[], $10::jsonb
 			FROM acquisition_targets targets
-			WHERE targets.id = $1 AND targets.status = 'pending'
+			WHERE targets.id = $1 AND `+searchedWant("targets.")+`
 			RETURNING id
 		`,
 			params.AcquisitionTargetID, params.Provider, params.SourceUsername,
@@ -2153,10 +2214,16 @@ func (q *Queries) CompleteAcquiredFile(
 			       files.decided_by
 			FROM acquisition_target_files files
 			JOIN downloads ON downloads.download_request_id = files.download_request_id
+			JOIN acquisition_targets targets ON targets.id = files.acquisition_target_id
 			WHERE files.acquisition_target_id = $1
 			  AND files.verdict = 'accepted'
 			  AND files.library_file_id IS NULL
 			  AND downloads.library_file_id IS NOT NULL
+			  -- A copy judged against a recording the want no longer names has
+			  -- nothing to write on a want that names none. Only a copy
+			  -- admitted on the anchor alone carries a key of its own.
+			  AND (targets.musicbrainz_recording_id IS NOT NULL
+			       OR files.evidence ? 'source')
 			ORDER BY files.decided_at
 			LIMIT 1
 		`, targetID).Scan(&offerID, &fileID, &evidence, &proven, &decidedBy)
@@ -2195,6 +2262,13 @@ func (q *Queries) CompleteAcquiredFile(
 			if err := json.Unmarshal(evidence, &decoded); err != nil {
 				return fmt.Errorf("decode the evidence that admitted %s: %w", fileID, err)
 			}
+		}
+		if decoded.Source != nil {
+			return completeSourceCopy(ctx, tx, sourceCopy{
+				targetID: targetID, offerID: offerID, fileID: fileID,
+				evidence: decoded, proven: proven, byHand: decidedBy == "user",
+				summary: summary, detail: detail,
+			}, &outcome)
 		}
 		recordingID, releaseGroupID, err := acquiredRecording(ctx, tx, targetID)
 		if err != nil {
@@ -2339,6 +2413,147 @@ func (q *Queries) CompleteAcquiredFile(
 		return nil
 	})
 	return outcome, err
+}
+
+// sourceCopy is an accepted copy of a want with no recording, ready to be
+// written its source identity.
+type sourceCopy struct {
+	targetID, offerID, fileID uuid.UUID
+	evidence                  AcquiredFileEvidence
+	proven                    string
+	byHand                    bool
+	summary, detail           string
+}
+
+// completeSourceCopy gives the library file a copy became the source identity
+// its want's anchor names, and settles the want as acquired with no recording
+// (ADR 0037 §4, §5).
+//
+// A file the resolver has already answered with "no provider knows this" gives
+// way: that answer is silence, and the anchor proved the audio. Any other
+// identity already on the file stays, and the want stops for a person, as it
+// does on the recording path.
+func completeSourceCopy(
+	ctx context.Context, tx pgx.Tx, accepted sourceCopy, outcome *AcquiredFileOutcome,
+) error {
+	key := accepted.evidence.Source
+	method := accepted.evidence.Method
+	if accepted.byHand {
+		method = "manual"
+	}
+	if method == "" {
+		return fmt.Errorf("the accepted accepted of want %s records nothing that admitted it", accepted.targetID)
+	}
+	proof := append([]string{}, accepted.evidence.Agrees...)
+	if anchor := accepted.evidence.Anchor; anchor != nil {
+		proof = append(proof, fmt.Sprintf("anchor: %s %s", anchor.Source, anchor.Reference))
+		if anchor.Measured {
+			proof = append(proof, fmt.Sprintf("bit error rate against the anchor: %.4f", anchor.Rate))
+		}
+	}
+	encoded, err := json.Marshal(proof)
+	if err != nil {
+		return fmt.Errorf("encode the proof of %s: %w", accepted.fileID, err)
+	}
+	var confidence any
+	if accepted.evidence.Confidence > 0 {
+		confidence = accepted.evidence.Confidence
+	}
+	// A Deezer preview was fetched by the entry's ISRC, so the track at that
+	// address is registered under it. It is kept on the identity, because it is
+	// what a recording MusicBrainz later names has to carry for the file to move
+	// onto it (ADR 0037 §6). An automatic identity is asked about again after
+	// the first rung of the unfound ladder, a day; a person's never is.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO library_file_identities (
+			library_file_id, kind, provider, source, external_id, external_url,
+			isrc, method, confidence, is_manual, summary, evidence,
+			source_recheck_after
+		)
+		SELECT $1, 'source', $2, $2, $3, $4,
+		       CASE WHEN $2 = 'deezer' THEN nullif(btrim(targets.entry_isrc), '') END,
+		       $5, $6, $7, $8, $9::jsonb,
+		       CASE WHEN $7 THEN NULL ELSE now() + interval '24 hours' END
+		FROM acquisition_targets targets
+		WHERE targets.id = $10
+		ON CONFLICT (library_file_id) DO UPDATE
+		SET kind = 'source', provider = EXCLUDED.provider, source = EXCLUDED.source,
+		    external_id = EXCLUDED.external_id, external_url = EXCLUDED.external_url,
+		    musicbrainz_release_group_id = NULL, artist_name = NULL,
+		    release_title = NULL, track_title = NULL, duration_ms = NULL,
+		    isrc = EXCLUDED.isrc,
+		    method = EXCLUDED.method, confidence = EXCLUDED.confidence,
+		    is_manual = EXCLUDED.is_manual, summary = EXCLUDED.summary,
+		    evidence = EXCLUDED.evidence,
+		    source_recheck_after = EXCLUDED.source_recheck_after,
+		    decided_at = now(), updated_at = now()
+		WHERE library_file_identities.kind = 'local_only'
+		  AND NOT library_file_identities.is_manual
+	`, accepted.fileID, key.Source, key.ExternalID, key.ExternalURL, method, confidence,
+		accepted.byHand, accepted.proven, encoded, accepted.targetID); err != nil {
+		return fmt.Errorf("record %s as %s: %w", accepted.fileID, key.ExternalID, err)
+	}
+
+	var stored string
+	if err := tx.QueryRow(ctx, `
+		SELECT coalesce(external_id, '') FROM library_file_identities
+		WHERE library_file_id = $1 AND kind = 'source'
+	`, accepted.fileID).Scan(&stored); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE acquisition_target_files
+		SET library_file_id = $2, updated_at = now()
+		WHERE id = $1
+	`, accepted.offerID, accepted.fileID); err != nil {
+		return err
+	}
+	outcome.LibraryFileID = uuid.NullUUID{UUID: accepted.fileID, Valid: true}
+
+	if stored != key.ExternalID {
+		outcome.Disagreed = true
+		_, err := tx.Exec(ctx, `
+			UPDATE acquisition_targets
+			SET summary = $2, `+scheduleLook("NULL::timestamptz")+`, updated_at = now()
+			WHERE id = $1 AND `+searchedWant("")+`
+		`, accepted.targetID, accepted.summary)
+		return err
+	}
+
+	// The scan queue asks only about 'pending' and 'failed' files, so this is
+	// what keeps the resolver from replacing the proof with the peer's tags.
+	if _, err := tx.Exec(ctx, `
+		UPDATE library_files
+		SET resolution_status = 'source', resolution_summary = $2,
+		    resolution_error = NULL, resolution_attempted_at = now(), updated_at = now()
+		WHERE id = $1
+	`, accepted.fileID, accepted.proven); err != nil {
+		return fmt.Errorf("record that %s is answered: %w", accepted.fileID, err)
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE acquisition_targets
+		SET status = 'acquired', acquired_library_file_id = $2, acquired_at = now(),
+		    summary = $3, next_attempt_at = NULL, next_search_at = NULL,
+		    last_error = NULL, last_attempt_at = now(), updated_at = now()
+		WHERE id = $1 AND status = 'unresolved' AND musicbrainz_recording_id IS NULL
+	`, accepted.targetID, accepted.fileID, accepted.detail)
+	if err != nil {
+		return err
+	}
+	outcome.Settled = tag.RowsAffected() == 1
+	if outcome.Settled {
+		return nil
+	}
+	// The want was resolved while its accepted was being imported. The file proves
+	// the anchor and says nothing about that recording, so the want stops for
+	// a person instead of settling on it.
+	outcome.Disagreed = true
+	_, err = tx.Exec(ctx, `
+		UPDATE acquisition_targets
+		SET summary = $2, next_attempt_at = NULL, updated_at = now()
+		WHERE id = $1 AND status = 'pending'
+	`, accepted.targetID, accepted.summary)
+	return err
 }
 
 // acquiredRecording reads what the want names, so the identity written for its
