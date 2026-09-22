@@ -3042,6 +3042,9 @@ type JudgeAgainRow struct {
 	// SourceDirectory is the provider folder the copy was delivered into. It is
 	// where the file is looked for, and it is read from the request rather than
 	// from the copy because that is where validation has always read it.
+	// Provider says which folder it is under: the download inbox, or the folder
+	// a keyed want's address is fetched into (ADR 0038 §6).
+	Provider        string
 	SourceDirectory string
 	FileName        string
 	Verdict         string
@@ -3148,7 +3151,7 @@ func (q *Queries) copiesToJudgeAgain(
 	ctx context.Context, targetID uuid.NullUUID,
 ) ([]JudgeAgainRow, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT copies.id, copies.acquisition_target_id, requests.id,
+		SELECT copies.id, copies.acquisition_target_id, requests.id, requests.provider,
 		       requests.source_directory, copies.file_name, copies.verdict,
 		       coalesce(copies.audio_fingerprint, ''),
 		       coalesce(targets.anchor_fingerprint, ''),
@@ -3196,7 +3199,7 @@ func (q *Queries) copiesToJudgeAgain(
 	for rows.Next() {
 		var row JudgeAgainRow
 		if err := rows.Scan(
-			&row.CopyID, &row.AcquisitionTargetID, &row.RequestID,
+			&row.CopyID, &row.AcquisitionTargetID, &row.RequestID, &row.Provider,
 			&row.SourceDirectory, &row.FileName, &row.Verdict, &row.AudioFingerprint,
 			&row.AnchorFingerprint, &row.AnchorSource, &row.AnchorReference,
 			&row.AnchorLabel, &row.AnchorViews, &row.AnchorSeconds,
@@ -3359,6 +3362,7 @@ func (q *Queries) ReleaseCopyFromJudging(ctx context.Context, requestID uuid.UUI
 type UnfingerprintedCopyRow struct {
 	CopyID              uuid.UUID
 	AcquisitionTargetID uuid.UUID
+	Provider            string
 	SourceDirectory     string
 	FileName            string
 }
@@ -3378,7 +3382,7 @@ func (q *Queries) CopiesMissingFingerprint(
 	ctx context.Context, limit int32,
 ) ([]UnfingerprintedCopyRow, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT copies.id, copies.acquisition_target_id,
+		SELECT copies.id, copies.acquisition_target_id, requests.provider,
 		       requests.source_directory, copies.file_name
 		FROM acquisition_target_files copies
 		JOIN download_requests requests ON requests.id = copies.download_request_id
@@ -3397,7 +3401,8 @@ func (q *Queries) CopiesMissingFingerprint(
 	for rows.Next() {
 		var row UnfingerprintedCopyRow
 		if err := rows.Scan(
-			&row.CopyID, &row.AcquisitionTargetID, &row.SourceDirectory, &row.FileName,
+			&row.CopyID, &row.AcquisitionTargetID, &row.Provider, &row.SourceDirectory,
+			&row.FileName,
 		); err != nil {
 			return nil, err
 		}

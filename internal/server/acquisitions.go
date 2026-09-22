@@ -21,6 +21,7 @@ import (
 	"github.com/pxldi/schall/internal/acquisition"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/preview"
+	"github.com/pxldi/schall/internal/tracksource"
 )
 
 // AcquisitionTargets records what somebody wants and what became of it.
@@ -1383,7 +1384,7 @@ func (api *API) warmPreviews(items []db.AcquisitionReviewItem) {
 			if file.Verdict != db.AcquiredFileHeld && !(creditOnly && isCreditOnlyRefusal(file)) {
 				continue
 			}
-			source, err := inboxFile(api.inboxPath, file.RemotePath, file.FileName)
+			source, err := api.copyFile(file)
 			if err != nil {
 				continue
 			}
@@ -1568,7 +1569,7 @@ func (api *API) reviewCopyAudio(response http.ResponseWriter, request *http.Requ
 	if !ok {
 		return
 	}
-	source, err := inboxFile(api.inboxPath, fetched.RemotePath, fetched.FileName)
+	source, err := api.copyFile(fetched)
 	if err != nil {
 		api.problem(response, http.StatusNotFound, "the copy is no longer there",
 			[]string{err.Error()})
@@ -1686,7 +1687,7 @@ func (api *API) drawWaveform(
 	if api.waveforms == nil || !api.waveforms.Available() || api.inboxPath == "" {
 		return nil
 	}
-	source, err := inboxFile(api.inboxPath, fetched.RemotePath, fetched.FileName)
+	source, err := api.copyFile(fetched)
 	if err != nil {
 		return nil
 	}
@@ -1777,6 +1778,20 @@ func (api *API) servePlayable(response http.ResponseWriter, request *http.Reques
 	etag := strings.TrimSuffix(filepath.Base(playable), filepath.Ext(playable))
 	response.Header().Set("ETag", `"`+etag+`"`)
 	http.ServeContent(response, request, "", info.ModTime(), file)
+}
+
+// copyFile locates one copy of a want: under the fetch folder for a track taken
+// from a keyed want's address (ADR 0038 §6), and under the download inbox for a
+// peer's copy. The importer chooses between the two by the same provider.
+func (api *API) copyFile(copied db.AcquisitionTargetFileRow) (string, error) {
+	root := api.inboxPath
+	if tracksource.Serves(copied.Provider) {
+		root = api.fetchPath
+	}
+	if root == "" {
+		return "", errors.New("the folder this copy was fetched into is not configured")
+	}
+	return inboxFile(root, copied.RemotePath, copied.FileName)
 }
 
 // inboxFile locates one fetched copy under the download inbox.

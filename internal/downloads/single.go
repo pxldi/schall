@@ -343,7 +343,7 @@ func (importer *Importer) inspectCandidate(
 		Name: row.File.Name, Agrees: []string{}, Differs: []string{},
 		Problems: []string{}, SizeBytes: row.File.SizeBytes, BitRate: row.File.BitRate,
 	}
-	sourceRoot, err := inboxFolder(importer.inboxPath, row.SourceDirectory)
+	sourceRoot, err := importer.deliveredFolder(row.Provider, row.SourceDirectory)
 	if err != nil {
 		evidence.Problems = append(evidence.Problems, err.Error())
 		return inspected{}, evidence, nil

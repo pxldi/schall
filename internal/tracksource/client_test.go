@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -179,5 +180,72 @@ func TestExcerptWithNoAudioWrittenIsGone(t *testing.T) {
 	client, _ := fakeClient("", "", nil)
 	if _, err := client.Excerpt(context.Background(), Track{URL: "https://soundcloud.com/a/b"}); !errors.Is(err, ErrGone) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The whole track is taken as the service serves it and lands in the folder it
+// was asked for, with nothing of yt-dlp's own left beside it (ADR 0038 §6).
+func TestFetchKeepsTheTrackAsServed(t *testing.T) {
+	client := NewClient(Options{Path: "/fake/yt-dlp"})
+	client.real = false
+	var gotArgs []string
+	client.run = func(_ context.Context, _ string, args ...string) ([]byte, []byte, error) {
+		gotArgs = args
+		output := args[len(args)-2]
+		path := strings.TrimSuffix(output, "%(id)s.%(ext)s") + "293.opus"
+		if err := os.WriteFile(path, []byte("opus audio"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return nil, nil, nil
+	}
+	directory := filepath.Join(t.TempDir(), "want")
+
+	fetched, err := client.Fetch(context.Background(), Track{
+		ID: "293", URL: "https://soundcloud.com/abo/illegal-edit",
+	}, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := Fetched{
+		Path: filepath.Join(directory, "293.opus"), Name: "293.opus",
+		Extension: "opus", SizeBytes: int64(len("opus audio")),
+	}
+	if fetched != want {
+		t.Fatalf("fetched = %#v, want %#v", fetched, want)
+	}
+	for _, arg := range gotArgs {
+		if arg == "-x" || arg == "--extract-audio" || arg == "--audio-format" || arg == "--audio-quality" {
+			t.Fatalf("args = %q, want the audio kept as served", gotArgs)
+		}
+	}
+	if gotArgs[0] != "-f" || gotArgs[1] != "bestaudio" {
+		t.Fatalf("args = %q, want the best audio the service serves", gotArgs)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "293.opus" {
+		t.Fatalf("folder holds %v, want only the track", entries)
+	}
+}
+
+// A fetch that fails says why and leaves nothing in the folder.
+func TestFetchThatFailsLeavesNothing(t *testing.T) {
+	client, _ := fakeClient("", "ERROR: HTTP Error 429: Too Many Requests", errors.New("exit status 1"))
+	directory := filepath.Join(t.TempDir(), "want")
+
+	_, err := client.Fetch(context.Background(), Track{URL: "https://soundcloud.com/a/b"}, directory)
+
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v, want rate limited", err)
+	}
+	entries, readErr := os.ReadDir(directory)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("folder holds %v, want nothing", entries)
 	}
 }

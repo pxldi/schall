@@ -108,5 +108,5 @@ func (importer *Importer) fingerprintHeldCopies(
 // way. A second derivation that disagreed by one component would look in a
 // folder that is not there and count every copy as gone.
 func (importer *Importer) copySource(copied db.UnfingerprintedCopyRow) (string, bool) {
-	return inboxFile(importer.inboxPath, copied.SourceDirectory, copied.FileName)
+	return importer.deliveredFile(copied.Provider, copied.SourceDirectory, copied.FileName)
 }

@@ -163,6 +163,40 @@ func TestAWaveformIsReadAndKeptForACopyHeldWithoutOne(t *testing.T) {
 	}
 }
 
+// A track fetched from a keyed want's address is in the fetch folder, not the
+// inbox, and review reads it from there (ADR 0038 §6).
+func TestAWaveformOfATrackFetchedFromItsAddressIsReadFromTheFetchFolder(t *testing.T) {
+	fetched := t.TempDir()
+	folder := uuid.NewString()
+	if err := os.MkdirAll(filepath.Join(fetched, folder), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fetched, folder, "293.mp3"), []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := &stubWaveforms{available: true, peaks: make([]byte, 200)}
+	copyID := uuid.New()
+	targets := &fakeAcquisitionTargets{
+		copies: []db.AcquisitionTargetFileRow{{
+			ID: copyID, Verdict: db.AcquiredFileHeld, Provider: "soundcloud",
+			RemotePath: folder + "/293.mp3", FileName: "293.mp3",
+		}},
+	}
+	handler := NewAPI(&fakeStore{}, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(),
+		WithAcquisitionTargets(targets), WithDownloadInbox(copyInInbox(t)),
+		WithSourceFetchFolder(fetched), WithWaveforms(reader))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/api/v1/review-queue/copies/"+copyID.String()+"/waveform", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if want := filepath.Join(fetched, folder, "293.mp3"); len(reader.read) != 1 || reader.read[0] != want {
+		t.Fatalf("read %v, want %q", reader.read, want)
+	}
+}
+
 // A copy nothing could read has no waveform, and that is a fact about the file
 // rather than a broken installation.
 func TestACopyNothingCanReadHasNoWaveform(t *testing.T) {

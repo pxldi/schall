@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -255,6 +256,7 @@ func run() error {
 	// a fetched file is the recording a want was waiting for. One set of rules
 	// decides all three, so none of them can be loosened on its own.
 	resolver := identity.NewResolver(musicBrainzClient).WithAliases(store)
+	trackSources := tracksource.NewClient(tracksource.Options{Path: cfg.YtdlpPath})
 	acquisitionService := acquisition.NewService(store, logger).
 		WithResolver(resolver).
 		WithMatcher(matchService).
@@ -276,7 +278,7 @@ func run() error {
 		// the excerpt taken from it as the want's anchor (ADR 0038). It uses
 		// the yt-dlp the YouTube anchor uses; the artwork of the admitted file
 		// is fetched through the SoundCloud client's plain image GET.
-		WithTrackSources(tracksource.NewClient(tracksource.Options{Path: cfg.YtdlpPath}),
+		WithTrackSources(trackSources,
 			chromaprint.NewFingerprinter(chromaprint.Options{FpcalcPath: cfg.FpcalcPath})).
 		WithSourceNamer(tracksource.NewNamer(store, soundCloudClient, logger)).
 		WithEvents(eventHub)
@@ -437,6 +439,7 @@ func run() error {
 	// The duplicates screen's press, made on a schedule. It reads its own
 	// setting and does nothing unless somebody switched it on.
 	jobWorker.WithDuplicateSweeper(dedupe.NewDuplicateSweep(libraryRemover, pool))
+	var sourceFetchPath string
 	if cfg.DownloadInboxPath != "" {
 		if info, err := os.Stat(cfg.DownloadInboxPath); err != nil {
 			return fmt.Errorf("configure download inbox path: %w", err)
@@ -490,6 +493,19 @@ func run() error {
 			WithFetcher(transferService).
 			WithListener(downloads.NewSettingsIdentifier(store.ImportSettings, cfg.FpcalcPath))
 		transferService.WithImportQueue()
+		// Where a keyed want's track is fetched from its address when no peer
+		// shares a copy (ADR 0038 §6). The importer reads the file from there and
+		// judges it as it judges a peer's copy. It is a folder of its own because
+		// the inbox is slskd's and is usually mounted read-only, and it is held
+		// outside every music folder for the reason staging is.
+		if cfg.SourceFetchPath != "" {
+			sourceFetchPath, err = sourceFetchFolder(ctx, store, cfg)
+			if err != nil {
+				return fmt.Errorf("configure source fetch path: %w", err)
+			}
+			importer.WithFetchFolder(sourceFetchPath)
+			acquisitionService.WithSourceFetches(trackSources, sourceFetchPath)
+		}
 		jobWorker.WithDownloadImporter(importer)
 		// What deletes the downloaded files nothing needs any more, by the rule
 		// in ADR 0035. It is wired beside the importer because it
@@ -803,6 +819,7 @@ func run() error {
 		server.WithActivity(activity.New(pool)),
 		server.WithDuplicateResolution(dedupe.NewSettings(pool)),
 		server.WithDownloadInbox(cfg.DownloadInboxPath),
+		server.WithSourceFetchFolder(sourceFetchPath),
 		server.WithPreviews(preview.New(cfg.FFmpegPath, cfg.PreviewCachePath, logger)),
 		// For the copies held before the importer started keeping a waveform.
 		server.WithWaveforms(waveform.NewReader(waveform.Options{FFmpegPath: cfg.FFmpegPath})),
@@ -896,4 +913,37 @@ func newLogger(levelName string) zerolog.Logger {
 		Timestamp().
 		Str("service", "schall").
 		Logger()
+}
+
+// sourceFetchFolder creates the folder keyed wants' tracks are fetched into,
+// proves it writable and outside every music folder, and returns it resolved.
+// A folder a scan could walk into would have the scan index a fetched track as
+// music the library holds before anything proved it.
+func sourceFetchFolder(ctx context.Context, store *db.Queries, cfg config.Config) (string, error) {
+	if err := os.MkdirAll(cfg.SourceFetchPath, 0o755); err != nil {
+		return "", err
+	}
+	root, err := filepath.EvalSymlinks(cfg.SourceFetchPath)
+	if err != nil {
+		return "", err
+	}
+	probe, err := os.CreateTemp(root, ".writable-")
+	if err != nil {
+		return "", fmt.Errorf("the folder %s is not writable: %w", root, err)
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
+
+	roots, err := store.ListLibraryRoots(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read the music folders: %w", err)
+	}
+	libraryPaths := append([]string{cfg.ImportLibraryPath}, cfg.LibraryAllowedRoots...)
+	for _, libraryRoot := range roots {
+		libraryPaths = append(libraryPaths, libraryRoot.Path)
+	}
+	if err := uploads.EnsureOutsideLibrary(root, libraryPaths); err != nil {
+		return "", err
+	}
+	return root, nil
 }

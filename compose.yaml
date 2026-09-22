@@ -15,6 +15,9 @@ services:
       # would index a truncated file as music the library holds, and startup
       # refuses to begin if this path is anywhere a scan would walk.
       SCHALL_UPLOAD_STAGING_PATH: "/uploads"
+      # Where a keyed want's track is fetched from its address. Outside /music
+      # for the same reason, and outside /downloads because that is read-only.
+      SCHALL_SOURCE_FETCH_PATH: "/fetched"
     # Loopback by default, because the API has no authentication: everything a
     # browser can do to this library — settings, uploads, jobs, deletion — is
     # available to anyone who can reach the port. Serving a LAN is a decision
@@ -34,6 +37,9 @@ services:
       # folder. Scratch space: what is in it is either on its way into the
       # library or a refusal somebody has not discarded yet.
       - "${SCHALL_UPLOADS_PATH:-./uploads}:/uploads"
+      # Where a track fetched from a keyed want's address waits to be checked,
+      # and stays while a person decides about it in Review. Writable.
+      - "${SCHALL_FETCHED_PATH:-./fetched}:/fetched"
     depends_on:
       postgres:
         condition: service_healthy

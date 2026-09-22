@@ -36,6 +36,10 @@
 /uploads/*
 !/uploads/.gitkeep
 
+# Local development fetch folder, tracked as a folder for the same reason.
+/fetched/*
+!/fetched/.gitkeep
+
 # Editors
 .idea/
 .vscode/

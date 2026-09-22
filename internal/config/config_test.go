@@ -167,6 +167,20 @@ func TestLoadRefusesAManagedLibraryNothingWouldUse(t *testing.T) {
 	}
 }
 
+// A track fetched from an address is imported by the importer the download
+// inbox configures, so a fetch folder without one would fill with files
+// nothing imports.
+func TestLoadRefusesAFetchFolderWithoutADownloadInbox(t *testing.T) {
+	t.Setenv("SCHALL_DATABASE_URL", "postgres://example")
+	t.Setenv("SCHALL_IMPORT_LIBRARY_PATH", "/music")
+	t.Setenv("SCHALL_UPLOAD_STAGING_PATH", "/staging")
+	t.Setenv("SCHALL_SOURCE_FETCH_PATH", "/fetched")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() accepted a fetch folder with no download inbox")
+	}
+}
+
 // Schall and Navidrome read the same directory through their own mounts, so a
 // deployment where the two disagree says so once, here.
 func TestLoadReadsTheNavidromePathMap(t *testing.T) {

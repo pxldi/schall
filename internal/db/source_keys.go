@@ -363,3 +363,134 @@ func WriteFileCoverArt(
 	}
 	return nil
 }
+
+// ErrSourceAlreadyFetched reports a want that already holds a copy fetched from
+// its address. Schall fetches from the source once per want (ADR 0038 §6).
+var ErrSourceAlreadyFetched = errors.New("this want already holds a copy fetched from its address")
+
+// holdsSourceCopy is "the want holds a copy fetched from its own address". A
+// fetched copy records the service as its provider. A copy whose bytes never
+// arrived does not count: nothing was judged, so the fetch has not happened.
+// It reads targets.
+const holdsSourceCopy = `
+	EXISTS (
+	    SELECT 1 FROM acquisition_target_files copies
+	    WHERE copies.acquisition_target_id = targets.id
+	      AND copies.provider = targets.source
+	      AND copies.verdict <> 'undelivered'
+	)`
+
+// SourceCopyFetched reports whether a keyed want already holds a copy fetched
+// from its address. pgx.ErrNoRows means there is no such want.
+func (q *Queries) SourceCopyFetched(ctx context.Context, targetID uuid.UUID) (bool, error) {
+	var fetched bool
+	err := q.db.QueryRow(ctx, `
+		SELECT `+holdsSourceCopy+`
+		FROM acquisition_targets targets
+		WHERE targets.id = $1
+	`, targetID).Scan(&fetched)
+	return fetched, err
+}
+
+// SourceFetchParams is one whole track fetched from a keyed want's address and
+// written into the fetch folder.
+type SourceFetchParams struct {
+	TargetID uuid.UUID
+	// Source and ExternalID are the want's key. They are recorded as the copy's
+	// provider and user, the way a peer's copy records slskd and the peer.
+	Source     string
+	ExternalID string
+	// Directory is the copy's folder under the fetch folder, and FileName the
+	// file inside it.
+	Directory string
+	FileName  string
+	Extension string
+	SizeBytes int64
+	Reasons   []string
+	Summary   string
+}
+
+// RecordSourceFetch records a track fetched from a keyed want's address as a
+// finished transfer, and queues its import (ADR 0038 §6). The import then
+// judges it exactly as it judges a peer's copy: the same rows, the same job,
+// the same verdicts.
+//
+// Everything is one transaction, and it re-reads the want first.
+// ErrWantHasMovedOn means it stopped looking for a copy, or is not keyed to
+// this address. ErrSourceAlreadyFetched means another pass got there first.
+func (q *Queries) RecordSourceFetch(ctx context.Context, params SourceFetchParams) (uuid.UUID, error) {
+	remotePath := params.Directory + "/" + params.FileName
+	var requestID uuid.UUID
+	err := q.inTransaction(ctx, "recording a track fetched from its address", func(tx pgx.Tx) error {
+		var (
+			source, externalID string
+			searched, fetched  bool
+		)
+		if err := tx.QueryRow(ctx, `
+			SELECT coalesce(targets.source, ''), coalesce(targets.external_id, ''),
+			       `+searchedWant("targets.")+`, `+holdsSourceCopy+`
+			FROM acquisition_targets targets
+			WHERE targets.id = $1
+			FOR UPDATE
+		`, params.TargetID).Scan(&source, &externalID, &searched, &fetched); err != nil {
+			return err
+		}
+		switch {
+		case source != params.Source || externalID != params.ExternalID || !searched:
+			return ErrWantHasMovedOn
+		case fetched:
+			return ErrSourceAlreadyFetched
+		}
+
+		files, err := json.Marshal([]DownloadRequestFile{{
+			Path: remotePath, Name: params.FileName, Extension: params.Extension,
+			SizeBytes: params.SizeBytes,
+		}})
+		if err != nil {
+			return fmt.Errorf("encode the fetched track: %w", err)
+		}
+		reasons := params.Reasons
+		if reasons == nil {
+			reasons = []string{}
+		}
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO download_requests (
+				acquisition_target_id, provider, source_username, source_directory,
+				status, started_at, file_count, expected_track_count, total_size_bytes,
+				format, score, reasons, files
+			)
+			VALUES ($1, $2, $3, $4, 'completed', now(), 1, 1, $5, $6, 0, $7, $8)
+			RETURNING id
+		`, params.TargetID, params.Source, params.ExternalID, params.Directory,
+			params.SizeBytes, params.Extension, reasons, files).Scan(&requestID); err != nil {
+			return fmt.Errorf("record the fetch of want %s: %w", params.TargetID, err)
+		}
+		// The import writes the library path onto this row, and completing the
+		// want reads the library file back through it.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO downloads (
+				download_request_id, provider, remote_path, source_username, source_path,
+				size_bytes, transferred_bytes, status, started_at, completed_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $6, 'completed', now(), now())
+		`, requestID, params.Source, remotePath, params.ExternalID, params.Directory,
+			params.SizeBytes); err != nil {
+			return fmt.Errorf("record the transfer of want %s: %w", params.TargetID, err)
+		}
+		if err := recordAcquiredFile(ctx, tx, RecordAcquiredFileParams{
+			AcquisitionTargetID: params.TargetID,
+			Provider:            params.Source,
+			SourceUsername:      params.ExternalID,
+			RemotePath:          remotePath,
+			FileName:            params.FileName,
+			SizeBytes:           params.SizeBytes,
+			Verdict:             AcquiredFileFetching,
+			Summary:             params.Summary,
+			DownloadRequestID:   uuid.NullUUID{UUID: requestID, Valid: true},
+		}); err != nil {
+			return err
+		}
+		return q.WithTx(tx).QueueDownloadImport(ctx, requestID)
+	})
+	return requestID, err
+}

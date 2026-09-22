@@ -184,7 +184,8 @@ func NewStaging(root string, logger zerolog.Logger) (*Staging, error) {
 func (staging *Staging) Root() string { return staging.root }
 
 // EnsureOutsideLibrary refuses a staging folder that any scan could walk into,
-// or that could swallow a music folder.
+// or that could swallow a music folder. The folder tracks are fetched into from
+// an address is held to the same rule (ADR 0038 §6).
 //
 // This is checked against the folders that exist rather than assumed from
 // configuration, because the cost of being wrong is a truncated file indexed as
@@ -206,11 +207,11 @@ func EnsureOutsideLibrary(root string, libraryPaths []string) error {
 		for _, candidate := range bothForms(configured) {
 			if contains(candidate, root) {
 				return fmt.Errorf(
-					"the upload staging folder %s is inside the music folder %s", root, configured)
+					"the folder %s is inside the music folder %s", root, configured)
 			}
 			if contains(root, candidate) {
 				return fmt.Errorf(
-					"the upload staging folder %s contains the music folder %s", root, configured)
+					"the folder %s contains the music folder %s", root, configured)
 			}
 		}
 	}
