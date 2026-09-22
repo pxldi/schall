@@ -87,6 +87,7 @@ import type {
   SourcePreferencesInput,
   SourceResults,
   SourceSearchRun,
+  SourceTrack,
   SpotifySettings,
   Storage,
   TrackList,
@@ -1031,6 +1032,21 @@ export const api = {
     const query = parameters.toString();
     return request<AcquisitionTargets>(`/api/v1/acquisition-targets${query ? `?${query}` : ''}`);
   },
+
+  lookupSourceTrack: (url: string) =>
+    request<SourceTrack>(`/api/v1/source-tracks?url=${encodeURIComponent(url)}`),
+
+  keyTargetToSource: (targetId: string, body: { url: string; externalId: string }) =>
+    request<AcquisitionTarget>(
+      `/api/v1/acquisition-targets/${encodeURIComponent(targetId)}/source`,
+      { method: 'POST', body: JSON.stringify(body) }
+    ),
+
+  setMinimumBitrate: (targetId: string, minimumBitrate: number) =>
+    request<AcquisitionTarget>(
+      `/api/v1/acquisition-targets/${encodeURIComponent(targetId)}/minimum-bitrate`,
+      { method: 'PUT', body: JSON.stringify({ minimumBitrate }) }
+    ),
 
   stopPursuingTarget: (targetId: string) =>
     request<AcquisitionTarget>(

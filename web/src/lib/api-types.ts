@@ -988,12 +988,38 @@ export interface PlaylistEntry {
   targetId?: string;
   targetStatus?: string;
   targetSummary?: string;
+  source?: string;
+  externalId?: string;
+  externalUrl?: string;
+  sourceLookup?: SourceLookup;
+  minimumBitrate?: number;
   // Present only for the entries MusicBrainz has had no recording for, which is
   // the only state where adding the release is what helps. An entry still
   // waiting to be asked about carries none, and looks the same on the wire
   // otherwise — the API draws that line, because the summary is prose and the
   // status says 'unresolved' for both.
   musicbrainzSeed?: MusicBrainzSeed;
+}
+
+export interface SourceLookup {
+  title: string;
+  artist: string;
+  uploader: string;
+  accountId?: string;
+  durationMs: number;
+  artworkUrl?: string;
+}
+
+export interface SourceTrack {
+  source: string;
+  externalId: string;
+  url: string;
+  title: string;
+  artist: string;
+  uploader: string;
+  accountId?: string;
+  durationMs: number | null;
+  artworkUrl?: string;
 }
 
 // What the player was found to hold for one list, read now rather than
@@ -1888,6 +1914,11 @@ export interface AcquisitionTarget {
   /** Where the file this want exists to replace sits, set only when origin is
    * "upgrade". Empty once the replacement has already happened. */
   upgradeOfPath?: string;
+  source?: string;
+  externalId?: string;
+  externalUrl?: string;
+  sourceLookup?: SourceLookup;
+  minimumBitrate?: number;
 }
 
 /** A page of wants, and how many there are in the states that were asked for. */

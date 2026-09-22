@@ -274,9 +274,12 @@ type PlaylistEntryRow struct {
 	// the writes that return a row have not asked it.
 	AnsweringFileID uuid.NullUUID
 
-	TargetID      uuid.NullUUID
-	TargetStatus  pgtype.Text
-	TargetSummary pgtype.Text
+	TargetID             uuid.NullUUID
+	TargetStatus         pgtype.Text
+	TargetSummary        pgtype.Text
+	TargetSource         pgtype.Text
+	TargetExternalURL    pgtype.Text
+	TargetMinimumBitrate pgtype.Int4
 }
 
 // PlaylistEntry returns one entry by its own id, with the same reading
@@ -291,13 +294,17 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 			playlist_entries.entry_title, playlist_entries.entry_album,
 			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
-			live_target.id, live_target.status, live_target.summary
+			live_target.id, live_target.status, live_target.summary,
+			live_target.source, live_target.external_url, live_target.minimum_bitrate
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
-			       coalesce(survivor.summary, joined.summary) AS summary
+			       coalesce(survivor.summary, joined.summary) AS summary,
+			       coalesce(survivor.source, joined.source) AS source,
+			       coalesce(survivor.external_url, joined.external_url) AS external_url,
+			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate
 			FROM playlist_entry_targets
 			JOIN acquisition_targets joined
 			    ON joined.id = playlist_entry_targets.acquisition_target_id
@@ -315,6 +322,7 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 		&entry.EntryDurationMS, &entry.EntryISRC,
 		&entry.OwnedFileID, &entry.AnsweringFileID,
 		&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
+		&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
 	)
 	return entry, err
 }
@@ -328,13 +336,17 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			playlist_entries.entry_title, playlist_entries.entry_album,
 			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
-			live_target.id, live_target.status, live_target.summary
+			live_target.id, live_target.status, live_target.summary,
+			live_target.source, live_target.external_url, live_target.minimum_bitrate
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
-			       coalesce(survivor.summary, joined.summary) AS summary
+			       coalesce(survivor.summary, joined.summary) AS summary,
+			       coalesce(survivor.source, joined.source) AS source,
+			       coalesce(survivor.external_url, joined.external_url) AS external_url,
+			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate
 			FROM playlist_entry_targets
 			JOIN acquisition_targets joined
 			    ON joined.id = playlist_entry_targets.acquisition_target_id
@@ -361,6 +373,7 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			&entry.EntryDurationMS, &entry.EntryISRC,
 			&entry.OwnedFileID, &entry.AnsweringFileID,
 			&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
+			&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
 		); err != nil {
 			return nil, err
 		}
