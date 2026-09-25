@@ -73,7 +73,9 @@ function want(kind: ReviewItem['kind'], id = TARGET): ReviewItem {
       status: 'awaiting_review',
       summary: 'Waiting for an ear.',
       attempts: 2,
-      anchorAttempts: 0
+      anchorAttempts: 0,
+      nextSearchAt: null,
+      searchAttempts: 0
     },
     copies: kind === 'copies' ? [copy()] : [],
     candidates:

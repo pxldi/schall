@@ -51,6 +51,8 @@ function target(overrides: Partial<AcquisitionTarget> = {}): AcquisitionTarget {
     summary: 'Waiting for an ear.',
     attempts: 2,
     anchorAttempts: 0,
+    nextSearchAt: null,
+    searchAttempts: 0,
     ...overrides
   };
 }

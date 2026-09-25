@@ -33,6 +33,8 @@ function want(overrides: Partial<AcquisitionTarget> = {}): AcquisitionTarget {
     createdAt: new Date(clock - 6 * 86_400_000).toISOString(),
     lastAttemptAt: new Date(clock - 2 * 3_600_000).toISOString(),
     nextAttemptAt: new Date(clock + 4 * 3_600_000).toISOString(),
+    nextSearchAt: null,
+    searchAttempts: 0,
     ...overrides
   };
 }
@@ -180,6 +182,21 @@ describe('the wants being looked for', () => {
     opened();
 
     expect(await screen.findByText('not looked for yet')).toBeTruthy();
+  });
+
+  it('shows when Soulseek will next search an unresolved want', async () => {
+    answering({
+      looking: [
+        want({
+          status: 'unresolved',
+          nextSearchAt: new Date(Date.now() + 2 * 3_600_000).toISOString()
+        })
+      ]
+    });
+
+    opened();
+
+    expect(await screen.findByText(/next search in/)).toBeTruthy();
   });
 
   it('asks for the three states a want passes through in one request', async () => {

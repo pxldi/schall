@@ -2257,6 +2257,39 @@ func TestACopyReportsTheSizeThePeerGaveForIt(t *testing.T) {
 	}
 }
 
+func TestReadingAWantReportsItsSearchSchedule(t *testing.T) {
+	targetID := uuid.New()
+	nextSearchAt := time.Date(2026, time.August, 14, 14, 30, 0, 0, time.UTC)
+	targets := &fakeAcquisitionTargets{
+		target: db.AcquisitionTargetRow{
+			ID: targetID, Status: "unresolved", Origin: "playlist",
+			NextSearchAt:   pgtype.Timestamptz{Time: nextSearchAt, Valid: true},
+			SearchAttempts: 3,
+		},
+	}
+	handler := acquisitionHandler(targets)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/api/v1/acquisition-targets/"+targetID.String(), nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
+	}
+	var payload struct {
+		NextSearchAt   *time.Time `json:"nextSearchAt"`
+		SearchAttempts int32      `json:"searchAttempts"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.NextSearchAt == nil || !payload.NextSearchAt.Equal(nextSearchAt) {
+		t.Fatalf("nextSearchAt = %v, want %v", payload.NextSearchAt, nextSearchAt)
+	}
+	if payload.SearchAttempts != 3 {
+		t.Fatalf("searchAttempts = %d, want 3", payload.SearchAttempts)
+	}
+}
+
 // Wanting a release the store could not be read for is not an empty release.
 func TestWantingAReleaseReportsAStoreThatFailed(t *testing.T) {
 	store := &fakeStore{
