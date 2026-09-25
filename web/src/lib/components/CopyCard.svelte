@@ -182,6 +182,11 @@
   const titleRow = $derived(
     credit && differs(credit.fileTitle, credit.wantedTitle) ? credit.fileTitle : ''
   );
+  const displayHeading = $derived(
+    heading === 'In your library' || !copy.origin
+      ? heading
+      : `${heading} · from ${copy.origin.label}`
+  );
 </script>
 
 <audio
@@ -225,7 +230,9 @@
     >
       {#if selected}<span class="size-2.5 rounded-full bg-accent"></span>{/if}
     </span>
-    <span class="truncate text-meta text-ink-3">{heading}</span>
+    <span class="truncate text-meta text-ink-3">
+      {displayHeading}
+    </span>
     {#if subheading}
       <span class="truncate text-meta text-ink-3">{subheading}</span>
     {/if}

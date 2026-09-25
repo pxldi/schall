@@ -58,6 +58,21 @@ func Serves(provider string) bool {
 	return false
 }
 
+// Host is the public host for a source service, as recorded by its provider
+// name on a fetched copy.
+func Host(provider string) string {
+	switch provider {
+	case SoundCloud:
+		return "soundcloud.com"
+	case YouTube:
+		return "youtube.com"
+	case Bandcamp:
+		return "bandcamp.com"
+	default:
+		return ""
+	}
+}
+
 // Track is what yt-dlp said about one address.
 type Track struct {
 	// Source is the service, one of the constants above.

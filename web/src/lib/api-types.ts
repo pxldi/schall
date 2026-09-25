@@ -1951,6 +1951,7 @@ export interface AcquiredCopy {
   summary: string;
   evidence?: AcquiredCopyEvidence;
   decidedAt: string;
+  origin?: { kind: 'soulseek' | 'address'; label: string };
   /** The library file this copy became, once the scan has made one. It is what
    * lets a screen point at the file rather than only describe it. */
   libraryFileId?: string;
