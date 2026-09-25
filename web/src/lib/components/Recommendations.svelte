@@ -19,6 +19,11 @@
   // its artist, and is kept in the recommendation store alone: what somebody
   // thinks of a piece of music is not the same fact as whether a downloaded
   // file is the recording it claims to be (ADR 0005).
+  //
+  // Two sources are read here, one at a time: ListenBrainz, and Schall's own
+  // engine, built from the listens already copied (ADR 0039). Their ranks are
+  // not comparable, so the switch shows one list or the other. Feedback belongs
+  // to the list it was pressed on.
   import {
     createMutation,
     createQuery,
@@ -34,6 +39,7 @@
     type Recommendation,
     type RecommendationFeedbackSignal,
     type RecommendationPageRequest,
+    type RecommendationSource,
     type RecommendationSubject
   } from '$lib/api';
   import { relativeTime } from '$lib/utils';
@@ -43,9 +49,18 @@
   import Settle from '$lib/components/Settle.svelte';
   import Menu, { type MenuItem } from '$lib/components/Menu.svelte';
   import Pager from '$lib/components/Pager.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
 
   const pageSize = 25;
   const queryClient = useQueryClient();
+
+  const sources = [
+    { value: 'listenbrainz', name: 'ListenBrainz' },
+    { value: 'schall', name: 'Schall' }
+  ];
+  let source = $state<RecommendationSource>('listenbrainz');
+  const own = $derived(source === 'schall');
+  const sourceName = $derived(own ? 'Schall' : 'ListenBrainz');
 
   // Which page to ask for. Reading a page can take rows out of the list — three
   // showings with no answer is the fifth rule — so a position in it moves under
@@ -67,9 +82,12 @@
   // under a press.
   const options = $derived(
     queryOptions({
-      queryKey: ['recommendations', asked],
-      queryFn: () => api.recommendations(pageSize, asked),
-      placeholderData: keepPreviousData
+      queryKey: ['recommendations', source, asked],
+      queryFn: () => api.recommendations(pageSize, asked, source),
+      // Only a page of the same list stands in: the other source's rows under
+      // this source's header would send a press to the wrong list.
+      placeholderData: (previous, previousQuery) =>
+        previousQuery?.queryKey[1] === source ? keepPreviousData(previous) : undefined
     })
   );
   const recommendations = createQuery(toStore(() => options));
@@ -81,6 +99,15 @@
   // shrank is put back onto it there, which is what dismissing the last
   // suggestion on the last page does.
   const offset = $derived($recommendations.data?.offset ?? 0);
+
+  // A switch starts the other list at its first page. Its ranks are not this
+  // list's, so a rank step would land nowhere.
+  function chooseSource(value: string) {
+    source = value as RecommendationSource;
+    asked = { offset: 0 };
+    clearFeedbackOpen = false;
+    feedbackMessage = '';
+  }
 
   // The Pager speaks in positions, because first page, last page and the one
   // before this one are what a reader thinks in. Two of its four controls can
@@ -167,9 +194,14 @@
     }
   });
 
+  // The source travels with the press, so a switch while it is in flight
+  // cannot file it under the other list.
   const feedback = createMutation({
-    mutationFn: (choice: { recordingId: string; signal: RecommendationFeedbackSignal }) =>
-      api.recordRecommendationFeedback(choice.recordingId, choice.signal),
+    mutationFn: (choice: {
+      recordingId: string;
+      signal: RecommendationFeedbackSignal;
+      source: RecommendationSource;
+    }) => api.recordRecommendationFeedback(choice.recordingId, choice.signal, choice.source),
     onSuccess: (_result, choice) => {
       failure = null;
       feedbackMessage =
@@ -184,7 +216,7 @@
   });
 
   const clearFeedback = createMutation({
-    mutationFn: () => api.clearRecommendationFeedback(),
+    mutationFn: (from: RecommendationSource) => api.clearRecommendationFeedback(from),
     onSuccess: async () => {
       clearFeedbackOpen = false;
       failure = null;
@@ -338,6 +370,8 @@
     similar_artist: 'close to an artist you listen to',
     similar_recording: 'close to a recording you listen to',
     top_recording: 'one of your own most played',
+    listened: "you played it, you don't have it",
+    co_listened: 'played beside music you have',
     feedback_more_like_this: 'you asked for more like this',
     feedback_less_like_this: 'you asked for less like this'
   };
@@ -392,12 +426,19 @@
   <section class="flex flex-col gap-2.5">
     <div class="flex flex-wrap items-center gap-2.5">
       <span class="label">Suggested by your listening</span>
+      <Segmented
+        variant="filter"
+        options={sources}
+        value={source}
+        onchange={chooseSource}
+        label="Recommendation source"
+      />
       <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
       <span class="min-w-56 text-meta text-ink-3">
         {#if readAt}
-          read from ListenBrainz {readAt}
+          {own ? 'built from your listens' : 'read from ListenBrainz'} {readAt}
         {:else}
-          <span aria-hidden="true">read from ListenBrainz …</span>
+          <span aria-hidden="true">{own ? 'built from your listens' : 'read from ListenBrainz'} …</span>
         {/if}
       </span>
     </div>
@@ -411,8 +452,15 @@
           What is this
         </summary>
         <p class="reveal mt-1 max-w-[64ch] text-meta leading-5 text-ink-2">
-          Music your library does not hold, suggested from what your ListenBrainz
-          account has listened to. Press <span class="text-ink">Want it</span> and Schall looks
+          {#if own}
+            Music you played at least twice that your library does not hold, ranked by how
+            often you played it beside music you have. Schall reads the listens it copied
+            from ListenBrainz.
+          {:else}
+            Music your library does not hold, suggested from what your ListenBrainz
+            account has listened to.
+          {/if}
+          Press <span class="text-ink">Want it</span> and Schall looks
           for a copy. Press
           <span class="text-ink">Not interested</span> and choose what is never suggested again: this
           recording, its release, or its artist. Use <span class="text-ink">More like this</span> or
@@ -421,15 +469,16 @@
       </details>
       {#if clearFeedbackOpen}
         <div class="w-full rounded-row border border-fail/40 bg-fail/14 p-3" role="group" aria-label="Clear feedback confirmation">
-          <p class="text-body font-medium text-ink">Clear all recommendation feedback?</p>
+          <p class="text-body font-medium text-ink">Clear all {sourceName} feedback?</p>
           <p class="mt-1 text-meta leading-5 text-ink-2">
-            This clears all ListenBrainz recommendation feedback. The next sweep uses source ranking alone.
+            This removes every More like this and Less like this pressed on the {sourceName} list.
+            The next sweep uses source ranking alone.
           </p>
           <div class="mt-3 flex flex-wrap justify-end gap-2">
             <Button variant="ghost" size="sm" tall onclick={() => (clearFeedbackOpen = false)} disabled={$clearFeedback.isPending}>
               Cancel
             </Button>
-            <Button variant="danger" size="sm" tall onclick={() => $clearFeedback.mutate()} disabled={$clearFeedback.isPending}>
+            <Button variant="danger" size="sm" tall onclick={() => $clearFeedback.mutate(source)} disabled={$clearFeedback.isPending}>
               {$clearFeedback.isPending ? 'Clearing' : 'Clear feedback'}
             </Button>
           </div>
@@ -453,8 +502,12 @@
         {:else}
           and no next read is waiting.
         {/if}
-        Check your account under
-        <a href="/settings" class="text-ink underline underline-offset-2">Settings</a>.
+        <!-- The own engine needs no account, so Settings has nothing to fix
+             for it. -->
+        {#if !own}
+          Check your account under
+          <a href="/settings" class="text-ink underline underline-offset-2">Settings</a>.
+        {/if}
       </p>
     {/if}
 
@@ -476,7 +529,13 @@
       when that line is absent. Saying "the next read tries for all of it"
       under "no next read is waiting" would contradict it.
     -->
-    {#if snapshot?.status === 'partial'}
+    <!-- A partial Schall list is one still being looked up in MusicBrainz,
+         25 recordings a pass, and it grows until the pool is done. -->
+    {#if snapshot?.status === 'partial' && own}
+      <p class="max-w-[64ch] text-meta leading-4 text-ink-3">
+        This list is still growing. Schall looks up a few recordings in MusicBrainz at a time.
+      </p>
+    {:else if snapshot?.status === 'partial'}
       <p class="max-w-[64ch] text-meta leading-4 text-ink-3">
         This list is shorter than usual. The read that built it did not get the whole
         answer from ListenBrainz{stalled ? '' : ', and the next read tries for all of it'}.
@@ -515,7 +574,7 @@
                 aria-label="More like this"
                 disabled={$feedback.isPending}
                 onclick={() =>
-                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'more_like_this' })}
+                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'more_like_this', source })}
               >
                 More like this
               </Button>
@@ -526,7 +585,7 @@
                 aria-label="Less like this"
                 disabled={$feedback.isPending}
                 onclick={() =>
-                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'less_like_this' })}
+                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'less_like_this', source })}
               >
                 Less like this
               </Button>
@@ -596,6 +655,17 @@
               No next read is waiting.
             {/if}
           </span>
+          {#if !own}
+            <Button href="/settings" variant="outline" size="sm">Open settings</Button>
+          {/if}
+          {:else if !snapshot?.fetched && own}
+          <!-- The own engine runs once a copied listen names a recording. It
+               needs no account of its own, but the listens come from a
+               ListenBrainz sync, so Settings is where they start. -->
+          <span class="text-body font-semibold text-ink">No sweep has run yet</span>
+          <span class="text-meta leading-5 text-ink-2">
+            Schall builds this list from the listens it copies from ListenBrainz.
+          </span>
           <Button href="/settings" variant="outline" size="sm">Open settings</Button>
           {:else if !snapshot?.fetched}
           <span class="text-body font-semibold text-ink">No listening history read yet</span>
@@ -609,14 +679,18 @@
           {:else if hidden && hidden.total > 0}
           <span class="text-body font-semibold text-ink">Every suggestion is held back</span>
           <span class="text-meta leading-5 text-ink-2">
-            ListenBrainz had {hidden.total}
+            {sourceName} had {hidden.total}
             {hidden.total === 1 ? 'suggestion' : 'suggestions'}, all held back for now. The next
-            sweep asks again.
+            sweep {own ? 'builds the list again' : 'asks again'}.
           </span>
           {:else}
           <span class="text-body font-semibold text-ink">Nothing suggested yet</span>
           <span class="text-meta leading-5 text-ink-2">
-            ListenBrainz had nothing to suggest for this account yet.
+            {#if own}
+              Schall found nothing to suggest from your listens yet.
+            {:else}
+              ListenBrainz had nothing to suggest for this account yet.
+            {/if}
           </span>
           {/if}
         </EmptyPanel>

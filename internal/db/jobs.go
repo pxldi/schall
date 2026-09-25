@@ -320,6 +320,7 @@ var ScheduledSweepKinds = []string{
 	"sweep_cover_art",
 	"sweep_follow_feed",
 	"sweep_recommendations",
+	"sweep_own_recommendations",
 	"sweep_lyrics",
 	"sync_listens",
 	"sweep_preview_anchors",

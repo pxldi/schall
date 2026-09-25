@@ -530,6 +530,13 @@ var recurringJobs = []recurringJob{
 			"account is disabled or no pass is running.",
 	},
 	{
+		kind:  jobs.SweepOwnRecommendations,
+		label: "Schall recommendation sweep",
+		idle: "Not scheduled. This sweep is queued at startup when a copied listen " +
+			"names a recording and then queues its own replacement, so nothing " +
+			"waiting means no such listen was held at the last start.",
+	},
+	{
 		kind:  jobs.SyncListens,
 		label: "Listening history sync",
 		idle: "Not scheduled. This sync runs only with an enabled ListenBrainz " +

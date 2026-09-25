@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,11 +32,16 @@ type fakeRecommendations struct {
 	shown       []uuid.UUID
 	feedback    []string
 	feedbackErr error
+	// read, pressed and cleared are the sources each call named.
+	read    []string
+	pressed []string
+	cleared []string
 }
 
 func (service *fakeRecommendations) Evaluate(
-	context.Context, string,
+	_ context.Context, source string,
 ) ([]recommendations.EvaluatedCandidate, error) {
+	service.read = append(service.read, source)
 	if service.evaluateErr != nil {
 		return nil, service.evaluateErr
 	}
@@ -55,8 +61,9 @@ func (service *fakeRecommendations) Dismiss(
 }
 
 func (service *fakeRecommendations) RecordFeedback(
-	_ context.Context, recordingID uuid.UUID, signal recommendations.FeedbackSignal,
+	_ context.Context, source string, recordingID uuid.UUID, signal recommendations.FeedbackSignal,
 ) (db.RecommendationFeedback, error) {
+	service.pressed = append(service.pressed, source)
 	if service.feedbackErr != nil {
 		return db.RecommendationFeedback{}, service.feedbackErr
 	}
@@ -68,7 +75,8 @@ func (service *fakeRecommendations) RecordFeedback(
 	}, nil
 }
 
-func (service *fakeRecommendations) ClearFeedback(context.Context) error {
+func (service *fakeRecommendations) ClearFeedback(_ context.Context, source string) error {
+	service.cleared = append(service.cleared, source)
 	service.feedback = nil
 	return nil
 }
@@ -101,11 +109,15 @@ type fakeSnapshotStore struct {
 	snapshot db.RecommendationSnapshot
 	fetched  bool
 	sweep    db.RecommendationSweepState
+	// headers and sweeps are the source and job kind each read named.
+	headers []string
+	sweeps  []string
 }
 
 func (store *fakeSnapshotStore) RecommendationSnapshot(
-	context.Context, string,
+	_ context.Context, source string,
 ) (db.RecommendationSnapshot, error) {
+	store.headers = append(store.headers, source)
 	if !store.fetched {
 		return db.RecommendationSnapshot{}, pgx.ErrNoRows
 	}
@@ -113,8 +125,9 @@ func (store *fakeSnapshotStore) RecommendationSnapshot(
 }
 
 func (store *fakeSnapshotStore) RecommendationSweepState(
-	context.Context,
+	_ context.Context, kind string,
 ) (db.RecommendationSweepState, error) {
+	store.sweeps = append(store.sweeps, kind)
 	return store.sweep, nil
 }
 
@@ -669,5 +682,116 @@ func TestRecommendationFeedbackClearUsesTheSourceOnly(t *testing.T) {
 	}
 	if len(service.feedback) != 0 {
 		t.Fatalf("feedback = %v, want cleared", service.feedback)
+	}
+}
+
+func TestTheListReadsListenBrainzWhenNoSourceIsNamed(t *testing.T) {
+	service := &fakeRecommendations{}
+	store := &fakeSnapshotStore{fakeStore: &fakeStore{}}
+	page := readRecommendations(t, recommendationHandler(service, store), "")
+
+	if !reflect.DeepEqual(service.read, []string{"listenbrainz"}) ||
+		!reflect.DeepEqual(store.headers, []string{"listenbrainz"}) ||
+		!reflect.DeepEqual(store.sweeps, []string{"sweep_recommendations"}) ||
+		page.Snapshot.Source != "listenbrainz" {
+		t.Fatalf("read %v, headers %v, sweeps %v, snapshot %q; want ListenBrainz throughout",
+			service.read, store.headers, store.sweeps, page.Snapshot.Source)
+	}
+}
+
+func TestTheListReadsTheSchallSourceWhenAskedFor(t *testing.T) {
+	service := &fakeRecommendations{}
+	store := &fakeSnapshotStore{fakeStore: &fakeStore{}}
+	page := readRecommendations(t, recommendationHandler(service, store), "?source=schall")
+
+	if !reflect.DeepEqual(service.read, []string{"schall"}) ||
+		!reflect.DeepEqual(store.headers, []string{"schall"}) ||
+		!reflect.DeepEqual(store.sweeps, []string{"sweep_own_recommendations"}) ||
+		page.Snapshot.Source != "schall" {
+		t.Fatalf("read %v, headers %v, sweeps %v, snapshot %q; want the own engine throughout",
+			service.read, store.headers, store.sweeps, page.Snapshot.Source)
+	}
+}
+
+func TestTheListRefusesASourceThereIsNot(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := httptest.NewRecorder()
+	recommendationHandler(service, nil).ServeHTTP(response,
+		httptest.NewRequest(http.MethodGet, "/api/v1/recommendations?source=spotify", nil))
+
+	if response.Code != http.StatusUnprocessableEntity || len(service.read) != 0 {
+		t.Fatalf("status = %d, read %v; want 422 and nothing read", response.Code, service.read)
+	}
+}
+
+func pressFeedback(t *testing.T, service *fakeRecommendations, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	response := httptest.NewRecorder()
+	recommendationHandler(service, nil).ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost, "/api/v1/recommendations/feedback", strings.NewReader(body)))
+	return response
+}
+
+func TestRecommendationFeedbackWithoutASourceIsListenBrainzFeedback(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := pressFeedback(t, service, `{"recordingId":"`+uuid.New().String()+`","signal":"more_like_this"}`)
+
+	if response.Code != http.StatusOK || !reflect.DeepEqual(service.pressed, []string{"listenbrainz"}) {
+		t.Fatalf("status = %d, pressed %v; want listenbrainz", response.Code, service.pressed)
+	}
+}
+
+func TestRecommendationFeedbackIsRecordedAgainstTheSourceNamed(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := pressFeedback(t, service,
+		`{"recordingId":"`+uuid.New().String()+`","signal":"less_like_this","source":"schall"}`)
+
+	if response.Code != http.StatusOK || !reflect.DeepEqual(service.pressed, []string{"schall"}) {
+		t.Fatalf("status = %d, pressed %v; want schall", response.Code, service.pressed)
+	}
+}
+
+func TestRecommendationFeedbackRefusesASourceThereIsNot(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := pressFeedback(t, service,
+		`{"recordingId":"`+uuid.New().String()+`","signal":"more_like_this","source":"spotify"}`)
+
+	if response.Code != http.StatusUnprocessableEntity || len(service.pressed) != 0 {
+		t.Fatalf("status = %d, pressed %v; want 422 and nothing recorded", response.Code, service.pressed)
+	}
+}
+
+func clearFeedback(t *testing.T, service *fakeRecommendations, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	response := httptest.NewRecorder()
+	recommendationHandler(service, nil).ServeHTTP(response, httptest.NewRequest(
+		http.MethodDelete, "/api/v1/recommendations/feedback"+query, nil))
+	return response
+}
+
+func TestClearingFeedbackWithoutASourceClearsListenBrainz(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := clearFeedback(t, service, "")
+
+	if response.Code != http.StatusNoContent || !reflect.DeepEqual(service.cleared, []string{"listenbrainz"}) {
+		t.Fatalf("status = %d, cleared %v; want listenbrainz", response.Code, service.cleared)
+	}
+}
+
+func TestClearingFeedbackClearsOnlyTheSourceNamed(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := clearFeedback(t, service, "?source=schall")
+
+	if response.Code != http.StatusNoContent || !reflect.DeepEqual(service.cleared, []string{"schall"}) {
+		t.Fatalf("status = %d, cleared %v; want schall", response.Code, service.cleared)
+	}
+}
+
+func TestClearingFeedbackRefusesASourceThereIsNot(t *testing.T) {
+	service := &fakeRecommendations{}
+	response := clearFeedback(t, service, "?source=spotify")
+
+	if response.Code != http.StatusUnprocessableEntity || len(service.cleared) != 0 {
+		t.Fatalf("status = %d, cleared %v; want 422 and nothing cleared", response.Code, service.cleared)
 	}
 }

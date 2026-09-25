@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/pxldi/schall/internal/db"
+	"github.com/pxldi/schall/internal/jobs"
 	"github.com/pxldi/schall/internal/recommendations"
 )
 
@@ -31,9 +32,9 @@ type Recommendations interface {
 		ctx context.Context, subject recommendations.DismissalSubject, musicBrainzID uuid.UUID,
 	) (db.RecommendationDismissal, error)
 	RecordFeedback(
-		ctx context.Context, recordingID uuid.UUID, signal recommendations.FeedbackSignal,
+		ctx context.Context, source string, recordingID uuid.UUID, signal recommendations.FeedbackSignal,
 	) (db.RecommendationFeedback, error)
-	ClearFeedback(context.Context) error
+	ClearFeedback(ctx context.Context, source string) error
 	// RecordImpressions counts a showing for each recording the stored list
 	// actually offers, and answers how many that was. Recordings it does not
 	// offer are dropped rather than refused: a reader can report a row that a
@@ -54,7 +55,7 @@ type Recommendations interface {
 // finished. Only the queue says a later sweep tried and got nowhere.
 type RecommendationSnapshotStore interface {
 	RecommendationSnapshot(ctx context.Context, source string) (db.RecommendationSnapshot, error)
-	RecommendationSweepState(ctx context.Context) (db.RecommendationSweepState, error)
+	RecommendationSweepState(ctx context.Context, kind string) (db.RecommendationSweepState, error)
 }
 
 // WithRecommendations registers what reads the stored recommendation list and
@@ -66,10 +67,30 @@ func WithRecommendations(service Recommendations) Option {
 	}
 }
 
-// defaultRecommendationSource is the only source there is today. It is a
-// parameter rather than a constant in the query because the stores are keyed by
-// source, and a second one would otherwise mean changing every caller.
+// defaultRecommendationSource is the source a caller that names none reads, so
+// every caller from before the own engine keeps its behaviour (ADR 0039 §4).
 const defaultRecommendationSource = "listenbrainz"
+
+// recommendationSweepKinds names, for each source a reader may pick, the job
+// whose sweep builds its list. The refresh line reads that job's rows.
+var recommendationSweepKinds = map[string]string{
+	defaultRecommendationSource: jobs.SweepRecommendations,
+	recommendations.OwnSource:   jobs.SweepOwnRecommendations,
+}
+
+// recommendationSource reads the source a request names. Absent is
+// ListenBrainz. Anything else is refused, because an unknown source would read
+// as an empty list.
+func recommendationSource(raw string) (string, bool) {
+	source := strings.TrimSpace(raw)
+	if source == "" {
+		return defaultRecommendationSource, true
+	}
+	_, known := recommendationSweepKinds[source]
+	return source, known
+}
+
+const recommendationSourceProblem = "source must be listenbrainz or schall"
 
 // recommendationResponse is one suggestion, as a reader sees it. Every
 // identifier is a MusicBrainz identifier, because that is what the dismissal
@@ -168,6 +189,12 @@ func (api *API) listRecommendations(response http.ResponseWriter, request *http.
 		api.problem(response, http.StatusServiceUnavailable, "recommendations are unavailable", nil)
 		return
 	}
+	source, known := recommendationSource(request.URL.Query().Get("source"))
+	if !known {
+		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
+			[]string{recommendationSourceProblem})
+		return
+	}
 	limit, offset := defaultRecommendationLimit, 0
 	var after, before *int32
 	if raw := strings.TrimSpace(request.URL.Query().Get("limit")); raw != "" {
@@ -214,7 +241,7 @@ func (api *API) listRecommendations(response http.ResponseWriter, request *http.
 		return
 	}
 
-	evaluated, err := api.recommendationList.Evaluate(request.Context(), defaultRecommendationSource)
+	evaluated, err := api.recommendationList.Evaluate(request.Context(), source)
 	if err != nil {
 		api.internalError(response, request, err)
 		return
@@ -254,7 +281,7 @@ func (api *API) listRecommendations(response http.ResponseWriter, request *http.
 		end = total
 	}
 
-	snapshot := api.recommendationSnapshot(request.Context(), defaultRecommendationSource)
+	snapshot := api.recommendationSnapshot(request.Context(), source)
 	api.writeJSON(response, http.StatusOK, map[string]any{
 		"items":    visible[offset:end],
 		"total":    total,
@@ -262,7 +289,7 @@ func (api *API) listRecommendations(response http.ResponseWriter, request *http.
 		"offset":   offset,
 		"hidden":   hidden,
 		"snapshot": snapshot,
-		"refresh":  api.recommendationRefresh(request.Context(), snapshot),
+		"refresh":  api.recommendationRefresh(request.Context(), source, snapshot),
 	})
 }
 
@@ -358,13 +385,13 @@ func (api *API) recommendationSnapshot(
 // header is: the suggestions are the answer, and how fresh they are is said
 // beside them.
 func (api *API) recommendationRefresh(
-	ctx context.Context, snapshot recommendationSnapshotResponse,
+	ctx context.Context, source string, snapshot recommendationSnapshotResponse,
 ) recommendationRefreshResponse {
 	result := recommendationRefreshResponse{}
 	if api.recommendationSnapshots == nil {
 		return result
 	}
-	state, err := api.recommendationSnapshots.RecommendationSweepState(ctx)
+	state, err := api.recommendationSnapshots.RecommendationSweepState(ctx, recommendationSweepKinds[source])
 	if err != nil {
 		api.logger.Error().Err(err).Msg("read recommendation sweep state")
 		return result
@@ -466,6 +493,10 @@ func (api *API) dismissRecommendation(response http.ResponseWriter, request *htt
 type recommendationFeedbackRequest struct {
 	RecordingID string `json:"recordingId"`
 	Signal      string `json:"signal"`
+	// Source is the list the press was made on, ListenBrainz when absent. The
+	// event is copied from that source's candidate and only that source's sweep
+	// reads it (ADR 0039 §5).
+	Source string `json:"source"`
 }
 
 // recordRecommendationFeedback records a soft opinion against the current
@@ -479,6 +510,12 @@ func (api *API) recordRecommendationFeedback(response http.ResponseWriter, reque
 	var input recommendationFeedbackRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		api.problem(response, http.StatusBadRequest, "invalid request body", []string{err.Error()})
+		return
+	}
+	source, known := recommendationSource(input.Source)
+	if !known {
+		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
+			[]string{recommendationSourceProblem})
 		return
 	}
 	recordingID, err := uuid.Parse(strings.TrimSpace(input.RecordingID))
@@ -497,7 +534,7 @@ func (api *API) recordRecommendationFeedback(response http.ResponseWriter, reque
 			[]string{"signal must be more_like_this or less_like_this"})
 		return
 	}
-	row, err := api.recommendationList.RecordFeedback(request.Context(), recordingID, signal)
+	row, err := api.recommendationList.RecordFeedback(request.Context(), source, recordingID, signal)
 	if errors.Is(err, pgx.ErrNoRows) {
 		api.problem(response, http.StatusConflict, "suggestion is stale", nil)
 		return
@@ -513,14 +550,21 @@ func (api *API) recordRecommendationFeedback(response http.ResponseWriter, reque
 	})
 }
 
-// clearRecommendationFeedback removes the current source's soft signals and
-// leaves dismissals, impressions, wants and review decisions untouched.
+// clearRecommendationFeedback removes the named source's soft signals. The
+// other source's signals, dismissals, impressions, wants and review decisions
+// stay.
 func (api *API) clearRecommendationFeedback(response http.ResponseWriter, request *http.Request) {
 	if api.recommendationList == nil {
 		api.problem(response, http.StatusServiceUnavailable, "recommendations are unavailable", nil)
 		return
 	}
-	if err := api.recommendationList.ClearFeedback(request.Context()); err != nil {
+	source, known := recommendationSource(request.URL.Query().Get("source"))
+	if !known {
+		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
+			[]string{recommendationSourceProblem})
+		return
+	}
+	if err := api.recommendationList.ClearFeedback(request.Context(), source); err != nil {
 		api.internalError(response, request, err)
 		return
 	}

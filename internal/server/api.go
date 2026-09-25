@@ -818,8 +818,10 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Get("/settings/notifications", api.getNotificationSettings)
 			router.Put("/settings/notifications", api.saveNotificationSettings)
 			router.Post("/settings/notifications/test", api.testNotification)
-			// And what that account produced: music the library does not hold,
-			// with the hard suppression rules applied as it is read. Reading
+			// And what that account produced, or what Schall's own engine built
+			// from the copied listens (`source`, ListenBrainz when absent): music
+			// the library does not hold, with the hard suppression rules
+			// applied as it is read. Reading
 			// decides nothing — the two writes are the reader saying "not
 			// interested", and the count of what has been put in front of them.
 			router.Get("/recommendations", api.listRecommendations)

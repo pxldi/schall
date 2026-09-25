@@ -34,6 +34,8 @@ type fakeStore struct {
 	candidates           map[string][]db.InsertRecommendationCandidateParams
 	recommendationWrites int
 	feedback             []db.RecommendationFeedback
+	pool                 []db.OwnRecommendationPoolRow
+	poolParams           []db.OwnRecommendationPoolParams
 }
 
 type recordedCheck struct {
@@ -208,14 +210,33 @@ func (store *fakeStore) RecordRecommendationFeedback(
 }
 
 func (store *fakeStore) ListRecommendationFeedback(
-	context.Context, string,
+	_ context.Context, source string,
 ) ([]db.RecommendationFeedback, error) {
-	return append([]db.RecommendationFeedback(nil), store.feedback...), nil
+	result := make([]db.RecommendationFeedback, 0, len(store.feedback))
+	for _, row := range store.feedback {
+		if row.Source == source {
+			result = append(result, row)
+		}
+	}
+	return result, nil
 }
 
-func (store *fakeStore) DeleteRecommendationFeedback(context.Context, string) error {
-	store.feedback = nil
+func (store *fakeStore) DeleteRecommendationFeedback(_ context.Context, source string) error {
+	kept := store.feedback[:0]
+	for _, row := range store.feedback {
+		if row.Source != source {
+			kept = append(kept, row)
+		}
+	}
+	store.feedback = kept
 	return nil
+}
+
+func (store *fakeStore) OwnRecommendationPool(
+	_ context.Context, params db.OwnRecommendationPoolParams,
+) ([]db.OwnRecommendationPoolRow, error) {
+	store.poolParams = append(store.poolParams, params)
+	return append([]db.OwnRecommendationPoolRow(nil), store.pool...), nil
 }
 
 // Everything asked about is offered here. The rule that a recording has to be

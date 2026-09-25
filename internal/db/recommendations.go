@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -125,8 +127,9 @@ func (q *Queries) RecommendationSnapshot(ctx context.Context, source string) (Re
 // RecommendationSweepState is what the job queue holds about the background
 // sweep that keeps the recommendation list up to date.
 //
-// The sweep is a row in the jobs table with kind 'sweep_recommendations'. It
-// runs by itself, and nobody presses anything to start it. One sweep is a chain
+// Each sweep is a row in the jobs table: kind 'sweep_recommendations' for
+// ListenBrainz and 'sweep_own_recommendations' for the own engine. It runs by
+// itself, and nobody presses anything to start it. One sweep is a chain
 // of short passes, each of which is its own row: a pass that ends leaves a
 // finished row behind and queues the next one, with the wait written into that
 // row's run_after. So the last finished row and the waiting row together say
@@ -153,16 +156,17 @@ type RecommendationSweepState struct {
 	Running bool
 }
 
-// RecommendationSweepState reads the two job rows that say whether the sweep is
-// still refreshing the list. The kind is written out here, as it is in the index
-// that keeps one sweep at a time (migration 00048); internal/jobs owns the name.
-func (q *Queries) RecommendationSweepState(ctx context.Context) (RecommendationSweepState, error) {
+// RecommendationSweepState reads the two job rows that say whether one source's
+// sweep is still refreshing its list. The caller names the job kind, which
+// internal/jobs owns: 'sweep_recommendations' (migration 00048) or
+// 'sweep_own_recommendations' (migration 00104).
+func (q *Queries) RecommendationSweepState(ctx context.Context, kind string) (RecommendationSweepState, error) {
 	var state RecommendationSweepState
 	err := q.db.QueryRow(ctx, `
 		WITH finished AS (
 			SELECT started_at, completed_at
 			FROM jobs
-			WHERE kind = 'sweep_recommendations'
+			WHERE kind = $1
 			  AND status IN ('completed', 'failed', 'cancelled')
 			ORDER BY completed_at DESC
 			LIMIT 1
@@ -171,7 +175,7 @@ func (q *Queries) RecommendationSweepState(ctx context.Context) (RecommendationS
 				min(run_after) FILTER (WHERE status = 'queued') AS next_run_after,
 				count(*) FILTER (WHERE status = 'running') > 0 AS running
 			FROM jobs
-			WHERE kind = 'sweep_recommendations'
+			WHERE kind = $1
 			  AND status IN ('queued', 'running')
 		)
 		SELECT
@@ -181,7 +185,7 @@ func (q *Queries) RecommendationSweepState(ctx context.Context) (RecommendationS
 			waiting.next_run_after,
 			coalesce(waiting.running, false)
 		FROM waiting
-	`).Scan(
+	`, kind).Scan(
 		&state.Attempted,
 		&state.Started,
 		&state.Finished,
@@ -189,6 +193,46 @@ func (q *Queries) RecommendationSweepState(ctx context.Context) (RecommendationS
 		&state.Running,
 	)
 	return state, err
+}
+
+// EnsureOwnRecommendationSweepQueued adds an own-recommendation pass when none
+// is queued or running and the listens name at least one recording (ADR 0039
+// §6). An installation with no such listens gets no job, and a pass already
+// waiting keeps its time.
+func (q *Queries) EnsureOwnRecommendationSweepQueued(ctx context.Context, runAfter time.Time) error {
+	_, err := q.db.Exec(ctx, `
+		INSERT INTO jobs (kind, payload, max_attempts, run_after)
+		SELECT 'sweep_own_recommendations', '{}'::jsonb, 3, $1
+		WHERE EXISTS (SELECT 1 FROM listens WHERE recording_mbid IS NOT NULL)
+		ON CONFLICT (kind)
+		    WHERE kind = 'sweep_own_recommendations' AND status IN ('queued', 'running')
+		DO NOTHING
+	`, runAfter)
+	return err
+}
+
+// QueueOwnRecommendationSweep queues the next own-recommendation pass with the
+// position the chain reached. A pass already queued keeps the earlier time and
+// takes the new position. A running pass makes this write nothing, because the
+// update matches only a queued row.
+func (q *Queries) QueueOwnRecommendationSweep(
+	ctx context.Context, runAfter time.Time, payload json.RawMessage,
+) error {
+	if len(payload) == 0 || !json.Valid(payload) {
+		return errors.New("own recommendation sweep payload must be valid JSON")
+	}
+	_, err := q.db.Exec(ctx, `
+		INSERT INTO jobs (kind, payload, max_attempts, run_after)
+		VALUES ('sweep_own_recommendations', $2::jsonb, 3, $1)
+		ON CONFLICT (kind)
+		    WHERE kind = 'sweep_own_recommendations' AND status IN ('queued', 'running')
+		DO UPDATE
+		SET run_after = least(jobs.run_after, EXCLUDED.run_after),
+		    payload = EXCLUDED.payload,
+		    updated_at = now()
+		WHERE jobs.status = 'queued'
+	`, runAfter, payload)
+	return err
 }
 
 // RecommendationCandidateCount is how many candidate rows one source holds.

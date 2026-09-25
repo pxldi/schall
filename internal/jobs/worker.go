@@ -52,6 +52,9 @@ const (
 	SweepCoverArt             = "sweep_cover_art"
 	SweepFollowFeed           = "sweep_follow_feed"
 	SweepRecommendations      = "sweep_recommendations"
+	// SweepOwnRecommendations is fixed by migration 00104, whose partial unique
+	// index is keyed on this exact string.
+	SweepOwnRecommendations = "sweep_own_recommendations"
 	// SweepLyrics is fixed by migration 00053, whose partial unique index is
 	// keyed on this exact string.
 	SweepLyrics = "sweep_lyrics"
@@ -545,6 +548,7 @@ type Queue interface {
 	QueueWeeklyPlaylistRefresh(context.Context, time.Time) error
 	QueueNewReleasesPlaylistRefresh(context.Context, time.Time) error
 	QueueRecommendationSweepContinuation(context.Context, time.Time, json.RawMessage) error
+	QueueOwnRecommendationSweep(context.Context, time.Time, json.RawMessage) error
 	QueueLyricsSweep(context.Context, time.Time, json.RawMessage) error
 	QueueListensSync(context.Context, time.Time) error
 	QueuePreviewAnchorSweep(context.Context, time.Time) error
@@ -704,6 +708,12 @@ type RecommendationSweeper interface {
 	SweepPage(context.Context, recommendations.SweepPosition) (recommendations.SweepResult, error)
 }
 
+// OwnRecommendationSweeper runs one pass of the own engine, which builds the
+// `schall` list from the listens already copied (ADR 0039).
+type OwnRecommendationSweeper interface {
+	SweepOwnPage(context.Context, recommendations.OwnSweepPosition) (recommendations.OwnSweepResult, error)
+}
+
 // WeeklyPlaylistRefresher runs one pass of the weekly playlist: judge what is on
 // trial, take in what arrived, choose the next songs.
 type WeeklyPlaylistRefresher interface {
@@ -858,6 +868,9 @@ type Worker struct {
 	// label already has.
 	labels     LabelRefresher
 	recommends RecommendationSweeper
+	// ownRecommends builds the `schall` list. Optional: without it no own
+	// sweep can run.
+	ownRecommends OwnRecommendationSweeper
 	// lyrics writes the words of a song beside it. Optional: without it the
 	// library simply has no lyrics, which is what it had before.
 	lyrics  LyricsSweeper
@@ -1133,6 +1146,13 @@ func (worker *Worker) WithUpgradeSweeper(sweeper UpgradeSweeper) *Worker {
 // provider candidate snapshot. Without it no recommendation job can run.
 func (worker *Worker) WithRecommendationSweeper(recommends RecommendationSweeper) *Worker {
 	worker.recommends = recommends
+	return worker
+}
+
+// WithOwnRecommendationSweeper registers the component that builds the own
+// engine's snapshot. Without it no own recommendation job can run.
+func (worker *Worker) WithOwnRecommendationSweeper(sweeper OwnRecommendationSweeper) *Worker {
+	worker.ownRecommends = sweeper
 	return worker
 }
 
@@ -1520,6 +1540,8 @@ func (worker *Worker) process(ctx context.Context, job Job) {
 		worker.processWantJudging(ctx, job)
 	case SweepRecommendations:
 		worker.processRecommendationSweep(ctx, job)
+	case SweepOwnRecommendations:
+		worker.processOwnRecommendationSweep(ctx, job)
 	case RefreshWeeklyPlaylist:
 		worker.processWeeklyPlaylistRefresh(ctx, job)
 	case RefreshNewReleasesPlaylist:
@@ -1732,6 +1754,74 @@ func (worker *Worker) processRecommendationSweep(ctx context.Context, job Job) {
 		return
 	}
 	worker.queueRecommendationSweep(ctx, next)
+}
+
+// processOwnRecommendationSweep runs one pass of the own engine and queues the
+// next (ADR 0039 §6). A pass with recordings still waiting comes back at once,
+// a pass MusicBrainz stopped answering waits recommendationUnreachable, and a
+// finished chain waits recommendationIdle. The chain's position rides in the
+// payload so no pass asks MusicBrainz twice about one recording.
+func (worker *Worker) processOwnRecommendationSweep(ctx context.Context, job Job) {
+	if worker.ownRecommends == nil {
+		worker.finishFailed(ctx, job, errors.New("own recommendation sweeping is not configured"), false)
+		return
+	}
+	var position recommendations.OwnSweepPosition
+	if len(job.Payload) > 0 {
+		if err := json.Unmarshal(job.Payload, &position); err != nil {
+			worker.finishFailed(ctx, job, fmt.Errorf("invalid own recommendation sweep payload: %w", err), false)
+			return
+		}
+	}
+	result, err := worker.ownRecommends.SweepOwnPage(ctx, position)
+	if err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("sweep own recommendations: %w", err), true)
+		if spent(job, err) {
+			worker.queueOwnRecommendationSweep(ctx, worker.now().Add(recommendationIdle), recommendations.OwnSweepPosition{})
+		}
+		return
+	}
+	if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+		return
+	}
+	worker.logger.Info().
+		Str("job_id", job.ID.String()).
+		Int("pool", result.Report.Pool).
+		Int("cached", result.Report.Cached).
+		Int("asked", result.Report.Asked).
+		Int("stored", result.Report.Stored).
+		Str("status", result.Report.Status).
+		Str("detail", result.Report.Detail).
+		Bool("more", result.More).
+		Bool("written", result.Report.Written).
+		Msg("own recommendations swept")
+
+	next := worker.now().Add(recommendationIdle)
+	switch {
+	case result.More:
+		next = worker.now()
+	case result.Report.ProviderFailed:
+		next = worker.now().Add(recommendationUnreachable)
+	}
+	position = recommendations.OwnSweepPosition{}
+	if result.Resume {
+		position = result.Position
+	}
+	worker.queueOwnRecommendationSweep(ctx, next, position)
+}
+
+func (worker *Worker) queueOwnRecommendationSweep(
+	ctx context.Context, at time.Time, position recommendations.OwnSweepPosition,
+) {
+	payload, err := json.Marshal(position)
+	if err != nil {
+		worker.logger.Error().Err(err).Msg("encode own recommendation sweep position")
+		return
+	}
+	if err := worker.queue.QueueOwnRecommendationSweep(ctx, at, payload); err != nil {
+		worker.logger.Error().Err(err).Msg("queue own recommendation sweep")
+	}
 }
 
 // processLyricsSweep walks one page of the library and writes the words it can

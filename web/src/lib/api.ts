@@ -63,6 +63,7 @@ import type {
   RecommendationFeedbackSignal,
   RecommendationList,
   RecommendationPageRequest,
+  RecommendationSource,
   RecommendationSubject,
   RefreshJob,
   ReleaseCover,
@@ -669,8 +670,12 @@ export const api = {
   // what Previous and Next send: reading a page can take rows out of the list,
   // and a position would then move under the reader. `offset` addresses the two
   // ends of the list, which stay exact whatever the rules have removed.
-  recommendations: (limit = 25, page: RecommendationPageRequest = {}) => {
-    const asked = new URLSearchParams({ limit: String(limit) });
+  recommendations: (
+    limit = 25,
+    page: RecommendationPageRequest = {},
+    source: RecommendationSource = 'listenbrainz'
+  ) => {
+    const asked = new URLSearchParams({ limit: String(limit), source });
     if (page.after !== undefined) asked.set('after', String(page.after));
     else if (page.before !== undefined) asked.set('before', String(page.before));
     else asked.set('offset', String(page.offset ?? 0));
@@ -686,14 +691,22 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ subject, musicBrainzId }) }
     ),
 
-  recordRecommendationFeedback: (recordingId: string, signal: RecommendationFeedbackSignal) =>
+  // Feedback belongs to the list it was pressed on: only that source's sweep
+  // reads it, and clearing it clears that source alone.
+  recordRecommendationFeedback: (
+    recordingId: string,
+    signal: RecommendationFeedbackSignal,
+    source: RecommendationSource = 'listenbrainz'
+  ) =>
     request<{ recordingId: string; signal: RecommendationFeedbackSignal; createdAt: string }>(
       '/api/v1/recommendations/feedback',
-      { method: 'POST', body: JSON.stringify({ recordingId, signal }) }
+      { method: 'POST', body: JSON.stringify({ recordingId, signal, source }) }
     ),
 
-  clearRecommendationFeedback: () =>
-    request<void>('/api/v1/recommendations/feedback', { method: 'DELETE' }),
+  clearRecommendationFeedback: (source: RecommendationSource = 'listenbrainz') =>
+    request<void>(`/api/v1/recommendations/feedback?${new URLSearchParams({ source })}`, {
+      method: 'DELETE'
+    }),
 
   // What the reader was actually shown. Three showings a day or more apart with
   // no decision hold a recording back for ninety days, so this is sent by the

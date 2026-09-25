@@ -72,6 +72,8 @@ type fakeQueue struct {
 	newReleasesRefreshQueuedFor   time.Time
 	newReleasesRefreshQueuedCalls int
 	recommendationSweepPayload    json.RawMessage
+	ownSweepQueuedFor             time.Time
+	ownSweepPayload               json.RawMessage
 	// err is how the calls that read a catalogue identity answer. Everything
 	// else has a field of its own, so a test can break exactly the call it is
 	// about rather than every call the job makes.
@@ -367,6 +369,16 @@ func (queue *fakeQueue) QueueRecommendationSweepContinuation(
 	}
 	queue.recommendationSweepQueuedFor = runAfter
 	queue.recommendationSweepPayload = append(json.RawMessage(nil), payload...)
+	return nil
+}
+func (queue *fakeQueue) QueueOwnRecommendationSweep(
+	_ context.Context, runAfter time.Time, payload json.RawMessage,
+) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.ownSweepQueuedFor = runAfter
+	queue.ownSweepPayload = append(json.RawMessage(nil), payload...)
 	return nil
 }
 func (queue *fakeQueue) QueueListensSync(_ context.Context, runAfter time.Time) error {
@@ -1862,6 +1874,107 @@ func (sweeper *fakeRecommendationSweeper) SweepPage(
 	sweeper.swept++
 	sweeper.position = position
 	return sweeper.result, sweeper.err
+}
+
+type fakeOwnRecommendationSweeper struct {
+	result   recommendations.OwnSweepResult
+	err      error
+	position recommendations.OwnSweepPosition
+}
+
+func (sweeper *fakeOwnRecommendationSweeper) SweepOwnPage(
+	_ context.Context, position recommendations.OwnSweepPosition,
+) (recommendations.OwnSweepResult, error) {
+	sweeper.position = position
+	return sweeper.result, sweeper.err
+}
+
+// runOwnSweep processes one own-recommendation job carrying position and says
+// what the fake queue was left holding.
+func runOwnSweep(
+	t *testing.T, sweeper *fakeOwnRecommendationSweeper, position recommendations.OwnSweepPosition, attempts int,
+) (*fakeQueue, uuid.UUID, time.Time) {
+	t.Helper()
+	jobID := uuid.New()
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithOwnRecommendationSweeper(sweeper)
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	worker.now = func() time.Time { return now }
+	payload, _ := json.Marshal(position)
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: SweepOwnRecommendations, Payload: payload, Attempts: attempts, MaxAttempts: 3,
+	})
+	return queue, jobID, now
+}
+
+func queuedOwnPosition(t *testing.T, queue *fakeQueue) recommendations.OwnSweepPosition {
+	t.Helper()
+	var queued recommendations.OwnSweepPosition
+	if err := json.Unmarshal(queue.ownSweepPayload, &queued); err != nil {
+		t.Fatalf("queued payload %s: %v", queue.ownSweepPayload, err)
+	}
+	return queued
+}
+
+func TestAnOwnRecommendationPassWithRecordingsWaitingComesStraightBack(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1, Unexpandable: []uuid.UUID{uuid.New()}}
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		More: true, Resume: true, Position: next,
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now) {
+		t.Fatalf("completed = %s, next pass = %s, want one due now", queue.completed, queue.ownSweepQueuedFor)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want %#v", queued, next)
+	}
+}
+
+func TestAnOwnRecommendationPassReadsItsPositionFromThePayload(t *testing.T) {
+	position := recommendations.OwnSweepPosition{Passes: 4, Unexpandable: []uuid.UUID{uuid.New()}}
+	sweeper := &fakeOwnRecommendationSweeper{}
+	runOwnSweep(t, sweeper, position, 1)
+
+	if !reflect.DeepEqual(sweeper.position, position) {
+		t.Fatalf("sweeper position = %#v, want %#v", sweeper.position, position)
+	}
+}
+
+func TestAFinishedOwnRecommendationChainComesBackADayLater(t *testing.T) {
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		Position: recommendations.OwnSweepPosition{Passes: 3},
+	}}, recommendations.OwnSweepPosition{Passes: 2}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationIdle)) {
+		t.Fatalf("completed = %s, next pass = %s, want one in %s",
+			queue.completed, queue.ownSweepQueuedFor, recommendationIdle)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, recommendations.OwnSweepPosition{}) {
+		t.Fatalf("queued position = %#v, want a new chain", queued)
+	}
+}
+
+func TestAnOwnRecommendationPassMusicBrainzDidNotAnswerWaitsHalfAnHour(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1}
+	queue, _, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		Resume: true, Position: next, Report: recommendations.OwnSweepReport{ProviderFailed: true},
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if !queue.ownSweepQueuedFor.Equal(now.Add(recommendationUnreachable)) {
+		t.Fatalf("next pass = %s, want one in %s", queue.ownSweepQueuedFor, recommendationUnreachable)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want the chain carried on", queued)
+	}
+}
+
+func TestAnOwnRecommendationPassThatSpentItsRetriesQueuesTheNextDay(t *testing.T) {
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{err: errors.New("database went away")},
+		recommendations.OwnSweepPosition{}, 3)
+
+	if queue.failed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationIdle)) {
+		t.Fatalf("failed = %s, next pass = %s, want one in %s", queue.failed, queue.ownSweepQueuedFor, recommendationIdle)
+	}
 }
 
 func TestARecommendationPassWithMoreWaitingComesStraightBack(t *testing.T) {

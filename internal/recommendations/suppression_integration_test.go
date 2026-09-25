@@ -505,11 +505,11 @@ func TestRecommendationFeedbackAppendsAndCopiesCurrentCandidateContext(t *testin
 		ReasonContext:             map[string]any{"seed_recording_ids": []string{seedID.String()}},
 	})
 
-	first, err := service.RecordFeedback(ctx, recordingID, FeedbackMoreLikeThis)
+	first, err := service.RecordFeedback(ctx, testRecommendationSource, recordingID, FeedbackMoreLikeThis)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.RecordFeedback(ctx, recordingID, FeedbackLessLikeThis)
+	second, err := service.RecordFeedback(ctx, testRecommendationSource, recordingID, FeedbackLessLikeThis)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +541,7 @@ func TestRecommendationFeedbackAppendsAndCopiesCurrentCandidateContext(t *testin
 	}
 
 	replaceRecommendationCandidates(t, service, recommendationCandidate(uuid.New(), uuid.New(), uuid.New()))
-	if _, err := service.RecordFeedback(ctx, recordingID, FeedbackMoreLikeThis); !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := service.RecordFeedback(ctx, testRecommendationSource, recordingID, FeedbackMoreLikeThis); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("stale feedback error = %v, want pgx.ErrNoRows", err)
 	}
 	rows, err = queries.ListRecommendationFeedback(ctx, testRecommendationSource)
@@ -558,13 +558,13 @@ func TestRecommendationFeedbackCanBeClearedWithoutClearingDismissals(t *testing.
 	service, queries, _, _ := recommendationService(t)
 	recordingID := uuid.New()
 	replaceRecommendationCandidates(t, service, recommendationCandidate(recordingID, uuid.New(), uuid.New()))
-	if _, err := service.RecordFeedback(ctx, recordingID, FeedbackMoreLikeThis); err != nil {
+	if _, err := service.RecordFeedback(ctx, testRecommendationSource, recordingID, FeedbackMoreLikeThis); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Dismiss(ctx, DismissRecording, recordingID); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.ClearFeedback(ctx); err != nil {
+	if err := service.ClearFeedback(ctx, testRecommendationSource); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := queries.ListRecommendationFeedback(ctx, testRecommendationSource)
@@ -709,7 +709,7 @@ func TestRecommendationFeedbackNeverSuppresses(t *testing.T) {
 	recordingID := uuid.New()
 	replaceRecommendationCandidates(t, service,
 		recommendationCandidate(recordingID, uuid.New(), uuid.New()))
-	if _, err := service.RecordFeedback(ctx, recordingID, FeedbackLessLikeThis); err != nil {
+	if _, err := service.RecordFeedback(ctx, testRecommendationSource, recordingID, FeedbackLessLikeThis); err != nil {
 		t.Fatal(err)
 	}
 
