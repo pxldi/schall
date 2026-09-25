@@ -68,6 +68,29 @@ func TestStartupQueuesOneOwnSweepOnceAListenNamesARecording(t *testing.T) {
 	}
 }
 
+// A listens sync starts the own sweep only when it stored a listen naming a
+// recording, so the count must leave out listens with none and listens
+// already held.
+func TestInsertingListensCountsTheNewOnesThatNameARecording(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+	at := time.Date(2026, time.September, 5, 13, 0, 0, 0, time.UTC)
+	page := []ListenInsert{
+		{ListenedAt: at, ArtistName: "A", TrackName: "Mapped", RecordingMBID: uuid.NewString()},
+		{ListenedAt: at.Add(-time.Minute), ArtistName: "A", TrackName: "Unmapped"},
+	}
+
+	first, err := queries.InsertListens(ctx, page)
+	if err != nil || first != (ListensInserted{Stored: 2, Recordings: 1}) {
+		t.Fatalf("first insert = %+v, %v; want two stored, one naming a recording", first, err)
+	}
+	again, err := queries.InsertListens(ctx, page)
+	if err != nil || again != (ListensInserted{}) {
+		t.Fatalf("second insert = %+v, %v; want nothing", again, err)
+	}
+}
+
 func TestOneOwnSweepIsQueuedOrRunningHoweverOftenItIsAskedFor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

@@ -549,6 +549,9 @@ type Queue interface {
 	QueueNewReleasesPlaylistRefresh(context.Context, time.Time) error
 	QueueRecommendationSweepContinuation(context.Context, time.Time, json.RawMessage) error
 	QueueOwnRecommendationSweep(context.Context, time.Time, json.RawMessage) error
+	// EnsureOwnRecommendationSweepQueued adds an own sweep only when none is
+	// queued or running and a listen names a recording.
+	EnsureOwnRecommendationSweepQueued(context.Context, time.Time) error
 	QueueLyricsSweep(context.Context, time.Time, json.RawMessage) error
 	QueueListensSync(context.Context, time.Time) error
 	QueuePreviewAnchorSweep(context.Context, time.Time) error
@@ -2301,6 +2304,14 @@ func (worker *Worker) processListensSync(ctx context.Context, job Job) {
 		return
 	}
 	result, err := worker.listens.Sync(ctx)
+	// The own engine reads nothing but these listens, so the first ones that
+	// name a recording start it without waiting for a restart (ADR 0039 §6). A
+	// pass that failed part way still stored what it stored.
+	if result.StoredRecordings > 0 {
+		if err := worker.queue.EnsureOwnRecommendationSweepQueued(ctx, worker.now()); err != nil {
+			worker.logger.Error().Err(err).Msg("queue own recommendation sweep")
+		}
+	}
 	if errors.Is(err, listens.ErrDisabled) || errors.Is(err, listens.ErrNotConfigured) {
 		// Somebody switched the account off since this was queued. That is
 		// not a failure to record; the job ends and asks for no successor,
@@ -2325,6 +2336,7 @@ func (worker *Worker) processListensSync(ctx context.Context, job Job) {
 		Str("job_id", job.ID.String()).
 		Int("fetched", result.Fetched).
 		Int64("stored", result.Stored).
+		Int64("stored_recordings", result.StoredRecordings).
 		Bool("more", result.More).
 		Msg("listens synced")
 	next := worker.now().Add(listensIdle)

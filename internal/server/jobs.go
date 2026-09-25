@@ -532,9 +532,9 @@ var recurringJobs = []recurringJob{
 	{
 		kind:  jobs.SweepOwnRecommendations,
 		label: "Schall recommendation sweep",
-		idle: "Not scheduled. This sweep is queued at startup when a copied listen " +
-			"names a recording and then queues its own replacement, so nothing " +
-			"waiting means no such listen was held at the last start.",
+		idle: "Not scheduled. Startup and a listens sync queue this sweep once a " +
+			"copied listen names a recording, and it then queues its own " +
+			"replacement, so nothing waiting means no listen names one yet.",
 	},
 	{
 		kind:  jobs.SyncListens,

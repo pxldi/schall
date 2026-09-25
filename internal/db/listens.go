@@ -24,14 +24,19 @@ type ListenInsert struct {
 	ArtistMBIDs    []string
 }
 
+// ListensInserted is what one page of listens added. Recordings counts the new
+// rows that name a recording, which is what the own recommendation engine
+// reads (ADR 0039).
+type ListensInserted struct {
+	Stored     int64
+	Recordings int64
+}
+
 // InsertListens stores a page of listens and says how many were new. A listen
 // already held (same moment, artist and track) is skipped, so a page pulled
 // twice costs nothing.
-func (q *Queries) InsertListens(ctx context.Context, listens []ListenInsert) (int64, error) {
-	if len(listens) == 0 {
-		return 0, nil
-	}
-	var inserted int64
+func (q *Queries) InsertListens(ctx context.Context, listens []ListenInsert) (ListensInserted, error) {
+	var inserted ListensInserted
 	for _, listen := range listens {
 		artistIDs := make([]uuid.UUID, 0, len(listen.ArtistMBIDs))
 		for _, raw := range listen.ArtistMBIDs {
@@ -57,7 +62,13 @@ func (q *Queries) InsertListens(ctx context.Context, listens []ListenInsert) (in
 		if err != nil {
 			return inserted, fmt.Errorf("insert listen: %w", err)
 		}
-		inserted += tag.RowsAffected()
+		if tag.RowsAffected() == 0 {
+			continue
+		}
+		inserted.Stored++
+		if nullUUID(listen.RecordingMBID).Valid {
+			inserted.Recordings++
+		}
 	}
 	return inserted, nil
 }

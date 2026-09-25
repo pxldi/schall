@@ -27,7 +27,7 @@ var ErrDisabled = errors.New("listenbrainz is disabled")
 type Store interface {
 	ListenBrainzSettings(context.Context) (db.ListenBrainzSettingsRow, error)
 	ListenBounds(context.Context) (db.ListenBounds, error)
-	InsertListens(context.Context, []db.ListenInsert) (int64, error)
+	InsertListens(context.Context, []db.ListenInsert) (db.ListensInserted, error)
 }
 
 const (
@@ -51,6 +51,9 @@ const (
 type Result struct {
 	Fetched int
 	Stored  int64
+	// StoredRecordings counts the stored listens that name a recording. One or
+	// more is what queues the own recommendation sweep (ADR 0039 §6).
+	StoredRecordings int64
 	// More is true when the pass stopped at its page budget with history still
 	// unread, so the next pass should follow at once.
 	More bool
@@ -148,6 +151,7 @@ func (service *Service) Sync(ctx context.Context) (Result, error) {
 		older, err := service.backfill(ctx, client, username, bounds.Oldest.Time)
 		result.Fetched += older.Fetched
 		result.Stored += older.Stored
+		result.StoredRecordings += older.StoredRecordings
 		result.More = older.More
 		return result, err
 	}
@@ -172,7 +176,8 @@ func (service *Service) forward(
 			return result, err
 		}
 		result.Fetched += len(listens)
-		result.Stored += stored
+		result.Stored += stored.Stored
+		result.StoredRecordings += stored.Recordings
 		newest := minTS
 		for _, listen := range listens {
 			if listen.ListenedAt.After(newest) {
@@ -207,7 +212,8 @@ func (service *Service) backfill(
 			return result, err
 		}
 		result.Fetched += len(listens)
-		result.Stored += stored
+		result.Stored += stored.Stored
+		result.StoredRecordings += stored.Recordings
 		oldest := maxTS
 		for _, listen := range listens {
 			if listen.ListenedAt.Before(oldest) {
