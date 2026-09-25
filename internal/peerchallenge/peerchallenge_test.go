@@ -83,6 +83,11 @@ func TestChallengeWordReadsTheMessagesPeersActuallySend(t *testing.T) {
 			message: `Reply with "hello there" to continue`,
 			want:    "hello there",
 		},
+		"doesthisevenmatter": {
+			message: "THIS IS AN AUTOMATED MESSAGE: \U0001F9CC The Troll demands proof of consciousness. " +
+				"Please respond to this message with the following case-sensitive phrase: Ab-So-Lutely",
+			want: "Ab-So-Lutely",
+		},
 	} {
 		word, ok := ChallengeWord(testCase.message)
 		if !ok {
@@ -141,6 +146,25 @@ func TestChallengeWordDoesNotReadAQuotedAlbumTitle(t *testing.T) {
 	}
 }
 
+// zeabu on 2026-09-05 sent three lines in one second and put the word on a line
+// of its own. "Captcha" could as easily be a heading for a line that never
+// came, so none of the three is read as a word or dismissed as a note: all
+// three go to a person.
+func TestAWordOnALineOfItsOwnIsLeftToAPerson(t *testing.T) {
+	for _, message := range []string{
+		`You can download various files, but first ->`,
+		`To download, reply to this message with the next word:`,
+		`Captcha`,
+	} {
+		if word, ok := ChallengeWord(message); ok {
+			t.Errorf("read %q as a challenge word in %q", word, message)
+		}
+		if Informational(message) {
+			t.Errorf("%q was read as a note", message)
+		}
+	}
+}
+
 // The messages these peers send that ask for nothing. Each was read off a live
 // conversation, and each used to become a question on the Downloads page with a
 // reply box under it.
@@ -150,6 +174,15 @@ func TestInformationalRecognisesTheNotesPeersSend(t *testing.T) {
 		"paradox1977 on an expiry":     `The download challenge expired. Request a file again for a new challenge.`,
 		"PSXDupe on what it shares":    `I spend a great amount of time cleaning and verifying the music I download. Ensuring that all tracks are lossless and not upsampled MP3s. I am happy to share these files with anyone who is sharing.`,
 		"PSXDupe on its share rule":    `However, Please keep in mind, If you are not sharing at least 2,500+ files, then you'll simply be banned immediately.  If you are sharing rubbish just to share, you will be banned immediately. Along with being banned, you will also be set to ignore.`,
+		"ProveIt accepting a word":     `ProveIt: You are verified. I will now retry your queued downloads automatically. If they do not auto-restart, please retry manually.`,
+		"ProveIt in lower case":        `ProveIt: you are verified. i will now retry your queued downloads automatically. if they do not auto-restart, please retry manually!`,
+		"Tymemage accepting a word":    `(AUTOMATED MESSAGE DO NOT RESPOND) ProveIt: You are verified. I will now retry your queued downloads automatically. If they do not auto-restart, please retry manually.`,
+		"PSXDupe accepting a word":     `You have been verified. Have a great day.`,
+		"nick_in_mersey4 accepting":    `Thanks. You are now verified and added to my user list. I will retry your queued download automatically. If it does not automatically restart, please re-queue it manually.`,
+		"Yumii accepting a word":       "Thankies! You’re verified now :3",
+		"Yumii on the retry":           "Your downloads should retry automatically. If they don’t, just try again manually.",
+		"delightful accepting a word":  "✅",
+		"MrBe9n beside its challenge":  `This is an automated message.`,
 	} {
 		if !Informational(message) {
 			t.Errorf("%s was not recognised as a note", name)
@@ -161,7 +194,9 @@ func TestInformationalRecognisesTheNotesPeersSend(t *testing.T) {
 // of all: a challenge read as a note would never be answered.
 func TestInformationalRefusesWhatItWasNotTaughtToRead(t *testing.T) {
 	for name, message := range map[string]string{
-		"a challenge":            proveItMessage,
+		"a challenge": proveItMessage,
+		"a challenge that says it is automated": `ProveIt: To prove you are a human downloading these files, ` +
+			`please type "dumptrump" in this chat to be added to my whitelist. This is an automated process.`,
 		"the bot's own question": `Antworte nur mit diesem Wort: BERLIN. This unlocks downloads for 7 days.`,
 		"prose asking for a word": `Just in case you couldn't download, just type rockstar in lowercase ` +
 			`without any punctuation, it's a plugin that I use to stop bots from spamming me.`,

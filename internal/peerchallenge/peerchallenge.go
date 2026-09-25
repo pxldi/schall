@@ -27,9 +27,11 @@ const maxWordLength = 64
 var (
 	// labelledWord is the paradox1977 bot: "Reply only with this word /
 	// Antworte nur mit diesem Wort: BERLIN." Both spellings end in a colon and
-	// the word, so one pattern reads either. It is tried first because that
-	// message also quotes the album title, and a title is not a challenge.
-	labelledWord = regexp.MustCompile(`(?i)\bwor[dt]\s*:\s*(\S{1,64})`)
+	// the word, so one pattern reads either. doesthisevenmatter on 2026-09-07
+	// labels it a phrase: "the following case-sensitive phrase: Ab-So-Lutely".
+	// It is tried first because the paradox1977 message also quotes the album
+	// title, and a title is not a challenge.
+	labelledWord = regexp.MustCompile(`(?i)\b(?:wor[dt]|phrase)\s*:\s*(\S{1,64})`)
 
 	// quotedWord is the ProveIt plugin and DJRolee: type, write, say, reply or
 	// respond with the word, in quotes, immediately after the verb. The quotes
@@ -50,8 +52,8 @@ var (
 	expiredChallenge = regexp.MustCompile(`(?i)\bchallenge\b[^.]{0,40}\bexpired\b`)
 
 	// announcements are the messages these peers send that ask for nothing: a
-	// word being accepted, a challenge running out, and the two notes PSXDupe
-	// sends beside its challenge about what it shares and who it bans. Each was
+	// word being accepted, a challenge running out, and the lines PSXDupe and
+	// MrBe9n send beside their challenges. Each was
 	// read off a live conversation, and the list is enumerated for the same
 	// reason the challenge patterns are — a message nobody wrote down here is
 	// shown to a person rather than judged.
@@ -69,6 +71,19 @@ var (
 		// PSXDupe on the collection it shares, and on who it bans.
 		regexp.MustCompile(`(?i)\bi spend a great amount of time\b`),
 		regexp.MustCompile(`(?i)\bbanned immediately\b`),
+		// The peer confirming a word, which arrives seconds after it and so
+		// after the row for the word. ProveIt says "You are verified", PSXDupe
+		// "You have been verified", nick_in_mersey4 "You are now verified",
+		// Yumii "You’re verified now" with a typographic apostrophe.
+		regexp.MustCompile(`(?i)\byou(?:['\x{2019}]re| are| have been)(?: now)? verified\b`),
+		// Yumii's second line of the same confirmation.
+		regexp.MustCompile(`(?i)\bdownloads should retry automatically\b`),
+		// delightful's whole confirmation.
+		regexp.MustCompile(`^\s*\x{2705}\s*$`),
+		// MrBe9n's third line. Anchored to the whole message, because ProveIt
+		// challenges end with "This is an automated process." and have to stay
+		// challenges.
+		regexp.MustCompile(`(?i)^\s*this is an automated message\.?\s*$`),
 	}
 
 	// sentencePunctuation is what ends the sentence a labelled word sits in:
