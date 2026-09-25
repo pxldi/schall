@@ -29,9 +29,15 @@ func (store *fakeStore) ListenBounds(context.Context) (db.ListenBounds, error) {
 	return store.bounds, nil
 }
 
-func (store *fakeStore) InsertListens(_ context.Context, listens []db.ListenInsert) (int64, error) {
+func (store *fakeStore) InsertListens(_ context.Context, listens []db.ListenInsert) (db.ListensInserted, error) {
 	store.inserted = append(store.inserted, listens...)
-	return int64(len(listens)), nil
+	inserted := db.ListensInserted{Stored: int64(len(listens))}
+	for _, listen := range listens {
+		if listen.RecordingMBID != "" {
+			inserted.Recordings++
+		}
+	}
+	return inserted, nil
 }
 
 func enabled() db.ListenBrainzSettingsRow {
@@ -79,6 +85,33 @@ func TestSyncReadsForwardFromTheNewestListen(t *testing.T) {
 	}
 	if len(store.inserted) != 3 || store.inserted[0].TrackName != "T0" {
 		t.Errorf("inserted %+v", store.inserted)
+	}
+}
+
+// The count of stored listens that name a recording is what starts the own
+// recommendation sweep (ADR 0039 §6), so a listen ListenBrainz did not map
+// must not be counted.
+func TestSyncCountsTheStoredListensThatNameARecording(t *testing.T) {
+	at := time.Date(2026, time.September, 5, 13, 0, 0, 0, time.UTC).Unix()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(fmt.Sprintf(`{"payload":{"count":2,"listens":[
+			{"listened_at":%d,"track_metadata":{"artist_name":"A","track_name":"Mapped",
+			 "mbid_mapping":{"recording_mbid":"8bc0f5f1-d052-429b-9123-1040f7e2b4b6"}}},
+			{"listened_at":%d,"track_metadata":{"artist_name":"A","track_name":"Unmapped"}}]}}`, at, at-60)))
+	}))
+	defer server.Close()
+	store := &fakeStore{settings: enabled(), bounds: db.ListenBounds{
+		Count:  10,
+		Newest: pgtype.Timestamptz{Time: time.Unix(at-3600, 0), Valid: true},
+	}}
+	service := NewService(store, "schall-test/0.0", zerolog.Nop()).WithEndpoint(server.URL, nil, nil)
+
+	result, err := service.Sync(context.Background())
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if result.Stored != 2 || result.StoredRecordings != 1 {
+		t.Fatalf("result = %+v, want two stored and one naming a recording", result)
 	}
 }
 

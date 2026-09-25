@@ -134,6 +134,7 @@
     sweep_lyrics: 'lyrics sweep',
     sweep_preview_anchors: 'preview sweep',
     sweep_recommendations: 'suggestions sweep',
+    sweep_own_recommendations: 'Schall suggestions sweep',
     sync_listens: 'listening history sync',
     sweep_audio_spectrum: 'audio measurement',
     sweep_transcode: 'transcode sweep',
@@ -205,6 +206,11 @@
       label: 'Recommendation sweep',
       does: 'Fetches and publishes listening recommendations',
       waitsFor: 'an enabled ListenBrainz account'
+    },
+    sweep_own_recommendations: {
+      label: 'Schall recommendation sweep',
+      does: 'Builds the Schall recommendations from your listens',
+      waitsFor: 'a listen that names a recording'
     },
     sync_listens: {
       label: 'Listening history sync',

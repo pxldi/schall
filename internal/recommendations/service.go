@@ -1,5 +1,6 @@
 // Package recommendations reads the external source Schall takes suggestions
-// from, as the stored settings describe it.
+// from, as the stored settings describe it. It also runs Schall's own engine
+// over the listens already copied (own.go, ADR 0039).
 //
 // It is the only thing in the tree that builds a ListenBrainz client, and it
 // builds one per use from the settings row rather than holding one: an account
@@ -65,6 +66,7 @@ type Store interface {
 	RecordRecommendationFeedback(context.Context, db.RecordRecommendationFeedbackParams) (db.RecommendationFeedback, error)
 	ListRecommendationFeedback(context.Context, string) ([]db.RecommendationFeedback, error)
 	DeleteRecommendationFeedback(context.Context, string) error
+	OwnRecommendationPool(context.Context, db.OwnRecommendationPoolParams) ([]db.OwnRecommendationPoolRow, error)
 	RecordRecommendationImpression(context.Context, db.RecordRecommendationImpressionParams) (db.RecommendationImpression, error)
 	ListedRecommendationRecordings(context.Context, []uuid.UUID) ([]uuid.UUID, error)
 }
@@ -1028,11 +1030,7 @@ func (service *Service) expandCandidates(
 		asked:  make([]uuid.UUID, 0, len(candidates)),
 	}
 	for _, candidate := range candidates {
-		recording, err := service.recordings.Recording(ctx, candidate.recordingID)
-		if errors.Is(err, musicbrainz.ErrNotFound) {
-			run.asked = append(run.asked, candidate.recordingID)
-			continue
-		}
+		recording, usable, err := service.expandRecording(ctx, candidate.recordingID)
 		if err != nil {
 			// Not counted as asked. MusicBrainz refusing to answer says nothing
 			// about the recording, so the next pass has to put the question again.
@@ -1044,28 +1042,7 @@ func (service *Service) expandCandidates(
 			return run, nil
 		}
 		run.asked = append(run.asked, candidate.recordingID)
-
-		var release musicbrainz.RecordingRelease
-		for _, item := range recording.Releases {
-			if item.ReleaseGroupID != uuid.Nil {
-				release = item
-				break
-			}
-		}
-		artistIDs := make([]uuid.UUID, 0, len(recording.Credits))
-		seenArtists := make(map[uuid.UUID]struct{}, len(recording.Credits))
-		for _, credit := range recording.Credits {
-			if credit.ArtistID == uuid.Nil {
-				continue
-			}
-			if _, seen := seenArtists[credit.ArtistID]; seen {
-				continue
-			}
-			seenArtists[credit.ArtistID] = struct{}{}
-			artistIDs = append(artistIDs, credit.ArtistID)
-		}
-		if release.ReleaseGroupID == uuid.Nil || len(artistIDs) == 0 ||
-			strings.TrimSpace(recording.Title) == "" || strings.TrimSpace(recording.ArtistCredit) == "" {
+		if !usable {
 			continue
 		}
 
@@ -1082,14 +1059,82 @@ func (service *Service) expandCandidates(
 			sort.Strings(seeds)
 			candidate.reasonContext["seed_recording_ids"] = seeds
 		}
-		run.stored = append(run.stored, CandidateInput{
-			MusicBrainzRecordingID: recording.ID, MusicBrainzReleaseGroupID: release.ReleaseGroupID,
-			MusicBrainzArtistIDs: artistIDs, RecordingTitle: recording.Title,
-			ReleaseTitle: release.Title, ArtistName: recording.ArtistCredit,
-			SourceScore: candidate.score, ReasonCodes: reasons, ReasonContext: candidate.reasonContext,
-		})
+		run.stored = append(run.stored, recording.input(candidate.score, reasons, candidate.reasonContext))
 	}
 	return run, nil
+}
+
+// recordingExpansion is what MusicBrainz says about one recording, in the shape
+// a stored candidate needs: the release group and the complete artist credit
+// the hard read-time rules compare against.
+type recordingExpansion struct {
+	recordingID    uuid.UUID
+	releaseGroupID uuid.UUID
+	artistIDs      []uuid.UUID
+	title          string
+	releaseTitle   string
+	artistName     string
+}
+
+// expandRecording asks MusicBrainz about one recording. Both sweeps use it, so
+// they spend the same client and its one-request-per-second limit.
+//
+// It answers false with no error when MusicBrainz answered and the answer
+// cannot be stored: it does not know the recording, or knows it without a
+// release group or a credited artist. An error means MusicBrainz did not
+// answer, which says nothing about the recording.
+func (service *Service) expandRecording(
+	ctx context.Context, recordingID uuid.UUID,
+) (recordingExpansion, bool, error) {
+	recording, err := service.recordings.Recording(ctx, recordingID)
+	if errors.Is(err, musicbrainz.ErrNotFound) {
+		return recordingExpansion{}, false, nil
+	}
+	if err != nil {
+		return recordingExpansion{}, false, err
+	}
+
+	var release musicbrainz.RecordingRelease
+	for _, item := range recording.Releases {
+		if item.ReleaseGroupID != uuid.Nil {
+			release = item
+			break
+		}
+	}
+	artistIDs := make([]uuid.UUID, 0, len(recording.Credits))
+	seenArtists := make(map[uuid.UUID]struct{}, len(recording.Credits))
+	for _, credit := range recording.Credits {
+		if credit.ArtistID == uuid.Nil {
+			continue
+		}
+		if _, seen := seenArtists[credit.ArtistID]; seen {
+			continue
+		}
+		seenArtists[credit.ArtistID] = struct{}{}
+		artistIDs = append(artistIDs, credit.ArtistID)
+	}
+	if release.ReleaseGroupID == uuid.Nil || len(artistIDs) == 0 ||
+		strings.TrimSpace(recording.Title) == "" || strings.TrimSpace(recording.ArtistCredit) == "" {
+		return recordingExpansion{}, false, nil
+	}
+	return recordingExpansion{
+		recordingID: recording.ID, releaseGroupID: release.ReleaseGroupID,
+		artistIDs: artistIDs, title: recording.Title,
+		releaseTitle: release.Title, artistName: recording.ArtistCredit,
+	}, true, nil
+}
+
+// input is the stored candidate this expansion becomes under one source's
+// score and reasons.
+func (recording recordingExpansion) input(
+	score *float64, reasons []string, context map[string]any,
+) CandidateInput {
+	return CandidateInput{
+		MusicBrainzRecordingID: recording.recordingID, MusicBrainzReleaseGroupID: recording.releaseGroupID,
+		MusicBrainzArtistIDs: append([]uuid.UUID(nil), recording.artistIDs...), RecordingTitle: recording.title,
+		ReleaseTitle: recording.releaseTitle, ArtistName: recording.artistName,
+		SourceScore: score, ReasonCodes: reasons, ReasonContext: context,
+	}
 }
 
 // SuppressionRule is why a candidate is not renderable. Empty means it may be
@@ -1314,12 +1359,16 @@ const (
 	FeedbackLessLikeThis FeedbackSignal = "less_like_this"
 )
 
-// RecordFeedback copies the current candidate into one append-only event. The
-// database statement reads and writes it together, so a replaced candidate
-// produces no partial event.
+// RecordFeedback copies the source's current candidate into one append-only
+// event. The database statement reads and writes it together, so a replaced
+// candidate produces no partial event. Each sweep reads only its own source's
+// events (ADR 0039 §5).
 func (service *Service) RecordFeedback(
-	ctx context.Context, recordingID uuid.UUID, signal FeedbackSignal,
+	ctx context.Context, source string, recordingID uuid.UUID, signal FeedbackSignal,
 ) (db.RecommendationFeedback, error) {
+	if strings.TrimSpace(source) == "" {
+		return db.RecommendationFeedback{}, errors.New("recommendation feedback source is required")
+	}
 	if recordingID == uuid.Nil {
 		return db.RecommendationFeedback{}, errors.New("recommendation feedback recording ID is required")
 	}
@@ -1328,7 +1377,7 @@ func (service *Service) RecordFeedback(
 	}
 	row, err := service.store.RecordRecommendationFeedback(ctx, db.RecordRecommendationFeedbackParams{
 		Signal:                 string(signal),
-		Source:                 listenbrainz.Name,
+		Source:                 source,
 		MusicbrainzRecordingID: recordingID,
 	})
 	if err != nil {
@@ -1337,10 +1386,13 @@ func (service *Service) RecordFeedback(
 	return row, nil
 }
 
-// ClearFeedback removes the current source's feedback events. Other
-// recommendation decisions remain in their own stores.
-func (service *Service) ClearFeedback(ctx context.Context) error {
-	if err := service.store.DeleteRecommendationFeedback(ctx, listenbrainz.Name); err != nil {
+// ClearFeedback removes one source's feedback events. The other source's
+// events and every other recommendation decision remain in their stores.
+func (service *Service) ClearFeedback(ctx context.Context, source string) error {
+	if strings.TrimSpace(source) == "" {
+		return errors.New("recommendation feedback source is required")
+	}
+	if err := service.store.DeleteRecommendationFeedback(ctx, source); err != nil {
 		return fmt.Errorf("clear recommendation feedback: %w", err)
 	}
 	return nil

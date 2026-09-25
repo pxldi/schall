@@ -1261,6 +1261,11 @@ export type RecommendationSubject = 'recording' | 'release_group' | 'artist';
 
 export type RecommendationFeedbackSignal = 'more_like_this' | 'less_like_this';
 
+// Which list to read. ListenBrainz is the account's collaborative-filtered and
+// similar-recording answer; Schall is the own engine, built from the listens
+// already copied (ADR 0039). The two are ranked apart and read one at a time.
+export type RecommendationSource = 'listenbrainz' | 'schall';
+
 // The weekly playlist. Schall picks a few suggestions a week, obtains them, and
 // puts them here; a song nobody kept is removed again a week later.
 //

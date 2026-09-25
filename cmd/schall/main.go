@@ -354,6 +354,9 @@ func run() error {
 		// moment it lands.
 		WithStandingWants(acquisition.NewStanding(store, acquisitionService, logger)).
 		WithRecommendationSweeper(recommendationService).
+		// The own engine shares recommendationService, so its MusicBrainz
+		// look-ups go through the same client and rate limit (ADR 0039).
+		WithOwnRecommendationSweeper(recommendationService).
 		// The words of a song, written beside it as an .lrc file. LRCLIB is
 		// asked by the catalogue's account of the recording and answers only
 		// when the length agrees, so a song it has never heard of is silence
@@ -720,6 +723,13 @@ func run() error {
 		if err := store.EnsureListensSyncQueued(ctx, time.Now()); err != nil {
 			return fmt.Errorf("queue listens sync: %w", err)
 		}
+	}
+
+	// The own engine needs no account, only listens a sync already copied
+	// (ADR 0039 §6). The query queues nothing where no listen names a
+	// recording, and a pass already waiting keeps its time.
+	if err := store.EnsureOwnRecommendationSweepQueued(ctx, time.Now()); err != nil {
+		return fmt.Errorf("queue own recommendation sweep: %w", err)
 	}
 
 	// A refresh left open by a restart would block every later one, because one

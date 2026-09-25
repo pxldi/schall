@@ -183,6 +183,11 @@ var stillness = []quiet{
 	// disconnects one.
 	{"enabled recommendation accounts", `
 		SELECT count(*) FROM listenbrainz_settings WHERE enabled`},
+	// Startup queues the own engine's sweep when a listen names a recording
+	// (ADR 0039 §6), and the sweep replaces the stored `schall` list. The
+	// fixture holds no listens.
+	{"listens that name a recording", `
+		SELECT count(*) FROM listens WHERE recording_mbid IS NOT NULL`},
 	// The spectrum sweep decodes a few seconds of every file it has never
 	// listened to. None of the fixture's files is on disc, so a pass over them
 	// would run a decoder per row in the middle of a browser test and learn

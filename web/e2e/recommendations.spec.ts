@@ -90,6 +90,19 @@ test('a stored list with no sweep behind it is not called stale', async ({ page 
   await expect(page.getByText('This list stopped refreshing')).toHaveCount(0);
 });
 
+// The own engine needs no ListenBrainz account (ADR 0039). The fixture has no
+// account and no listens, so the Schall list is readable and says no sweep has
+// run.
+test('the Schall list is read without a ListenBrainz account', async ({ page }) => {
+  await page.goto('/playlists?view=recommended');
+  await expect(page.getByText(seeded.recommendations.shown[0], { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Schall', exact: true }).click();
+
+  await expect(page.getByText('No sweep has run yet')).toBeVisible();
+  await expect(page.getByText(seeded.recommendations.shown[0], { exact: true })).toHaveCount(0);
+});
+
 test('the view a reader opened survives a reload', async ({ page }) => {
   await page.goto('/playlists');
   await page.getByRole('button', { name: 'Recommended' }).click();

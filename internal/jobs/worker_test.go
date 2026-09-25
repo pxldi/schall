@@ -18,6 +18,7 @@ import (
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/library"
+	"github.com/pxldi/schall/internal/listens"
 	"github.com/pxldi/schall/internal/lyrics"
 	"github.com/pxldi/schall/internal/musicbrainz"
 	"github.com/pxldi/schall/internal/navidrome"
@@ -72,6 +73,10 @@ type fakeQueue struct {
 	newReleasesRefreshQueuedFor   time.Time
 	newReleasesRefreshQueuedCalls int
 	recommendationSweepPayload    json.RawMessage
+	ownSweepQueuedFor             time.Time
+	ownSweepPayload               json.RawMessage
+	ownSweepEnsuredFor            time.Time
+	ownSweepEnsured               int
 	// err is how the calls that read a catalogue identity answer. Everything
 	// else has a field of its own, so a test can break exactly the call it is
 	// about rather than every call the job makes.
@@ -367,6 +372,24 @@ func (queue *fakeQueue) QueueRecommendationSweepContinuation(
 	}
 	queue.recommendationSweepQueuedFor = runAfter
 	queue.recommendationSweepPayload = append(json.RawMessage(nil), payload...)
+	return nil
+}
+func (queue *fakeQueue) QueueOwnRecommendationSweep(
+	_ context.Context, runAfter time.Time, payload json.RawMessage,
+) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.ownSweepQueuedFor = runAfter
+	queue.ownSweepPayload = append(json.RawMessage(nil), payload...)
+	return nil
+}
+func (queue *fakeQueue) EnsureOwnRecommendationSweepQueued(_ context.Context, runAfter time.Time) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.ownSweepEnsuredFor = runAfter
+	queue.ownSweepEnsured++
 	return nil
 }
 func (queue *fakeQueue) QueueListensSync(_ context.Context, runAfter time.Time) error {
@@ -1862,6 +1885,174 @@ func (sweeper *fakeRecommendationSweeper) SweepPage(
 	sweeper.swept++
 	sweeper.position = position
 	return sweeper.result, sweeper.err
+}
+
+type fakeOwnRecommendationSweeper struct {
+	result   recommendations.OwnSweepResult
+	err      error
+	position recommendations.OwnSweepPosition
+}
+
+func (sweeper *fakeOwnRecommendationSweeper) SweepOwnPage(
+	_ context.Context, position recommendations.OwnSweepPosition,
+) (recommendations.OwnSweepResult, error) {
+	sweeper.position = position
+	return sweeper.result, sweeper.err
+}
+
+// runOwnSweep processes one own-recommendation job carrying position and says
+// what the fake queue was left holding.
+func runOwnSweep(
+	t *testing.T, sweeper *fakeOwnRecommendationSweeper, position recommendations.OwnSweepPosition, attempts int,
+) (*fakeQueue, uuid.UUID, time.Time) {
+	t.Helper()
+	jobID := uuid.New()
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithOwnRecommendationSweeper(sweeper)
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	worker.now = func() time.Time { return now }
+	payload, _ := json.Marshal(position)
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: SweepOwnRecommendations, Payload: payload, Attempts: attempts, MaxAttempts: 3,
+	})
+	return queue, jobID, now
+}
+
+func queuedOwnPosition(t *testing.T, queue *fakeQueue) recommendations.OwnSweepPosition {
+	t.Helper()
+	var queued recommendations.OwnSweepPosition
+	if err := json.Unmarshal(queue.ownSweepPayload, &queued); err != nil {
+		t.Fatalf("queued payload %s: %v", queue.ownSweepPayload, err)
+	}
+	return queued
+}
+
+func TestAnOwnRecommendationPassWithRecordingsWaitingComesStraightBack(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1, Unexpandable: []uuid.UUID{uuid.New()}}
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		More: true, Resume: true, Position: next,
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now) {
+		t.Fatalf("completed = %s, next pass = %s, want one due now", queue.completed, queue.ownSweepQueuedFor)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want %#v", queued, next)
+	}
+}
+
+func TestAnOwnRecommendationPassReadsItsPositionFromThePayload(t *testing.T) {
+	position := recommendations.OwnSweepPosition{Passes: 4, Unexpandable: []uuid.UUID{uuid.New()}}
+	sweeper := &fakeOwnRecommendationSweeper{}
+	runOwnSweep(t, sweeper, position, 1)
+
+	if !reflect.DeepEqual(sweeper.position, position) {
+		t.Fatalf("sweeper position = %#v, want %#v", sweeper.position, position)
+	}
+}
+
+func TestAFinishedOwnRecommendationChainComesBackADayLater(t *testing.T) {
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		Position: recommendations.OwnSweepPosition{Passes: 3},
+	}}, recommendations.OwnSweepPosition{Passes: 2}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationIdle)) {
+		t.Fatalf("completed = %s, next pass = %s, want one in %s",
+			queue.completed, queue.ownSweepQueuedFor, recommendationIdle)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, recommendations.OwnSweepPosition{}) {
+		t.Fatalf("queued position = %#v, want a new chain", queued)
+	}
+}
+
+func TestAnOwnRecommendationPassMusicBrainzDidNotAnswerWaitsHalfAnHour(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1}
+	queue, _, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		Resume: true, Position: next, Report: recommendations.OwnSweepReport{ProviderFailed: true},
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if !queue.ownSweepQueuedFor.Equal(now.Add(recommendationUnreachable)) {
+		t.Fatalf("next pass = %s, want one in %s", queue.ownSweepQueuedFor, recommendationUnreachable)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want the chain carried on", queued)
+	}
+}
+
+// Twenty-four answers and then a failure is still an outage (ADR 0039 §6). The
+// result says there is more to do, and the failure wins over it.
+func TestAnOwnRecommendationPassThatFailedAfterAnswersWaitsHalfAnHour(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1, Unexpandable: []uuid.UUID{uuid.New()}}
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		More: true, Resume: true, Position: next,
+		Report: recommendations.OwnSweepReport{Asked: 24, Stored: 24, ProviderFailed: true},
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationUnreachable)) {
+		t.Fatalf("completed = %s, next pass = %s, want one in %s",
+			queue.completed, queue.ownSweepQueuedFor, recommendationUnreachable)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want the chain carried on", queued)
+	}
+}
+
+type fakeListensSyncer struct {
+	result listens.Result
+	err    error
+}
+
+func (syncer fakeListensSyncer) Sync(context.Context) (listens.Result, error) {
+	return syncer.result, syncer.err
+}
+
+// runListensSync processes one listens sync job against a syncer that answers
+// with result and err, and says what the fake queue was left holding.
+func runListensSync(t *testing.T, result listens.Result, err error) (*fakeQueue, time.Time) {
+	t.Helper()
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).
+		WithListens(fakeListensSyncer{result: result, err: err})
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	worker.now = func() time.Time { return now }
+	worker.process(context.Background(), Job{ID: uuid.New(), Kind: SyncListens, Attempts: 1, MaxAttempts: 3})
+	return queue, now
+}
+
+// The own engine reads nothing but the copied listens, so the first ones that
+// name a recording start it instead of waiting for a restart (ADR 0039 §6).
+func TestAListensSyncThatStoredARecordingAsksForTheOwnSweep(t *testing.T) {
+	queue, now := runListensSync(t, listens.Result{Fetched: 3, Stored: 3, StoredRecordings: 2}, nil)
+
+	if queue.ownSweepEnsured != 1 || !queue.ownSweepEnsuredFor.Equal(now) {
+		t.Fatalf("own sweep asked for %d times at %s, want once now", queue.ownSweepEnsured, queue.ownSweepEnsuredFor)
+	}
+}
+
+func TestAListensSyncThatStoredNoRecordingDoesNotAskForTheOwnSweep(t *testing.T) {
+	queue, _ := runListensSync(t, listens.Result{Fetched: 4, Stored: 4}, nil)
+
+	if queue.ownSweepEnsured != 0 {
+		t.Fatalf("own sweep asked for %d times, want none", queue.ownSweepEnsured)
+	}
+}
+
+func TestAListensSyncThatFailedAfterStoringARecordingAsksForTheOwnSweep(t *testing.T) {
+	queue, _ := runListensSync(t, listens.Result{Fetched: 500, Stored: 500, StoredRecordings: 480},
+		errors.New("read listens after 2026-09-25T11:00:00Z: timeout"))
+
+	if queue.ownSweepEnsured != 1 {
+		t.Fatalf("own sweep asked for %d times, want once", queue.ownSweepEnsured)
+	}
+}
+
+func TestAnOwnRecommendationPassThatSpentItsRetriesQueuesTheNextDay(t *testing.T) {
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{err: errors.New("database went away")},
+		recommendations.OwnSweepPosition{}, 3)
+
+	if queue.failed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationIdle)) {
+		t.Fatalf("failed = %s, next pass = %s, want one in %s", queue.failed, queue.ownSweepQueuedFor, recommendationIdle)
+	}
 }
 
 func TestARecommendationPassWithMoreWaitingComesStraightBack(t *testing.T) {

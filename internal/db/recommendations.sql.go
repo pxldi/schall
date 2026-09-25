@@ -416,6 +416,174 @@ func (q *Queries) ListedRecommendationRecordings(ctx context.Context, musicbrain
 	return items, nil
 }
 
+const ownRecommendationPool = `-- name: OwnRecommendationPool :many
+WITH ordered AS (
+    SELECT
+        listens.listened_at,
+        listens.artist_name,
+        listens.track_name,
+        listens.recording_mbid,
+        CASE
+            WHEN lag(listens.listened_at) OVER listened IS NULL
+              OR listens.listened_at - lag(listens.listened_at) OVER listened
+                   > $1::bigint * interval '1 microsecond'
+                THEN 1
+            ELSE 0
+        END AS opens_session
+    FROM listens
+    WINDOW listened AS (ORDER BY listens.listened_at, listens.artist_name, listens.track_name)
+),
+sessioned AS (
+    SELECT
+        ordered.recording_mbid,
+        ordered.listened_at,
+        sum(ordered.opens_session) OVER (
+            ORDER BY ordered.listened_at, ordered.artist_name, ordered.track_name
+            ROWS UNBOUNDED PRECEDING
+        ) AS session
+    FROM ordered
+),
+listened AS (
+    SELECT DISTINCT sessioned.recording_mbid
+    FROM sessioned
+    WHERE sessioned.recording_mbid IS NOT NULL
+),
+owned AS (
+    SELECT library_file_identities.musicbrainz_recording_id AS recording_mbid
+    FROM library_file_identities
+    JOIN library_files ON library_files.id = library_file_identities.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND library_file_identities.musicbrainz_recording_id
+              IN (SELECT listened.recording_mbid FROM listened)
+    UNION
+    SELECT tracks.musicbrainz_recording_id
+    FROM tracks
+    JOIN track_mappings ON track_mappings.track_id = tracks.id
+    JOIN library_files ON library_files.id = track_mappings.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND tracks.musicbrainz_recording_id
+              IN (SELECT listened.recording_mbid FROM listened)
+),
+pool AS (
+    SELECT
+        sessioned.recording_mbid,
+        count(*) AS plays,
+        max(sessioned.listened_at) AS latest_listened_at
+    FROM sessioned
+    WHERE sessioned.recording_mbid IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM owned WHERE owned.recording_mbid = sessioned.recording_mbid
+      )
+    GROUP BY sessioned.recording_mbid
+    HAVING count(*) >= $2::bigint
+),
+pool_sessions AS (
+    SELECT DISTINCT sessioned.recording_mbid, sessioned.session
+    FROM sessioned
+    JOIN pool ON pool.recording_mbid = sessioned.recording_mbid
+),
+owned_sessions AS (
+    SELECT DISTINCT sessioned.recording_mbid, sessioned.session
+    FROM sessioned
+    JOIN owned ON owned.recording_mbid = sessioned.recording_mbid
+),
+shared AS (
+    SELECT pool_sessions.recording_mbid, count(*) AS shared_sessions
+    FROM pool_sessions
+    WHERE pool_sessions.session IN (SELECT owned_sessions.session FROM owned_sessions)
+    GROUP BY pool_sessions.recording_mbid
+),
+pairs AS (
+    SELECT
+        pool_sessions.recording_mbid,
+        owned_sessions.recording_mbid AS seed_mbid,
+        count(*) AS together
+    FROM pool_sessions
+    JOIN owned_sessions ON owned_sessions.session = pool_sessions.session
+    GROUP BY pool_sessions.recording_mbid, owned_sessions.recording_mbid
+),
+ranked_seeds AS (
+    SELECT
+        pairs.recording_mbid,
+        pairs.seed_mbid,
+        row_number() OVER (
+            PARTITION BY pairs.recording_mbid
+            ORDER BY pairs.together DESC, pairs.seed_mbid
+        ) AS position
+    FROM pairs
+),
+seeds AS (
+    SELECT
+        ranked_seeds.recording_mbid,
+        array_agg(ranked_seeds.seed_mbid ORDER BY ranked_seeds.position)::uuid[] AS seed_recording_ids
+    FROM ranked_seeds
+    WHERE ranked_seeds.position <= $3::bigint
+    GROUP BY ranked_seeds.recording_mbid
+)
+SELECT
+    pool.recording_mbid::uuid AS recording_mbid,
+    pool.plays::bigint AS plays,
+    pool.latest_listened_at::timestamptz AS latest_listened_at,
+    coalesce(shared.shared_sessions, 0)::bigint AS shared_sessions,
+    coalesce(seeds.seed_recording_ids, '{}')::uuid[] AS seed_recording_ids
+FROM pool
+LEFT JOIN shared ON shared.recording_mbid = pool.recording_mbid
+LEFT JOIN seeds ON seeds.recording_mbid = pool.recording_mbid
+ORDER BY pool.recording_mbid
+`
+
+type OwnRecommendationPoolParams struct {
+	SessionGapMicroseconds int64 `json:"session_gap_microseconds"`
+	MinimumPlays           int64 `json:"minimum_plays"`
+	MaximumSeeds           int64 `json:"maximum_seeds"`
+}
+
+type OwnRecommendationPoolRow struct {
+	RecordingMbid    uuid.UUID          `json:"recording_mbid"`
+	Plays            int64              `json:"plays"`
+	LatestListenedAt pgtype.Timestamptz `json:"latest_listened_at"`
+	SharedSessions   int64              `json:"shared_sessions"`
+	SeedRecordingIds []uuid.UUID        `json:"seed_recording_ids"`
+}
+
+// The own engine's candidates (ADR 0039 §1-§3): recordings the listens name at
+// least minimum_plays times that no present library file holds.
+//
+// Sessions run over every listen, including those with no recording MBID: a
+// listen nobody could identify is still somebody listening, so it keeps a
+// session open. The primary key orders listens that share a moment, so the two
+// window passes agree on which listen opened a session.
+//
+// Ownership uses the evidence of the read query's owned_recordings: a present
+// file whose proven identity names the recording, or a present file mapped to
+// a track that names it. Release-group ownership is left to rule 1 at read
+// time, as every other suppression is.
+func (q *Queries) OwnRecommendationPool(ctx context.Context, arg OwnRecommendationPoolParams) ([]OwnRecommendationPoolRow, error) {
+	rows, err := q.db.Query(ctx, ownRecommendationPool, arg.SessionGapMicroseconds, arg.MinimumPlays, arg.MaximumSeeds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OwnRecommendationPoolRow{}
+	for rows.Next() {
+		var i OwnRecommendationPoolRow
+		if err := rows.Scan(
+			&i.RecordingMbid,
+			&i.Plays,
+			&i.LatestListenedAt,
+			&i.SharedSessions,
+			&i.SeedRecordingIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordRecommendationFeedback = `-- name: RecordRecommendationFeedback :one
 INSERT INTO recommendation_feedback (
     source,

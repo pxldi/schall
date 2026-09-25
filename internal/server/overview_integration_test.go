@@ -120,8 +120,8 @@ func TestOverviewCountsListensInTheBrowsersZone(t *testing.T) {
 	stored, err := store.InsertListens(ctx, []db.ListenInsert{
 		{ListenedAt: recent, ArtistName: "Pashanim", TrackName: "Maske weg", ReleaseName: "traence"},
 	})
-	if err != nil || stored != 0 {
-		t.Fatalf("second insert stored %d, err %v; want 0", stored, err)
+	if err != nil || stored.Stored != 0 {
+		t.Fatalf("second insert stored %d, err %v; want 0", stored.Stored, err)
 	}
 
 	// The catalogue holds Pashanim under the listen's artist ID, with a

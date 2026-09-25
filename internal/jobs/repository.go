@@ -605,6 +605,20 @@ func (repository *Repository) QueueRecommendationSweepContinuation(
 	return db.New(repository.pool).QueueRecommendationSweepContinuation(ctx, runAfter, payload)
 }
 
+// QueueOwnRecommendationSweep asks for the next pass of the own engine,
+// carrying the position its chain reached.
+func (repository *Repository) QueueOwnRecommendationSweep(
+	ctx context.Context, runAfter time.Time, payload json.RawMessage,
+) error {
+	return db.New(repository.pool).QueueOwnRecommendationSweep(ctx, runAfter, payload)
+}
+
+// EnsureOwnRecommendationSweepQueued asks for an own-recommendation pass when
+// none is on the books and a listen names a recording.
+func (repository *Repository) EnsureOwnRecommendationSweepQueued(ctx context.Context, runAfter time.Time) error {
+	return db.New(repository.pool).EnsureOwnRecommendationSweepQueued(ctx, runAfter)
+}
+
 // QueueListensSync asks for one listening-history sync at the given time.
 func (repository *Repository) QueueListensSync(ctx context.Context, runAfter time.Time) error {
 	return db.New(repository.pool).QueueListensSync(ctx, runAfter)

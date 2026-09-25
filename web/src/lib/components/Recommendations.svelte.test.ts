@@ -100,9 +100,12 @@ async function looking(...titles: string[]) {
 
 /** Every write the view made, in the order it made them. */
 let posted: { path: string; body: unknown }[] = [];
+/** Every list read the view made, as the address it asked. */
+let read: string[] = [];
 
 function answering(list: RecommendationList) {
   posted = [];
+  read = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
@@ -110,6 +113,7 @@ function answering(list: RecommendationList) {
         posted.push({ path, body: init.body ? JSON.parse(String(init.body)) : undefined });
         return new Response(JSON.stringify({}), { status: 200 });
       }
+      read.push(path);
       return new Response(JSON.stringify(list));
     })
   );
@@ -266,7 +270,8 @@ describe('Recommendations', () => {
         path: '/api/v1/recommendations/feedback',
         body: {
           recordingId: 'e2000000-0000-4000-8000-000000000001',
-          signal: 'more_like_this'
+          signal: 'more_like_this',
+          source: 'listenbrainz'
         }
       })
     );
@@ -284,7 +289,8 @@ describe('Recommendations', () => {
         path: '/api/v1/recommendations/feedback',
         body: {
           recordingId: 'e2000000-0000-4000-8000-000000000001',
-          signal: 'less_like_this'
+          signal: 'less_like_this',
+          source: 'listenbrainz'
         }
       })
     );
@@ -295,17 +301,192 @@ describe('Recommendations', () => {
     opened();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
-    expect(screen.getByText('Clear all recommendation feedback?')).toBeTruthy();
+    expect(screen.getByText('Clear all ListenBrainz feedback?')).toBeTruthy();
     expect(screen.getByText(/The next sweep uses source ranking alone/)).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
 
     await vi.waitFor(() =>
       expect(posted).toContainEqual({
-        path: '/api/v1/recommendations/feedback',
+        path: '/api/v1/recommendations/feedback?source=listenbrainz',
         body: undefined
       })
     );
+  });
+
+  it('reads the ListenBrainz list until the reader switches', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+
+    expect(read.every((path) => new URL(path, 'http://test').searchParams.get('source') === 'listenbrainz')).toBe(true);
+    expect(screen.getByRole('button', { name: 'ListenBrainz' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Schall' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('reads the Schall list once the reader switches to it', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await vi.waitFor(() =>
+      expect(read.map((path) => new URL(path, 'http://test').searchParams.get('source'))).toContain('schall')
+    );
+    expect(screen.getByRole('button', { name: 'Schall' }).getAttribute('aria-pressed')).toBe('true');
+    expect(await screen.findByText(/built from your listens/)).toBeTruthy();
+  });
+
+  it('starts the Schall list at its first page', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await vi.waitFor(() => {
+      const schall = read
+        .map((path) => new URL(path, 'http://test').searchParams)
+        .filter((asked) => asked.get('source') === 'schall');
+      expect(schall.length).toBeGreaterThan(0);
+      expect(schall[0].get('offset')).toBe('0');
+    });
+  });
+
+  it('does not show the ListenBrainz rows while the Schall list is on its way', async () => {
+    answering(answer());
+    const listenBrainz = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string, init?: RequestInit) =>
+        new URL(path, 'http://test').searchParams.get('source') === 'schall'
+          ? new Promise<Response>(() => {})
+          : listenBrainz(path, init)
+      )
+    );
+    opened();
+    await screen.findByText('Weather Report');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await vi.waitFor(() => expect(screen.queryByText('Weather Report')).toBeNull());
+  });
+
+  it('sends feedback on a Schall suggestion as Schall feedback', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'More like this' }));
+
+    await vi.waitFor(() =>
+      expect(posted).toContainEqual({
+        path: '/api/v1/recommendations/feedback',
+        body: {
+          recordingId: 'e2000000-0000-4000-8000-000000000001',
+          signal: 'more_like_this',
+          source: 'schall'
+        }
+      })
+    );
+  });
+
+  it('names Schall when it asks before clearing Schall feedback', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
+
+    const confirmation = screen.getByRole('group', { name: 'Clear feedback confirmation' });
+    expect(confirmation.textContent).toContain('Clear all Schall feedback?');
+    expect(confirmation.textContent).toContain('pressed on the Schall list');
+  });
+
+  it('clears only the Schall feedback from the Schall list', async () => {
+    answering(answer());
+    opened();
+    await screen.findByText('Weather Report');
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
+
+    await vi.waitFor(() =>
+      expect(posted).toContainEqual({
+        path: '/api/v1/recommendations/feedback?source=schall',
+        body: undefined
+      })
+    );
+  });
+
+  it('writes out why the own engine suggested a recording', async () => {
+    answering(answer({ items: [suggestion({ reasonCodes: ['co_listened', 'listened'] })] }));
+    opened();
+
+    expect(
+      await screen.findByText("played beside music you have · you played it, you don't have it")
+    ).toBeTruthy();
+  });
+
+  it('says no Schall sweep has run when the Schall list holds nothing', async () => {
+    answering(
+      answer({
+        items: [],
+        snapshot: { source: 'schall', fetched: false, status: '', detail: '', fetchedAt: null }
+      })
+    );
+    opened();
+    await screen.findByText('No listening history read yet');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    expect(await screen.findByText('No sweep has run yet')).toBeTruthy();
+  });
+
+  it('does not send a Schall reader to Settings when the list stopped refreshing', async () => {
+    answering(
+      answer({
+        refresh: {
+          attempted: true,
+          succeeded: false,
+          lastAttemptAt: new Date(clock - 5 * 60_000).toISOString(),
+          nextAttemptAt: new Date(clock + 25 * 60_000).toISOString()
+        }
+      })
+    );
+    opened();
+    await screen.findByText(/This list stopped refreshing/);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    // The line leaves while the Schall list loads and comes back with it.
+    expect(await screen.findByText(/This list stopped refreshing/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+  });
+
+  it('says a partial Schall list is still growing', async () => {
+    answering(
+      answer({
+        snapshot: {
+          source: 'schall',
+          fetched: true,
+          status: 'partial',
+          detail: '25 of 340 recordings looked up in MusicBrainz',
+          fetchedAt: new Date(clock - 5 * 60_000).toISOString()
+        }
+      })
+    );
+    opened();
+    await screen.findByText(/This list is shorter than usual/);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
+
+    expect(await screen.findByText(/This list is still growing/)).toBeTruthy();
+    expect(screen.queryByText(/This list is shorter than usual/)).toBeNull();
   });
 
   it('says how many suggestions were held back and which rule held each one', async () => {
