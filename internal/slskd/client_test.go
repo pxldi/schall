@@ -1903,19 +1903,27 @@ type reportedWindow struct {
 	Elapsed           float64 `json:"elapsed"`
 	LastReplyAt       float64 `json:"last_reply_at"`
 	BySecond          []int   `json:"replies_by_second"`
+	Message           string  `json:"message"`
 }
 
+// readWindow finds the window among everything the search logged. A search can
+// log other lines first, such as a stop slskd refused.
 func readWindow(t *testing.T, reported *bytes.Buffer) reportedWindow {
 	t.Helper()
-	line := strings.TrimSpace(reported.String())
-	if line == "" {
-		t.Fatal("the search reported no window at all")
+	for _, line := range strings.Split(strings.TrimSpace(reported.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var window reportedWindow
+		if err := json.Unmarshal([]byte(line), &window); err != nil {
+			t.Fatalf("decode reported line %q: %v", line, err)
+		}
+		if window.Message == "a search window closed" {
+			return window
+		}
 	}
-	var window reportedWindow
-	if err := json.Unmarshal([]byte(line), &window); err != nil {
-		t.Fatalf("decode reported window %q: %v", line, err)
-	}
-	return window
+	t.Fatalf("the search reported no window at all: %q", reported.String())
+	return reportedWindow{}
 }
 
 func TestASearchReportsHowManyPeersRepliedToIt(t *testing.T) {
@@ -2236,7 +2244,7 @@ func TestAPlateauWithEmptyResponsesReportsRepliesUnread(t *testing.T) {
 // A stop slskd would not take is not a failure: the wait for the search to end
 // on its own is the same wait, one poll longer.
 func TestASearchSlskdWouldNotStopIsStillWaitedOutForItsReplies(t *testing.T) {
-	stub := &searchStub{replies: []int{1}, completeAfter: 3, refuseStop: true}
+	stub := &searchStub{replies: []int{1}, completeAfter: 20, refuseStop: true}
 	client, reported := newMeasuredClient(
 		t, stub.handler(t, offeredByOnePeer()), 2*time.Second, time.Millisecond)
 	client.replyPlateau = 5 * time.Millisecond
