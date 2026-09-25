@@ -978,6 +978,34 @@ func TestATargetReportsTheCopiesItHasTried(t *testing.T) {
 	}
 }
 
+func TestATargetReportsCopyOrigins(t *testing.T) {
+	targetID := uuid.New()
+	targets := &fakeAcquisitionTargets{
+		target: db.AcquisitionTargetRow{ID: targetID, Status: "pending", Origin: "playlist"},
+		copies: []db.AcquisitionTargetFileRow{
+			{ID: uuid.New(), AcquisitionTargetID: targetID, Provider: "slskd", SourceUsername: "peer_name", FileName: "peer.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall"},
+			{ID: uuid.New(), AcquisitionTargetID: targetID, Provider: "soundcloud", SourceUsername: "soundcloud:293", FileName: "address.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall"},
+		},
+	}
+	handler := acquisitionHandler(targets)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/acquisition-targets/"+targetID.String(), nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
+	}
+	var payload acquisitionTargetResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if got := payload.Copies[0].Origin; got == nil || got.Kind != "soulseek" || got.Label != "peer_name" {
+		t.Fatalf("peer origin = %+v", got)
+	}
+	if got := payload.Copies[1].Origin; got == nil || got.Kind != "address" || got.Label != "soundcloud.com" {
+		t.Fatalf("address origin = %+v", got)
+	}
+}
+
 // Only a copy waiting for a decision is playable here. An accepted copy is a
 // library file with its own path and a refused one was answered, so serving
 // either would be a second route to files under a different name.

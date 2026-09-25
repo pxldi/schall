@@ -73,6 +73,38 @@ function widened(element: Element, width: number) {
 }
 
 describe('the facts a card states', () => {
+  it('shows a Soulseek peer as the copy origin', () => {
+    render(CopyCard, {
+      props: {
+        heading: 'Copy 1',
+        copy: copy({ origin: { kind: 'soulseek', label: 'peer_name' } }),
+        wantedMs: 281_000,
+        selected: false,
+        onselect: () => {}
+      }
+    });
+
+    expect(screen.getByRole('radio', { name: 'Copy 1' }).textContent).toContain(
+      'Copy 1 · from peer_name'
+    );
+  });
+
+  it('shows an address host as the copy origin', () => {
+    render(CopyCard, {
+      props: {
+        heading: 'Copy 2',
+        copy: copy({ origin: { kind: 'address', label: 'soundcloud.com' } }),
+        wantedMs: 281_000,
+        selected: false,
+        onselect: () => {}
+      }
+    });
+
+    expect(screen.getByRole('radio', { name: 'Copy 2' }).textContent).toContain(
+      'Copy 2 · from soundcloud.com'
+    );
+  });
+
   it('shows no length glyph when the grader has no verdict', () => {
     render(CopyCard, {
       props: {

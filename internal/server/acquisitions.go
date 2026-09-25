@@ -182,9 +182,15 @@ type acquiredCopyResponse struct {
 	Summary   string                   `json:"summary"`
 	Evidence  *db.AcquiredFileEvidence `json:"evidence,omitempty"`
 	DecidedAt time.Time                `json:"decidedAt"`
+	Origin    *copyOrigin              `json:"origin,omitempty"`
 	// The library file this copy became, once the scan has made one. It is what
 	// lets a screen point at the file rather than only describe it.
 	LibraryFileID *uuid.UUID `json:"libraryFileId,omitempty"`
+}
+
+type copyOrigin struct {
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
 }
 
 func acquiredCopyResponsesFrom(rows []db.AcquisitionTargetFileRow) []acquiredCopyResponse {
@@ -195,6 +201,7 @@ func acquiredCopyResponsesFrom(rows []db.AcquisitionTargetFileRow) []acquiredCop
 			Provider: row.Provider, Username: row.SourceUsername, Path: row.RemotePath,
 			Name: row.FileName, Verdict: row.Verdict, DecidedBy: row.DecidedBy,
 			Summary: row.Summary, Evidence: row.Evidence, DecidedAt: row.DecidedAt,
+			Origin: acquiredCopyOrigin(row),
 		}
 		if row.SizeBytes.Valid {
 			size := row.SizeBytes.Int64
@@ -207,6 +214,16 @@ func acquiredCopyResponsesFrom(rows []db.AcquisitionTargetFileRow) []acquiredCop
 		copies = append(copies, tried)
 	}
 	return copies
+}
+
+func acquiredCopyOrigin(row db.AcquisitionTargetFileRow) *copyOrigin {
+	if tracksource.Serves(row.Provider) {
+		return &copyOrigin{Kind: "address", Label: tracksource.Host(row.Provider)}
+	}
+	if row.Provider == "slskd" && strings.TrimSpace(row.SourceUsername) != "" {
+		return &copyOrigin{Kind: "soulseek", Label: row.SourceUsername}
+	}
+	return nil
 }
 
 type acquisitionCandidateResponse struct {
