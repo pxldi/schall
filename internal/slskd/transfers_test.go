@@ -73,6 +73,22 @@ func TestARejectionForBeingOverwhelmedIsDeferred(t *testing.T) {
 	}
 }
 
+// slskd's daily and weekly quotas carry the queue limit's words and a period.
+// chropic sent both, and read as backpressure they were asked again for five
+// days.
+func TestARejectionForAQuotaIsNotDeferred(t *testing.T) {
+	for _, reason := range []string{
+		"Transfer rejected: Too many files today",
+		"Transfer rejected: Too many files this week",
+		"Transfer rejected: Too many megabytes today",
+		"Transfer rejected: Too many megabytes this week",
+	} {
+		if peerDeferred("Completed, Rejected", reason) {
+			t.Errorf("quota %q was read as backpressure", reason)
+		}
+	}
+}
+
 // A file the peer no longer shares is a refusal about the file. Asking again in
 // a quarter of an hour would only be told the same thing.
 func TestARejectionForAFileNoLongerSharedIsNotDeferred(t *testing.T) {
