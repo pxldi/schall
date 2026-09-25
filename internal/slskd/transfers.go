@@ -143,6 +143,12 @@ func normalizeTransferState(state string) string {
 // cost of the reverse is one copy rested for a day.
 var peerQueueLimits = []string{"too many files", "too many megabytes", "overwhelmed with requests"}
 
+// peerQuotaPeriods mark a limit on a day's or a week's allowance. slskd words
+// its quotas "Too many files today" and "Too many files this week", which
+// contain a queue limit's words but do not lift in minutes: read as
+// backpressure, chropic refused 181 files that way between 5 and 10 September.
+var peerQuotaPeriods = []string{"today", "this week"}
+
 // peerDeferred reports a rejection that means "not now" rather than "no".
 //
 // Both halves have to agree: the state has to say the peer rejected the
@@ -154,6 +160,11 @@ func peerDeferred(state, exception string) bool {
 		return false
 	}
 	reason := strings.ToLower(exception)
+	for _, period := range peerQuotaPeriods {
+		if strings.Contains(reason, period) {
+			return false
+		}
+	}
 	for _, limit := range peerQueueLimits {
 		if strings.Contains(reason, limit) {
 			return true
