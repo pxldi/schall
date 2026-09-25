@@ -27,6 +27,8 @@ function target(overrides: Partial<AcquisitionTarget> = {}): AcquisitionTarget {
     summary: 'held for review',
     attempts: 1,
     anchorAttempts: 0,
+    nextSearchAt: null,
+    searchAttempts: 0,
     ...overrides
   };
 }

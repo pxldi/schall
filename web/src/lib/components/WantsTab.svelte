@@ -209,9 +209,16 @@
   function timing(want: AcquisitionTarget) {
     if (want.status === 'not_wanted') return '';
     if (waitingOnYou(want)) return 'waiting for you';
-    if (want.lastAttemptAt) return `tried ${relativeTime(want.lastAttemptAt)}`;
-    if (want.nextAttemptAt) return `next look ${relativeTime(want.nextAttemptAt)}`;
-    return 'not looked for yet';
+    const main = want.lastAttemptAt
+      ? `tried ${relativeTime(want.lastAttemptAt)}`
+      : want.nextAttemptAt
+        ? `next look ${relativeTime(want.nextAttemptAt)}`
+        : 'not looked for yet';
+    const search =
+      want.status === 'unresolved' && want.nextSearchAt
+        ? `next search ${relativeTime(want.nextSearchAt)}`
+        : '';
+    return [main, search].filter(Boolean).join(' · ');
   }
 
   const chips: Record<Role, string> = {

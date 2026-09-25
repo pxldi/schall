@@ -122,6 +122,8 @@ type acquisitionTargetResponse struct {
 	Attempts        int32      `json:"attempts"`
 	LastAttemptAt   *time.Time `json:"lastAttemptAt"`
 	NextAttemptAt   *time.Time `json:"nextAttemptAt"`
+	NextSearchAt    *time.Time `json:"nextSearchAt"`
+	SearchAttempts  int32      `json:"searchAttempts"`
 	BelowFloorSince *time.Time `json:"belowFloorSince,omitempty"`
 	FloorWaivedAt   *time.Time `json:"floorWaivedAt,omitempty"`
 	LibraryFileID   *uuid.UUID `json:"libraryFileId,omitempty"`
@@ -267,6 +269,8 @@ func acquisitionTargetResponseFrom(row db.AcquisitionTargetRow) acquisitionTarge
 		Attempts:            row.Attempts,
 		LastAttemptAt:       nullableTime(row.LastAttemptAt.Valid, row.LastAttemptAt.Time),
 		NextAttemptAt:       nullableTime(row.NextAttemptAt.Valid, row.NextAttemptAt.Time),
+		NextSearchAt:        nullableTime(row.NextSearchAt.Valid, row.NextSearchAt.Time),
+		SearchAttempts:      row.SearchAttempts,
 		BelowFloorSince:     nullableTime(row.BelowFloorSince.Valid, row.BelowFloorSince.Time),
 		FloorWaivedAt:       nullableTime(row.FloorWaivedAt.Valid, row.FloorWaivedAt.Time),
 		LibraryFileID:       nullableUUID(row.AcquiredLibraryFileID),

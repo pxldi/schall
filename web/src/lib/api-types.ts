@@ -1899,6 +1899,10 @@ export interface AcquisitionTarget {
    * null on a want nothing has searched for yet. */
   lastAttemptAt?: string | null;
   nextAttemptAt?: string | null;
+  /** When Soulseek will next search an unresolved want, when it has an anchor. */
+  nextSearchAt?: string | null;
+  /** The rung of the Soulseek search for an unresolved want. */
+  searchAttempts: number;
   /** What went wrong on the last attempt, if anything did. */
   lastError?: string;
   /** Why the sample is unavailable, when the want has no sample. */
