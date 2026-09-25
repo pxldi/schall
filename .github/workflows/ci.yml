@@ -16,9 +16,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job pins ubuntu-24.04. ubuntu-latest moves to 26.04 from 2026-10-19,
+# and nobody has run the Playwright system libraries on that image yet.
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Integration tests skip themselves without SCHALL_TEST_DATABASE_URL, so
     # without a database here they were compiled and never run. This database
@@ -39,12 +41,12 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # First, and before the toolchain it does not need: a knob added to the Go
       # code and never written down is a deploy that runs with a feature quietly
       # off, and this is the job that can still say so cheaply.
       - run: ./scripts/check-env-example.sh
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.25.x"
       # Regenerate before the diff check: a models.go left behind by a
@@ -61,14 +63,14 @@ jobs:
           SCHALL_TEST_DATABASE_URL: postgres://schall:schall@127.0.0.1:5432/schall_test?sslmode=disable
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -83,7 +85,7 @@ jobs:
   # both toolchains and a database, and because a UI failure that reads as a
   # frontend failure sends somebody to the wrong half of the repository.
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
@@ -100,11 +102,11 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.25.x"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -124,19 +126,19 @@ jobs:
         env:
           SCHALL_E2E_DATABASE_URL: postgres://schall:schall@127.0.0.1:5433/schall_e2e?sslmode=disable
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: web/test-results/
           retention-days: 7
 
   container:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -150,24 +152,24 @@ jobs:
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend, frontend, browser, container]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: tag
         run: |
           echo "value=main-$(git log -1 --format=%ct)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$(git log -1 --date=format:%Y-%m-%d --format=%cd) $(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: true
