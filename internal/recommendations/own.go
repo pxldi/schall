@@ -167,7 +167,6 @@ func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosit
 	inputs := ownInputs(pool, expanded)
 	unfinished := left > 0
 	spent := unfinished && passes >= maximumSweepPasses
-	reached := failure == "" || answered > 0
 
 	report := OwnSweepReport{
 		Pool:           len(pool),
@@ -177,7 +176,9 @@ func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosit
 	}
 	next := OwnSweepPosition{Passes: passes, Unexpandable: carriedUnexpandable(pool, unexpandable)}
 	result := OwnSweepResult{
-		More:     unfinished && !spent && reached,
+		// Any MusicBrainz failure is an outage to wait out (ADR 0039 §6), even
+		// after answers earlier in the pass.
+		More:     unfinished && !spent && failure == "",
 		Resume:   unfinished && !spent,
 		Position: next,
 	}

@@ -292,24 +292,30 @@ func TestOwnSweepWaitsWhenMusicBrainzAnswersNothing(t *testing.T) {
 	}
 }
 
-func TestOwnSweepComesStraightBackWhenMusicBrainzAnsweredBeforeFailing(t *testing.T) {
+// ADR 0039 §6 waits thirty minutes on a MusicBrainz outage, and an outage that
+// starts part way through a pass is still one. The pass keeps what it stored
+// and hands its position on.
+func TestOwnSweepWaitsWhenMusicBrainzFailsAfterAnswering(t *testing.T) {
 	store := &fakeStore{}
-	ids := sortedIDs(2)
-	store.pool = []db.OwnRecommendationPoolRow{poolRow(ids[0], 2, 0), poolRow(ids[1], 2, 0)}
-	provider := &fakeRecordingProvider{errors: map[uuid.UUID]error{ids[1]: errors.New("timeout")}}
-	expandable(provider, ids[0])
+	ids := sortedIDs(25)
+	for _, recordingID := range ids {
+		store.pool = append(store.pool, poolRow(recordingID, 2, 0))
+	}
+	provider := &fakeRecordingProvider{errors: map[uuid.UUID]error{ids[24]: errors.New("timeout")}}
+	expandable(provider, ids[:24]...)
 	service := ownService(store, provider)
 
 	result, err := service.SweepOwnPage(context.Background(), OwnSweepPosition{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.More || !result.Resume || !result.Report.ProviderFailed {
-		t.Fatalf("result = %#v, want a continuation at once", result)
+	if result.More || !result.Resume || !result.Report.ProviderFailed || result.Position.Passes != 1 {
+		t.Fatalf("result = %#v, want a wait with the chain kept", result)
 	}
 	snapshot := store.snapshots[OwnSource]
-	if snapshot.Status != "partial" || !strings.HasPrefix(snapshot.Detail, "1 of 2 recordings looked up in MusicBrainz; ") {
-		t.Fatalf("snapshot = %#v", snapshot)
+	if snapshot.Status != "partial" || len(ownPublished(store)) != 24 ||
+		!strings.HasPrefix(snapshot.Detail, "24 of 25 recordings looked up in MusicBrainz; ") {
+		t.Fatalf("snapshot = %#v with %d rows, want the 24 answers kept", snapshot, len(ownPublished(store)))
 	}
 }
 

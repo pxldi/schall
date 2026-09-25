@@ -1757,10 +1757,10 @@ func (worker *Worker) processRecommendationSweep(ctx context.Context, job Job) {
 }
 
 // processOwnRecommendationSweep runs one pass of the own engine and queues the
-// next (ADR 0039 §6). A pass with recordings still waiting comes back at once,
-// a pass MusicBrainz stopped answering waits recommendationUnreachable, and a
-// finished chain waits recommendationIdle. The chain's position rides in the
-// payload so no pass asks MusicBrainz twice about one recording.
+// next (ADR 0039 §6). A pass MusicBrainz stopped answering waits
+// recommendationUnreachable, a pass with recordings still waiting comes back
+// at once, and a finished chain waits recommendationIdle. The chain's position
+// rides in the payload so no pass asks MusicBrainz twice about one recording.
 func (worker *Worker) processOwnRecommendationSweep(ctx context.Context, job Job) {
 	if worker.ownRecommends == nil {
 		worker.finishFailed(ctx, job, errors.New("own recommendation sweeping is not configured"), false)
@@ -1797,12 +1797,14 @@ func (worker *Worker) processOwnRecommendationSweep(ctx context.Context, job Job
 		Bool("written", result.Report.Written).
 		Msg("own recommendations swept")
 
+	// A failure is checked first: a pass that stored records before MusicBrainz
+	// stopped answering still waits out the outage.
 	next := worker.now().Add(recommendationIdle)
 	switch {
-	case result.More:
-		next = worker.now()
 	case result.Report.ProviderFailed:
 		next = worker.now().Add(recommendationUnreachable)
+	case result.More:
+		next = worker.now()
 	}
 	position = recommendations.OwnSweepPosition{}
 	if result.Resume {

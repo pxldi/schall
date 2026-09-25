@@ -1968,6 +1968,24 @@ func TestAnOwnRecommendationPassMusicBrainzDidNotAnswerWaitsHalfAnHour(t *testin
 	}
 }
 
+// Twenty-four answers and then a failure is still an outage (ADR 0039 §6). The
+// result says there is more to do, and the failure wins over it.
+func TestAnOwnRecommendationPassThatFailedAfterAnswersWaitsHalfAnHour(t *testing.T) {
+	next := recommendations.OwnSweepPosition{Passes: 1, Unexpandable: []uuid.UUID{uuid.New()}}
+	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
+		More: true, Resume: true, Position: next,
+		Report: recommendations.OwnSweepReport{Asked: 24, Stored: 24, ProviderFailed: true},
+	}}, recommendations.OwnSweepPosition{}, 1)
+
+	if queue.completed != jobID || !queue.ownSweepQueuedFor.Equal(now.Add(recommendationUnreachable)) {
+		t.Fatalf("completed = %s, next pass = %s, want one in %s",
+			queue.completed, queue.ownSweepQueuedFor, recommendationUnreachable)
+	}
+	if queued := queuedOwnPosition(t, queue); !reflect.DeepEqual(queued, next) {
+		t.Fatalf("queued position = %#v, want the chain carried on", queued)
+	}
+}
+
 func TestAnOwnRecommendationPassThatSpentItsRetriesQueuesTheNextDay(t *testing.T) {
 	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{err: errors.New("database went away")},
 		recommendations.OwnSweepPosition{}, 3)
