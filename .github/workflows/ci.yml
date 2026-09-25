@@ -51,7 +51,11 @@ jobs:
           go-version: "1.25.x"
       # Regenerate before the diff check: a models.go left behind by a
       # migration is a checkout where make sqlc stops the build.
+      # sqlc v1.31.1 needs Go 1.26. setup-go sets GOTOOLCHAIN=local, which stops
+      # `go run` from fetching that toolchain, so this step allows it again.
       - run: make sqlc
+        env:
+          GOTOOLCHAIN: auto
       - run: gofmt -w cmd internal
       - run: git diff --exit-code
       - run: go vet ./...
