@@ -33,10 +33,10 @@ const (
 	ownPlaysWeight          = 0.3
 )
 
-// listenedRecordingKey names, in reason_context, the recording the listens
-// carried when MusicBrainz answered about it under another identifier. The
-// next pass finds the stored expansion through it and does not ask again.
-const listenedRecordingKey = "listened_recording_id"
+// listenedRecordingsKey names, in reason_context, every pool recording
+// MusicBrainz answered about under the stored row's identifier. The next pass
+// finds the stored expansion through each of them and does not ask again.
+const listenedRecordingsKey = "listened_recording_ids"
 
 // OwnSweepPosition is what one pass of an own sweep hands the next.
 //
@@ -268,8 +268,8 @@ func ownScore(shared, mostShared, plays, mostPlays int64) float64 {
 }
 
 // publishedExpansions reads the published snapshot as a cache of MusicBrainz
-// answers, keyed by the recording each row is stored under and, for a merged
-// recording, by the one the listens carried.
+// answers, keyed by the recording each row is stored under and by every
+// merged recording the listens carried for it.
 func publishedExpansions(rows []db.RecommendationCandidate) (map[uuid.UUID]recordingExpansion, error) {
 	cache := make(map[uuid.UUID]recordingExpansion, len(rows))
 	for _, row := range rows {
@@ -288,10 +288,12 @@ func publishedExpansions(rows []db.RecommendationCandidate) (map[uuid.UUID]recor
 				return nil, fmt.Errorf("decode own recommendation %s context: %w", row.MusicbrainzRecordingID, err)
 			}
 		}
-		var listened string
-		if raw, ok := context[listenedRecordingKey]; ok && json.Unmarshal(raw, &listened) == nil {
-			if listenedID, err := uuid.Parse(listened); err == nil {
-				cache[listenedID] = recording
+		var listened []string
+		if raw, ok := context[listenedRecordingsKey]; ok && json.Unmarshal(raw, &listened) == nil {
+			for _, value := range listened {
+				if listenedID, err := uuid.Parse(value); err == nil {
+					cache[listenedID] = recording
+				}
 			}
 		}
 	}
@@ -300,8 +302,17 @@ func publishedExpansions(rows []db.RecommendationCandidate) (map[uuid.UUID]recor
 
 // ownInputs builds the snapshot rows for every pool recording with an
 // expansion. Two pool recordings MusicBrainz merged into one stored recording
-// would conflict, so the higher-ranked one is kept.
+// would conflict, so the higher-ranked one gives the row its counts. Every
+// merged pool recording is named on the row, so none is asked about again.
 func ownInputs(pool []ownCandidate, expanded map[uuid.UUID]recordingExpansion) []CandidateInput {
+	aliases := make(map[uuid.UUID][]string, len(expanded))
+	for _, candidate := range pool {
+		recording, ok := expanded[candidate.recordingID]
+		if ok && recording.recordingID != candidate.recordingID {
+			aliases[recording.recordingID] = append(aliases[recording.recordingID], candidate.recordingID.String())
+		}
+	}
+
 	inputs := make([]CandidateInput, 0, len(expanded))
 	stored := make(map[uuid.UUID]struct{}, len(expanded))
 	for _, candidate := range pool {
@@ -328,8 +339,9 @@ func ownInputs(pool []ownCandidate, expanded map[uuid.UUID]recordingExpansion) [
 			}
 			context["seed_recording_ids"] = seeds
 		}
-		if recording.recordingID != candidate.recordingID {
-			context[listenedRecordingKey] = candidate.recordingID.String()
+		if merged := aliases[recording.recordingID]; len(merged) > 0 {
+			sort.Strings(merged)
+			context[listenedRecordingsKey] = merged
 		}
 		score := candidate.score
 		inputs = append(inputs, recording.input(&score, reasons, context))

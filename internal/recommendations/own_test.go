@@ -383,8 +383,34 @@ func TestOwnSweepStoresTwoIdentifiersMusicBrainzMergedAsOneRow(t *testing.T) {
 		t.Fatalf("rows = %#v, want one row under %v", rows, canonical)
 	}
 	stored := ownContext(t, rows[0])
-	if stored["plays"] != float64(5) || stored[listenedRecordingKey] != listened.String() {
+	if stored["plays"] != float64(5) ||
+		!reflect.DeepEqual(stored[listenedRecordingsKey], []any{listened.String()}) {
 		t.Fatalf("context = %#v, want the higher-ranked listen and its identifier", stored)
+	}
+}
+
+// Two identifiers the listens carry, both merged into a third the pool does not
+// hold. The lower-ranked one gives the row nothing, and it is still named on
+// the row so no later pass asks about it.
+func TestOwnSweepDoesNotAskAgainAboutAMergedRecordingItDidNotKeep(t *testing.T) {
+	store := &fakeStore{}
+	kept, folded, canonical := uuid.New(), uuid.New(), uuid.New()
+	store.pool = []db.OwnRecommendationPoolRow{poolRow(kept, 5, 1), poolRow(folded, 2, 0)}
+	answer := expandedRecording(canonical, uuid.New(), uuid.New(), "Roads")
+	provider := &fakeRecordingProvider{recordings: map[uuid.UUID]musicbrainz.Recording{
+		kept: answer, folded: answer,
+	}}
+	service := ownService(store, provider)
+	if _, err := service.SweepOwnPage(context.Background(), OwnSweepPosition{}); err != nil {
+		t.Fatal(err)
+	}
+
+	provider.asked = nil
+	if _, err := service.SweepOwnPage(context.Background(), OwnSweepPosition{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.asked) != 0 {
+		t.Fatalf("second pass asked %v, want nothing", provider.asked)
 	}
 }
 
