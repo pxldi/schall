@@ -42,6 +42,11 @@ var ErrNotConfigured = errors.New("ListenBrainz is not configured")
 // sweeps do not.
 var ErrDisabled = errors.New("ListenBrainz recommendations are disabled")
 
+// ErrExpansionNotConfigured means the service was built without a MusicBrainz
+// client. Nothing a retry does can change that, so a sweep that meets it stops
+// at once rather than spending its attempts on the same sentence.
+var ErrExpansionNotConfigured = errors.New("MusicBrainz recording expansion is not configured")
+
 // ErrCheckSuperseded means the settings row moved while the check was running,
 // so the verdict is about an account that is no longer the configured one.
 //
@@ -69,6 +74,7 @@ type Store interface {
 	OwnRecommendationPool(context.Context, db.OwnRecommendationPoolParams) ([]db.OwnRecommendationPoolRow, error)
 	RecordRecommendationImpression(context.Context, db.RecordRecommendationImpressionParams) (db.RecommendationImpression, error)
 	ListedRecommendationRecordings(context.Context, []uuid.UUID) ([]uuid.UUID, error)
+	OwnedRecordingsCreditedTo(context.Context, []uuid.UUID) ([]db.OwnedRecordingsCreditedToRow, error)
 }
 
 type Service struct {
@@ -441,7 +447,7 @@ func (service *Service) SweepPage(ctx context.Context, position SweepPosition) (
 		return SweepResult{}, ErrDisabled
 	}
 	if service.recordings == nil {
-		return SweepResult{}, errors.New("MusicBrainz recording expansion is not configured")
+		return SweepResult{}, ErrExpansionNotConfigured
 	}
 
 	// A chain belongs to the account it was started for. Saving a different
@@ -1074,6 +1080,13 @@ type recordingExpansion struct {
 	title          string
 	releaseTitle   string
 	artistName     string
+	// catalogue is the row MusicBrainz answered with. It is held only for the
+	// pass that asked, so a cached expansion has none.
+	catalogue musicbrainz.Recording
+	// ownedVersionIDs is what the own engine stores under ownedVersionsKey, and
+	// versionsChecked says it was looked for at all.
+	ownedVersionIDs []uuid.UUID
+	versionsChecked bool
 }
 
 // expandRecording asks MusicBrainz about one recording. Both sweeps use it, so
@@ -1121,6 +1134,7 @@ func (service *Service) expandRecording(
 		recordingID: recording.ID, releaseGroupID: release.ReleaseGroupID,
 		artistIDs: artistIDs, title: recording.Title,
 		releaseTitle: release.Title, artistName: recording.ArtistCredit,
+		catalogue: recording,
 	}, true, nil
 }
 

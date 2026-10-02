@@ -478,3 +478,155 @@ func TestOwnSweepReadsOnlyItsOwnFeedback(t *testing.T) {
 			rows[0].MusicbrainzRecordingID, rows[0].ReasonCodes, lower)
 	}
 }
+
+// versionRow is a MusicBrainz row of "Roads" by one artist, of the given
+// length in milliseconds and carrying the given ISRCs. A length of zero is a
+// row MusicBrainz knows no length for.
+func versionRow(recordingID, artistID uuid.UUID, title string, lengthMS int, isrcs ...string) musicbrainz.Recording {
+	recording := expandedRecording(recordingID, uuid.New(), artistID, title)
+	if lengthMS > 0 {
+		recording.DurationMS = &lengthMS
+	}
+	recording.ISRCs = isrcs
+	return recording
+}
+
+// ownedVersionsAfterOneSweep sweeps a pool of one recording, listened, against
+// a library holding one owned recording by the same artist, and answers what
+// the stored row names as owned versions.
+func ownedVersionsAfterOneSweep(
+	t *testing.T, listened, owned musicbrainz.Recording, ownedTitle string,
+) []any {
+	t.Helper()
+	artistID := listened.Credits[0].ArtistID
+	store := &fakeStore{credited: map[uuid.UUID][]db.OwnedRecordingsCreditedToRow{
+		artistID: {{RecordingMbid: owned.ID, Title: ownedTitle}},
+	}}
+	provider := &fakeRecordingProvider{recordings: map[uuid.UUID]musicbrainz.Recording{
+		listened.ID: listened, owned.ID: owned,
+	}}
+	store.pool = []db.OwnRecommendationPoolRow{poolRow(listened.ID, 3, 0)}
+	if _, err := ownService(store, provider).SweepOwnPage(context.Background(), OwnSweepPosition{}); err != nil {
+		t.Fatal(err)
+	}
+	rows := ownPublished(store)
+	if len(rows) != 1 {
+		t.Fatalf("published %d rows, want the listened recording", len(rows))
+	}
+	versions, ok := ownContext(t, rows[0])[ownedVersionsKey].([]any)
+	if !ok {
+		t.Fatalf("context = %#v, want %s written", ownContext(t, rows[0]), ownedVersionsKey)
+	}
+	return versions
+}
+
+// MusicBrainz enters one track twice: the same credit, the same title and two
+// lengths a second apart. The listened row is named as a version of the owned
+// one, which is what hides it at read time (ADR 0031).
+func TestOwnSweepNamesAnOwnedSecondRowOfTheSameTrack(t *testing.T) {
+	artistID := uuid.New()
+	listened := versionRow(uuid.New(), artistID, "Roads", 302_000)
+	owned := versionRow(uuid.New(), artistID, "Roads", 303_000)
+
+	versions := ownedVersionsAfterOneSweep(t, listened, owned, "Roads")
+	if len(versions) != 1 || versions[0] != owned.ID.String() {
+		t.Fatalf("owned versions = %v, want %s", versions, owned.ID)
+	}
+}
+
+// A title the two rows share proves nothing on its own. A live take, a row
+// with no length and a row the label registered separately all keep the
+// listened recording on the list.
+func TestOwnSweepNeverHidesARecordingBehindATitleAlone(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		listenedLength int
+		ownedLength    int
+		listenedISRCs  []string
+		ownedISRCs     []string
+		ownedDifferent bool
+	}{
+		{name: "another length", listenedLength: 302_000, ownedLength: 361_000},
+		{name: "no length on either row", listenedLength: 0, ownedLength: 0},
+		{name: "no length on the owned row", listenedLength: 302_000, ownedLength: 0},
+		{name: "registration codes that disagree", listenedLength: 302_000, ownedLength: 302_000,
+			listenedISRCs: []string{"GBAAA9400001"}, ownedISRCs: []string{"GBAAA9400002"}},
+		{name: "another artist", listenedLength: 302_000, ownedLength: 302_000, ownedDifferent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			artistID := uuid.New()
+			listened := versionRow(uuid.New(), artistID, "Roads", test.listenedLength, test.listenedISRCs...)
+			ownedArtist := artistID
+			if test.ownedDifferent {
+				ownedArtist = uuid.New()
+			}
+			owned := versionRow(uuid.New(), ownedArtist, "Roads", test.ownedLength, test.ownedISRCs...)
+
+			if versions := ownedVersionsAfterOneSweep(t, listened, owned, "Roads"); len(versions) != 0 {
+				t.Fatalf("owned versions = %v, want none", versions)
+			}
+		})
+	}
+}
+
+// The library's title only chooses which owned rows MusicBrainz is asked about.
+// An owned recording under another title is not asked about at all.
+func TestOwnSweepAsksOnlyAboutOwnedRowsWhoseTitleAgrees(t *testing.T) {
+	artistID := uuid.New()
+	listened := versionRow(uuid.New(), artistID, "Roads", 302_000)
+	owned := versionRow(uuid.New(), artistID, "Glory Box", 302_000)
+	store := &fakeStore{credited: map[uuid.UUID][]db.OwnedRecordingsCreditedToRow{
+		artistID: {{RecordingMbid: owned.ID, Title: "Glory Box"}},
+	}}
+	provider := &fakeRecordingProvider{recordings: map[uuid.UUID]musicbrainz.Recording{
+		listened.ID: listened, owned.ID: owned,
+	}}
+	store.pool = []db.OwnRecommendationPoolRow{poolRow(listened.ID, 3, 0)}
+	if _, err := ownService(store, provider).SweepOwnPage(context.Background(), OwnSweepPosition{}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(provider.asked, []uuid.UUID{listened.ID}) {
+		t.Fatalf("asked %v, want only the listened recording", provider.asked)
+	}
+}
+
+// The live list was written before owned versions were checked. Each of its
+// rows is asked about once more, and stays on the list until it is.
+func TestOwnSweepAsksAgainAboutARowPublishedBeforeVersionsWereChecked(t *testing.T) {
+	artistID := uuid.New()
+	listened := versionRow(uuid.New(), artistID, "Roads", 302_000)
+	store := &fakeStore{}
+	stored := storedCandidate(OwnSource, listened.ID, "Roads")
+	stored.ReasonCodes = []string{"listened"}
+	store.write(db.UpsertRecommendationSnapshotParams{Source: OwnSource, Status: "complete"},
+		[]db.InsertRecommendationCandidateParams{stored})
+	provider := &fakeRecordingProvider{
+		recordings: map[uuid.UUID]musicbrainz.Recording{listened.ID: listened},
+		errors:     map[uuid.UUID]error{listened.ID: errors.New("503 Service Unavailable")},
+	}
+	store.pool = []db.OwnRecommendationPoolRow{poolRow(listened.ID, 3, 0)}
+	service := ownService(store, provider)
+
+	result, err := service.SweepOwnPage(context.Background(), OwnSweepPosition{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Report.ProviderFailed || !result.Resume {
+		t.Fatalf("result = %#v, want an outage with the row still to check", result)
+	}
+	rows := ownPublished(store)
+	if len(rows) != 1 || rows[0].MusicbrainzRecordingID != listened.ID {
+		t.Fatalf("published %#v, want the unchecked row kept", rows)
+	}
+	if _, written := ownContext(t, rows[0])[ownedVersionsKey]; written {
+		t.Fatalf("context = %#v, want no owned versions claimed for a row nobody checked", ownContext(t, rows[0]))
+	}
+
+	delete(provider.errors, listened.ID)
+	if _, err := service.SweepOwnPage(context.Background(), result.Position); err != nil {
+		t.Fatal(err)
+	}
+	if _, written := ownContext(t, ownPublished(store)[0])[ownedVersionsKey]; !written {
+		t.Fatalf("context = %#v, want the row checked", ownContext(t, ownPublished(store)[0]))
+	}
+}

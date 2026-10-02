@@ -1927,6 +1927,19 @@ func queuedOwnPosition(t *testing.T, queue *fakeQueue) recommendations.OwnSweepP
 	return queued
 }
 
+// A worker built without a MusicBrainz client gets the same answer on every
+// attempt, so the job fails once and queues no successor.
+func TestAnOwnRecommendationSweepWithoutMusicBrainzFailsOnce(t *testing.T) {
+	queue, jobID, _ := runOwnSweep(t, &fakeOwnRecommendationSweeper{
+		err: recommendations.ErrExpansionNotConfigured,
+	}, recommendations.OwnSweepPosition{}, 1)
+
+	if queue.failed != jobID || queue.retried != uuid.Nil || !queue.ownSweepQueuedFor.IsZero() {
+		t.Fatalf("failed = %s retried = %s successor = %s, want one permanent failure",
+			queue.failed, queue.retried, queue.ownSweepQueuedFor)
+	}
+}
+
 func TestAnOwnRecommendationPassWithRecordingsWaitingComesStraightBack(t *testing.T) {
 	next := recommendations.OwnSweepPosition{Passes: 1, Unexpandable: []uuid.UUID{uuid.New()}}
 	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{result: recommendations.OwnSweepResult{
@@ -2347,6 +2360,7 @@ func TestAnExhaustedRecommendationPassStillLeavesASuccessor(t *testing.T) {
 func TestADisabledOrUnconfiguredRecommendationSourceStopsItsQueuedSweep(t *testing.T) {
 	for name, sweepErr := range map[string]error{
 		"disabled": recommendations.ErrDisabled, "not configured": recommendations.ErrNotConfigured,
+		"no MusicBrainz": recommendations.ErrExpansionNotConfigured,
 	} {
 		t.Run(name, func(t *testing.T) {
 			jobID := uuid.New()

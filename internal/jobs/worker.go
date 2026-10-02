@@ -1716,7 +1716,8 @@ func (worker *Worker) processRecommendationSweep(ctx context.Context, job Job) {
 	result, err := worker.recommends.SweepPage(ctx, position)
 	if err != nil {
 		permanent := errors.Is(err, recommendations.ErrDisabled) ||
-			errors.Is(err, recommendations.ErrNotConfigured)
+			errors.Is(err, recommendations.ErrNotConfigured) ||
+			errors.Is(err, recommendations.ErrExpansionNotConfigured)
 		worker.finishFailed(ctx, job, fmt.Errorf("sweep recommendations: %w", err), !permanent)
 		if !permanent && spent(job, err) {
 			worker.queueRecommendationSweep(ctx, worker.now().Add(recommendationIdle))
@@ -1778,8 +1779,11 @@ func (worker *Worker) processOwnRecommendationSweep(ctx context.Context, job Job
 	}
 	result, err := worker.ownRecommends.SweepOwnPage(ctx, position)
 	if err != nil {
-		worker.finishFailed(ctx, job, fmt.Errorf("sweep own recommendations: %w", err), true)
-		if spent(job, err) {
+		// A missing MusicBrainz client is the same answer on every attempt. The
+		// next start queues a sweep again once one is configured.
+		permanent := errors.Is(err, recommendations.ErrExpansionNotConfigured)
+		worker.finishFailed(ctx, job, fmt.Errorf("sweep own recommendations: %w", err), !permanent)
+		if !permanent && spent(job, err) {
 			worker.queueOwnRecommendationSweep(ctx, worker.now().Add(recommendationIdle), recommendations.OwnSweepPosition{})
 		}
 		return
