@@ -74,6 +74,7 @@ type Store interface {
 	OwnRecommendationPool(context.Context, db.OwnRecommendationPoolParams) ([]db.OwnRecommendationPoolRow, error)
 	RecordRecommendationImpression(context.Context, db.RecordRecommendationImpressionParams) (db.RecommendationImpression, error)
 	ListedRecommendationRecordings(context.Context, []uuid.UUID) ([]uuid.UUID, error)
+	OwnedRecordingsCreditedTo(context.Context, []uuid.UUID) ([]db.OwnedRecordingsCreditedToRow, error)
 }
 
 type Service struct {
@@ -1079,6 +1080,13 @@ type recordingExpansion struct {
 	title          string
 	releaseTitle   string
 	artistName     string
+	// catalogue is the row MusicBrainz answered with. It is held only for the
+	// pass that asked, so a cached expansion has none.
+	catalogue musicbrainz.Recording
+	// ownedVersionIDs is what the own engine stores under ownedVersionsKey, and
+	// versionsChecked says it was looked for at all.
+	ownedVersionIDs []uuid.UUID
+	versionsChecked bool
 }
 
 // expandRecording asks MusicBrainz about one recording. Both sweeps use it, so
@@ -1126,6 +1134,7 @@ func (service *Service) expandRecording(
 		recordingID: recording.ID, releaseGroupID: release.ReleaseGroupID,
 		artistIDs: artistIDs, title: recording.Title,
 		releaseTitle: release.Title, artistName: recording.ArtistCredit,
+		catalogue: recording,
 	}, true, nil
 }
 

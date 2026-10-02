@@ -156,6 +156,32 @@ owned_release_groups AS (
     WHERE library_files.missing_at IS NULL
       AND albums.musicbrainz_release_group_id
               IN (SELECT musicbrainz_release_group_id FROM listed)
+),
+owned_version_ids AS (
+    SELECT DISTINCT version.id::uuid AS musicbrainz_id
+    FROM listed,
+         jsonb_array_elements_text(
+             CASE jsonb_typeof(listed.reason_context->'owned_version_ids')
+                 WHEN 'array' THEN listed.reason_context->'owned_version_ids'
+                 ELSE '[]'::jsonb
+             END
+         ) AS version(id)
+),
+owned_versions AS (
+    SELECT library_file_identities.musicbrainz_recording_id AS musicbrainz_id
+    FROM library_file_identities
+    JOIN library_files ON library_files.id = library_file_identities.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND library_file_identities.musicbrainz_recording_id
+              IN (SELECT musicbrainz_id FROM owned_version_ids)
+    UNION
+    SELECT tracks.musicbrainz_recording_id
+    FROM tracks
+    JOIN track_mappings ON track_mappings.track_id = tracks.id
+    JOIN library_files ON library_files.id = track_mappings.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND tracks.musicbrainz_recording_id
+              IN (SELECT musicbrainz_id FROM owned_version_ids)
 )
 SELECT
     listed.source, listed.musicbrainz_recording_id, listed.musicbrainz_release_group_id, listed.musicbrainz_artist_ids, listed.recording_title, listed.release_title, listed.artist_name, listed.rank, listed.source_score, listed.reason_codes, listed.reason_context, listed.fetched_at, listed.source_snapshot_id, listed.source_snapshot_at, listed.snapshot_status, listed.snapshot_detail, listed.snapshot_fetched_at,
@@ -163,6 +189,16 @@ SELECT
         listed.musicbrainz_recording_id IN (SELECT musicbrainz_id FROM owned_recordings)
         OR listed.musicbrainz_release_group_id
                IN (SELECT musicbrainz_id FROM owned_release_groups)
+        OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(
+                CASE jsonb_typeof(listed.reason_context->'owned_version_ids')
+                    WHEN 'array' THEN listed.reason_context->'owned_version_ids'
+                    ELSE '[]'::jsonb
+                END
+            ) AS version(id)
+            WHERE version.id::uuid IN (SELECT musicbrainz_id FROM owned_versions)
+        )
     )::boolean AS owned,
     EXISTS (
         SELECT 1
@@ -286,7 +322,9 @@ type ListRecommendationCandidateFactsRow struct {
 // The first rule, `owned`, asks whether the library already holds the music,
 // and it can be answered four ways: the file's proven identity names the
 // recording or its release group, or the track the file is mapped to names the
-// recording, or that track's album names the release group.
+// recording, or that track's album names the release group. A row the own
+// engine wrote can also name owned recordings that are a second MusicBrainz row
+// of the same track (owned_version_ids), and those are asked the same two ways.
 //
 // Those four used to be one EXISTS with an OR across three tables, written
 // beside the candidate it was about. A subquery in the select list is run once
@@ -301,6 +339,10 @@ type ListRecommendationCandidateFactsRow struct {
 // Restricting each set to the list is what keeps it small enough to hash, which
 // is what stops the walk coming back on a larger library.
 // A file that has gone missing proves nothing, here as everywhere else.
+// The own engine names, under owned_version_ids, the owned recordings it found
+// to be a second MusicBrainz row of the same registered track (ADR 0031). The
+// row is hidden while one of them is still held, by the same evidence as
+// owned_recordings, and comes back once the last of them goes missing.
 func (q *Queries) ListRecommendationCandidateFacts(ctx context.Context, arg ListRecommendationCandidateFactsParams) ([]ListRecommendationCandidateFactsRow, error) {
 	rows, err := q.db.Query(ctx, listRecommendationCandidateFacts, arg.ObservedAt, arg.Source)
 	if err != nil {
@@ -579,6 +621,78 @@ func (q *Queries) OwnRecommendationPool(ctx context.Context, arg OwnRecommendati
 			&i.SharedSessions,
 			&i.SeedRecordingIds,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ownedRecordingsCreditedTo = `-- name: OwnedRecordingsCreditedTo :many
+WITH credited AS (
+    SELECT DISTINCT tracks.musicbrainz_recording_id AS recording_mbid
+    FROM track_artist_credits
+    JOIN tracks ON tracks.id = track_artist_credits.track_id
+    WHERE track_artist_credits.musicbrainz_artist_id = ANY($1::uuid[])
+      AND tracks.musicbrainz_recording_id IS NOT NULL
+),
+held AS (
+    SELECT library_file_identities.musicbrainz_recording_id AS recording_mbid,
+           library_file_identities.track_title AS title
+    FROM library_file_identities
+    JOIN library_files ON library_files.id = library_file_identities.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND library_file_identities.musicbrainz_recording_id IN (SELECT recording_mbid FROM credited)
+    UNION
+    SELECT tracks.musicbrainz_recording_id, tracks.title
+    FROM tracks
+    JOIN track_mappings ON track_mappings.track_id = tracks.id
+    JOIN library_files ON library_files.id = track_mappings.library_file_id
+    WHERE library_files.missing_at IS NULL
+      AND tracks.musicbrainz_recording_id IN (SELECT recording_mbid FROM credited)
+)
+SELECT DISTINCT
+    held.recording_mbid::uuid AS recording_mbid,
+    titles.title::text AS title
+FROM held
+JOIN (
+    SELECT tracks.musicbrainz_recording_id AS recording_mbid, tracks.title
+    FROM tracks
+    WHERE tracks.musicbrainz_recording_id IN (SELECT held.recording_mbid FROM held)
+    UNION
+    SELECT held.recording_mbid, held.title FROM held WHERE held.title IS NOT NULL
+) AS titles ON titles.recording_mbid = held.recording_mbid
+ORDER BY 1, 2
+`
+
+type OwnedRecordingsCreditedToRow struct {
+	RecordingMbid uuid.UUID `json:"recording_mbid"`
+	Title         string    `json:"title"`
+}
+
+// Recordings a present library file holds whose catalogue credit names one of
+// these artists, with every title the catalogue and the file's identity give
+// them. The own sweep asks MusicBrainz about the ones whose title agrees and
+// hides a pool recording only where the two MusicBrainz rows are one registered
+// track (ADR 0031). The title only chooses which rows to ask about. A row this
+// misses stays on the list, which is where it was before.
+//
+// Ownership is the evidence of owned_recordings above: a present file whose
+// proven identity names the recording, or a present file mapped to a track that
+// names it.
+func (q *Queries) OwnedRecordingsCreditedTo(ctx context.Context, artistIds []uuid.UUID) ([]OwnedRecordingsCreditedToRow, error) {
+	rows, err := q.db.Query(ctx, ownedRecordingsCreditedTo, artistIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OwnedRecordingsCreditedToRow{}
+	for rows.Next() {
+		var i OwnedRecordingsCreditedToRow
+		if err := rows.Scan(&i.RecordingMbid, &i.Title); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

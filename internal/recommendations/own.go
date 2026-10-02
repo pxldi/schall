@@ -3,6 +3,7 @@ package recommendations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/db"
+	"github.com/pxldi/schall/internal/identity"
+	"github.com/pxldi/schall/internal/musicbrainz"
+	"github.com/pxldi/schall/internal/tagmatch"
 )
 
 // OwnSource is the source name the own engine stores its snapshot and reads
@@ -36,6 +40,13 @@ const (
 // MusicBrainz answered about under the stored row's identifier. The next pass
 // finds the stored expansion through each of them and does not ask again.
 const listenedRecordingsKey = "listened_recording_ids"
+
+// ownedVersionsKey names, in reason_context, the owned recordings MusicBrainz
+// holds as the same registered track as the stored row (ADR 0031). The read
+// query hides the row while a present file holds one of them. A published row
+// without the key was written before the check existed, so the next pass asks
+// MusicBrainz about it again instead of reusing it.
+const ownedVersionsKey = "owned_version_ids"
 
 // OwnSweepPosition is what one pass of an own sweep hands the next.
 //
@@ -89,6 +100,10 @@ type ownCandidate struct {
 // already holds, asks MusicBrainz about at most maximumCandidateExpansions
 // others in rank order, and writes the whole snapshot. It never reads the
 // ListenBrainz account: the listens a sync already copied are its only input.
+//
+// Every recording it asks MusicBrainz about is also checked against the owned
+// recordings of the same artists, and the row names those that are the same
+// registered track (ownedVersions), which hides it at read time.
 func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosition) (OwnSweepResult, error) {
 	if service.recordings == nil {
 		return OwnSweepResult{}, ErrExpansionNotConfigured
@@ -120,17 +135,24 @@ func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosit
 
 	expanded := make(map[uuid.UUID]recordingExpansion, len(pool))
 	pending := make([]uuid.UUID, 0, len(pool))
+	cached := 0
 	for _, candidate := range pool {
-		if recording, held := cache[candidate.recordingID]; held {
+		recording, held := cache[candidate.recordingID]
+		if held && recording.versionsChecked {
 			expanded[candidate.recordingID] = recording
+			cached++
 			continue
 		}
 		if _, known := unexpandable[candidate.recordingID]; known {
 			continue
 		}
+		// A row published before owned versions were checked stays on the list
+		// until MusicBrainz is asked about it again.
+		if held {
+			expanded[candidate.recordingID] = recording
+		}
 		pending = append(pending, candidate.recordingID)
 	}
-	cached := len(expanded)
 
 	// Rank order is the source score. Feedback moves rows only when the
 	// snapshot is ranked, so it never decides what is looked up (ADR 0028).
@@ -139,6 +161,7 @@ func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosit
 		asking = asking[:maximumCandidateExpansions]
 	}
 	answered, failure := 0, ""
+	versions := make(map[uuid.UUID]*musicbrainz.Recording)
 	for _, recordingID := range asking {
 		recording, usable, err := service.expandRecording(ctx, recordingID)
 		if err != nil {
@@ -148,14 +171,23 @@ func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosit
 		answered++
 		if !usable {
 			unexpandable[recordingID] = struct{}{}
+			delete(expanded, recordingID)
 			continue
 		}
+		// A recording whose owned versions could not be checked is not stored,
+		// so the next pass asks about it again.
+		recording.ownedVersionIDs, err = service.ownedVersions(ctx, recording, versions)
+		if err != nil {
+			failure = fmt.Sprintf("MusicBrainz expansion stopped at %s: %v", recordingID, err)
+			break
+		}
+		recording.versionsChecked = true
 		expanded[recordingID] = recording
 	}
 
 	left := 0
 	for _, recordingID := range pending {
-		_, done := expanded[recordingID]
+		done := expanded[recordingID].versionsChecked
 		_, refused := unexpandable[recordingID]
 		if !done && !refused {
 			left++
@@ -281,13 +313,29 @@ func publishedExpansions(rows []db.RecommendationCandidate) (map[uuid.UUID]recor
 			releaseTitle:   row.ReleaseTitle,
 			artistName:     row.ArtistName,
 		}
-		cache[row.MusicbrainzRecordingID] = recording
 		var context map[string]json.RawMessage
 		if len(row.ReasonContext) > 0 {
 			if err := json.Unmarshal(row.ReasonContext, &context); err != nil {
 				return nil, fmt.Errorf("decode own recommendation %s context: %w", row.MusicbrainzRecordingID, err)
 			}
 		}
+		if raw, checked := context[ownedVersionsKey]; checked {
+			var versions []string
+			if err := json.Unmarshal(raw, &versions); err != nil {
+				return nil, fmt.Errorf("decode own recommendation %s owned versions: %w", row.MusicbrainzRecordingID, err)
+			}
+			recording.versionsChecked = true
+			recording.ownedVersionIDs = make([]uuid.UUID, 0, len(versions))
+			for _, value := range versions {
+				versionID, err := uuid.Parse(value)
+				if err != nil {
+					return nil, fmt.Errorf("decode own recommendation %s owned version %q: %w",
+						row.MusicbrainzRecordingID, value, err)
+				}
+				recording.ownedVersionIDs = append(recording.ownedVersionIDs, versionID)
+			}
+		}
+		cache[row.MusicbrainzRecordingID] = recording
 		var listened []string
 		if raw, ok := context[listenedRecordingsKey]; ok && json.Unmarshal(raw, &listened) == nil {
 			for _, value := range listened {
@@ -339,6 +387,14 @@ func ownInputs(pool []ownCandidate, expanded map[uuid.UUID]recordingExpansion) [
 			}
 			context["seed_recording_ids"] = seeds
 		}
+		if recording.versionsChecked {
+			versions := make([]string, 0, len(recording.ownedVersionIDs))
+			for _, versionID := range recording.ownedVersionIDs {
+				versions = append(versions, versionID.String())
+			}
+			sort.Strings(versions)
+			context[ownedVersionsKey] = versions
+		}
 		if merged := aliases[recording.recordingID]; len(merged) > 0 {
 			sort.Strings(merged)
 			context[listenedRecordingsKey] = merged
@@ -362,4 +418,58 @@ func carriedUnexpandable(pool []ownCandidate, unexpandable map[uuid.UUID]struct{
 		return carried[left].String() < carried[right].String()
 	})
 	return carried
+}
+
+// ownedVersions names the owned recordings that are a second MusicBrainz row of
+// the recording just expanded (ADR 0031), or that MusicBrainz merged into it.
+//
+// The library is read first for owned recordings credited to the same artists
+// under a title that agrees. That narrows whom MusicBrainz is asked about and
+// proves nothing: each one is hidden behind only where the two MusicBrainz rows
+// are one registered track by identity.SameRegistrationByNameAndLength. asked
+// keeps every answer of the pass, so no owned recording is asked about twice.
+func (service *Service) ownedVersions(
+	ctx context.Context, recording recordingExpansion, asked map[uuid.UUID]*musicbrainz.Recording,
+) ([]uuid.UUID, error) {
+	rows, err := service.store.OwnedRecordingsCreditedTo(ctx, recording.artistIDs)
+	if err != nil {
+		return nil, fmt.Errorf("read owned recordings credited to %s: %w", recording.recordingID, err)
+	}
+	title := tagmatch.WithoutBracketedLabels(recording.catalogue.Title)
+	worth := make([]uuid.UUID, 0, len(rows))
+	seen := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		if _, done := seen[row.RecordingMbid]; done || recording.catalogue.Answers(row.RecordingMbid) {
+			continue
+		}
+		if tagmatch.Title(title, tagmatch.WithoutBracketedLabels(row.Title)) != tagmatch.Agrees {
+			continue
+		}
+		seen[row.RecordingMbid] = struct{}{}
+		worth = append(worth, row.RecordingMbid)
+	}
+
+	versions := make([]uuid.UUID, 0, len(worth))
+	for _, ownedID := range worth {
+		owned, known := asked[ownedID]
+		if !known {
+			answer, err := service.recordings.Recording(ctx, ownedID)
+			switch {
+			case errors.Is(err, musicbrainz.ErrNotFound):
+			case err != nil:
+				return nil, fmt.Errorf("look up owned recording %s: %w", ownedID, err)
+			default:
+				owned = &answer
+			}
+			asked[ownedID] = owned
+		}
+		if owned == nil {
+			continue
+		}
+		if owned.ID == recording.catalogue.ID ||
+			identity.SameRegistrationByNameAndLength(recording.catalogue, *owned) {
+			versions = append(versions, ownedID)
+		}
+	}
+	return versions, nil
 }

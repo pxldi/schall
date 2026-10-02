@@ -235,6 +235,89 @@ func TestOwnedSuppressionFollowsTheMappedTrackToItsAlbum(t *testing.T) {
 	}
 }
 
+// heldTrack puts a present file in the library, mapped to a catalogue track of
+// recordingID credited to artistID, and answers the file.
+func heldTrack(t *testing.T, pool *pgxpool.Pool, recordingID, artistID uuid.UUID, title string) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	localArtistID, albumID, trackID, fileID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	for _, statement := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO artists (id, musicbrainz_id, name, sort_name, followed_at, catalogue_summary)
+		  VALUES ($1, $2, 'Portishead', 'Portishead', NULL, 'held by the library')`, []any{localArtistID, uuid.New()}},
+		{`INSERT INTO albums (id, artist_id, musicbrainz_release_group_id, title)
+		  VALUES ($1, $2, $3, 'Dummy')`, []any{albumID, localArtistID, uuid.New()}},
+		{`INSERT INTO tracks (id, album_id, musicbrainz_recording_id, title)
+		  VALUES ($1, $2, $3, $4)`, []any{trackID, albumID, recordingID, title}},
+		{`INSERT INTO track_artist_credits (track_id, position, credited_name, musicbrainz_artist_id)
+		  VALUES ($1, 1, 'Portishead', $2)`, []any{trackID, artistID}},
+		{`INSERT INTO library_files (id, path, size_bytes, modified_at)
+		  VALUES ($1, $2, 10, $3)`, []any{fileID, "/music/" + fileID.String() + ".flac", testObservedAt}},
+		{`INSERT INTO track_mappings (track_id, library_file_id, method, is_manual)
+		  VALUES ($1, $2, 'manual', true)`, []any{trackID, fileID}},
+	} {
+		if _, err := pool.Exec(ctx, statement.sql, statement.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return fileID
+}
+
+// A row the own engine found to be a second MusicBrainz row of an owned
+// recording is hidden as owned while a present file holds that recording, and
+// offered again once the file goes missing (ADR 0031).
+func TestARowNamingAnOwnedVersionIsHiddenWhileTheVersionIsHeld(t *testing.T) {
+	ctx := context.Background()
+	service, _, pool, _ := recommendationService(t)
+	recordingID, ownedID, artistID := uuid.New(), uuid.New(), uuid.New()
+	candidate := recommendationCandidate(recordingID, uuid.New(), artistID)
+	candidate.ReasonContext = map[string]any{ownedVersionsKey: []string{ownedID.String()}}
+	plain := uuid.New()
+	replaceRecommendationCandidates(t, service, candidate, recommendationCandidate(plain, uuid.New(), artistID))
+
+	if got := evaluatedRules(t, service)[recordingID]; got != "" {
+		t.Fatalf("a version nobody holds suppressed by %q, want no rule", got)
+	}
+	fileID := heldTrack(t, pool, ownedID, artistID, "Roads")
+	rules := evaluatedRules(t, service)
+	if rules[recordingID] != SuppressedOwned || rules[plain] != "" {
+		t.Fatalf("rules = %v, want only the row naming the held version owned", rules)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE library_files SET missing_at = $2 WHERE id = $1`, fileID, testObservedAt); err != nil {
+		t.Fatal(err)
+	}
+	if got := evaluatedRules(t, service)[recordingID]; got != "" {
+		t.Fatalf("a missing version suppressed by %q, want no rule", got)
+	}
+}
+
+// The library is read for owned recordings credited to the artists asked about,
+// with each title it has for them. A recording no present file holds is not
+// among them.
+func TestOwnedRecordingsCreditedToReadsOnlyHeldRecordingsOfThoseArtists(t *testing.T) {
+	ctx := context.Background()
+	_, queries, pool, _ := recommendationService(t)
+	artistID, otherArtistID := uuid.New(), uuid.New()
+	held, missing, elsewhere := uuid.New(), uuid.New(), uuid.New()
+	heldTrack(t, pool, held, artistID, "Roads")
+	missingFile := heldTrack(t, pool, missing, artistID, "Sour Times")
+	if _, err := pool.Exec(ctx, `UPDATE library_files SET missing_at = $2 WHERE id = $1`, missingFile, testObservedAt); err != nil {
+		t.Fatal(err)
+	}
+	heldTrack(t, pool, elsewhere, otherArtistID, "Roads")
+
+	rows, err := queries.OwnedRecordingsCreditedTo(ctx, []uuid.UUID{artistID})
+	if err != nil {
+		t.Fatalf("OwnedRecordingsCreditedTo() error = %v", err)
+	}
+	want := []db.OwnedRecordingsCreditedToRow{{RecordingMbid: held, Title: "Roads"}}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %#v, want %#v", rows, want)
+	}
+}
+
 func TestRequestedSuppressionIncludesOnlyActiveTargets(t *testing.T) {
 	ctx := context.Background()
 	service, _, pool, _ := recommendationService(t)

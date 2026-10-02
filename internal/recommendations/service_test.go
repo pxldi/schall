@@ -36,6 +36,9 @@ type fakeStore struct {
 	feedback             []db.RecommendationFeedback
 	pool                 []db.OwnRecommendationPoolRow
 	poolParams           []db.OwnRecommendationPoolParams
+	// credited is the library's owned recordings, each under the artists its
+	// catalogue credit names.
+	credited map[uuid.UUID][]db.OwnedRecordingsCreditedToRow
 }
 
 type recordedCheck struct {
@@ -237,6 +240,16 @@ func (store *fakeStore) OwnRecommendationPool(
 ) ([]db.OwnRecommendationPoolRow, error) {
 	store.poolParams = append(store.poolParams, params)
 	return append([]db.OwnRecommendationPoolRow(nil), store.pool...), nil
+}
+
+func (store *fakeStore) OwnedRecordingsCreditedTo(
+	_ context.Context, artistIDs []uuid.UUID,
+) ([]db.OwnedRecordingsCreditedToRow, error) {
+	var rows []db.OwnedRecordingsCreditedToRow
+	for _, artistID := range artistIDs {
+		rows = append(rows, store.credited[artistID]...)
+	}
+	return rows, nil
 }
 
 // Everything asked about is offered here. The rule that a recording has to be
