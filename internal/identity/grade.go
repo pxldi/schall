@@ -1214,6 +1214,18 @@ func oneRegistration(
 	return notOneRegistration
 }
 
+// SameRegistrationByNameAndLength reports two MusicBrainz rows that ADR 0031
+// holds to be one registered track: the same artists, the same title and the
+// same length, with no registration codes that disagree. It reads the two rows
+// alone. A row with no length proves nothing here, because there is no copy to
+// measure in its place.
+//
+// It is the test the recommendation lists use to hide a second row of a song
+// the library already holds. A title on its own never answers it.
+func SameRegistrationByNameAndLength(one, other musicbrainz.Recording) bool {
+	return oneRegistration(one, other, 0) == byNameAndLength
+}
+
 // registrationCodesDisagree reports two rows the label registered as two tracks.
 //
 // A row with no ISRC is silence and disagrees with nothing, which is the usual
