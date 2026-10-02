@@ -120,9 +120,14 @@ RETURNING *;
 -- and the route that writes it takes any UUID a caller sends. No source is
 -- named because impressions are not: one recording has one fatigue cycle,
 -- whichever list offered it.
+--
+-- A snapshot a sweep is still building is stored under the published name with
+-- ':building' on the end (stagedSuffix in internal/recommendations). Nobody is
+-- shown it, so a recording only it names was never on screen.
 SELECT DISTINCT musicbrainz_recording_id
 FROM recommendation_candidates
-WHERE musicbrainz_recording_id = ANY(sqlc.arg('musicbrainz_recording_ids')::uuid[]);
+WHERE musicbrainz_recording_id = ANY(sqlc.arg('musicbrainz_recording_ids')::uuid[])
+  AND source NOT LIKE '%:building';
 
 -- name: UpsertRecommendationSnapshot :one
 INSERT INTO recommendation_snapshots (

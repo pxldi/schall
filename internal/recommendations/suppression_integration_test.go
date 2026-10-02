@@ -675,6 +675,38 @@ func TestOnlyARecordingTheStoredListOffersIsCountedAsShown(t *testing.T) {
 	}
 }
 
+// A snapshot a sweep is still building is shown to nobody, so a recording only
+// it names was never on screen and its showing does not count.
+func TestARecordingOnlyTheBuildingSnapshotNamesIsNotCountedAsShown(t *testing.T) {
+	ctx := context.Background()
+	service, _, pool, _ := recommendationService(t)
+	building := uuid.New()
+	if err := service.replaceSnapshot(ctx, Snapshot{
+		Source:     stagedSource(testRecommendationSource),
+		Status:     "partial",
+		Detail:     "still building",
+		FetchedAt:  testObservedAt,
+		Candidates: []CandidateInput{recommendationCandidate(building, uuid.New(), uuid.New())},
+	}); err != nil {
+		t.Fatalf("replaceSnapshot() error = %v", err)
+	}
+
+	recorded, err := service.RecordImpressions(ctx, []uuid.UUID{building})
+	if err != nil {
+		t.Fatalf("RecordImpressions() error = %v", err)
+	}
+	if recorded != 0 {
+		t.Fatalf("recorded = %d, want nothing counted for a list nobody reads", recorded)
+	}
+	var counted int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recommendation_impressions`).Scan(&counted); err != nil {
+		t.Fatal(err)
+	}
+	if counted != 0 {
+		t.Fatalf("impressions = %d, want none", counted)
+	}
+}
+
 func TestReviewQueueRejectionDoesNotAffectRecommendations(t *testing.T) {
 	ctx := context.Background()
 	service, _, pool, _ := recommendationService(t)
