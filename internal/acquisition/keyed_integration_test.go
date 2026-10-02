@@ -69,3 +69,55 @@ func TestASweepSearchesAKeyedWantAndNeverResolvesIt(t *testing.T) {
 		t.Errorf("NextDue() = %v, want nothing due before the search at %v", due, after.NextSearchAt.Time)
 	}
 }
+
+// Two entries keyed to one address are one want (ADR 0040 §1). Before
+// acquisition_targets_source_key_idx both were searched and both could import
+// the same track.
+func TestASecondWantKeyedToOneAddressIsSupersededByTheFirst(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	service := newTestService(pool).
+		WithTrackSources(&fakeTrackSources{track: addressedTrack}, fakePrints{value: excerptFingerprint})
+	first := createEntry(ctx, t, service)
+	duration := int32(187000)
+	second, _, err := service.Create(ctx, Entry{
+		Origin: "playlist", Artist: "Abo", Title: "Illegal (Abo Edit)", DurationMS: &duration,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if _, err := service.KeyToSource(ctx, first.ID, addressedTrack.URL, addressedTrack.ExternalID); err != nil {
+		t.Fatalf("KeyToSource(first) error = %v", err)
+	}
+	merged, err := service.KeyToSource(ctx, second.ID, addressedTrack.URL, addressedTrack.ExternalID)
+	if err != nil {
+		t.Fatalf("KeyToSource(second) error = %v", err)
+	}
+
+	if merged.Status != "superseded" || !merged.SupersededByID.Valid ||
+		merged.SupersededByID.UUID != first.ID || merged.ExternalID != addressedTrack.ExternalID {
+		t.Fatalf("second want = %s by %v key %q, want it superseded by the first and keyed",
+			merged.Status, merged.SupersededByID, merged.ExternalID)
+	}
+	if merged.NextSearchAt.Valid || merged.Summary != keyedSupersededSummary {
+		t.Errorf("second want search %v summary %q, want no search and the merge named",
+			merged.NextSearchAt, merged.Summary)
+	}
+	survivor, err := service.Target(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if survivor.Status != "unresolved" || !survivor.NextSearchAt.Valid {
+		t.Errorf("first want = %s search %v, want it still searched", survivor.Status, survivor.NextSearchAt)
+	}
+
+	// The index holds whatever writes the key.
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets SET status = 'unresolved', superseded_by_id = NULL
+		WHERE id = $1
+	`, second.ID); err == nil {
+		t.Fatal("two live wants share one address, want acquisition_targets_source_key_idx to refuse it")
+	}
+}

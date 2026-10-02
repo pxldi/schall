@@ -55,14 +55,21 @@ var ErrNoFiler = errors.New("recording what a library file is is unavailable")
 // against the file, through the same check every other settled want goes through
 // (OwnedFileForRecording, then SettleAcquiredTarget).
 //
+// A want with no recording has nothing to write onto the file. The person's
+// answer settles the want against the file, and the file keeps the answer it
+// already carried (ADR 0040 §5).
+//
 // ErrWantIsNotStopped means the queue is no longer asking this.
 func (service *Service) AcceptFiledCopy(ctx context.Context, targetID uuid.UUID) error {
-	if service.filer == nil {
-		return ErrNoFiler
-	}
 	target, err := service.store.AcquisitionTarget(ctx, targetID)
 	if err != nil {
 		return err
+	}
+	if !target.MusicBrainzRecordingID.Valid {
+		return service.acceptFiledCopyWithoutRecording(ctx, target)
+	}
+	if service.filer == nil {
+		return ErrNoFiler
 	}
 	// The same three facts the stopped question is read from, asked again here:
 	// a want with a time is being looked at, and one with no recording has
@@ -90,6 +97,37 @@ func (service *Service) AcceptFiledCopy(ctx context.Context, targetID uuid.UUID)
 		Str("musicbrainz_recording_id", target.MusicBrainzRecordingID.UUID.String()).
 		Msg("a library file was accepted by hand as the recording a want asked for")
 	service.kickSweeper(ctx)
+	service.announce()
+	return nil
+}
+
+// acceptFiledCopyWithoutRecording settles a stopped want with no recording
+// against its library file, on a person's word.
+func (service *Service) acceptFiledCopyWithoutRecording(
+	ctx context.Context, target db.AcquisitionTargetRow,
+) error {
+	if target.Status != "unresolved" || target.NextSearchAt.Valid {
+		return ErrWantIsNotStopped
+	}
+	filing, err := service.store.AcquiredCopyFiling(ctx, target.ID)
+	if err != nil {
+		return err
+	}
+	if !filing.Found {
+		return ErrWantIsNotStopped
+	}
+	err = service.store.SettleStoppedUnresolvedTarget(
+		ctx, target.ID, filing.LibraryFileID, acquiredSummary, acceptedFiledDetail)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrWantIsNotStopped
+	}
+	if err != nil {
+		return err
+	}
+	service.logger.Info().
+		Str("acquisition_target_id", target.ID.String()).
+		Str("library_file_id", filing.LibraryFileID.String()).
+		Msg("a want with no recording was settled by hand against its library file")
 	service.announce()
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -53,6 +54,10 @@ var (
 const (
 	keyedSummary         = "Keyed to an address. Looking for a copy that matches its audio."
 	keyedAcquiredSummary = "Keyed to an address. The library already holds this track."
+	// What a want says when another want is already keyed to the same address
+	// (ADR 0040 §1), and when that want is one the person removed.
+	keyedSupersededSummary          = "Already wanted. Another entry is keyed to the same address and carries it now."
+	keyedSupersededNotWantedSummary = "Another entry keyed to this address was removed from your wishlist. It has not been added again."
 	// sourceFetchedSummary is what a keyed want says while the track fetched
 	// from its address waits to be checked.
 	sourceFetchedSummary = "No peer is sharing a copy. The track was fetched from its address and is being checked."
@@ -75,6 +80,44 @@ func (service *Service) WithSourceNamer(namer SourceNamer) *Service {
 	return service
 }
 
+// FetchCleaner removes the files in the fetch folder nothing needs any more
+// (ADR 0040 §3). internal/downloads is the one implementation.
+type FetchCleaner interface {
+	Clean(ctx context.Context) (int, error)
+}
+
+// fetchCleanEvery is how often a sweep cleans the fetch folder. Every rule the
+// cleaner applies waits a day first, so an hour costs nothing.
+const fetchCleanEvery = time.Hour
+
+// WithFetchCleaner registers what cleans the fetch folder.
+func (service *Service) WithFetchCleaner(cleaner FetchCleaner) *Service {
+	service.cleaner = cleaner
+	return service
+}
+
+// cleanFetchFolder cleans the fetch folder when the last pass is an hour old.
+// A failure is logged: the wants that are due must not wait on a folder.
+func (service *Service) cleanFetchFolder(ctx context.Context) {
+	if service.cleaner == nil {
+		return
+	}
+	service.cleaning.Lock()
+	defer service.cleaning.Unlock()
+	if !service.cleanedAt.IsZero() && service.now().Sub(service.cleanedAt) < fetchCleanEvery {
+		return
+	}
+	service.cleanedAt = service.now()
+	removed, err := service.cleaner.Clean(ctx)
+	if err != nil {
+		service.logger.Warn().Err(err).Msg("clean the source fetch folder")
+		return
+	}
+	if removed > 0 {
+		service.logger.Info().Int("removed", removed).Msg("cleaned the source fetch folder")
+	}
+}
+
 // WithSourceFetches registers what fetches a keyed want's track from its
 // address, and the folder it writes into. The importer reads fetched copies
 // from the same folder. Without them a keyed want is only searched for.
@@ -95,7 +138,7 @@ func (service *Service) WithSourceFetches(fetcher SourceFetcher, directory strin
 func (service *Service) fetchFromSource(
 	ctx context.Context, target db.AcquisitionTargetRow,
 ) (bool, error) {
-	if target.Source == "" || service.fetches == nil || service.fetchRoot == "" {
+	if !service.fetchesFromSource(target) {
 		return false, nil
 	}
 	fetched, err := service.store.SourceCopyFetched(ctx, target.ID)
@@ -159,6 +202,30 @@ func (service *Service) fetchFromSource(
 		Int64("size_bytes", got.SizeBytes).
 		Msg("fetched a keyed want's track from its address")
 	return true, nil
+}
+
+// fetchesFromSource reports whether this installation can fetch the want's
+// track from its address: the want is keyed, and a fetcher and its folder are
+// registered.
+func (service *Service) fetchesFromSource(target db.AcquisitionTargetRow) bool {
+	return target.Source != "" && service.fetches != nil && service.fetchRoot != ""
+}
+
+// onlyFromSource is a round for a keyed want on an installation with no peer
+// to ask: no slskd, or slskd switched off (ADR 0040 §4). The address is
+// fetched once, as after a search that found nothing, and otherwise the want
+// waits out the ladder as a search that found nothing does.
+func (service *Service) onlyFromSource(
+	ctx context.Context, target db.AcquisitionTargetRow, detail string,
+) error {
+	fetched, err := service.fetchFromSource(ctx, target)
+	if err != nil {
+		return err
+	}
+	if fetched {
+		return service.waitOut(ctx, target, sourceFetchedSummary)
+	}
+	return service.settleAttempt(ctx, target, "none", waitingSummary, detail)
 }
 
 // LookUpSource says what an address holds, and changes nothing. The person
@@ -227,6 +294,7 @@ func (service *Service) KeyToSource(
 		},
 		Fingerprint: fingerprint, Seconds: seconds,
 		Summary: keyedSummary, AcquiredSummary: keyedAcquiredSummary,
+		SupersededSummary: keyedSupersededSummary, SupersededNotWanted: keyedSupersededNotWantedSummary,
 	})
 	if err != nil {
 		return db.AcquisitionTargetRow{}, err
@@ -242,7 +310,8 @@ func (service *Service) KeyToSource(
 }
 
 // discardFetch removes a fetched file no row records, and its folder when that
-// leaves it empty. Nothing cleans the fetch folder otherwise. The file never
+// leaves it empty. The cleaning pass would remove it a day later (ADR 0040
+// §3); removing it now keeps the folder free of it meanwhile. The file never
 // reached the library.
 func discardFetch(path, directory string) {
 	_ = os.Remove(path)

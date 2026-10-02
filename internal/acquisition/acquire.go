@@ -199,8 +199,10 @@ func (service *Service) hunt(
 		return nil
 	}
 	// An installation with nothing to look with leaves the want exactly as it was
-	// before anything could look: wanted, and not in the library yet.
-	if service.hunter == nil || service.fetcher == nil {
+	// before anything could look: wanted, and not in the library yet. A keyed
+	// want can still be fetched from its address (ADR 0040 §4), so it goes on.
+	canSearch := service.hunter != nil && service.fetcher != nil
+	if !canSearch && !service.fetchesFromSource(target) {
 		return service.settleAttempt(ctx, target, "none", waitingSummary, waitingDetail)
 	}
 	// A listener, settled library witness, or recorded anchor can verify a copy.
@@ -278,6 +280,10 @@ func (service *Service) hunt(
 		return nil
 	}
 
+	if !canSearch {
+		return service.onlyFromSource(ctx, target, waitingDetail)
+	}
+
 	wanted := sources.QueryTrack{Title: target.EntryTitle}
 	if target.EntryDurationMS.Valid {
 		wanted.DurationSeconds = int(target.EntryDurationMS.Int32) / 1000
@@ -305,6 +311,11 @@ func (service *Service) hunt(
 	}
 	candidates, refused, preferences, text, err := search(
 		ctx, sources.Query{Tracks: []sources.QueryTrack{wanted}}, rungs)
+	// slskd not being set up is no refusal and no failure: there is no peer to
+	// ask. A keyed want is fetched from its address instead (ADR 0040 §4).
+	if errors.Is(err, sources.ErrNotConfigured) && service.fetchesFromSource(target) {
+		return service.onlyFromSource(ctx, target, err.Error())
+	}
 	if err != nil {
 		return service.recordSearchFailure(ctx, target, err, pass)
 	}

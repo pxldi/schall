@@ -3239,3 +3239,24 @@ func TestTheReviewQueueSaysAWantIsWaitingOnTheLibrary(t *testing.T) {
 			payload.Items[0].WaitingUntil)
 	}
 }
+
+// A want with no recording that stopped on its library file asks the stopped
+// question. Before, only a pending want could, so Review showed this one as a
+// grid of copies with nothing to choose (ADR 0040 §5).
+func TestAStoppedWantWithNoRecordingIsReviewedAsStopped(t *testing.T) {
+	file := db.AcquisitionTargetFileRow{
+		Verdict: "accepted", LibraryFileID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+	stopped := db.AcquisitionReviewItem{
+		Target: db.AcquisitionTargetRow{Status: "unresolved"},
+		Files:  []db.AcquisitionTargetFileRow{file},
+	}
+	if kind := reviewKindOf(stopped); kind != reviewKindStopped {
+		t.Errorf("kind = %q, want %q", kind, reviewKindStopped)
+	}
+	searching := stopped
+	searching.Target.NextSearchAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	if kind := reviewKindOf(searching); kind != reviewKindCopies {
+		t.Errorf("kind of a want still searched = %q, want %q", kind, reviewKindCopies)
+	}
+}

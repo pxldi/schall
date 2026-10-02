@@ -167,17 +167,30 @@ func TestLoadRefusesAManagedLibraryNothingWouldUse(t *testing.T) {
 	}
 }
 
-// A track fetched from an address is imported by the importer the download
-// inbox configures, so a fetch folder without one would fill with files
-// nothing imports.
-func TestLoadRefusesAFetchFolderWithoutADownloadInbox(t *testing.T) {
+// A track fetched from an address is imported into the managed library, so a
+// fetch folder needs one. It needs no download inbox: before, the fallback was
+// refused on an installation without slskd (ADR 0040 §4).
+func TestLoadTakesAFetchFolderWithTheLibraryAndNoInbox(t *testing.T) {
 	t.Setenv("SCHALL_DATABASE_URL", "postgres://example")
 	t.Setenv("SCHALL_IMPORT_LIBRARY_PATH", "/music")
-	t.Setenv("SCHALL_UPLOAD_STAGING_PATH", "/staging")
+	t.Setenv("SCHALL_SOURCE_FETCH_PATH", "/fetched")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want a fetch folder beside the library alone", err)
+	}
+	if cfg.SourceFetchPath != "/fetched" || cfg.DownloadInboxPath != "" {
+		t.Fatalf("fetch %q inbox %q, want the fetch folder and no inbox",
+			cfg.SourceFetchPath, cfg.DownloadInboxPath)
+	}
+}
+
+func TestLoadRefusesAFetchFolderWithoutTheLibrary(t *testing.T) {
+	t.Setenv("SCHALL_DATABASE_URL", "postgres://example")
 	t.Setenv("SCHALL_SOURCE_FETCH_PATH", "/fetched")
 
 	if _, err := Load(); err == nil {
-		t.Fatal("Load() accepted a fetch folder with no download inbox")
+		t.Fatal("Load() accepted a fetch folder with nowhere to import into")
 	}
 }
 

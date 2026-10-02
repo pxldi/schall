@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/slskd"
@@ -712,6 +713,23 @@ func TestSearchForSkipsARungTheRemainingBudgetCannotFinish(t *testing.T) {
 	}
 	if len(downloader.searched) != 0 {
 		t.Fatalf("searched %q, want the underfunded rung skipped", downloader.searched)
+	}
+}
+
+// An installation nobody connected to slskd has no settings row. Before, the
+// search reported the database's "no rows", which the acquisition loop read as
+// a failed search instead of a source that is not there (ADR 0040 §4).
+func TestSearchForWithNoSettingsRowReportsNoSourceConfigured(t *testing.T) {
+	store := &fakeSearchStore{settingsErr: pgx.ErrNoRows}
+	downloader := &fakeDownloader{}
+	searcher := testSearcher(store, downloader)
+
+	_, _, _, _, err := searcher.SearchFor(context.Background(), sources.Query{}, rungs("Anetha"))
+	if !errors.Is(err, sources.ErrNotConfigured) {
+		t.Fatalf("error = %v, want %v", err, sources.ErrNotConfigured)
+	}
+	if len(downloader.searched) != 0 {
+		t.Fatalf("searched %q, want nothing asked", downloader.searched)
 	}
 }
 
