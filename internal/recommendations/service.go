@@ -42,6 +42,11 @@ var ErrNotConfigured = errors.New("ListenBrainz is not configured")
 // sweeps do not.
 var ErrDisabled = errors.New("ListenBrainz recommendations are disabled")
 
+// ErrExpansionNotConfigured means the service was built without a MusicBrainz
+// client. Nothing a retry does can change that, so a sweep that meets it stops
+// at once rather than spending its attempts on the same sentence.
+var ErrExpansionNotConfigured = errors.New("MusicBrainz recording expansion is not configured")
+
 // ErrCheckSuperseded means the settings row moved while the check was running,
 // so the verdict is about an account that is no longer the configured one.
 //
@@ -441,7 +446,7 @@ func (service *Service) SweepPage(ctx context.Context, position SweepPosition) (
 		return SweepResult{}, ErrDisabled
 	}
 	if service.recordings == nil {
-		return SweepResult{}, errors.New("MusicBrainz recording expansion is not configured")
+		return SweepResult{}, ErrExpansionNotConfigured
 	}
 
 	// A chain belongs to the account it was started for. Saving a different

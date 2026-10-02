@@ -3,7 +3,6 @@ package recommendations
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -92,7 +91,7 @@ type ownCandidate struct {
 // ListenBrainz account: the listens a sync already copied are its only input.
 func (service *Service) SweepOwnPage(ctx context.Context, position OwnSweepPosition) (OwnSweepResult, error) {
 	if service.recordings == nil {
-		return OwnSweepResult{}, errors.New("MusicBrainz recording expansion is not configured")
+		return OwnSweepResult{}, ErrExpansionNotConfigured
 	}
 	rows, err := service.store.OwnRecommendationPool(ctx, db.OwnRecommendationPoolParams{
 		SessionGapMicroseconds: ownSessionGap.Microseconds(),
