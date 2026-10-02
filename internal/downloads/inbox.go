@@ -22,12 +22,22 @@ var errUnsafeFolderName = errors.New("the provider folder has no safe local name
 // that disagreed by one component would look in a folder that is not there, and
 // read every file it could not find as bytes that never arrived.
 func inboxFolder(inboxPath, sourceDirectory string) (string, error) {
+	// An installation that only fetches from addresses has an importer and no
+	// inbox (ADR 0040 §4). An empty path cleans to ".", the process's working
+	// folder, which is no place to read a peer's copy from.
+	if inboxPath == "" || inboxPath == "." {
+		return "", errNoInbox
+	}
 	folderName := path.Base(strings.ReplaceAll(strings.TrimSpace(sourceDirectory), `\`, "/"))
 	if folderName == "" || folderName == "." || folderName == "/" {
 		return "", errUnsafeFolderName
 	}
 	return containedDirectory(inboxPath, filepath.Join(inboxPath, folderName))
 }
+
+// errNoInbox reports a peer's copy on an installation that names no download
+// inbox.
+var errNoInbox = errors.New("the copy came from a peer and no download inbox is configured")
 
 // errNoFetchFolder reports a copy fetched from an address on an installation
 // that names no folder for such copies.

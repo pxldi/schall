@@ -374,6 +374,39 @@ func (q *Queries) InboxCleanupCopies(ctx context.Context) ([]InboxCopyRow, error
 	return copies, rows.Err()
 }
 
+// SourceFetchCopies reads every copy fetched from a keyed want's address, with
+// the want's state, in the shape the inbox pass reads a peer's copy (ADR 0040
+// §3). A fetched copy records its service as its provider.
+func (q *Queries) SourceFetchCopies(ctx context.Context) ([]InboxCopyRow, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT coalesce(requests.source_directory, ''), copies.remote_path,
+		       copies.file_name, copies.verdict, targets.status,
+		       coalesce(files.path, '')
+		FROM acquisition_target_files copies
+		JOIN acquisition_targets targets ON targets.id = copies.acquisition_target_id
+		LEFT JOIN download_requests requests ON requests.id = copies.download_request_id
+		LEFT JOIN library_files files ON files.id = copies.library_file_id
+		WHERE copies.provider IN ('soundcloud', 'youtube', 'bandcamp')
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("read the copies fetched from addresses: %w", err)
+	}
+	defer rows.Close()
+
+	copies := make([]InboxCopyRow, 0, 16)
+	for rows.Next() {
+		var copied InboxCopyRow
+		if err := rows.Scan(
+			&copied.SourceDirectory, &copied.RemotePath, &copied.FileName,
+			&copied.Verdict, &copied.WantStatus, &copied.LibraryPath,
+		); err != nil {
+			return nil, err
+		}
+		copies = append(copies, copied)
+	}
+	return copies, rows.Err()
+}
+
 // InboxCleanupRequests reads every download request with the files it asked for
 // and where each imported one ended up.
 func (q *Queries) InboxCleanupRequests(ctx context.Context) ([]InboxRequestRow, error) {

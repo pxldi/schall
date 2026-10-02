@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
@@ -306,6 +307,12 @@ func (searcher *Searcher) record(
 
 func (searcher *Searcher) provider(ctx context.Context) (sources.Provider, error) {
 	row, err := searcher.store.SlskdSettings(ctx)
+	// An installation nobody connected to slskd has no settings row at all.
+	// That is the same fact as a row switched off, and the acquisition loop
+	// answers it by fetching keyed wants from their addresses (ADR 0040 §4).
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, sources.ErrNotConfigured
+	}
 	if err != nil {
 		return nil, err
 	}

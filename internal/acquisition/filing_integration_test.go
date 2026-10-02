@@ -2,6 +2,7 @@ package acquisition
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -703,5 +704,53 @@ func TestAnExcerptFetchedBeforeTheWantWasResolvedAgainSettlesNothing(t *testing.
 	stored, _, _ := identityOfFile(ctx, t, pool, fileID)
 	if stored != filed {
 		t.Errorf("identity = %s, want the library's own answer %s untouched", stored, filed)
+	}
+}
+
+// A want with no recording stops when the file its copy became already carries
+// another answer. Before, Review read only pending wants as stopped, so this
+// one was asked nowhere, and accepting it needed a recording to write (ADR 0040
+// §5). The person's answer settles the want and leaves the file's answer alone.
+func TestAStoppedWantWithNoRecordingIsAskedInReviewAndSettledByHand(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	service := newTestService(pool)
+
+	target := createEntry(ctx, t, service)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, uuid.Nil)
+	anchorOf(ctx, t, pool, target.ID, 0.07)
+	filed := uuid.New()
+	filedAs(ctx, t, pool, fileID, filed, false)
+	alreadyCompleted(ctx, t, pool, target.ID, fileID)
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets SET next_search_at = NULL, summary = $2 WHERE id = $1
+	`, target.ID, disagreedSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := db.New(pool).AcquisitionReviewQueue(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("AcquisitionReviewQueue() error = %v", err)
+	}
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].Target.ID != target.ID {
+		t.Fatalf("review queue = %d items, want the stopped want with no recording", page.Total)
+	}
+
+	if err := service.AcceptFiledCopy(ctx, target.ID); err != nil {
+		t.Fatalf("AcceptFiledCopy() error = %v", err)
+	}
+
+	settled := targetRow(ctx, t, service, target.ID)
+	if settled.Status != "acquired" || settled.AcquiredLibraryFileID.UUID != fileID ||
+		settled.MusicBrainzRecordingID.Valid {
+		t.Fatalf("want = %s file %v recording %v, want it acquired against the file with no recording",
+			settled.Status, settled.AcquiredLibraryFileID, settled.MusicBrainzRecordingID)
+	}
+	if stored, _, _ := identityOfFile(ctx, t, pool, fileID); stored != filed {
+		t.Errorf("file filed under %s, want its own answer %s kept", stored, filed)
+	}
+	if err := service.AcceptFiledCopy(ctx, target.ID); !errors.Is(err, ErrWantIsNotStopped) {
+		t.Errorf("second AcceptFiledCopy() error = %v, want %v", err, ErrWantIsNotStopped)
 	}
 }

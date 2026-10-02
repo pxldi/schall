@@ -847,6 +847,53 @@ func (q *Queries) SettleAcquiredTarget(
 	return nil
 }
 
+// SettleStoppedUnresolvedTarget settles a want with no recording against the
+// library file its accepted copy became, because a person said that file is
+// what the want asked for (ADR 0040 §5). The want stopped because the file
+// already carried another answer, and nothing automatic may settle it on that.
+// The file's own identity is left as it is.
+//
+// pgx.ErrNoRows means the want is no longer stopped: it has a recording, a
+// search scheduled, or was answered.
+func (q *Queries) SettleStoppedUnresolvedTarget(
+	ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string,
+) error {
+	tag, err := q.db.Exec(ctx, `
+		WITH settled AS (
+			UPDATE acquisition_targets
+			SET status = 'acquired',
+			    acquired_at = now(),
+			    acquired_library_file_id = $2,
+			    attempts = attempts + 1,
+			    last_attempt_at = now(),
+			    next_attempt_at = NULL,
+			    next_search_at = NULL,
+			    last_error = NULL,
+			    summary = $3,
+			    recheck_reason = NULL,
+			    recheck_after = NULL,
+			    updated_at = now()
+			WHERE id = $1
+			  AND status = 'unresolved'
+			  AND musicbrainz_recording_id IS NULL
+			  AND next_search_at IS NULL
+			  AND `+anchorAdmits("")+`
+			RETURNING id, attempts
+		)
+		INSERT INTO acquisition_target_attempts (
+			acquisition_target_id, attempt, outcome, detail
+		)
+		SELECT id, attempts, 'acquired', $4 FROM settled
+	`, id, libraryFileID, summary, detail)
+	if err != nil {
+		return fmt.Errorf("settle stopped want %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 // RequeueAcquisitionTarget records an attempt that did not find the recording
 // and schedules the next one. There is no failure state to move to: Soulseek
 // peers come and go, and a want nobody could satisfy today is still wanted

@@ -54,6 +54,11 @@ type KeySourceParams struct {
 	// what it says when the library already holds the track.
 	Summary         string
 	AcquiredSummary string
+	// SupersededSummary is what the want says when another want is already
+	// keyed to the address, and SupersededNotWanted what it says when that want
+	// is one the person stopped pursuing.
+	SupersededSummary   string
+	SupersededNotWanted string
 }
 
 // KeyAcquisitionTargetToSource writes the address a person confirmed onto a
@@ -66,7 +71,24 @@ type KeySourceParams struct {
 // library already holds a file with the same source identity, the want is
 // acquired with it in the same transaction. A sweep and a judging of the want's
 // held copies are queued alongside (ADR 0029 §5), unless it was acquired.
+//
+// One live want holds an address (ADR 0040 §1). When another want already
+// holds it, this want is superseded by that one and keeps the key, the way an
+// entry that resolves to a recording another want holds is (00024). Two
+// keyings of one address in the same moment meet at
+// acquisition_targets_source_key_idx, and the one that loses is written again
+// and finds the other.
 func (q *Queries) KeyAcquisitionTargetToSource(
+	ctx context.Context, params KeySourceParams,
+) (AcquisitionTargetRow, error) {
+	target, err := q.keyAcquisitionTargetToSource(ctx, params)
+	if isUniqueViolation(err) {
+		return q.keyAcquisitionTargetToSource(ctx, params)
+	}
+	return target, err
+}
+
+func (q *Queries) keyAcquisitionTargetToSource(
 	ctx context.Context, params KeySourceParams,
 ) (AcquisitionTargetRow, error) {
 	lookup, err := json.Marshal(params.Lookup)
@@ -109,6 +131,48 @@ func (q *Queries) KeyAcquisitionTargetToSource(
 		}
 		if answered {
 			return ErrNotKeyable
+		}
+
+		var (
+			survivor       uuid.NullUUID
+			survivorStatus string
+		)
+		err = tx.QueryRow(ctx, `
+			SELECT id, status
+			FROM acquisition_targets
+			WHERE source = $1 AND external_id = $2
+			  AND status <> 'superseded' AND id <> $3
+			FOR UPDATE
+		`, params.Source, params.ExternalID, params.TargetID).Scan(&survivor, &survivorStatus)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("look for a want already keyed to %s: %w", params.ExternalID, err)
+		}
+		if survivor.Valid {
+			summary := params.SupersededSummary
+			if survivorStatus == "not_wanted" {
+				summary = params.SupersededNotWanted
+			}
+			target, err = scanAcquisitionTarget(tx.QueryRow(ctx, `
+				UPDATE acquisition_targets
+				SET source = $2, external_id = $3, external_url = $4, source_lookup = $5::jsonb,
+				    minimum_bitrate = $6,
+				    status = 'superseded', superseded_by_id = $7, review_reason = NULL,
+				    next_attempt_at = NULL, next_search_at = NULL,
+				    anchor_next_attempt_at = NULL, last_error = NULL,
+				    summary = $8, updated_at = now()
+				WHERE id = $1
+				RETURNING`+acquisitionTargetColumns, params.TargetID, params.Source,
+				params.ExternalID, params.ExternalURL, lookup, KeyedMinimumBitrate,
+				survivor.UUID, summary))
+			if err != nil {
+				return fmt.Errorf("merge want %s into want %s: %w", params.TargetID, survivor.UUID, err)
+			}
+			if _, err := tx.Exec(ctx, `
+				DELETE FROM acquisition_target_candidates WHERE acquisition_target_id = $1
+			`, params.TargetID); err != nil {
+				return fmt.Errorf("clear the candidates of want %s: %w", params.TargetID, err)
+			}
+			return nil
 		}
 
 		if _, err := tx.Exec(ctx, `
@@ -369,15 +433,20 @@ func WriteFileCoverArt(
 var ErrSourceAlreadyFetched = errors.New("this want already holds a copy fetched from its address")
 
 // holdsSourceCopy is "the want holds a copy fetched from its own address". A
-// fetched copy records the service as its provider. A copy whose bytes never
-// arrived does not count: nothing was judged, so the fetch has not happened.
-// It reads targets.
+// fetched copy records the service as its provider.
+//
+// A copy that could not be read counts for 30 days, the top rung of the
+// unfound ladder, and is fetched again after that (ADR 0040 §2). The service
+// serves the same bytes to the next fetch, so asking every round fetched the
+// same unreadable file every round. A service can re-encode a track, so the
+// question is asked again on the ladder's slowest clock. It reads targets.
 const holdsSourceCopy = `
 	EXISTS (
 	    SELECT 1 FROM acquisition_target_files copies
 	    WHERE copies.acquisition_target_id = targets.id
 	      AND copies.provider = targets.source
-	      AND copies.verdict <> 'undelivered'
+	      AND (copies.verdict <> 'undelivered'
+	           OR coalesce(copies.decided_at, copies.updated_at) > now() - interval '30 days')
 	)`
 
 // SourceCopyFetched reports whether a keyed want already holds a copy fetched

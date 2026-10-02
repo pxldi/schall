@@ -35,7 +35,8 @@ type Config struct {
 	// SourceFetchPath is where a keyed want's track is fetched from its address
 	// when no peer shares a copy (ADR 0038 §6). It has to be writable, which the
 	// download inbox usually is not, and outside every library root, for the
-	// same reason staging is. Empty means no track is fetched that way.
+	// same reason staging is. Empty means no track is fetched that way. It
+	// needs the managed library and no download inbox (ADR 0040 §4).
 	SourceFetchPath string
 	// FpcalcPath is the Chromaprint binary that turns audio into a fingerprint.
 	// It is configurable because the image may carry it anywhere, and empty
@@ -146,14 +147,16 @@ func Load() (Config, error) {
 	if cfg.UploadStagingPath != "" && cfg.ImportLibraryPath == "" {
 		return Config{}, fmt.Errorf("SCHALL_UPLOAD_STAGING_PATH requires SCHALL_IMPORT_LIBRARY_PATH")
 	}
-	if cfg.ImportLibraryPath != "" && cfg.DownloadInboxPath == "" && cfg.UploadStagingPath == "" {
+	if cfg.ImportLibraryPath != "" && cfg.DownloadInboxPath == "" && cfg.UploadStagingPath == "" &&
+		cfg.SourceFetchPath == "" {
 		return Config{}, fmt.Errorf(
-			"SCHALL_IMPORT_LIBRARY_PATH is only used by SCHALL_DOWNLOAD_INBOX_PATH and SCHALL_UPLOAD_STAGING_PATH; set one of them")
+			"SCHALL_IMPORT_LIBRARY_PATH is only used by SCHALL_DOWNLOAD_INBOX_PATH, SCHALL_UPLOAD_STAGING_PATH and SCHALL_SOURCE_FETCH_PATH; set one of them")
 	}
-	// A fetched track is imported by the same importer a peer's copy is, and
-	// that importer exists only beside a download inbox.
-	if cfg.SourceFetchPath != "" && cfg.DownloadInboxPath == "" {
-		return Config{}, fmt.Errorf("SCHALL_SOURCE_FETCH_PATH requires SCHALL_DOWNLOAD_INBOX_PATH")
+	// A fetched track is imported into the managed library like a peer's copy.
+	// It needs no download inbox: an installation without slskd fetches keyed
+	// wants from their addresses alone (ADR 0040 §4).
+	if cfg.SourceFetchPath != "" && cfg.ImportLibraryPath == "" {
+		return Config{}, fmt.Errorf("SCHALL_SOURCE_FETCH_PATH requires SCHALL_IMPORT_LIBRARY_PATH")
 	}
 	for name, path := range map[string]string{
 		"SCHALL_DOWNLOAD_INBOX_PATH": cfg.DownloadInboxPath,

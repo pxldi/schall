@@ -179,6 +179,7 @@ type Store interface {
 	) error
 	OwnedFileForRecording(context.Context, uuid.UUID) (uuid.NullUUID, error)
 	SettleAcquiredTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
+	SettleStoppedUnresolvedTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
 	RequeueAcquisitionTarget(
 		ctx context.Context, id uuid.UUID, outcome, summary, detail, lastError string,
 		nextAttemptAt time.Time,
@@ -294,6 +295,12 @@ type Service struct {
 	// only searched for.
 	fetches   SourceFetcher
 	fetchRoot string
+	// cleaner removes the fetched files nothing needs (ADR 0040 §3), at most
+	// once per fetchCleanEvery. Optional: without it the fetch folder is never
+	// cleaned. cleanedAt is the last pass, guarded by cleaning.
+	cleaner   FetchCleaner
+	cleaning  sync.Mutex
+	cleanedAt time.Time
 	// notices tells connected interfaces that the wants changed. Optional:
 	// without it the views go back to asking on a timer.
 	notices *events.Hub
@@ -506,6 +513,7 @@ func (service *Service) Sweep(ctx context.Context) error {
 	if err := service.recheckSources(ctx); err != nil {
 		return err
 	}
+	service.cleanFetchFolder(ctx)
 	targets, err := service.store.DueAcquisitionTargets(ctx, service.now(), sweepBatch)
 	if err != nil {
 		return fmt.Errorf("list due acquisition targets: %w", err)
@@ -1016,6 +1024,9 @@ const (
 
 	acquiredDetail     = "A file the library already holds is proven to be this recording."
 	acquiredCopyDetail = "A copy was fetched, proven by its audio, and imported."
+	// What the attempt records when a person settles a stopped want with no
+	// recording against its library file (ADR 0040 §5).
+	acceptedFiledDetail = "You said the library file this copy became is what this entry asked for."
 	// What an attempt records when the want named the clean edition and the file
 	// on the disc holds the explicit one. The two are different recordings, so
 	// the detail says which one the library has (ADR 0032).

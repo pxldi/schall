@@ -1265,6 +1265,11 @@ func reviewKindOf(item db.AcquisitionReviewItem) string {
 		(holdsAnAcceptedCopy(item) || holdsOnlyCreditRefusals(item)) {
 		return reviewKindStopped
 	}
+	// A want with no recording stops on its search schedule instead, and only
+	// on a library file (ADR 0040 §5).
+	if target.Status == "unresolved" && !target.NextSearchAt.Valid && holdsAnAcceptedCopy(item) {
+		return reviewKindStopped
+	}
 	return reviewKindCopies
 }
 

@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
+	"github.com/pxldi/schall/internal/downloads"
+	"github.com/pxldi/schall/internal/sources"
 	"github.com/pxldi/schall/internal/tracksource"
+	"github.com/rs/zerolog"
 )
 
 // When a search round finds nothing to fetch, a keyed want takes the track from
@@ -208,5 +211,130 @@ func TestAFetchFromAnAddressThatFailsLeavesNoCopyAndIsAskedAgain(t *testing.T) {
 
 	if len(fetcher.fetched) != 2 {
 		t.Fatalf("fetched %d times, want the next round to ask again", len(fetcher.fetched))
+	}
+}
+
+// A fetched file that cannot be read is the file the service serves, so the
+// next round would fetch the same bytes again. It counts as the want's fetch for
+// 30 days and is asked for again after that (ADR 0040 §2). Before, an
+// undelivered copy never counted, and every round fetched the track again.
+func TestAnUnreadableFetchIsNotFetchedAgainUntilTheLadderTopsOut(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	fetcher := &fakeSourceFetcher{}
+	root := t.TempDir()
+	service, hunter, target := keyedWithNothingOnOffer(ctx, t, pool, fetcher, root)
+	service.WithFetchCleaner(downloads.NewFetchCleaner(db.New(pool), root, zerolog.Nop()))
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	copies := offers(ctx, t, pool, target.ID)
+	if len(copies) != 1 {
+		t.Fatalf("copies = %+v, want the fetched track", copies)
+	}
+	claimed, err := db.New(pool).ClaimTargetImport(ctx, copiesRequest(t, copies[0]))
+	if err != nil {
+		t.Fatalf("ClaimTargetImport() error = %v", err)
+	}
+	if err := db.New(pool).SettleAcquiredFile(ctx, db.SettleAcquiredFileParams{
+		RecordAcquiredFileParams: db.RecordAcquiredFileParams{
+			AcquisitionTargetID: target.ID, Provider: claimed.Provider,
+			SourceUsername: claimed.SourceUsername, RemotePath: claimed.File.Path,
+			FileName: claimed.File.Name, SizeBytes: claimed.File.SizeBytes,
+			Verdict: db.AcquiredFileUndelivered, Summary: "unreadable",
+			DownloadRequestID: uuid.NullUUID{UUID: claimed.RequestID, Valid: true},
+		},
+		ImportStatus: "discarded", ImportError: "unreadable",
+		TargetSummary: "unreadable", NextAttemptAt: time.Now(), Outcome: "failed",
+	}); err != nil {
+		t.Fatalf("SettleAcquiredFile() error = %v", err)
+	}
+	searchDueNow(ctx, t, pool, target.ID)
+	// A day later the unreadable file is deleted by the sweep's cleaning pass
+	// (ADR 0040 §3). Before, nothing cleaned the fetch folder.
+	fetchedFile := filepath.Join(root, target.ID.String(), claimed.File.Name)
+	dayOld := time.Now().Add(-25 * time.Hour)
+	if err := os.Chtimes(fetchedFile, dayOld, dayOld); err != nil {
+		t.Fatal(err)
+	}
+	service.cleanedAt = time.Time{}
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(hunter.texts) != 2 || len(fetcher.fetched) != 1 {
+		t.Fatalf("searched %d times and fetched %d times, want a second search and no second fetch",
+			len(hunter.texts), len(fetcher.fetched))
+	}
+	if _, err := os.Stat(fetchedFile); !os.IsNotExist(err) {
+		t.Fatalf("the unreadable fetched file is still there: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_target_files SET decided_at = now() - interval '31 days'
+		WHERE acquisition_target_id = $1
+	`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	searchDueNow(ctx, t, pool, target.ID)
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(fetcher.fetched) != 2 {
+		t.Fatalf("fetched %d times, want the address asked again once the ladder topped out",
+			len(fetcher.fetched))
+	}
+}
+
+// An installation without slskd has a keyed want's address and nothing else to
+// look with. Before, the fallback ran only after a Soulseek round, so such an
+// installation never fetched from the source (ADR 0040 §4). Both shapes are
+// held: no searcher wired at all, and a searcher that reports slskd unset.
+func TestAKeyedWantIsFetchedFromItsAddressWithoutSlskd(t *testing.T) {
+	for _, shape := range []struct {
+		name   string
+		hunter *fakeHunter
+	}{
+		{"no searcher", nil},
+		{"slskd not set up", &fakeHunter{err: sources.ErrNotConfigured}},
+	} {
+		t.Run(shape.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			pool := dbtest.Setup(t)
+			fetcher := &fakeSourceFetcher{}
+			service := newTestService(pool)
+			if shape.hunter != nil {
+				service = hunting(pool, shape.hunter, &fakeFetcher{}, false)
+			}
+			service = service.
+				WithTrackSources(&fakeTrackSources{track: addressedTrack}, fakePrints{value: excerptFingerprint}).
+				WithSourceFetches(fetcher, t.TempDir())
+			target := createEntry(ctx, t, service)
+			if _, err := service.KeyToSource(ctx, target.ID, addressedTrack.URL, addressedTrack.ExternalID); err != nil {
+				t.Fatalf("KeyToSource() error = %v", err)
+			}
+
+			if err := service.Sweep(ctx); err != nil {
+				t.Fatalf("Sweep() error = %v", err)
+			}
+
+			if len(fetcher.fetched) != 1 {
+				t.Fatalf("fetched %d times, want the address fetched", len(fetcher.fetched))
+			}
+			copies := offers(ctx, t, pool, target.ID)
+			if len(copies) != 1 || copies[0].Verdict != db.AcquiredFileFetching {
+				t.Fatalf("copies = %+v, want the fetched track on its way to the import", copies)
+			}
+			after, err := service.Target(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Summary != sourceFetchedSummary {
+				t.Errorf("summary = %q, want %q", after.Summary, sourceFetchedSummary)
+			}
+		})
 	}
 }

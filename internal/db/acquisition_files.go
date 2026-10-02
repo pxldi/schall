@@ -963,14 +963,22 @@ const reviewQuestions = `
 		-- copy that was accepted and became a file, which is why it stopped. A
 		-- want with no time and no copy is one nobody has scheduled yet, and it
 		-- has nothing for a person to decide.
+		--
+		-- A want with no recording stops the same way on its search schedule,
+		-- and it is searched only while its anchor can admit (ADR 0037 §2,
+		-- ADR 0040 §5).
 		SELECT acquisition_targets.id AS target_id,
 		       coalesce(acquisition_targets.last_attempt_at,
 		                acquisition_targets.updated_at) AS asked_at
 		FROM acquisition_targets
 		JOIN acquisition_target_files
 		    ON acquisition_target_files.acquisition_target_id = acquisition_targets.id
-		WHERE acquisition_targets.status = 'pending'
-		  AND acquisition_targets.next_attempt_at IS NULL
+		WHERE ((acquisition_targets.status = 'pending'
+		        AND acquisition_targets.next_attempt_at IS NULL)
+		       OR (acquisition_targets.status = 'unresolved'
+		           AND acquisition_targets.next_search_at IS NULL
+		           AND acquisition_targets.anchor_fingerprint IS NOT NULL
+		           AND acquisition_targets.anchor_source IN ` + AdmittingAnchorSources + `))
 		  AND acquisition_target_files.verdict = 'accepted'
 		  AND acquisition_target_files.library_file_id IS NOT NULL
 	),

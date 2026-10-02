@@ -449,13 +449,20 @@ func run() error {
 		} else if !info.IsDir() {
 			return fmt.Errorf("configure download inbox path: path must be a directory")
 		}
+	}
+	// The importer judges a peer's copy from the inbox and a keyed want's track
+	// from the fetch folder. Either folder is enough for it to run: an
+	// installation without slskd still fetches keyed wants from their addresses
+	// (ADR 0040 §4).
+	var importer *downloads.Importer
+	if cfg.DownloadInboxPath != "" || cfg.SourceFetchPath != "" {
 		if _, err := pathValidator.Validate(cfg.ImportLibraryPath); err != nil {
 			return fmt.Errorf("configure import library path: %w", err)
 		}
 		// Acoustic verification reads its own settings on every use, so a key
 		// entered later takes effect without a restart, and an installation
 		// that never enters one is validated exactly as it was before.
-		importer := downloads.NewImporter(
+		importer = downloads.NewImporter(
 			store, cfg.DownloadInboxPath, cfg.ImportLibraryPath, logger,
 		).WithAcousticIdentifier(
 			downloads.NewSettingsIdentifier(store.ImportSettings, cfg.FpcalcPath),
@@ -484,6 +491,9 @@ func run() error {
 			// turning it on takes effect without a restart; unlike it, it runs
 			// after every verdict and can change none of them.
 			WithTranscoding(shrinkCopies)
+		jobWorker.WithDownloadImporter(importer)
+	}
+	if cfg.DownloadInboxPath != "" {
 		// A want is looked for through the same search a release run uses and
 		// fetched through the same transfer path a folder chosen by hand takes.
 		// Both are wired here rather than above, because looking for a copy nothing
@@ -496,20 +506,6 @@ func run() error {
 			WithFetcher(transferService).
 			WithListener(downloads.NewSettingsIdentifier(store.ImportSettings, cfg.FpcalcPath))
 		transferService.WithImportQueue()
-		// Where a keyed want's track is fetched from its address when no peer
-		// shares a copy (ADR 0038 §6). The importer reads the file from there and
-		// judges it as it judges a peer's copy. It is a folder of its own because
-		// the inbox is slskd's and is usually mounted read-only, and it is held
-		// outside every music folder for the reason staging is.
-		if cfg.SourceFetchPath != "" {
-			sourceFetchPath, err = sourceFetchFolder(ctx, store, cfg)
-			if err != nil {
-				return fmt.Errorf("configure source fetch path: %w", err)
-			}
-			importer.WithFetchFolder(sourceFetchPath)
-			acquisitionService.WithSourceFetches(trackSources, sourceFetchPath)
-		}
-		jobWorker.WithDownloadImporter(importer)
 		// What deletes the downloaded files nothing needs any more, by the rule
 		// in ADR 0035. It is wired beside the importer because it
 		// works on the same folder, and it runs only when somebody asks.
@@ -525,6 +521,22 @@ func run() error {
 		if err := store.QueuePendingDownloadImports(ctx); err != nil {
 			return fmt.Errorf("queue pending download imports: %w", err)
 		}
+	}
+	// Where a keyed want's track is fetched from its address when no peer
+	// shares a copy (ADR 0038 §6). The importer reads the file from there and
+	// judges it as it judges a peer's copy. It is a folder of its own because
+	// the inbox is slskd's and is usually mounted read-only, and it is held
+	// outside every music folder for the reason staging is.
+	if cfg.SourceFetchPath != "" {
+		sourceFetchPath, err = sourceFetchFolder(ctx, store, cfg)
+		if err != nil {
+			return fmt.Errorf("configure source fetch path: %w", err)
+		}
+		importer.WithFetchFolder(sourceFetchPath)
+		acquisitionService.WithSourceFetches(trackSources, sourceFetchPath).
+			// What deletes the fetched files nothing needs, by the inbox's rule
+			// (ADR 0040 §3). The sweep runs it at most once an hour.
+			WithFetchCleaner(downloads.NewFetchCleaner(store, sourceFetchPath, logger))
 	}
 
 	// The other acquisition route: music the user already owns, arriving through
