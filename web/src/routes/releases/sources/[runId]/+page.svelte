@@ -1,14 +1,5 @@
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import {
-    Ban,
-    Check,
-    ChevronDown,
-    ChevronRight,
-    Download,
-    LoaderCircle,
-    RotateCw
-  } from '@lucide/svelte';
   import { page } from '$app/state';
   import {
     api,
@@ -21,6 +12,7 @@
   import { usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import Card from '$lib/components/Card.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
@@ -287,7 +279,7 @@
   <div class="flex min-h-8 min-w-[11rem] items-center justify-end gap-2">
       {#if pending}
         <Chip role="busy" dot={false}>
-          <LoaderCircle size={11} class="animate-spin" />
+          <Icon name="busy" size="sm" class="size-3 animate-spin" />
           {pending} still to search
         </Chip>
         <!-- Stopping keeps every release already answered: the run is claimed
@@ -303,9 +295,9 @@
           onclick={() => $cancel.mutate()}
         >
           {#if $cancel.isPending}
-            <LoaderCircle size={11} class="animate-spin" />
+            <Icon name="busy" size="sm" class="size-3 animate-spin" />
           {:else}
-            <Ban size={11} strokeWidth={2.3} />
+            <Icon name="dismiss" size="sm" class="size-3" />
           {/if}
           Stop the rest
         </Button>
@@ -349,7 +341,7 @@
           <summary
             class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
           >
-            <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+            <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
             What went wrong
           </summary>
           <div
@@ -368,9 +360,9 @@
       {#if trouble.again}
         <Button class="w-fit" disabled={$run.isFetching} onclick={() => $run.refetch()}>
           {#if $run.isFetching}
-            <LoaderCircle size={13} class="animate-spin" />
+            <Icon name="busy" size="sm" class="animate-spin" />
           {:else}
-            <RotateCw size={13} strokeWidth={2.3} />
+            <Icon name="refresh" size="sm" />
           {/if}
           Try again
         </Button>
@@ -414,7 +406,7 @@
 
           <Chip role={status.role} dot={result.status !== 'searching'} class="shrink-0">
             {#if result.status === 'searching'}
-              <LoaderCircle size={9} class="animate-spin" />
+              <Icon name="busy" size="sm" class="size-3 animate-spin" />
             {/if}
             {status.label}
           </Chip>
@@ -493,10 +485,10 @@
                 aria-expanded={open}
               >
                 {#if open}
-                  <ChevronDown size={13} strokeWidth={2} />
+                  <Icon name="chevron-down" size="sm" />
                   Hide the other {result.candidates.length - 1}
                 {:else}
-                  <ChevronRight size={13} strokeWidth={2} />
+                  <Icon name="chevron-right" size="sm" />
                   Compare {result.candidates.length - 1} more
                 {/if}
               </button>
@@ -509,7 +501,7 @@
                    came from, so a request the run made itself is labelled as
                    one rather than looking like something the user did. -->
               <Chip role="ok" dot={false} class="ml-auto">
-                <Check size={11} strokeWidth={3} />
+                <Icon name="check" size="sm" class="size-3" />
                 {result.autoRequestedAt ? 'requested automatically' : 'requested'}
               </Chip>
               <Button href="/downloads" variant="outline" size="sm" class="shrink-0">
@@ -523,9 +515,9 @@
                 onclick={() => order(result)}
               >
                 {#if working === result.albumId}
-                  <LoaderCircle size={12} class="animate-spin" />
+                  <Icon name="busy" size="sm" class="animate-spin" />
                 {:else}
-                  <Download size={12} strokeWidth={2.3} />
+                  <Icon name="download" size="sm" />
                 {/if}
                 Request this source
               </Button>
@@ -569,7 +561,7 @@
       <summary
         class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
       >
-        <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+        <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
         {#if result.refusedBelowBitRate === result.refused.length}
           {result.refused.length}
           {result.refused.length === 1 ? 'copy' : 'copies'} below your minimum bit rate

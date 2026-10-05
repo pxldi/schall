@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { FileUp, LoaderCircle, Plus, RotateCw, Send, UserRoundMinus } from '@lucide/svelte';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
   import { coverSrc, usePagePrint } from '$lib/duoton';
   import { calendarDate, keepInUrl, urlChoice } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Cover from '$lib/components/Cover.svelte';
@@ -151,7 +151,7 @@
 <Hero title="Playlists" size="xl">
   {#snippet actions()}
     <Button type="button" variant="outline" onclick={() => (fileModalOpen = true)}>
-      <FileUp size={13} strokeWidth={2.2} />
+      <Icon name="upload" size="sm" />
       Import file
     </Button>
     <form
@@ -170,9 +170,9 @@
       />
       <Button type="submit" disabled={!url.trim() || $follow.isPending}>
         {#if $follow.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size="sm" class="animate-spin" />
         {:else}
-          <Plus size={13} strokeWidth={2.2} />
+          <Icon name="plus" size="sm" />
         {/if}
         Follow
       </Button>
@@ -278,7 +278,7 @@
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
                     >
-                      <RotateCw size={13} strokeWidth={2.2} /> Re-import
+                      <Icon name="refresh" size="sm" /> Re-import
                     </Button>
                   {/if}
                   <Button
@@ -287,7 +287,7 @@
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
                   >
-                    <Send size={13} strokeWidth={2.2} /> Send to player
+                    <Icon name="send" size="sm" /> Send to player
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
@@ -296,7 +296,7 @@
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
                     >
-                      <UserRoundMinus size={13} strokeWidth={2.2} /> Stop following
+                      <Icon name="unfollow" size="sm" /> Stop following
                     </Button>
                   {/if}
                 </span>

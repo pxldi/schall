@@ -1,4 +1,10 @@
 import {
+  UserRoundMinus,
+  Send,
+  SearchCheck,
+  MonitorSpeaker,
+  ListPlus,
+  Ban,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
@@ -71,6 +77,13 @@ export const icons = {
   artist: User,
   artists: Users,
   close: X,
+  dismiss: Ban,
+  peer: Users,
+  player: MonitorSpeaker,
+  "player-check": SearchCheck,
+  send: Send,
+  unfollow: UserRoundMinus,
+  want: ListPlus,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } satisfies Record<string, Component<any>>;
 

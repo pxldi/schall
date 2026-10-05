@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { Check, ChevronRight, LoaderCircle, MonitorSpeaker, RotateCw, SearchCheck } from '@lucide/svelte';
   import { page } from '$app/state';
   import { api, type PlayerPairing, type PlaylistEntry, type UnpairedFile } from '$lib/api';
   import AddToMusicBrainz from '$lib/components/AddToMusicBrainz.svelte';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
@@ -191,9 +191,9 @@
     title="Ask the player which of these files it holds"
   >
     {#if $pairing.isFetching}
-      <LoaderCircle size={12} class="animate-spin" />
+      <Icon name="busy" size="sm" class="animate-spin" />
     {:else}
-      <SearchCheck size={12} />
+      <Icon name="player-check" size="sm" />
     {/if}
     Check player
   </Button>
@@ -204,9 +204,9 @@
     title={playlist?.source === 'spotify' ? 'Re-import from Spotify' : 'Only Spotify playlists can be re-imported'}
   >
     {#if $reimport.isPending}
-      <LoaderCircle size={12} class="animate-spin" />
+      <Icon name="busy" size="sm" class="animate-spin" />
     {:else}
-      <RotateCw size={12} />
+      <Icon name="refresh" size="sm" />
     {/if}
     Re-import
   </Button>
@@ -216,9 +216,9 @@
     title="Push what is owned to Navidrome"
   >
     {#if $sendToPlayer.isPending}
-      <LoaderCircle size={12} class="animate-spin" />
+      <Icon name="busy" size="sm" class="animate-spin" />
     {:else}
-      <MonitorSpeaker size={12} />
+      <Icon name="player" size="sm" />
     {/if}
     Send to player
   </Button>
@@ -308,7 +308,7 @@
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-4 py-3">
           <span class="text-body font-medium text-ink">Player pairing</span>
           {#if $pairing.isFetching}
-            <LoaderCircle size={12} class="animate-spin text-ink-3" />
+            <Icon name="busy" size="sm" class="animate-spin text-ink-3" />
             <span class="text-meta text-ink-3">checking player…</span>
           {/if}
           {#if $pairing.isError}
@@ -436,7 +436,7 @@
                       title={state.label}
                       aria-label={state.label}
                     >
-                      <Check size={14} strokeWidth={2.6} />
+                      <Icon name="check" size="md" />
                     </span>
                   {:else if state.role === 'fail'}
                     <a
@@ -444,7 +444,7 @@
                       class="inline-flex items-center gap-1 text-accent hover:text-accent-soft"
                     >
                       <StateTag tone="attention">{state.label}</StateTag>
-                      <ChevronRight size={11} strokeWidth={2.4} />
+                      <Icon name="chevron-right" size="sm" class="size-3" />
                     </a>
                   {:else if state.label === 'no want'}
                     <Button
