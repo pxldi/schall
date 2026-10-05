@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { LoaderCircle } from '@lucide/svelte';
   import { api, type InboxCleanup, type InboxCleanupClass } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
   import Card from '$lib/components/Card.svelte';
@@ -77,7 +77,7 @@
       disabled={$cleanups.isPending || running || $clean.isPending}
       onclick={() => $clean.mutate(true)}
     >
-      {#if running || $clean.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+      {#if running || $clean.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
       Count what can go
     </Button>
   </div>

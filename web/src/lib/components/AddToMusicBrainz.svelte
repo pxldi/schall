@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ExternalLink } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import Button from '$lib/components/Button.svelte';
   import type { MusicBrainzSeed } from '$lib/api';
 
@@ -35,6 +35,6 @@
     title="Opens MusicBrainz's editor in a new tab, filled in for you."
   >
     Add to MusicBrainz
-    <ExternalLink size={11} />
+    <Icon name="external" size={11} />
   </Button>
 </form>

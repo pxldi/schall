@@ -1,9 +1,9 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
-  import { Check, LoaderCircle, X } from '@lucide/svelte';
   import { api, type LabelSearchResult } from '$lib/api';
   import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
@@ -203,7 +203,7 @@
             disabled={inFlight}
             aria-label="Close"
           >
-            <X size={18} />
+            <Icon name="close" size={18} />
           </button>
         </div>
 
@@ -220,15 +220,13 @@
               bind:this={searchField}
             />
             {#if $labelSearch.isFetching}
-              <LoaderCircle
+              <Icon name="busy"
                 class="pointer-events-none absolute right-2.5 top-1/2 z-2 -translate-y-1/2 animate-spin text-busy"
-                size={14}
-              />
+                size={14} />
             {:else if selectedLabel}
-              <Check
+              <Icon name="check"
                 class="pointer-events-none absolute right-2.5 top-1/2 z-2 -translate-y-1/2 text-ok"
-                size={14}
-              />
+                size={14} />
             {/if}
           </CyclingPlaceholder>
 
@@ -292,7 +290,7 @@
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           <Button type="submit" disabled={!selectedLabel || inFlight}>
             {#if inFlight}
-              <LoaderCircle size={13} class="animate-spin" /> Following
+              <Icon name="busy" size={13} class="animate-spin" /> Following
             {:else}
               Follow
             {/if}

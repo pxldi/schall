@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { Snippet } from 'svelte';
-  import { Check, Circle } from '@lucide/svelte';
   import { cn } from '$lib/utils';
   import StateMark from '$lib/components/StateMark.svelte';
 
@@ -59,9 +59,9 @@
     <div class="flex items-center gap-2.5">
       <StateMark {role} size="panel">
         {#if role === 'ok'}
-          <Check size={12} strokeWidth={3.2} />
+          <Icon name="check" size={12} />
         {:else if role === 'idle'}
-          <Circle size={10} strokeWidth={2} />
+          <Icon name="circle" size={10} />
         {:else}
           {glyphs[role]}
         {/if}

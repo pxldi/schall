@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, LoaderCircle, Save } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import Button from '$lib/components/Button.svelte';
   import { motionMs } from '$lib/motion.svelte';
 
@@ -57,11 +57,11 @@
 
 <Button type="submit" {variant} disabled={pending || disabled || nothingToSave}>
   {#if pending}
-    <LoaderCircle size={13} class="animate-spin" />
+    <Icon name="busy" size={13} class="animate-spin" />
   {:else if showSaved}
-    <Check size={13} strokeWidth={2.4} />
+    <Icon name="check" size={13} />
   {:else}
-    <Save size={13} strokeWidth={2.2} />
+    <Icon name="save" size={13} />
   {/if}
   {showSaved && !pending ? 'Saved' : 'Save'}
 </Button>

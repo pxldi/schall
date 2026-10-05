@@ -25,8 +25,8 @@
 </script>
 
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { tick } from 'svelte';
-  import { ChevronDown, Ellipsis } from '@lucide/svelte';
   import { cn } from '$lib/utils';
   import Button from './Button.svelte';
 
@@ -228,7 +228,7 @@
       class="aria-expanded:border-line-thick aria-expanded:bg-surface-thick aria-expanded:text-ink"
     >
       {label}
-      <ChevronDown size={13} class={cn('transition-transform', open && 'rotate-180')} />
+      <Icon name="chevron-down" size={13} class={cn('transition-transform', open && 'rotate-180')} />
     </Button>
   {:else}
     <!-- 24px is the row's content height at row.html's 8px padding, so the
@@ -248,7 +248,7 @@
       onkeydown={onTriggerKeydown}
       class="text-ink-4 group-hover:text-ink-2 aria-expanded:bg-surface-thick aria-expanded:text-ink"
     >
-      <Ellipsis size={14} />
+      <Icon name="more" size={14} />
     </Button>
   {/if}
 

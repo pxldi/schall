@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, X } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import type { AcquisitionCandidate } from '$lib/api';
   import { clock } from '$lib/review';
 
@@ -87,13 +87,13 @@
           <span class="flex min-w-0 flex-wrap gap-1.5">
             {#each candidate.agrees as entry (entry)}
               <span class="flex items-center gap-1 rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-2">
-                <Check size={10} strokeWidth={2.5} class="text-ok" />
+                <Icon name="check" size={10} class="text-ok" />
                 {chipLabel(entry)}
               </span>
             {/each}
             {#each candidate.differs as entry (entry)}
               <span class="flex items-center gap-1 rounded-full border border-fail-border px-2 py-0.5 text-meta text-ink-2">
-                <X size={10} strokeWidth={2.5} class="text-fail" />
+                <Icon name="close" size={10} class="text-fail" />
                 {chipLabel(entry)}
               </span>
             {/each}

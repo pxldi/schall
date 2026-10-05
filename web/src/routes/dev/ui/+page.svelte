@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Ellipsis, Filter, Plus } from '@lucide/svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
@@ -74,7 +74,7 @@
         {/each}
         <Button {size} variant="primary" disabled>disabled</Button>
         <Button {size} variant="quiet" icon title="More" aria-label="More">
-          <Ellipsis size={14} aria-hidden="true" />
+          <Icon name="more" size={14} />
         </Button>
         <Button {size} variant="ghost" href="/library">a link</Button>
       </div>
@@ -191,7 +191,7 @@
       <Popover.Trigger>
         {#snippet child({ props })}
           <Button variant="quiet" size="sm" {...props}>
-            <Filter size={13} aria-hidden="true" />
+            <Icon name="filter" size={13} />
             Filter
           </Button>
         {/snippet}
@@ -213,7 +213,7 @@
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <Button variant="quiet" size="sm" {...props} aria-label="Filter">
-              <Filter size={13} aria-hidden="true" />
+              <Icon name="filter" size={13} />
             </Button>
           {/snippet}
         </Tooltip.Trigger>
@@ -228,7 +228,7 @@
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
           <Button variant="quiet" size="sm" icon title="More" aria-label="More" {...props}>
-            <Ellipsis size={14} aria-hidden="true" />
+            <Icon name="more" size={14} />
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
@@ -261,7 +261,7 @@
       <Dialog.Trigger>
         {#snippet child({ props })}
           <Button size="sm" {...props}>
-            <Plus size={13} aria-hidden="true" />
+            <Icon name="plus" size={13} />
             Follow an artist
           </Button>
         {/snippet}

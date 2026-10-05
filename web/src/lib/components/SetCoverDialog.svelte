@@ -1,8 +1,8 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, useQueryClient } from '@tanstack/svelte-query';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { Image, LoaderCircle, X } from '@lucide/svelte';
   import { api } from '$lib/api';
   import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
@@ -209,7 +209,7 @@
             disabled={inFlight}
             aria-label="Close"
           >
-            <X size={18} />
+            <Icon name="close" size={18} />
           </button>
         </div>
 
@@ -231,7 +231,7 @@
             ondrop={dropped}
             disabled={inFlight}
           >
-            <Image size={18} class="text-ink-3" />
+            <Icon name="image" size={18} class="text-ink-3" />
             <span class="text-body font-medium text-ink">
               {chosen ? chosen.name : 'Choose image'}
             </span>
@@ -287,7 +287,7 @@
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           <Button type="submit" disabled={!ready || inFlight}>
             {#if $setCover.isPending}
-              <LoaderCircle size={13} class="animate-spin" /> Saving
+              <Icon name="busy" size={13} class="animate-spin" /> Saving
             {:else}
               Save
             {/if}

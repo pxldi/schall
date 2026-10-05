@@ -58,7 +58,7 @@
      read and leaves it on screen. -->
 <span
   aria-hidden="true"
-  class="numeric grid shrink-0 place-items-center rounded-row text-micro font-bold transition {size ===
+  class="numeric grid shrink-0 place-items-center rounded-row text-micro font-bold transition [--plate:currentColor] {size ===
   'panel'
     ? 'size-5'
     : 'size-4'} {tints[role]}"
