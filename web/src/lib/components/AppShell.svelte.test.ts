@@ -81,6 +81,14 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe(null);
   });
 
+  it('marks Downloads current on any of its views', () => {
+    address = 'http://localhost/downloads?view=all';
+
+    opened();
+
+    expect(screen.getByRole('link', { name: 'Downloads' }).getAttribute('aria-current')).toBe('page');
+  });
+
   it('counts a release page as Library', () => {
     address = 'http://localhost/releases/abc';
 

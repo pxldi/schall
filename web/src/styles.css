@@ -790,7 +790,8 @@ a {
      The navigation sits on the print. Over the print it is a wash of the dark
      ink fading to nothing, so the print shows through; once the print has
      scrolled away it turns solid. The open destination is the one pill filled
-     with the dark ink and lettered in the light one. */
+     with the light ink and lettered in the dark one: a dark-ink pill vanished
+     wherever the print under it was dark. */
   .topbar {
     background: linear-gradient(
       180deg,
@@ -828,8 +829,8 @@ a {
   }
 
   .topbar-item.active {
-    background: var(--color-duo-dark);
-    color: var(--color-duo-light);
+    background: var(--color-duo-light);
+    color: var(--color-duo-dark);
   }
 
   .topbar-search {
