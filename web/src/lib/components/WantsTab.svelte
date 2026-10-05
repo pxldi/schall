@@ -17,6 +17,8 @@
   import Pager from '$lib/components/Pager.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
+  import { leave } from '$lib/motion.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
 
@@ -269,9 +271,9 @@
     <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
       {#each Array(40) as _, placeholderIndex (placeholderIndex)}
         <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
-          <div class="h-5 animate-pulse rounded-row bg-surface-regular"></div>
-          <div class="mt-1 h-4 w-2/3 animate-pulse rounded-row bg-surface-regular"></div>
-          <div class="mt-1 h-4 w-1/2 animate-pulse rounded-row bg-surface-regular"></div>
+          <Skeleton class="h-4 w-full" />
+          <Skeleton class="mt-1.5 h-3.5 w-2/3" />
+          <Skeleton class="mt-1.5 h-3.5 w-1/2" />
         </div>
       {/each}
     </div>
@@ -281,7 +283,12 @@
       {#each items as want (want.id)}
         {@const mark = standing(want)}
         {@const sample = sampleStatus(want)}
-        <article class="border-b border-line-thin last:border-b-0">
+        <!-- A row stopped or taken back leaves this pile, and folds away rather
+             than vanishing; rows leaving because the page changed go on the cut. -->
+        <article
+          class="border-b border-line-thin last:border-b-0"
+          out:leave={{ active: $stop.variables === want.id || $resume.variables === want.id }}
+        >
           <div
             class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_112px_auto] md:gap-y-0"
           >

@@ -79,3 +79,43 @@ export function motionMs(step: 'state' | 'surface' | 'enter' | 'read'): number {
   // sixth of a millisecond. Seconds are the unit unless `ms` is written.
   return value.endsWith('ms') ? figure : figure * 1000;
 }
+
+// leave is the out transition for one row taken off a list because somebody
+// acted on it: a want stopped, a suggestion wanted. The row fades and slides a
+// few pixels aside, then closes the gap it leaves, so the rows under it move up
+// instead of jumping. Closing the gap has to animate height, which is the one
+// place a motion here moves layout; the rows below are the thing that moves.
+//
+// `active` is false for a row leaving because the whole list was replaced, by
+// a new page or a new filter. Twenty-five rows folding away at once is not an
+// event, so they go on the cut.
+//
+//   {#each items as item (item.id)}
+//     <div out:leave={{ active: leaving.has(item.id) }}>
+//
+// `after` holds the row in place first, for a row whose own control is still
+// drawing the answer to the press that removed it.
+export function leave(
+  node: Element,
+  { active = true, after = 0 }: { active?: boolean; after?: number } = {}
+) {
+  const half = active ? motionMs('enter') : 0;
+  if (half === 0) return { duration: 0 };
+  const style = getComputedStyle(node);
+  const box = ['height', 'padding-top', 'padding-bottom', 'border-top-width', 'border-bottom-width'].map(
+    (property) => [property, Number.parseFloat(style.getPropertyValue(property)) || 0] as const
+  );
+  const shape = (t: number) => 1 - (1 - t) ** 3;
+  return {
+    delay: after,
+    duration: half * 2,
+    // An out transition runs t from 1 down to 0: the first half fades the row,
+    // the second closes the gap it stood in.
+    css: (t: number) => {
+      const seen = shape(Math.max(0, t * 2 - 1));
+      const room = shape(Math.min(1, t * 2));
+      const sizes = box.map(([property, value]) => `${property}: ${value * room}px;`).join(' ');
+      return `overflow: hidden; min-height: 0; opacity: ${seen}; transform: translateX(${(1 - seen) * -8}px); ${sizes}`;
+    }
+  };
+}

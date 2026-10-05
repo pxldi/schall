@@ -34,6 +34,7 @@
     urlText
   } from '$lib/utils';
   import FileIdentity from '$lib/components/FileIdentity.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import ReviewMatch from '$lib/components/ReviewMatch.svelte';
   import { listening } from '$lib/preview.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -696,9 +697,7 @@
             class="h-[3.46875rem] border-b border-line-thin px-3 py-2 last:border-b-0"
             aria-hidden="true"
           >
-            <div
-              class="h-full animate-pulse rounded-row bg-surface-regular"
-            ></div>
+            <Skeleton class="h-full" />
           </div>
         {/each}
       </div>

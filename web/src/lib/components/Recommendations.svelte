@@ -44,6 +44,10 @@
   } from '$lib/api';
   import { relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
+  import WantToggle from '$lib/components/WantToggle.svelte';
+  import { leave, motionMs } from '$lib/motion.svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -170,6 +174,21 @@
       failure = error;
     }
   });
+
+  // The suggestions somebody has just wanted. Wanting one takes it off the
+  // list on the next read, and these are the rows that fold away when that
+  // read lands rather than vanishing with the rest of a page being replaced.
+  // A refusal takes the row back out, so its toggle can be pressed again.
+  let leaving = new SvelteSet<string>();
+  async function wantOne(recommendation: Recommendation) {
+    leaving.add(recommendation.recordingId);
+    try {
+      await $want.mutateAsync(recommendation);
+    } catch (error) {
+      leaving.delete(recommendation.recordingId);
+      throw error;
+    }
+  }
 
   // Saying no, at the level the reader meant it. The store has held all three
   // since it was designed and the suppression rules read all three, so a
@@ -558,6 +577,7 @@
         {#each items as recommendation (recommendation.recordingId)}
           <div
             use:onscreen={recommendation.recordingId}
+            out:leave={{ active: leaving.has(recommendation.recordingId), after: motionMs('enter') }}
             class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-thin px-3 py-2 last:border-b-0"
           >
             <span class="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-auto">
@@ -590,16 +610,15 @@
                 Less like this
               </Button>
             </div>
-            <Button
-              variant="outline"
+            <WantToggle
               size="sm"
-              tall
               class="shrink-0"
-              disabled={$want.isPending || $feedback.isPending}
-              onclick={() => $want.mutate(recommendation)}
-            >
-              Want it
-            </Button>
+              label={['Want it', 'Wanted']}
+              wanted={leaving.has(recommendation.recordingId)}
+              disabled={$feedback.isPending || leaving.has(recommendation.recordingId)}
+              onwant={() => wantOne(recommendation)}
+              onunwant={() => {}}
+            />
             <!--
               One decision at three widths. Three buttons on a row would read as
               three separate actions and crowd a row meant to stay readable, so
@@ -630,11 +649,7 @@
           aria-label="Loading recommendations"
         >
           <span class="text-meta text-ink-3">reading your suggestions…</span>
-          <div class="-mx-5 -mb-5 overflow-hidden">
-            {#each Array.from({ length: 40 }) as _}
-              <div aria-hidden="true" class="h-14 animate-pulse border-t border-line-thin"></div>
-            {/each}
-          </div>
+          <SkeletonRows count={40} class="-mx-5 -mb-5 border-t border-line-thin" />
           </div>
         {/snippet}
         <EmptyPanel class="items-start gap-2">
