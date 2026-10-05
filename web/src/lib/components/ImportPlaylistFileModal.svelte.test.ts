@@ -103,7 +103,9 @@ describe('ImportPlaylistFileModal', () => {
       entryCount: 2,
       ownedCount: 0,
       importedAt: '2026-08-28T00:00:00Z',
-      createdAt: '2026-08-28T00:00:00Z'
+      createdAt: '2026-08-28T00:00:00Z',
+      coverReleaseId: null,
+      inks: null
     });
     mount();
     await tick();
@@ -135,7 +137,9 @@ describe('ImportPlaylistFileModal', () => {
       entryCount: 2,
       ownedCount: 0,
       importedAt: '2026-08-28T00:00:00Z',
-      createdAt: '2026-08-28T00:00:00Z'
+      createdAt: '2026-08-28T00:00:00Z',
+      coverReleaseId: null,
+      inks: null
     });
     mount();
     await tick();

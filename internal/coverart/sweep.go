@@ -35,12 +35,17 @@ const (
 	// is being paid: a picture is worth having and not worth hammering somebody's
 	// server for, so a catalogue fills over minutes rather than in a burst.
 	betweenRequests = time.Second
+	// inkBatch is how many cached covers one pass reads inks from. Reading is
+	// local and takes a few milliseconds a cover, so it is not paced.
+	inkBatch = 200
 )
 
 // Store is the persistence the sweep needs, and nothing else.
 type Store interface {
 	ReleasesMissingCoverArt(context.Context, int32) ([]db.ReleasesMissingCoverArtRow, error)
 	SaveReleaseCoverArt(context.Context, db.SaveReleaseCoverArtParams) error
+	ReleaseCoversWithoutInks(context.Context, int32) ([]db.ReleaseCoversWithoutInksRow, error)
+	SaveReleaseInks(context.Context, db.SaveReleaseInksParams) (int64, error)
 	ArtistsMissingImage(context.Context, db.ArtistsMissingImageParams) ([]db.ArtistsMissingImageRow, error)
 	SaveArtistImage(context.Context, db.SaveArtistImageParams) error
 	ArtistsMissingBiography(context.Context, int32) ([]db.ArtistsMissingBiographyRow, error)
@@ -143,9 +148,10 @@ func (sweeper *Sweeper) Sweep(ctx context.Context) (bool, error) {
 			continue
 		}
 		stored := Saved(artwork)
+		inkDark, inkLight, palette := InkColumns(stored.Image)
 		if err := sweeper.store.SaveReleaseCoverArt(ctx, db.SaveReleaseCoverArtParams{
 			AlbumID: release.ID, Image: stored.Image, ContentType: stored.ContentType,
-			Source: stored.Source,
+			Source: stored.Source, InkDark: inkDark, InkLight: inkLight, Palette: palette,
 		}); err != nil {
 			return true, fmt.Errorf("cache cover art for release %s: %w", release.ID, err)
 		}
@@ -155,6 +161,10 @@ func (sweeper *Sweeper) Sweep(ctx context.Context) (bool, error) {
 			Str("source", stored.Source).
 			Bool("pictured", len(stored.Image) > 0).
 			Msg("a release was looked up for cover art")
+	}
+	moreInks, err := sweeper.readInks(ctx)
+	if err != nil {
+		return true, err
 	}
 	moreArtists, err := sweeper.pictureArtists(ctx)
 	if err != nil {
@@ -184,7 +194,35 @@ func (sweeper *Sweeper) Sweep(ctx context.Context) (bool, error) {
 			moreOnDisc = true
 		}
 	}
-	return len(releases) == sweepBatch || moreArtists || moreBiographies || moreOnDisc, nil
+	return len(releases) == sweepBatch || moreInks || moreArtists || moreBiographies || moreOnDisc, nil
+}
+
+// readInks reads the inks of covers cached without them, which is every cover
+// cached before inks were stored. A cover saved since then carries its inks
+// already and never comes back here.
+func (sweeper *Sweeper) readInks(ctx context.Context) (bool, error) {
+	covers, err := sweeper.store.ReleaseCoversWithoutInks(ctx, inkBatch)
+	if err != nil {
+		return false, fmt.Errorf("list covers with no inks: %w", err)
+	}
+	for _, cover := range covers {
+		if ctx.Err() != nil {
+			return true, ctx.Err()
+		}
+		inkDark, inkLight, palette := InkColumns(cover.Image)
+		if palette == nil {
+			palette = []string{}
+		}
+		// A picture replaced while this one was being read keeps whatever the
+		// replacement was saved with, so a row that no longer matches is left.
+		if _, err := sweeper.store.SaveReleaseInks(ctx, db.SaveReleaseInksParams{
+			AlbumID: cover.AlbumID, FetchedAt: cover.FetchedAt,
+			InkDark: inkDark, InkLight: inkLight, Palette: palette,
+		}); err != nil {
+			return true, fmt.Errorf("save inks of release %s: %w", cover.AlbumID, err)
+		}
+	}
+	return len(covers) == inkBatch, nil
 }
 
 // describeArtists fetches a few lines about the artists nobody has asked an

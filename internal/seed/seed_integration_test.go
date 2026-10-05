@@ -154,6 +154,10 @@ var stillness = []quiet{
 		SELECT count(*) FROM albums
 		LEFT JOIN release_cover_art ON release_cover_art.album_id = albums.id
 		WHERE release_cover_art.album_id IS NULL`},
+	// The same pass reads inks from every cached picture without a palette.
+	{"covers nobody has read inks from", `
+		SELECT count(*) FROM release_cover_art
+		WHERE image IS NOT NULL AND palette IS NULL`},
 	{"artists with no picture", `
 		SELECT count(*) FROM artists
 		LEFT JOIN artist_images ON artist_images.artist_id = artists.id

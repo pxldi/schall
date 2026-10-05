@@ -1057,6 +1057,118 @@ func TestEachViewOfTheDownloadListHoldsWhatItNames(t *testing.T) {
 	}
 }
 
+// Review asks only about a paused import whose latest pause compared
+// something. The questions view counts and pages exactly those, so the
+// Review chip and its list cannot disagree once the list runs past one page.
+func TestTheQuestionsViewHoldsOnlyPausesWithEvidence(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	params := seedRequestParams(ctx, t, pool)
+
+	asked := time.Now().Add(-time.Hour)
+	compared := seedRequestInState(ctx, t, pool, queries, params, `@@peer\Music\A`, "completed", "needs_review", asked)
+	bare := seedRequestInState(ctx, t, pool, queries, params, `@@peer\Music\B`, "completed", "needs_review", asked)
+	gaveUp := seedRequestInState(ctx, t, pool, queries, params, `@@peer\Music\C`, "completed", "needs_review", asked)
+	seedRequestInState(ctx, t, pool, queries, params, `@@peer\Music\D`, "completed", "needs_review", asked)
+
+	pause := func(id uuid.UUID, evidence string, at time.Time) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO download_import_reviews (download_request_id, kind, detail, recorded_at, evidence)
+			VALUES ($1, 'paused', 'paused', $2, $3::jsonb)
+		`, id, at, evidence); err != nil {
+			t.Fatalf("seed pause: %v", err)
+		}
+	}
+	pause(compared, `{"files": []}`, asked)
+	pause(bare, `null`, asked)
+	// The earlier pause compared files; the latest one gave up before it could.
+	pause(gaveUp, `{"files": []}`, asked)
+	pause(gaveUp, `null`, asked.Add(time.Minute))
+
+	page, err := queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{View: "questions", Limit: 25})
+	if err != nil {
+		t.Fatalf("ListDownloadRequests() error = %v", err)
+	}
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != compared {
+		t.Fatalf("questions page = %d items / total %d, want only the compared pause", len(page.Items), page.Total)
+	}
+	if page.Counts.Review != 4 || page.Counts.Questions != 1 {
+		t.Fatalf("counts = %#v, want 4 at review and 1 question", page.Counts)
+	}
+}
+
+// A copy left at needs_review after its want was acquired or dropped has
+// nothing left to ask. Review and its count leave it out; a copy for a want
+// still open, or for no want at all, stays.
+func TestReviewLeavesOutCopiesForFinishedWants(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	params := seedRequestParams(ctx, t, pool)
+
+	target := func(status string) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO acquisition_targets (
+				id, origin, entry_title, musicbrainz_recording_id, status, resolution_method, resolved_at,
+				acquired_at, not_wanted_at
+			)
+			VALUES ($1, 'manual', 'Glory Box', $2, $3::text, 'manual', now(),
+			        CASE WHEN $3::text = 'acquired' THEN now() END,
+			        CASE WHEN $3::text = 'not_wanted' THEN now() END)
+		`, id, uuid.New(), status); err != nil {
+			t.Fatalf("seed %s target: %v", status, err)
+		}
+		return id
+	}
+	asked := time.Now().Add(-time.Hour)
+	copyFor := func(folder string, targetID *uuid.UUID) uuid.UUID {
+		t.Helper()
+		id := seedRequestInState(ctx, t, pool, queries, params, folder, "completed", "needs_review", asked)
+		if _, err := pool.Exec(ctx, `
+			UPDATE download_requests SET acquisition_target_id = $2 WHERE id = $1
+		`, id, targetID); err != nil {
+			t.Fatalf("tie request to target: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO download_import_reviews (download_request_id, kind, detail, recorded_at, evidence)
+			VALUES ($1, 'paused', 'paused', $2, '{"files": []}'::jsonb)
+		`, id, asked); err != nil {
+			t.Fatalf("seed pause: %v", err)
+		}
+		return id
+	}
+	open := target("pending")
+	acquired := target("acquired")
+	dropped := target("not_wanted")
+	stillOpen := copyFor(`@@peer\Music\A`, &open)
+	noWant := copyFor(`@@peer\Music\B`, nil)
+	copyFor(`@@peer\Music\C`, &acquired)
+	copyFor(`@@peer\Music\D`, &dropped)
+
+	for _, view := range []string{"review", "questions"} {
+		page, err := queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{View: view, Limit: 25})
+		if err != nil {
+			t.Fatalf("ListDownloadRequests(%s) error = %v", view, err)
+		}
+		got := map[uuid.UUID]bool{}
+		for _, item := range page.Items {
+			got[item.ID] = true
+		}
+		if page.Total != 2 || len(got) != 2 || !got[stillOpen] || !got[noWant] {
+			t.Fatalf("%s page = %d items / total %d, want the open want and the copy without one", view, len(got), page.Total)
+		}
+		if page.Counts.Review != 2 || page.Counts.Questions != 2 {
+			t.Fatalf("%s counts = %#v, want 2 at review and 2 questions", view, page.Counts)
+		}
+	}
+}
+
 // seedSingleFileRequest records and starts a one-file request, which is the
 // shortest way to a transfer row the history can be read from.
 func seedSingleFileRequest(

@@ -15,7 +15,9 @@
   // because it marks where you are, a selected filter value may not because
   // it marks nothing but a value.
 
-  type Option = { value: string; name: string; count?: number };
+  // `count: null` says the option has no figure to wait for, so no placeholder
+  // is drawn for it while the others load; `undefined` means not yet known.
+  type Option = { value: string; name: string; count?: number | null };
   type Variant = 'tabs' | 'filter' | 'chips';
 
   let {
@@ -122,11 +124,11 @@
              Two digits is the common case; a figure wider than that grows the
              pill once, which is a smaller lie than a nought that turns into
              forty. -->
-        {#if option.count !== undefined}
+        {#if option.count !== undefined && option.count !== null}
           <span class="numeric min-w-[2ch] text-meta {countClass(value === option.value)}">
             {option.count.toLocaleString()}
           </span>
-        {:else if pending}
+        {:else if pending && option.count !== null}
           <span
             class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10 text-meta"
             aria-hidden="true"

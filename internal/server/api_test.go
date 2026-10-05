@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -105,6 +106,8 @@ type fakeStore struct {
 	removeCoverErr       error
 	cachedArtistImage    db.ArtistImageRow
 	cachedArtistImageErr error
+	// inks are the stored inks of releases, answered for whichever are asked.
+	inks []db.ReleaseInksRow
 	// tracksErr answers ListAlbumTracks alone, because a release that could be
 	// read and a track list that could not are different tests. artistsErr does
 	// the same for the artist page, which is read after its totals.
@@ -126,6 +129,18 @@ func (store *fakeStore) DeleteUserReleaseCoverArt(
 	}
 	store.removedCovers = append(store.removedCovers, albumID)
 	return store.removedCoverRows, nil
+}
+
+func (store *fakeStore) ReleaseInks(
+	_ context.Context, albumIDs []uuid.UUID,
+) ([]db.ReleaseInksRow, error) {
+	found := make([]db.ReleaseInksRow, 0, len(albumIDs))
+	for _, row := range store.inks {
+		if slices.Contains(albumIDs, row.AlbumID) {
+			found = append(found, row)
+		}
+	}
+	return found, nil
 }
 
 func (store *fakeStore) ArtistImage(context.Context, uuid.UUID) (db.ArtistImageRow, error) {

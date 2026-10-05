@@ -197,13 +197,19 @@ function listing(items: unknown[]) {
 
 function answer(url: string): unknown {
   if (url.includes('/waveform')) return new Response(null, { status: 404 });
-  if (url.startsWith('/api/v1/review-queue')) return listing(piles.wants);
+  if (url.startsWith('/api/v1/review-queue')) {
+    return {
+      ...listing(piles.wants),
+      resolutions: piles.wants.filter((item) => item.kind === 'resolution').length
+    };
+  }
   if (url.startsWith('/api/v1/downloads?')) {
     return {
       ...listing(piles.downloads),
       counts: {
         open: 0,
         review: piles.downloads.length,
+        questions: piles.downloads.length,
         imported: 0,
         discarded: 0,
         failed: 0,

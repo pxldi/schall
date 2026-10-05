@@ -37,7 +37,8 @@ const release = {
   albumType: 'album',
   releaseDate: '2000-10-02',
   trackCount: 10,
-  ownedTrackCount: 8
+  ownedTrackCount: 8,
+  inks: null
 };
 
 const track = {
