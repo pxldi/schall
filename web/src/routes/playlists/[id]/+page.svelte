@@ -234,7 +234,7 @@
     actions={playlistActions}
   >
     {#snippet back()}
-      <BackLink fallback="/playlists" label="Back to playlists" class="text-ink-2" />
+      <BackLink fallback="/playlists" label="Playlists" />
     {/snippet}
     {#snippet sub()}
       {#each factParts(playlist, entries) as part (part)}
@@ -270,7 +270,7 @@
     class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
     style="min-height: calc(var(--print-height) - var(--topbar-height));"
   >
-    <BackLink fallback="/playlists" label="Back to playlists" class="text-ink-2" />
+    <div class="mb-auto pt-4 pb-1"><BackLink fallback="/playlists" label="Playlists" /></div>
     <h1
       aria-label="Loading playlist"
       class="skeleton inline-block w-fit min-w-48 text-poster-m font-extrabold text-transparent"
