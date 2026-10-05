@@ -7,12 +7,14 @@
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
   import { entryState, ownedOf, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
 
   const queryClient = useQueryClient();
   const playlistId = page.params.id ?? '';
@@ -141,29 +143,103 @@
     return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
   }
 
-  function factLine(value: NonNullable<typeof playlist>, entryList: PlaylistEntry[]) {
-    if (!value.ownerName && !value.importedAt) return 'Importing playlist…';
+  // The line under the title, one part per fact; the hero puts the dots
+  // between them.
+  function factParts(value: NonNullable<typeof playlist>, entryList: PlaylistEntry[]) {
+    if (!value.ownerName && !value.importedAt) return ['Importing playlist…'];
     const parts = [value.ownerName ? `by ${value.ownerName}` : 'Owner not recorded'];
     parts.push(`${entryList.length} song${entryList.length === 1 ? '' : 's'}`);
     const duration = totalDuration(entryList);
     if (duration) parts.push(duration);
     if (value.importedAt) parts.push(`imported ${calendarDate(value.importedAt)}`);
-    return parts.join(' · ');
+    return parts;
   }
+
+  // The releases the list leads to, in list order, once each. The print lays
+  // up to five side by side; a list that leads to one prints it large.
+  const releaseIds = $derived([
+    ...new Set(entries.map((entry) => entry.releaseId).filter((id): id is string => !!id))
+  ]);
+  usePagePrint(() => {
+    if (!playlist) return undefined;
+    const covers = releaseIds.length
+      ? releaseIds.slice(0, 5)
+      : [
+          {
+            src: playlist.coverReleaseId ? coverSrc(playlist.coverReleaseId) : null,
+            seed: playlist.id
+          }
+        ];
+    return {
+      covers,
+      mode: covers.length > 1 ? 'strip' : 'single',
+      height: 20,
+      inks: playlist.inks
+    };
+  });
 </script>
 
 <svelte:head><title>{playlist?.name ?? 'Playlist'} · Schall</title></svelte:head>
 
-<div class="px-4 sm:px-6 pt-6 pb-3">
-  <BackLink fallback="/playlists" label="Back to playlists" />
-</div>
+<!-- One set of actions for the hero and for the frame drawn while the list
+     loads, where they wait disabled. Send to player is the one primary. -->
+{#snippet playlistActions()}
+  <Button
+    variant="outline"
+    disabled={!playlist || $pairing.isFetching}
+    onclick={checkPlayer}
+    title="Ask the player which of these files it holds"
+  >
+    {#if $pairing.isFetching}
+      <LoaderCircle size={12} class="animate-spin" />
+    {:else}
+      <SearchCheck size={12} />
+    {/if}
+    Check player
+  </Button>
+  <Button
+    variant="outline"
+    disabled={!playlist || playlist.source !== 'spotify' || $reimport.isPending}
+    onclick={() => $reimport.mutate()}
+    title={playlist?.source === 'spotify' ? 'Re-import from Spotify' : 'Only Spotify playlists can be re-imported'}
+  >
+    {#if $reimport.isPending}
+      <LoaderCircle size={12} class="animate-spin" />
+    {:else}
+      <RotateCw size={12} />
+    {/if}
+    Re-import
+  </Button>
+  <Button
+    disabled={!playlist || $sendToPlayer.isPending}
+    onclick={() => $sendToPlayer.mutate()}
+    title="Push what is owned to Navidrome"
+  >
+    {#if $sendToPlayer.isPending}
+      <LoaderCircle size={12} class="animate-spin" />
+    {:else}
+      <MonitorSpeaker size={12} />
+    {/if}
+    Send to player
+  </Button>
+{/snippet}
 
-<section class="flex items-start justify-between gap-5 px-4 sm:px-6 pb-4">
-  <div class="flex min-w-0 flex-1 flex-col gap-2">
-    {#if playlist}
-      <h1 class="min-w-0 truncate text-quiet-display font-semibold text-ink">{playlist.name}</h1>
-      <p class="text-body text-ink-2">{factLine(playlist, entries)}</p>
-      <div class="mt-1 flex flex-wrap items-center gap-2">
+{#if playlist}
+  <!-- The list over the covers of the releases it leads to, printed in the
+       inks of its first one (ADR Duoton). -->
+  <Hero
+    title={playlist.name}
+    size={playlist.name.length > 24 ? 'm' : 'l'}
+    actions={playlistActions}
+  >
+    {#snippet back()}
+      <BackLink fallback="/playlists" label="Back to playlists" class="text-ink-2" />
+    {/snippet}
+    {#snippet sub()}
+      {#each factParts(playlist, entries) as part (part)}
+        <span class="numeric">{part}</span>
+      {/each}
+      <span class="flex flex-wrap items-center gap-2">
         <OwnedBar owned={ownedOf(entries)} total={entries.length} width={120} noun="songs" />
         <span class="text-meta text-ink-3">owned</span>
         {#if pairingAsked}
@@ -184,59 +260,28 @@
             </button>
           {/if}
         {/if}
-      </div>
-    {:else}
-      <h1 aria-label="Loading playlist" class="inline-block min-w-48 animate-pulse rounded-row bg-surface-regular text-quiet-display font-semibold text-transparent">
-        Loading playlist
-      </h1>
+      </span>
+    {/snippet}
+  </Hero>
+{:else}
+  <!-- The frame the hero will fill, so the list under it does not move. -->
+  <section
+    class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
+    style="min-height: calc(var(--print-height) - var(--topbar-height));"
+  >
+    <BackLink fallback="/playlists" label="Back to playlists" class="text-ink-2" />
+    <h1
+      aria-label="Loading playlist"
+      class="inline-block w-fit min-w-48 animate-pulse rounded-row bg-surface-regular text-poster-m font-extrabold text-transparent"
+    >
+      Loading playlist
+    </h1>
+    <div class="flex items-end justify-between gap-6">
       <span class="numeric min-w-48 text-body text-ink-3" aria-busy="true">Loading playlist details…</span>
-    {/if}
-  </div>
-  <div class="flex flex-none items-center gap-1.5">
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={!playlist || $sendToPlayer.isPending}
-      onclick={() => $sendToPlayer.mutate()}
-      title="Push what is owned to Navidrome"
-    >
-      {#if $sendToPlayer.isPending}
-        <LoaderCircle size={12} class="animate-spin" />
-      {:else}
-        <MonitorSpeaker size={12} />
-      {/if}
-      Send to player
-    </Button>
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={!playlist || $pairing.isFetching}
-      onclick={checkPlayer}
-      title="Ask the player which of these files it holds"
-    >
-      {#if $pairing.isFetching}
-        <LoaderCircle size={12} class="animate-spin" />
-      {:else}
-        <SearchCheck size={12} />
-      {/if}
-      Check player
-    </Button>
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={!playlist || playlist.source !== 'spotify' || $reimport.isPending}
-      onclick={() => $reimport.mutate()}
-      title={playlist?.source === 'spotify' ? 'Re-import from Spotify' : 'Only Spotify playlists can be re-imported'}
-    >
-      {#if $reimport.isPending}
-        <LoaderCircle size={12} class="animate-spin" />
-      {:else}
-        <RotateCw size={12} />
-      {/if}
-      Re-import
-    </Button>
-  </div>
-</section>
+      <div class="flex shrink-0 items-center gap-2">{@render playlistActions()}</div>
+    </div>
+  </section>
+{/if}
 
 <div class="flex flex-col gap-3.5 px-4 sm:px-6 pb-5">
   {#if $detail.isError}
@@ -332,7 +377,9 @@
         {/if}
       </section>
     {/if}
-    <section class="rounded-panel border border-line-thin">
+    <!-- Rows under a hairline rather than inside a panel, the way the release
+         page sets its track list. -->
+    <section>
       <!-- The table is what scrolls sideways on a narrow screen, not the panel:
            the pager under it has to stay where it was put. -->
       <!-- Artist and album stand down on a narrow screen; the state does not.
@@ -344,7 +391,7 @@
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-left md:min-w-[640px]">
           <thead>
-            <tr class="border-b border-line-thin text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
+            <tr class="border-b border-line-regular text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
               <th class="numeric px-4 py-2 font-medium">#</th>
               <th class="px-3 py-2 font-medium">Title</th>
               <th class="hidden px-3 py-2 font-medium md:table-cell">Artist</th>

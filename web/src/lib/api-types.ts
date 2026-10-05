@@ -381,6 +381,15 @@ export interface ReleaseList {
   failedCount?: number;
 }
 
+/** A cover's two inks (ADR Duoton), #rrggbb and already clamped to legible
+ * luminance by the server. `palette` is the cover's main colours, most of the
+ * picture first. */
+export interface Inks {
+  dark: string;
+  light: string;
+  palette?: string[];
+}
+
 export interface ReleaseDetail {
   id: string;
   artistId: string;
@@ -413,6 +422,9 @@ export interface ReleaseDetail {
   /** What MusicBrainz's community voted this release is, most voted first.
    * Display only. Empty both when nobody voted and when nobody has asked. */
   genres: string[];
+  /** The cover's two inks and palette (ADR Duoton), stored when the cover was
+   * fetched. Null when there is no readable cover; absent from older servers. */
+  inks?: Inks | null;
 }
 
 /** What a release's cover became after somebody set one. The picture itself is
@@ -965,6 +977,10 @@ export interface Playlist {
   ownedCount: number;
   importedAt: string | null;
   createdAt: string | null;
+  /** The release of the first entry that leads to one, whose cover the list is
+   * printed from (ADR Duoton), and that cover's inks. */
+  coverReleaseId?: string | null;
+  inks?: Inks | null;
 }
 
 // MusicBrainz's release editor, filled in from an entry, as the form fields it
@@ -985,6 +1001,8 @@ export interface PlaylistEntry {
   durationMs?: number;
   isrc?: string;
   ownedFileId?: string;
+  /** The release this entry leads to, when one is known. */
+  releaseId?: string;
   targetId?: string;
   targetStatus?: string;
   targetSummary?: string;

@@ -18,6 +18,7 @@
     type SourceCandidate,
     type SourceSearchResult
   } from '$lib/api';
+  import { usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
@@ -25,7 +26,7 @@
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
   import { describeError } from '$lib/errors';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
@@ -66,6 +67,11 @@
   });
 
   const items = $derived($run.data?.items ?? []);
+
+  // A strip of the releases this run searched, in the order it searched them.
+  usePagePrint(() =>
+    items.length ? { covers: items.slice(0, 8).map((item) => item.albumId) } : undefined
+  );
   const pending = $derived($run.data?.pending ?? 0);
   const cancelled = $derived($run.data?.cancelledCount ?? 0);
   // Added up from the two answers that mean a search happened, rather than
@@ -229,18 +235,20 @@
 
 <svelte:head><title>Sources · Schall</title></svelte:head>
 
-<PageHeader>
+<!-- The run printed as a strip of the releases it searched (ADR Duoton), with
+     its counts under the title and Stop beside them. -->
+<Hero title="Sources" size="m">
+  {#snippet back()}
   <BackLink
     fallback="/library?status=missing"
     label="Back to the releases this run came from"
-    size={15}
-    class="inline-flex size-7 shrink-0 items-center justify-center rounded-control text-ink-2 hover:bg-surface-thick hover:text-ink"
+    class="text-ink-2"
   />
-  <h1 class="font-display text-2xl font-bold text-ink">Sources</h1>
-
-  <!-- Counts and Stop occupy a reserved row from the first paint. The run
-       query fills these slots without adding a second line to the header. -->
-  <div class="basis-full flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+  {/snippet}
+  {#snippet sub()}
+  <!-- Counts occupy a reserved row from the first paint. The run query fills
+       these slots without adding a second line to the header. -->
+  <div class="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
     {#if trouble && !$run.data}
       <Chip role="fail">{trouble.chip}</Chip>
     {:else if $run.isPending}
@@ -273,7 +281,10 @@
       </div>
     {/if}
 
-    <div class="ml-auto flex min-h-8 min-w-[11rem] items-center justify-end gap-2">
+  </div>
+  {/snippet}
+  {#snippet actions()}
+  <div class="flex min-h-8 min-w-[11rem] items-center justify-end gap-2">
       {#if pending}
         <Chip role="busy" dot={false}>
           <LoaderCircle size={11} class="animate-spin" />
@@ -301,9 +312,9 @@
       {:else}
         <span class="invisible h-8 w-full" aria-hidden="true"></span>
       {/if}
-    </div>
   </div>
-</PageHeader>
+  {/snippet}
+</Hero>
 
 {#if $cancel.isError}
   <div class="px-4 sm:px-6 pt-4">
