@@ -432,7 +432,7 @@
   {#if $artist.data}
   <Hero title={$artist.data.name} size={heroSize}>
     {#snippet back()}
-      <BackLink fallback="/artists" label="Back to artists" />
+      <BackLink fallback="/artists" label="Artists" />
     {/snippet}
     {#snippet sub()}
       <span>

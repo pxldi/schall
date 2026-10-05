@@ -25,7 +25,7 @@
     /** The line under the title. Each direct child is separated by a dot. */
     sub?: Snippet;
     actions?: Snippet;
-    /** A way back, drawn above everything else. */
+    /** A way back, drawn at the top left of the print. */
     back?: Snippet;
   } = $props();
 
@@ -41,8 +41,11 @@
   class="relative flex flex-col justify-end px-4 pb-4 sm:px-6"
   style="min-height: calc(var(--print-height) - var(--topbar-height));"
 >
+  <!-- The way back sits at the top of the print, where it is in the same place
+       on every page whatever the title's size. The auto margin takes the free
+       height that would otherwise go above the title. -->
   {#if back}
-    <div class="mb-2">{@render back()}</div>
+    <div class="mb-auto pt-4 pb-4">{@render back()}</div>
   {/if}
   {#if kicker}
     <p class="mb-1 text-dense-meta text-ink-2">{@render kicker()}</p>
