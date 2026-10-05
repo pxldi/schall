@@ -42,7 +42,7 @@
 >
   <div
     class="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5 {width === 'layout'
-      ? 'layout-width px-3'
+      ? 'layout-width px-4 sm:px-6'
       : 'px-4 sm:px-6'}"
   >
     {@render children()}

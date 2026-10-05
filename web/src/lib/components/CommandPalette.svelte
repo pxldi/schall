@@ -254,7 +254,7 @@
     >
       <div
         class={cn(
-          'grid h-[34px] shrink-0 grid-cols-[16px_minmax(0,1fr)_28px] items-center gap-x-3 px-3',
+          'palette-row grid h-[34px] shrink-0 grid-cols-[16px_minmax(0,1fr)_28px] items-center gap-x-3 px-3',
           hasBody && 'border-b border-line-thin'
         )}
       >
@@ -273,7 +273,7 @@
           aria-controls="palette-results"
           aria-activedescendant={current?.id ?? undefined}
           aria-autocomplete="list"
-          class="min-w-0 border-0 bg-transparent p-0 font-mono text-body font-medium text-ink placeholder:text-ink-4 focus:outline-none"
+          class="palette-field min-w-0 border-0 bg-transparent p-0 font-mono text-body font-medium text-ink placeholder:text-ink-4 focus:outline-none"
         />
       </div>
 
@@ -446,6 +446,21 @@
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     animation: palette-in var(--motion-surface) var(--motion-ease-arrive);
+  }
+
+  /* The focus ring goes round the whole search row, inside the panel. Drawn
+     on the field itself it sat 2px outside a box flush with the panel's top
+     edge, where the panel's clipping cut it and it ran over the column beside
+     the field. */
+  .palette-field:focus-visible {
+    outline: none;
+  }
+
+  .palette-row:has(.palette-field:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
   }
 
   @keyframes palette-in {

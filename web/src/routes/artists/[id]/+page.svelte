@@ -651,7 +651,7 @@
         {@const visible = opened ? section.items : section.items.slice(0, sectionCap)}
         <section class="flex flex-col gap-2">
           <div class="flex items-baseline justify-between gap-3">
-            <span class="text-[15px] font-semibold text-ink">
+            <span class="text-[0.9375rem] font-semibold text-ink">
               {label(section.type)}
               <span class="numeric text-meta font-normal text-ink-4">{section.items.length}</span>
             </span>
@@ -688,7 +688,7 @@
                     class="size-full object-cover"
                   />
                 </div>
-                <span class="block truncate text-[13.5px] font-medium text-ink" title={release.title}>
+                <span class="block truncate text-body font-medium text-ink" title={release.title}>
                   {release.title}
                 </span>
                 <!-- Never cut off. The line is a year and then how much of the
@@ -696,7 +696,7 @@
                      the denominator, which is the half that makes the other
                      half mean anything. A second line is cheaper than a fact
                      that ends in an ellipsis. -->
-                <span class="numeric block min-w-0 truncate text-meta {info.tone}" title={info.text}
+                <span class="numeric block min-w-0 text-meta {info.tone}" title={info.text}
                   >{info.text}</span
                 >
               </a>

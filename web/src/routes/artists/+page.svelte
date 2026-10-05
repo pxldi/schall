@@ -305,18 +305,32 @@
 
 <ControlRail>
   <!-- Not a fourth scope: it leaves this list for the labels one, so it sits
-       apart from the group it is not a member of. -->
-  <a href="/artists/labels" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink-2 hover:text-ink">
-    Labels
-    {#if labelsTotal !== undefined}
-      <span class="numeric text-meta text-ink-3">{labelsTotal.toLocaleString()}</span>
-    {:else}
-      <span
-        class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
-        aria-hidden="true"
-      ></span>
-    {/if}
-  </a>
+       apart from the group it is not a member of. The pair reads the same as
+       it does on the Labels page, with the page you are on lit. -->
+  <div class="flex items-center gap-5">
+    <span aria-current="page" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink">
+      Artists
+      {#if $dashboard.data}
+        <span class="numeric text-meta text-ink-3">{followedCount.toLocaleString()}</span>
+      {:else}
+        <span
+          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
+          aria-hidden="true"
+        ></span>
+      {/if}
+    </span>
+    <a href="/artists/labels" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink-2 hover:text-ink">
+      Labels
+      {#if labelsTotal !== undefined}
+        <span class="numeric text-meta text-ink-3">{labelsTotal.toLocaleString()}</span>
+      {:else}
+        <span
+          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
+          aria-hidden="true"
+        ></span>
+      {/if}
+    </a>
+  </div>
 
   <Button class="ml-auto" onclick={() => (showAddArtist = true)}>
     <Plus size={13} strokeWidth={2.3} /> Follow artist

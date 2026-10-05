@@ -34,8 +34,11 @@
   }
 </script>
 
+<!-- The 40rem floor keeps the columns readable on a phone, where the strip
+     scrolls. On a desktop the review pane is narrower than 40rem at the 133%
+     root, and the floor pushed each card's right edge out of sight. -->
 <div class="overflow-x-auto">
-  <div class="flex min-w-[40rem] flex-col gap-2" role="radiogroup" aria-label="Recordings this could be">
+  <div class="flex min-w-[40rem] flex-col gap-2 md:min-w-0" role="radiogroup" aria-label="Recordings this could be">
     <div class={`grid ${COLUMNS} gap-x-4 px-[18px] text-dense-micro uppercase text-ink-3`}>
       <span></span>
       <span></span>
@@ -81,7 +84,7 @@
             <span class="block truncate text-quiet-meta text-ink-2">{candidate.releaseTitle || '—'}</span>
           </span>
           <span class="numeric text-quiet-meta">{candidate.durationMs ? clock(candidate.durationMs / 1000) : '—'}</span>
-          <span class="flex flex-wrap gap-1.5">
+          <span class="flex min-w-0 flex-wrap gap-1.5">
             {#each candidate.agrees as entry (entry)}
               <span class="flex items-center gap-1 rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-2">
                 <Check size={10} strokeWidth={2.5} class="text-ok" />

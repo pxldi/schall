@@ -517,7 +517,7 @@
         </a>
         {#each heroFacts as fact (fact)}
           <span class="text-ink-4">·</span>
-          <span class="numeric">{fact}</span>
+          <span class="numeric whitespace-nowrap">{fact}</span>
         {/each}
       </p>
 
@@ -546,15 +546,15 @@
         <span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           <OwnedBar owned={ownedCount} total={$tracks.data.items.length} width={120} />
           {#if missingCount > 0}
-            <span class="numeric text-meta text-ink-3">
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">
               · {missingCount} {$release.data.artistFollowed ? 'missing' : 'not owned'}
             </span>
           {/if}
           {#if wantedCount > 0}
-            <span class="numeric text-meta text-ink-3">· {wantedCount} wanted</span>
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">· {wantedCount} wanted</span>
           {/if}
           {#if dismissedCount > 0}
-            <span class="numeric text-meta text-ink-3">· {dismissedCount} dismissed</span>
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">· {dismissedCount} dismissed</span>
           {/if}
         </span>
       {/if}
@@ -693,7 +693,7 @@
           <div class="flex h-7 items-center gap-3.5 border-b border-line-thin px-3">
             <span class="label w-7 shrink-0 text-center">#</span>
             <span class="label min-w-0 flex-1"></span>
-            <span class="label w-12 shrink-0 text-right">Length</span>
+            <span class="label w-16 shrink-0 whitespace-nowrap text-right">Length</span>
             <span class="label w-24 shrink-0"></span>
           </div>
           {#each $tracks.data.items as track, index (track.id)}
@@ -722,7 +722,7 @@
               >
                 {track.title}
               </p>
-              <span class="numeric w-12 shrink-0 text-right text-meta text-ink-3">
+              <span class="numeric w-16 shrink-0 text-right text-meta text-ink-3">
                 {duration(track.durationMs)}
               </span>
               <span class="flex w-24 shrink-0 items-center justify-end gap-1.5">
@@ -820,7 +820,11 @@
     </section>
 
     <section class="mt-2">
-      <span class="label">Sources</span>
+      <!-- The heading names what is under it, so it waits until there is
+           something: alone, it read as a section that failed to load. -->
+      {#if duplicateQuestion || openRequests.length || sourcesOpen}
+        <span class="label">Sources</span>
+      {/if}
 
       {#if duplicateQuestion}
         <div class="mt-5">

@@ -19,7 +19,7 @@
 
 <td
   data-numeric={numeric ? 'true' : undefined}
-  class={cn('px-3 py-2 align-middle', numeric && 'numeric text-right', className)}
+  class={cn('px-3 py-2 align-middle', numeric && 'numeric whitespace-nowrap text-right', className)}
   {...rest}
 >
   {@render children?.()}

@@ -36,9 +36,11 @@
     <span class="text-meta text-ink-3">
       {label.lastRefreshedAt ? `updated ${calendarDate(label.lastRefreshedAt)}` : 'not refreshed yet'}
     </span>
-  {:else}
+  {:else if $detail.isPending}
     <span class="h-7 w-48 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
     <span class="h-4 w-28 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
+  {:else}
+    <h1 class="sr-only">Label</h1>
   {/if}
 </PageHeader>
 

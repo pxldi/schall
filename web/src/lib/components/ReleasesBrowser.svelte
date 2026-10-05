@@ -756,7 +756,7 @@
   <Settle pending={$releases.isPending}>
     {#snippet placeholder()}
       <div
-    class="layout-width px-3 py-1"
+    class="layout-width px-4 sm:px-6 py-1"
     role="status"
     aria-label="Loading releases"
   >
@@ -787,7 +787,7 @@
        skeleton is replaced by rows and when a search that found nothing starts
        finding something, and at no other time — a refetch that already has rows
        to show never rebuilds this. -->
-  <div class="layout-width flex items-start gap-4 px-3 py-1">
+  <div class="layout-width flex items-start gap-4 px-4 sm:px-6 py-1">
     <!-- The scroll happens in the table's own box rather than on the page. A
          sticky header sticks to the nearest thing that scrolls, and if that
          thing is the whole document the column names slide away with the rows.
@@ -986,7 +986,7 @@
     {/if}
   </div>
 
-  <div class="px-3">
+  <div class="layout-width px-4 sm:px-6">
     <Pager {total} {offset} {pageSize} onchange={(next) => changePage(next)} />
   </div>
   {:else}
@@ -1045,7 +1045,7 @@
 
 {#snippet Head(label: string, key: Sort)}
   <button
-    class="label flex h-full items-center gap-1.5 transition hover:text-ink pointer-coarse:min-h-11"
+    class="label inline-flex h-full items-center gap-1.5 transition hover:text-ink pointer-coarse:min-h-11"
     onclick={() => pick(key)}
   >
     {label}
