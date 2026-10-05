@@ -1077,7 +1077,9 @@ a {
   /* In a list of tracks the + is drawn only on the row a pointer rests on or
      focus is inside, so the list reads as titles and not as forty rings. A
      wanted track keeps its disc on every row, because that is a state worth
-     reading at a glance. A screen with no hover shows every +, since a finger
+     reading at a glance. Focus counts only when it is keyboard focus: a click
+     leaves focus on the button, and the + would stay drawn after the pointer
+     left. A screen with no hover shows every +, since a finger
      has nothing to rest on. */
   @media (hover: hover) {
     .want-toggle[data-reveal='true'][data-wanted='false'] {
@@ -1090,7 +1092,7 @@ a {
     }
 
     .want-row:hover .want-toggle[data-reveal='true'],
-    .want-row:focus-within .want-toggle[data-reveal='true'],
+    .want-row:has(:focus-visible) .want-toggle[data-reveal='true'],
     .want-toggle[data-reveal='true']:focus-visible {
       opacity: 1;
     }
