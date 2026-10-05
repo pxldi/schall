@@ -435,14 +435,6 @@ a {
    the call site wins, which is the order a utility framework is built on.
    Anything new goes inside this block. */
 @layer components {
-  /* The desktop reading width for lists and decision workspaces. A grid keeps
-     the available width, but tables and split panes stop at this boundary. */
-  .layout-width {
-    width: 100%;
-    max-width: 1400px;
-    margin-inline: auto;
-  }
-
   /* The one boolean in Schall. A 24px target that carries a small tick when it is on:
      colour alone is not a state, here or anywhere. The tick is a mask rather
      than a child element because an `appearance-none` input cannot hold one.

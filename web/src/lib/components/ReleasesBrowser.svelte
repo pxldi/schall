@@ -746,7 +746,7 @@
   <Settle pending={$releases.isPending}>
     {#snippet placeholder()}
       <div
-    class="layout-width px-4 sm:px-6 py-1"
+    class="px-4 sm:px-6 py-1"
     role="status"
     aria-label="Loading releases"
   >
@@ -777,14 +777,14 @@
        skeleton is replaced by rows and when a search that found nothing starts
        finding something, and at no other time — a refetch that already has rows
        to show never rebuilds this. -->
-  <div class="layout-width flex items-start gap-4 px-4 sm:px-6 py-1">
+  <div class="flex items-start gap-4 px-4 sm:px-6 py-1">
     <!-- The scroll happens in the table's own box rather than on the page. A
          sticky header sticks to the nearest thing that scrolls, and if that
          thing is the whole document the column names slide away with the rows.
          `scroll-pt-9` is the header's own height, so a row jumped to by a
          letter lands under the names rather than behind them. -->
     <Table.Root
-      wrapperClass="layout-width rise max-h-[70dvh] min-w-0 flex-1 scroll-pt-9 scroll-smooth rounded-panel border border-line-thin"
+      wrapperClass="rise max-h-[70dvh] min-w-0 flex-1 scroll-pt-9 scroll-smooth rounded-panel border border-line-thin"
     >
       <Table.Header>
         <!-- The row of column names, which are also the controls that sort by
@@ -975,7 +975,7 @@
     {/if}
   </div>
 
-  <div class="layout-width px-4 sm:px-6">
+  <div class="px-4 sm:px-6">
     <Pager {total} {offset} {pageSize} onchange={(next) => changePage(next)} />
   </div>
   {:else}
