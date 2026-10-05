@@ -145,7 +145,7 @@
 
   const rowClass =
     'relative grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
-    'rounded-row border-b border-line-thin px-[18px] py-2 text-inherit no-underline ' +
+    'rounded-row border-b border-line-thin px-[1.125rem] py-2 text-inherit no-underline ' +
     'transition-[background] last:border-b-0 hover:bg-duo-light/10';
 
   // The keyboard selection mark: --raise-2, one step above the hover tint, plus
@@ -286,7 +286,7 @@
     transition:fade={{ duration: motionMs('surface') }}
   ></div>
   <div
-    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[18px] pb-[26px] pt-[90px]"
+    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[1.125rem] pb-[26px] pt-[90px]"
   >
     <aside
       bind:this={panel}
@@ -297,11 +297,11 @@
     >
       <div
         class={cn(
-          'palette-row grid h-[52px] shrink-0 grid-cols-[18px_minmax(0,1fr)_28px] items-center gap-x-3 px-[18px]',
+          'palette-row grid h-[3.25rem] shrink-0 grid-cols-[1.25rem_minmax(0,1fr)_1.5rem] items-center gap-x-3 px-[1.125rem]',
           hasBody && 'border-b border-line-thin'
         )}
       >
-        <span class="text-ink-3"><Icon name="search" size="lg" /></span>
+        <span class="grid place-items-center text-ink-3"><Icon name="search" size="lg" /></span>
         <input
           bind:this={box}
           bind:value={typed}
@@ -357,7 +357,7 @@
                      category of a result is never implied by being the only
                      one. -->
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
-                  <div class="mb-0.5 border-b border-line-thin px-[18px] pb-1.5">
+                  <div class="mb-0.5 border-b border-line-thin px-[1.125rem] pb-1.5">
                     <span
                       class="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-3"
                       >{category.label}</span
@@ -468,14 +468,18 @@
 
         <!-- Always present, so the keys are learnable by looking. -->
         <div
-          class="flex shrink-0 flex-wrap gap-4 border-t border-line-thin px-[18px] py-2.5 text-meta text-ink-3"
+          class="flex shrink-0 flex-wrap items-center gap-5 border-t border-line-thin px-[1.125rem] py-2.5 text-meta text-ink-3"
         >
-          <span class="inline-flex items-center gap-1"
-            ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /> move</span
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><span class="inline-flex"
+              ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /></span
+            >move</span
           >
-          <span class="inline-flex items-center gap-1"><Icon name="enter" size="sm" /> open</span>
-          <span class="inline-flex items-center gap-1"
-            ><kbd class="font-sans text-micro font-semibold">Esc</kbd> close</span
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><Icon name="enter" size="sm" />open</span
+          >
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><kbd class="font-sans text-meta font-semibold leading-none">Esc</kbd>close</span
           >
         </div>
       {/if}
@@ -489,7 +493,7 @@
         type="button"
         onclick={dismiss}
         aria-label="Close search"
-        class="tap absolute right-[14px] top-[14px] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
+        class="tap absolute right-[1.125rem] top-[0.875rem] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
       >
         <Icon name="close" size="sm" />
       </button>
