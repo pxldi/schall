@@ -10,7 +10,7 @@ import Segmented from '$lib/components/Segmented.svelte';
 
 afterEach(cleanup);
 
-function strip(options: { value: string; name: string; count?: number }[], pending = false) {
+function strip(options: { value: string; name: string; count?: number | null }[], pending = false) {
   return render(Segmented, {
     props: { options, value: '', onchange: () => {}, label: 'How complete an artist is', pending }
   });
@@ -36,6 +36,12 @@ describe('a strip whose figures have not arrived', () => {
     const { container } = strip([{ value: '', name: 'All' }], true);
 
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(1);
+  });
+
+  it('holds no room for an option that will never have a figure', () => {
+    const { container } = strip([{ value: '', name: 'Uploaded', count: null }], true);
+
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(0);
   });
 
   it('says nothing to a screen reader about a figure that does not exist yet', () => {
