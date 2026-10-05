@@ -10,10 +10,14 @@
   // small and reads as one list rather than a browse.
   import { createMutation, createQuery, queryOptions, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { Plus, RefreshCw, Search, UserRoundMinus } from '@lucide/svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import { api, type LabelListItem, type MonitorLevel } from '$lib/api';
   import { calendarDate } from '$lib/utils';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Cover from '$lib/components/Cover.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -22,7 +26,7 @@
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
-  const COLUMNS = 'grid-cols-[minmax(0,1fr)_150px_170px_110px_100px]';
+  const COLUMNS = 'grid-cols-[2.625rem_minmax(0,1fr)_150px_170px_110px_100px]';
 
   const queryClient = useQueryClient();
   let showAddLabel = $state(false);
@@ -68,7 +72,23 @@
       : items
   );
   const labelsTotal = $derived($labels.data?.total);
+  const followedTotal = $derived($labels.data?.followedCount);
   const artistsTotal = $derived($dashboard.data?.artistCount);
+
+  // A strip of the labels' covers, one each, inked from the first (ADR Duoton).
+  usePagePrint(() => {
+    if (!$labels.data) return undefined;
+    return {
+      covers: items
+        .filter((label) => label.coverAlbumIds?.length)
+        .slice(0, 8)
+        .map((label) => ({
+          src: coverSrc(label.coverAlbumIds[0]),
+          seed: label.coverAlbumIds[0],
+          inks: label.coverInks
+        }))
+    };
+  });
 
   function invalidate() {
     return Promise.all([
@@ -115,39 +135,42 @@
 
 <svelte:head><title>Labels · Schall</title></svelte:head>
 
-<!-- Hidden: the mast highlights Artists here too, so this names the
-     narrower page a screen reader would otherwise not be told. -->
-<h1 class="sr-only">Labels</h1>
+<Hero title="Labels" size="xl">
+  {#snippet back()}
+    <BackLink fallback="/artists" label="Back to artists" />
+  {/snippet}
+  {#snippet sub()}
+    {#if labelsTotal !== undefined}
+      <span>
+        <b class="numeric font-semibold text-ink">{labelsTotal.toLocaleString()}</b>
+        {labelsTotal === 1 ? 'label' : 'labels'}
+      </span>
+    {/if}
+    {#if followedTotal !== undefined}
+      <span><span class="numeric">{followedTotal.toLocaleString()}</span> followed</span>
+    {/if}
+    <a href="/artists" class="transition hover:text-ink">
+      <span class="underline underline-offset-3">
+      {#if artistsTotal !== undefined}
+        <span class="numeric">{artistsTotal.toLocaleString()}</span>
+        {artistsTotal === 1 ? 'artist' : 'artists'}
+      {:else}
+        Artists
+      {/if}
+      </span>
+    </a>
+  {/snippet}
+  {#snippet actions()}
+    <Button onclick={() => (showAddLabel = true)}>
+      <Icon name="plus" size="sm" /> Follow label
+    </Button>
+  {/snippet}
+</Hero>
 
 <ControlRail>
-  <div class="flex items-center gap-5">
-    <a href="/artists" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink-2 hover:text-ink">
-      Artists
-      {#if artistsTotal !== undefined}
-        <span class="numeric text-meta text-ink-3">{artistsTotal.toLocaleString()}</span>
-      {:else}
-        <span
-          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
-          aria-hidden="true"
-        ></span>
-      {/if}
-    </a>
-    <span aria-current="page" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink">
-      Labels
-      {#if labelsTotal !== undefined}
-        <span class="numeric text-meta text-ink-3">{labelsTotal.toLocaleString()}</span>
-      {:else}
-        <span
-          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
-          aria-hidden="true"
-        ></span>
-      {/if}
-    </span>
-  </div>
-
-  <form class="ml-auto w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
+  <form class="w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
     <label class="field flex w-full items-center gap-2">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
         placeholder="Filter labels"
@@ -156,10 +179,6 @@
       />
     </label>
   </form>
-
-  <Button onclick={() => (showAddLabel = true)}>
-    <Plus size={13} strokeWidth={2.3} /> Follow label
-  </Button>
 </ControlRail>
 
 <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
@@ -204,7 +223,8 @@
         {/each}
 
         <div class="flex flex-col">
-          <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3`}>
+          <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-meta text-ink-3`}>
+            <span></span>
             <span class="flex h-7 items-center">Label</span>
             <span class="flex h-7 items-center">Owned</span>
             <span class="flex h-7 items-center">Monitor</span>
@@ -216,7 +236,7 @@
             {#each filtered as label (label.id)}
               <li class={`grid ${COLUMNS} min-h-[52px] items-center gap-x-4 px-1 py-2`}>
                 {#if confirming === label.id}
-                  <div class="col-span-5 flex flex-wrap items-center gap-3 py-1">
+                  <div class="col-span-6 flex flex-wrap items-center gap-3 py-1">
                     <p class="text-meta text-ink-2">
                       Unfollow {label.name}? Its releases stay; nothing you own is touched.
                     </p>
@@ -239,6 +259,15 @@
                     </div>
                   </div>
                 {:else}
+                  <!-- The label's most-held cover. Only covers already cached
+                       are named, and a label with none gets generated art. -->
+                  <span class="size-[2.625rem] overflow-hidden rounded-row" aria-hidden="true">
+                    <Cover
+                      src={label.coverAlbumIds?.[0] ? coverSrc(label.coverAlbumIds[0]) : undefined}
+                      seed={label.id}
+                      class="size-full object-cover"
+                    />
+                  </span>
                   <span class="flex min-w-0 flex-col gap-0.5">
                     <a
                       href="/artists/labels/{label.id}"
@@ -290,18 +319,14 @@
                         disabled={$refresh.isPending || label.refreshStatus === 'running'}
                         onclick={() => $refresh.mutate(label.id)}
                       >
-                        <RefreshCw
-                          size={13}
-                          strokeWidth={2.2}
-                          class={label.refreshStatus === 'running' ? 'animate-spin' : ''}
-                        />
+                        <Icon name="refresh" size="sm" class={label.refreshStatus === 'running' ? 'animate-spin' : ''} />
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         onclick={() => (confirming = label.id)}
                       >
-                        <UserRoundMinus size={13} strokeWidth={2.2} /> Unfollow
+                        <Icon name="unfollow" size="sm" /> Unfollow
                       </Button>
                     {:else}
                       <!-- Held but not followed: an earlier follow was

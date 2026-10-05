@@ -43,6 +43,8 @@ function detail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
     monitorLevel: 'everything',
     wantMissing: false,
     discography: { releases: 5, owned: 3, missing: 2, dismissed: 0, counted: 5, loading: 0 },
+    leadAlbumId: null,
+    inks: null,
     genres: [],
     ...overrides
   };
@@ -137,8 +139,7 @@ describe('the genres', () => {
     answering(detail({ genres: ['post-rock', 'art rock'] }));
     opened();
 
-    expect(await screen.findByText('post-rock')).toBeTruthy();
-    expect(screen.getByText('art rock')).toBeTruthy();
+    expect(await screen.findByText('post-rock, art rock')).toBeTruthy();
   });
 
   it('shows nothing for an artist nobody voted for', async () => {
@@ -146,7 +147,7 @@ describe('the genres', () => {
     opened();
 
     expect(await screen.findByRole('heading', { name: 'Talk Talk' })).toBeTruthy();
-    expect(screen.queryByText('post-rock')).toBeNull();
+    expect(screen.queryByText(/post-rock/)).toBeNull();
   });
 });
 

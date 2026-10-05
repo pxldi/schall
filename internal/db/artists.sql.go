@@ -906,7 +906,8 @@ SELECT
     COALESCE(artists.biography_source_url, '')::text AS biography_source_url,
     count(albums.id) AS album_count,
     COALESCE(latest_refresh.status, 'pending') AS refresh_status,
-    latest_refresh.error_message AS refresh_error
+    latest_refresh.error_message AS refresh_error,
+    lead_album.id AS lead_album_id
 FROM artists
 LEFT JOIN albums ON albums.artist_id = artists.id
 LEFT JOIN LATERAL (
@@ -917,8 +918,24 @@ LEFT JOIN LATERAL (
     ORDER BY created_at DESC
     LIMIT 1
 ) AS latest_refresh ON true
+LEFT JOIN LATERAL (
+    SELECT lead.id
+    FROM albums AS lead
+    JOIN release_cover_art ON release_cover_art.album_id = lead.id
+    WHERE lead.artist_id = artists.id
+      AND octet_length(release_cover_art.image) > 0
+    ORDER BY (
+        SELECT count(*)
+        FROM tracks
+        JOIN track_mappings ON track_mappings.track_id = tracks.id
+        JOIN library_files ON library_files.id = track_mappings.library_file_id
+        WHERE tracks.album_id = lead.id
+          AND library_files.missing_at IS NULL
+    ) DESC, lead.release_date DESC NULLS LAST, lead.id
+    LIMIT 1
+) AS lead_album ON true
 WHERE artists.id = $1
-GROUP BY artists.id, latest_refresh.status, latest_refresh.error_message
+GROUP BY artists.id, latest_refresh.status, latest_refresh.error_message, lead_album.id
 `
 
 type GetArtistRow struct {
@@ -939,8 +956,12 @@ type GetArtistRow struct {
 	AlbumCount         int64              `json:"album_count"`
 	RefreshStatus      string             `json:"refresh_status"`
 	RefreshError       pgtype.Text        `json:"refresh_error"`
+	LeadAlbumID        uuid.NullUUID      `json:"lead_album_id"`
 }
 
+// The release the page takes its inks and its print from (ADR Duoton): the one
+// with the most songs the library holds, among those with a cached cover. NULL
+// when no release has one, and the page falls back to the house inks.
 func (q *Queries) GetArtist(ctx context.Context, id uuid.UUID) (GetArtistRow, error) {
 	row := q.db.QueryRow(ctx, getArtist, id)
 	var i GetArtistRow
@@ -962,6 +983,7 @@ func (q *Queries) GetArtist(ctx context.Context, id uuid.UUID) (GetArtistRow, er
 		&i.AlbumCount,
 		&i.RefreshStatus,
 		&i.RefreshError,
+		&i.LeadAlbumID,
 	)
 	return i, err
 }
@@ -1197,7 +1219,27 @@ SELECT
         SELECT 1 FROM artist_images
         WHERE artist_images.artist_id = listed.id
           AND artist_images.image IS NOT NULL
-    )::boolean AS has_image
+    )::boolean AS has_image,
+    -- The covers a card prints when the artist has no picture, and whose inks
+    -- it takes: the two releases with the most songs the library holds, newest
+    -- first among equals. Only covers already cached, so the index never sets
+    -- an archive working. Display only; nothing that decides anything reads it.
+    ARRAY(
+        SELECT albums.id
+        FROM albums
+        JOIN release_cover_art ON release_cover_art.album_id = albums.id
+        WHERE albums.artist_id = listed.id
+          AND octet_length(release_cover_art.image) > 0
+        ORDER BY (
+            SELECT count(*)
+            FROM tracks
+            JOIN track_mappings ON track_mappings.track_id = tracks.id
+            JOIN library_files ON library_files.id = track_mappings.library_file_id
+            WHERE tracks.album_id = albums.id
+              AND library_files.missing_at IS NULL
+        ) DESC, albums.release_date DESC NULLS LAST, albums.id
+        LIMIT 2
+    )::uuid[] AS cover_album_ids
 FROM listed
 WHERE $1::text = ''
    OR ($1::text = 'incomplete'
@@ -1258,6 +1300,7 @@ type ListArtistsRow struct {
 	ReviewCount       int64              `json:"review_count"`
 	NeedsAttention    bool               `json:"needs_attention"`
 	HasImage          bool               `json:"has_image"`
+	CoverAlbumIds     []uuid.UUID        `json:"cover_album_ids"`
 }
 
 // An explicit limit pages the list for callers that need it. A zero limit
@@ -1348,6 +1391,7 @@ func (q *Queries) ListArtists(ctx context.Context, arg ListArtistsParams) ([]Lis
 			&i.ReviewCount,
 			&i.NeedsAttention,
 			&i.HasImage,
+			&i.CoverAlbumIds,
 		); err != nil {
 			return nil, err
 		}

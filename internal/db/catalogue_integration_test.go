@@ -3786,3 +3786,106 @@ func TestANameThatDiffersOnlyInCaseIdentifiesNothing(t *testing.T) {
 		t.Errorf("identifier for Umbraid = %v, want none", id)
 	}
 }
+
+// The Duoton print and inks are drawn from cached covers. Releases with the
+// most songs held come first, newer first among equals, and a recorded absence
+// is no cover at all.
+func TestCoverChoicesRankReleasesBySongsHeld(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedReleaseShelf(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO release_cover_art (album_id, image, content_type, source)
+		SELECT id, '\x89504e47'::bytea, 'image/png', 'caa' FROM albums
+		WHERE title IN ('Dummy', 'Third', 'Music Has the Right to Children', 'Geogaddi')
+	`); err != nil {
+		t.Fatalf("seed covers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO release_cover_art (album_id, image, content_type, source)
+		SELECT id, NULL, '', 'none' FROM albums WHERE title = 'We Had Good Times Together'
+	`); err != nil {
+		t.Fatalf("seed recorded absence: %v", err)
+	}
+	titles := map[uuid.UUID]string{}
+	rows, err := pool.Query(ctx, `SELECT id, title FROM albums`)
+	if err != nil {
+		t.Fatalf("read albums: %v", err)
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var title string
+		if err := rows.Scan(&id, &title); err != nil {
+			t.Fatalf("scan album: %v", err)
+		}
+		titles[id] = title
+	}
+	named := func(ids []uuid.UUID) string {
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, titles[id])
+		}
+		return strings.Join(out, "|")
+	}
+
+	queries := New(pool)
+	artists, err := queries.ListArtists(ctx, ListArtistsParams{Sort: "name"})
+	if err != nil {
+		t.Fatalf("ListArtists() error = %v", err)
+	}
+	want := map[string]string{
+		"Boards of Canada": "Geogaddi|Music Has the Right to Children",
+		"Portishead":       "Third|Dummy",
+		"Sewerslvt":        "",
+	}
+	for _, artist := range artists {
+		if got := named(artist.CoverAlbumIds); got != want[artist.Name] {
+			t.Errorf("%s covers = %q, want %q", artist.Name, got, want[artist.Name])
+		}
+		detail, err := queries.GetArtist(ctx, artist.ID)
+		if err != nil {
+			t.Fatalf("GetArtist(%s) error = %v", artist.Name, err)
+		}
+		lead := ""
+		if detail.LeadAlbumID.Valid {
+			lead = titles[detail.LeadAlbumID.UUID]
+		}
+		if wantLead, _, _ := strings.Cut(want[artist.Name], "|"); lead != wantLead {
+			t.Errorf("%s lead = %q, want %q", artist.Name, lead, wantLead)
+		}
+	}
+
+	labelID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO labels (id, musicbrainz_id, name, followed_at) VALUES ($1, $2, 'Warp', now())
+	`, labelID, uuid.New()); err != nil {
+		t.Fatalf("seed label: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO label_releases (label_id, album_id)
+		SELECT $1, id FROM albums
+		WHERE title IN ('Dummy', 'Geogaddi', 'Music Has the Right to Children', 'We Had Good Times Together')
+	`, labelID); err != nil {
+		t.Fatalf("seed label releases: %v", err)
+	}
+	labels, err := queries.ListLabels(ctx)
+	if err != nil {
+		t.Fatalf("ListLabels() error = %v", err)
+	}
+	if len(labels) != 1 || named(labels[0].CoverAlbumIds) != "Geogaddi|Music Has the Right to Children" {
+		t.Errorf("label covers = %#v", labels)
+	}
+	releases, err := queries.LabelReleases(ctx, labelID)
+	if err != nil {
+		t.Fatalf("LabelReleases() error = %v", err)
+	}
+	pictured := map[string]bool{}
+	for _, release := range releases {
+		pictured[release.Title] = release.HasCover
+	}
+	if !pictured["Dummy"] || !pictured["Geogaddi"] || pictured["We Had Good Times Together"] {
+		t.Errorf("pictured = %v", pictured)
+	}
+}
