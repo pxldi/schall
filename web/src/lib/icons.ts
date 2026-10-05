@@ -208,4 +208,14 @@ export const icons = {
   ]
 } satisfies Record<string, IconPart[]>;
 
-export type IconName = keyof typeof icons;
+// Names the pages use for the same drawing, so a page can say what it means.
+const aliases = {
+  dismiss: icons.ban,
+  peer: icons.artists,
+  player: icons.device,
+  'player-check': icons['search-check']
+};
+
+export const allIcons = { ...icons, ...aliases };
+
+export type IconName = keyof typeof allIcons;

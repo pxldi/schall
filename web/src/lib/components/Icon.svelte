@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { icons, type IconName } from '$lib/icons';
+  import { allIcons, type IconName } from '$lib/icons';
   import { cn } from '$lib/utils';
 
   // Every icon in Schall is drawn here, by name, from the Misprint set in
@@ -37,7 +37,7 @@
   // text beside it.
   const steps = { sm: '0.875rem', md: '1rem', lg: '1.25rem' };
   const length = $derived(typeof size === 'number' ? `${size}px` : steps[size]);
-  const parts = $derived(icons[name]);
+  const parts = $derived(allIcons[name]);
 </script>
 
 <svg
