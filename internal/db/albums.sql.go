@@ -428,6 +428,43 @@ func (q *Queries) ReleaseCoverArt(ctx context.Context, albumID uuid.UUID) (Relea
 	return i, err
 }
 
+const releaseCoversWithoutInks = `-- name: ReleaseCoversWithoutInks :many
+SELECT album_id, image, fetched_at
+FROM release_cover_art
+WHERE image IS NOT NULL AND palette IS NULL
+ORDER BY album_id
+LIMIT $1
+`
+
+type ReleaseCoversWithoutInksRow struct {
+	AlbumID   uuid.UUID          `json:"album_id"`
+	Image     []byte             `json:"image"`
+	FetchedAt pgtype.Timestamptz `json:"fetched_at"`
+}
+
+// The cached pictures nobody has read inks from yet: the covers cached before
+// inks existed, and any whose reading was skipped. fetched_at comes along so
+// the write below lands only on the picture that was read.
+func (q *Queries) ReleaseCoversWithoutInks(ctx context.Context, limit int32) ([]ReleaseCoversWithoutInksRow, error) {
+	rows, err := q.db.Query(ctx, releaseCoversWithoutInks, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReleaseCoversWithoutInksRow{}
+	for rows.Next() {
+		var i ReleaseCoversWithoutInksRow
+		if err := rows.Scan(&i.AlbumID, &i.Image, &i.FetchedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const releaseFoldersToPicture = `-- name: ReleaseFoldersToPicture :many
 SELECT DISTINCT
     albums.id,
@@ -497,6 +534,48 @@ func (q *Queries) ReleaseFoldersToPicture(ctx context.Context) ([]ReleaseFolders
 			&i.MusicbrainzReleaseID,
 			&i.Source,
 			&i.Folder,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const releaseInks = `-- name: ReleaseInks :many
+SELECT album_id, ink_dark::text AS ink_dark, ink_light::text AS ink_light,
+       COALESCE(palette, '{}')::text[] AS palette
+FROM release_cover_art
+WHERE album_id = ANY($1::uuid[])
+  AND ink_dark IS NOT NULL
+`
+
+type ReleaseInksRow struct {
+	AlbumID  uuid.UUID `json:"album_id"`
+	InkDark  string    `json:"ink_dark"`
+	InkLight string    `json:"ink_light"`
+	Palette  []string  `json:"palette"`
+}
+
+// The inks of several releases at once, for the lists and pages that print in
+// them. A release with no picture, or a picture with no inks, has no row.
+func (q *Queries) ReleaseInks(ctx context.Context, albumIds []uuid.UUID) ([]ReleaseInksRow, error) {
+	rows, err := q.db.Query(ctx, releaseInks, albumIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReleaseInksRow{}
+	for rows.Next() {
+		var i ReleaseInksRow
+		if err := rows.Scan(
+			&i.AlbumID,
+			&i.InkDark,
+			&i.InkLight,
+			&i.Palette,
 		); err != nil {
 			return nil, err
 		}
@@ -618,32 +697,84 @@ func (q *Queries) ReleasesMissingCoverArt(ctx context.Context, limit int32) ([]R
 }
 
 const saveReleaseCoverArt = `-- name: SaveReleaseCoverArt :exec
-INSERT INTO release_cover_art (album_id, image, content_type, source, fetched_at)
-VALUES ($1, $2, $3, $4, now())
+INSERT INTO release_cover_art (
+    album_id, image, content_type, source, fetched_at, ink_dark, ink_light, palette
+)
+VALUES (
+    $1, $2, $3, $4, now(),
+    $5, $6, $7::text[]
+)
 ON CONFLICT (album_id) DO UPDATE
 SET image = EXCLUDED.image,
     content_type = EXCLUDED.content_type,
     source = EXCLUDED.source,
-    fetched_at = EXCLUDED.fetched_at
+    fetched_at = EXCLUDED.fetched_at,
+    ink_dark = EXCLUDED.ink_dark,
+    ink_light = EXCLUDED.ink_light,
+    palette = EXCLUDED.palette
 `
 
 type SaveReleaseCoverArtParams struct {
-	AlbumID     uuid.UUID `json:"album_id"`
-	Image       []byte    `json:"image"`
-	ContentType string    `json:"content_type"`
-	Source      string    `json:"source"`
+	AlbumID     uuid.UUID   `json:"album_id"`
+	Image       []byte      `json:"image"`
+	ContentType string      `json:"content_type"`
+	Source      string      `json:"source"`
+	InkDark     pgtype.Text `json:"ink_dark"`
+	InkLight    pgtype.Text `json:"ink_light"`
+	Palette     []string    `json:"palette"`
 }
 
 // A row with no image is the answer "asked, and there is none", which is what
 // stops the archive being asked again on every page view.
+//
+// The inks travel with the picture they were read from, so a new picture never
+// sits under the old one's inks. NULL inks and palette leave the reading to the
+// sweep.
 func (q *Queries) SaveReleaseCoverArt(ctx context.Context, arg SaveReleaseCoverArtParams) error {
 	_, err := q.db.Exec(ctx, saveReleaseCoverArt,
 		arg.AlbumID,
 		arg.Image,
 		arg.ContentType,
 		arg.Source,
+		arg.InkDark,
+		arg.InkLight,
+		arg.Palette,
 	)
 	return err
+}
+
+const saveReleaseInks = `-- name: SaveReleaseInks :execrows
+UPDATE release_cover_art
+SET ink_dark = $1,
+    ink_light = $2,
+    palette = $3::text[]
+WHERE album_id = $4
+  AND fetched_at = $5
+  AND image IS NOT NULL
+`
+
+type SaveReleaseInksParams struct {
+	InkDark   pgtype.Text        `json:"ink_dark"`
+	InkLight  pgtype.Text        `json:"ink_light"`
+	Palette   []string           `json:"palette"`
+	AlbumID   uuid.UUID          `json:"album_id"`
+	FetchedAt pgtype.Timestamptz `json:"fetched_at"`
+}
+
+// An empty palette with NULL inks records "read, and nothing decoded", so the
+// picture is not read again until it changes.
+func (q *Queries) SaveReleaseInks(ctx context.Context, arg SaveReleaseInksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveReleaseInks,
+		arg.InkDark,
+		arg.InkLight,
+		arg.Palette,
+		arg.AlbumID,
+		arg.FetchedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const trackToLyric = `-- name: TrackToLyric :one

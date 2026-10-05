@@ -55,6 +55,8 @@ type searchReleaseResult struct {
 	ReleaseDate     string `json:"releaseDate,omitempty"`
 	TrackCount      int32  `json:"trackCount"`
 	OwnedTrackCount int32  `json:"ownedTrackCount"`
+	// Inks are the two inks read from the cover, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 type searchTrackResult struct {
@@ -178,10 +180,17 @@ func (api *API) globalSearch(response http.ResponseWriter, request *http.Request
 		api.internalError(response, request, err)
 		return
 	}
-	api.writeJSON(response, http.StatusOK, searchResults(query, limit, results))
+	releaseIDs := make([]uuid.UUID, 0, len(results.Releases))
+	for _, row := range results.Releases {
+		releaseIDs = append(releaseIDs, row.ID)
+	}
+	inks := api.releaseInks(request.Context(), releaseIDs)
+	api.writeJSON(response, http.StatusOK, searchResults(query, limit, results, inks))
 }
 
-func searchResults(query string, limit int32, results db.SearchResults) searchResponse {
+func searchResults(
+	query string, limit int32, results db.SearchResults, inks map[uuid.UUID]inksResponse,
+) searchResponse {
 	payload := emptySearchResponse(query, limit)
 	payload.Totals = searchTotals{
 		Artists:   results.Totals.Artists,
@@ -200,7 +209,7 @@ func searchResults(query string, limit int32, results db.SearchResults) searchRe
 		release := searchReleaseResult{
 			ID: row.ID, Title: row.Title, ArtistID: row.ArtistID,
 			ArtistName: row.ArtistName, AlbumType: row.AlbumType, TrackCount: row.TrackCount,
-			OwnedTrackCount: row.OwnedTrackCount,
+			OwnedTrackCount: row.OwnedTrackCount, Inks: rowInks(inks, row.ID),
 		}
 		if row.ReleaseDate.Valid {
 			release.ReleaseDate = row.ReleaseDate.Time.Format("2006-01-02")
