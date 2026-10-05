@@ -45,7 +45,7 @@
 <div class="flex flex-row gap-10 px-4 pb-10 pt-6 sm:px-6">
   <nav
     aria-label="Settings sections"
-    class="sticky top-[calc(var(--topbar-height)+1.5rem)] flex w-[12.5rem] shrink-0 flex-col gap-0.5 self-start"
+    class="sticky top-[calc(var(--topbar-height)+1.5rem)] flex w-[10.5rem] shrink-0 flex-col gap-0.5 self-start"
   >
     {#each categories as category (category.href)}
       {@const active = category.href === current?.href}

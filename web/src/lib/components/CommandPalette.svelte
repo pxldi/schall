@@ -144,7 +144,7 @@
   }
 
   const rowClass =
-    'relative grid grid-cols-[36px_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
+    'relative grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
     'rounded-row border-b border-line-thin px-[18px] py-2 text-inherit no-underline ' +
     'transition-[background] last:border-b-0 hover:bg-duo-light/10';
 
