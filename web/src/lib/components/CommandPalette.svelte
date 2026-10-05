@@ -8,7 +8,7 @@
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
 
-  // One search field, summoned from anywhere with ⌘K, answering across the five
+  // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
   // exists: every row is a link to the page that owns the thing, and the palette
   // never grows a filter, a sort, a second page of results or an action of its
@@ -145,7 +145,12 @@
     opener = document.activeElement;
     open = true;
     // The field does not exist yet on the frame the palette opens.
-    queueMicrotask(() => box?.focus());
+    queueMicrotask(() => {
+      box?.focus();
+      // A palette opened by typing holds that first character; the caret goes
+      // after it so the next key continues the word.
+      box?.setSelectionRange(typed.length, typed.length);
+    });
   }
 
   function dismiss() {
@@ -178,8 +183,7 @@
     selected = Math.min(Math.max(selected + by, 0), entries.length - 1);
   }
 
-  // The button in the sidebar, which is how somebody who does not know the key
-  // opens this. It is an event rather than a prop because the palette is
+  // The search button in the shell, and the 404 page's Search button. It is an event rather than a prop because the palette is
   // mounted by the root layout and the button lives inside the shell, and
   // neither is the other's parent.
   $effect(() => {
@@ -191,13 +195,31 @@
     return () => window.removeEventListener('schall:search', summoned);
   });
 
-  // ⌘K from anywhere. The palette is reachable from every page, so the listener
-  // is on the window rather than on any one of them.
+  // Typing anywhere opens search with what was typed, so there is no shortcut
+  // to learn. A key is left alone when something else could be its reader: a
+  // field, an open dialog or menu, a modifier held for the browser, or a page
+  // shortcut that took the key first (the review queue's j, k and 1–9 call
+  // preventDefault). That last check waits a task, because the page's own
+  // window listener may run after this one.
+  const typingTargets =
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], dialog[open], [role="menu"], [role="listbox"]';
+
+  function startsSearch(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented || event.isComposing) return false;
+    if (event.metaKey || event.ctrlKey || event.altKey) return false;
+    if (event.key.length !== 1 || event.key.trim() === '') return false;
+    const target = event.target;
+    if (target instanceof Element && target.closest(typingTargets)) return false;
+    return document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]') === null;
+  }
+
   function onWindowKeydown(event: KeyboardEvent) {
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
-    event.preventDefault();
-    if (open) box?.select();
-    else summon();
+    if (open || !startsSearch(event)) return;
+    setTimeout(() => {
+      if (open || event.defaultPrevented) return;
+      typed = event.key;
+      summon();
+    });
   }
 
   function onFieldKeydown(event: KeyboardEvent) {

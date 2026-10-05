@@ -75,9 +75,16 @@ function mount() {
   });
 }
 
-/** The one press that brings the palette up, from wherever the reader is. */
+/** The search button in the shell, which opens the palette empty. */
 async function summon() {
-  await fireEvent.keyDown(window, { key: 'k', metaKey: true });
+  window.dispatchEvent(new CustomEvent('schall:search'));
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+/** A key pressed on the page itself, with nothing focused. */
+async function typeOnPage(key: string, init: KeyboardEventInit = {}) {
+  await fireEvent.keyDown(document.body, { key, ...init });
+  await vi.advanceTimersByTimeAsync(0);
 }
 
 function field() {
@@ -129,12 +136,78 @@ describe('CommandPalette', () => {
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  it('comes up on the one press, from wherever the reader is', async () => {
+  it('comes up from the search button', async () => {
     mount();
 
     await summon();
 
     expect(field()).toBeTruthy();
+  });
+
+  it('comes up when somebody starts typing, holding what they typed', async () => {
+    mount();
+
+    await typeOnPage('r');
+
+    expect((field() as HTMLInputElement).value).toBe('r');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(asked).toEqual(['/api/v1/search?q=r']);
+  });
+
+  it('no longer opens on Ctrl K or any held modifier', async () => {
+    mount();
+
+    await typeOnPage('k', { ctrlKey: true });
+    await typeOnPage('k', { metaKey: true });
+    await typeOnPage('k', { altKey: true });
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('leaves keys alone that are not characters', async () => {
+    mount();
+
+    await typeOnPage(' ');
+    await typeOnPage('Enter');
+    await typeOnPage('ArrowDown');
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('leaves typing in a field to that field', async () => {
+    mount();
+    const other = document.createElement('input');
+    document.body.append(other);
+
+    await fireEvent.keyDown(other, { key: 'r' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+    other.remove();
+  });
+
+  it('leaves a key to an open dialog', async () => {
+    mount();
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    document.body.append(dialog);
+
+    await typeOnPage('r');
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+    dialog.remove();
+  });
+
+  it('leaves a key that a page shortcut already took', async () => {
+    mount();
+    const claim = (event: KeyboardEvent) => event.preventDefault();
+    window.addEventListener('keydown', claim);
+
+    await typeOnPage('j');
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+    window.removeEventListener('keydown', claim);
   });
 
   // Summoned and empty, the palette is one line high. A hint line saying a query
