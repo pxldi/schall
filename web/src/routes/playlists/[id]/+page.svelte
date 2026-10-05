@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
   import { api, type PlayerPairing, type PlaylistEntry, type UnpairedFile } from '$lib/api';
@@ -272,7 +273,7 @@
     <BackLink fallback="/playlists" label="Back to playlists" class="text-ink-2" />
     <h1
       aria-label="Loading playlist"
-      class="inline-block w-fit min-w-48 animate-pulse rounded-row bg-surface-regular text-poster-m font-extrabold text-transparent"
+      class="skeleton inline-block w-fit min-w-48 text-poster-m font-extrabold text-transparent"
     >
       Loading playlist
     </h1>
@@ -297,9 +298,9 @@
       aria-busy="true"
       aria-label="Loading playlist entries"
     >
-      <div aria-hidden="true" class="h-10 animate-pulse border-b border-line-thin"></div>
+      <div aria-hidden="true" class="flex h-10 flex-col justify-center gap-1.5 border-b border-line-thin px-3"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
       {#each Array.from({ length: playlistEntrySkeletonCount }) as _}
-        <div aria-hidden="true" class="h-14 animate-pulse border-b border-line-thin last:border-b-0"></div>
+        <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
       {/each}
         </section>
       {/snippet}
@@ -331,7 +332,7 @@
             aria-label="Loading player pairing"
           >
             {#each Array.from({ length: 40 }) as _}
-              <div aria-hidden="true" class="h-14 animate-pulse border-b border-line-thin last:border-b-0"></div>
+              <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
             {/each}
           </div>
         {:else if pairingData?.configured}
