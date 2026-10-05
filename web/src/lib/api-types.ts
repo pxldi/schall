@@ -62,11 +62,7 @@ export interface Overview {
     listens: { total: number; previous: number; days: OverviewDay[] };
     mostPlayed: OverviewPlayed[];
     topArtists: OverviewArtist[];
-    whenYouListen: {
-      cells: number[][];
-      peakHour: number;
-      busiestWeekday: string;
-    };
+    whenYouListen: { cells: number[][]; peakHour: number; busiestWeekday: string };
     topAlbums: OverviewAlbum[];
     sessions: OverviewSession[];
   };
@@ -121,7 +117,7 @@ export interface Artist {
    * not a question that can be asked. Absent for every other artist. */
   source?: string;
   lastRefreshedAt: string | null;
-  refreshStatus: "pending" | "queued" | "running" | "completed" | "failed";
+  refreshStatus: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
   refreshError?: string;
 }
 
@@ -181,19 +177,19 @@ export interface ArtistList {
  * `completeness` and `sort` are answered by the server rather than the browser
  * so narrowing and ordering happen before the list arrives. */
 export interface ArtistFilters {
-  scope?: "followed" | "held";
+  scope?: 'followed' | 'held';
   query?: string;
-  completeness?: "incomplete" | "complete" | "attention";
+  completeness?: 'incomplete' | 'complete' | 'attention';
   /** One genre, picked from the list the catalogue holds. It is matched whole
    * rather than searched for, so it is never a pattern. */
   genre?: string;
-  sort?: "name" | "least-complete" | "most-missing";
+  sort?: 'name' | 'least-complete' | 'most-missing';
 }
 
 /** What counts as missing for an artist and what "want everything missing"
  * wants. A filter on counting and auto-wanting, never on what is shown:
  * unmonitored releases stay browsable and wantable by hand. */
-export type MonitorLevel = "everything" | "main" | "albums_eps" | "owned";
+export type MonitorLevel = 'everything' | 'main' | 'albums_eps' | 'owned';
 
 export interface ArtistDetail extends Artist {
   albumCount: number;
@@ -233,7 +229,7 @@ export interface Label {
   followed: boolean;
   followedAt: string | null;
   lastRefreshedAt: string | null;
-  refreshStatus: "pending" | "queued" | "running" | "completed" | "failed";
+  refreshStatus: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
 }
 
 export interface LabelListItem extends Label {
@@ -332,7 +328,7 @@ export interface UnfollowResult {
   name: string;
   sortName: string;
   followed: false;
-  outcome: "held" | "released";
+  outcome: 'held' | 'released';
   catalogueSummary?: string;
   mappedTrackCount: number;
 }
@@ -362,7 +358,7 @@ export interface Release {
   artistMonitorLevel: MonitorLevel;
   musicbrainzReleaseId: string | null;
   editionSelectionReason?: string;
-  trackRefreshStatus: "pending" | "queued" | "running" | "completed" | "failed";
+  trackRefreshStatus: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
   /** Whether a picture of the release is cached. A list asks for the covers
    * that exist and not for every row; a release nobody has pictured yet, or
    * one the archives have no sleeve for, has none. */
@@ -378,7 +374,7 @@ export interface Release {
  * total the catalogue rather than browse it still need. */
 export interface ReleaseFilters {
   artistId?: string;
-  scope?: "followed" | "library";
+  scope?: 'followed' | 'library';
   query?: string;
   status?: ReleaseStatus;
   /** The two halves of an artist's completeness, counted by their monitor level
@@ -386,20 +382,15 @@ export interface ReleaseFilters {
    * says what shape a release is in, this says whether it is part of what the
    * user asked to keep complete. */
   completeness?: ReleaseCompleteness;
-  sort?: "artist" | "title" | "year" | "owned";
-  direction?: "asc" | "desc";
+  sort?: 'artist' | 'title' | 'year' | 'owned';
+  direction?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
 }
 
-export type ReleaseStatus =
-  | "owned"
-  | "partial"
-  | "missing"
-  | "untracked"
-  | "failed";
+export type ReleaseStatus = 'owned' | 'partial' | 'missing' | 'untracked' | 'failed';
 
-export type ReleaseCompleteness = "owned" | "missing";
+export type ReleaseCompleteness = 'owned' | 'missing';
 
 export interface ReleaseList {
   items: Release[];
@@ -449,7 +440,7 @@ export interface ReleaseDetail {
    * tracks is an ordinary permanent state for music held locally, so the tracks
    * alone cannot say whether waiting would ever end: 'queued' and 'running' mean
    * work is under way, and anything else means nothing is coming. */
-  trackRefreshStatus: "pending" | "queued" | "running" | "completed" | "failed";
+  trackRefreshStatus: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
   /** What MusicBrainz's community voted this release is, most voted first.
    * Display only. Empty both when nobody voted and when nobody has asked. */
   genres: string[];
@@ -548,7 +539,7 @@ export interface TrackList {
 
 export interface RefreshJob {
   jobId: string;
-  status: "queued" | "running";
+  status: 'queued' | 'running';
   createdAt: string;
 }
 
@@ -680,7 +671,7 @@ export interface LibrarySummary {
   pendingCount: number;
   failedCount: number;
   totalSizeBytes: number;
-  scanStatus: "idle" | "queued" | "running" | "completed" | "failed";
+  scanStatus: 'idle' | 'queued' | 'running' | 'completed' | 'failed';
   scanError?: string;
   scanStartedAt: string | null;
   scanCompletedAt: string | null;
@@ -713,7 +704,7 @@ export interface LibraryFile {
   isrc?: string;
   missingAt?: string;
   scanError?: string;
-  matchStatus: "matched" | "unmatched" | "ambiguous" | "duplicate";
+  matchStatus: 'matched' | 'unmatched' | 'ambiguous' | 'duplicate';
   matchCandidateCount: number;
   /** Set when somebody said they meant to have this twice. Only meaningful
    * while matchStatus is 'duplicate'. */
@@ -826,15 +817,15 @@ export interface KeptCopy {
 // What Schall knows about the external identity of one file, which is a
 // separate question from whether the local catalogue holds a track for it.
 export type ResolutionStatus =
-  | "pending"
-  | "resolved"
-  | "needs_review"
-  | "conflict"
-  | "local_only"
-  | "failed"
+  | 'pending'
+  | 'resolved'
+  | 'needs_review'
+  | 'conflict'
+  | 'local_only'
+  | 'failed'
   // The file is named by its address on another service instead of by a
   // recording. Somebody pasted that address and confirmed it.
-  | "source";
+  | 'source';
 
 /** What SoundCloud's oEmbed endpoint said about one track.
  *
@@ -886,7 +877,7 @@ export interface FileIdentity {
   trackTitle?: string;
   durationMs?: number;
   isrc?: string;
-  kind: "external" | "local_only";
+  kind: 'external' | 'local_only';
   /** The short name Schall records the evidence under, such as `recording-id`.
    * It is for code to read. `methodText` is the same thing written out, and it
    * is the only one of the two that may be shown to a person. */
@@ -919,7 +910,7 @@ export interface FileResolution {
   summary?: string;
   error?: string;
   attemptedAt?: string;
-  matchStatus: LibraryFile["matchStatus"];
+  matchStatus: LibraryFile['matchStatus'];
   identity: FileIdentity | null;
   candidates: IdentityCandidate[];
 }
@@ -937,10 +928,7 @@ export interface LibraryFiles {
  * are not matching states — they say a file is not on disc, or that it is and
  * could not be read — and they are in the same field because the reader picking
  * one is asking one question: which files am I looking at. */
-export type LibraryFileStatus =
-  | LibraryFile["matchStatus"]
-  | "missing"
-  | "unreadable";
+export type LibraryFileStatus = LibraryFile['matchStatus'] | 'missing' | 'unreadable';
 
 export interface LibraryFileFilters {
   status?: LibraryFileStatus;
@@ -985,7 +973,7 @@ export interface SpotifySettings {
   clientSecretSet: boolean;
   connected: boolean;
   accountName?: string;
-  connectionStatus: "unknown" | "ok" | "failed";
+  connectionStatus: 'unknown' | 'ok' | 'failed';
   connectionError?: string;
   lastCheckedAt: string | null;
   // What must be registered on the Spotify application for the connect flow
@@ -1000,13 +988,7 @@ export interface Playlist {
   // uploaded; its sourceId is the file's own name. 'weekly' and
   // 'new_releases' are the two Schall makes for itself, one row each for the
   // life of the installation.
-  source:
-    | "spotify"
-    | "manual"
-    | "navidrome"
-    | "file"
-    | "weekly"
-    | "new_releases";
+  source: 'spotify' | 'manual' | 'navidrome' | 'file' | 'weekly' | 'new_releases';
   sourceId?: string;
   sourceRevision?: string;
   name: string;
@@ -1107,12 +1089,7 @@ export interface UnpairedFile {
   // The same path with its non-ASCII escaped and its length in bytes, so a
   // difference that does not survive being displayed is still visible.
   pathEscaped: string;
-  reason:
-    | "no_search_term"
-    | "no_candidates"
-    | "no_path_match"
-    | "path_repeated"
-    | string;
+  reason: 'no_search_term' | 'no_candidates' | 'no_path_match' | 'path_repeated' | string;
   searched: string[];
   candidates: number;
   offered: string[];
@@ -1124,7 +1101,7 @@ export interface SlskdSettings {
   apiKeySet: boolean;
   enabled: boolean;
   searchTimeoutSeconds: number;
-  connectionStatus: "unknown" | "ok" | "failed";
+  connectionStatus: 'unknown' | 'ok' | 'failed';
   connectionDetail?: string;
   connectionError?: string;
   lastCheckedAt: string | null;
@@ -1143,7 +1120,7 @@ export interface NavidromeSettings {
   username: string;
   passwordSet: boolean;
   enabled: boolean;
-  connectionStatus: "unknown" | "ok" | "failed";
+  connectionStatus: 'unknown' | 'ok' | 'failed';
   connectionDetail?: string;
   connectionError?: string;
   lastCheckedAt: string | null;
@@ -1169,11 +1146,11 @@ export interface NotificationSettings {
   configured: boolean;
   // 'ntfy' is the push service whose app puts the message on a phone; 'webhook'
   // is anything else, and is sent a JSON object.
-  kind: "ntfy" | "webhook";
+  kind: 'ntfy' | 'webhook';
   endpoint: string;
   tokenSet: boolean;
   enabled: boolean;
-  connectionStatus: "unknown" | "ok" | "failed";
+  connectionStatus: 'unknown' | 'ok' | 'failed';
   connectionError?: string;
   lastCheckedAt: string | null;
 }
@@ -1182,7 +1159,7 @@ export interface NotificationSettings {
 // installation that asks nobody for a credential.
 export interface Me {
   actor: string;
-  auth: "browser" | "token" | "open";
+  auth: 'browser' | 'token' | 'open';
 }
 
 // One phone that holds a token. The token itself is not here: only its hash is
@@ -1204,7 +1181,7 @@ export interface MintedPhone extends Phone {
 }
 
 export interface NotificationSettingsInput {
-  kind: "ntfy" | "webhook";
+  kind: 'ntfy' | 'webhook';
   endpoint: string;
   // Empty keeps the stored token, which is why removing one needs its own flag:
   // the page is never shown the token, so it cannot send it back to keep it.
@@ -1223,7 +1200,7 @@ export interface ListenBrainzSettings {
   // between deployments, so it is stored rather than compiled in.
   similarityAlgorithm: string;
   enabled: boolean;
-  connectionStatus: "unknown" | "ok" | "failed";
+  connectionStatus: 'unknown' | 'ok' | 'failed';
   connectionDetail?: string;
   connectionError?: string;
   lastCheckedAt: string | null;
@@ -1322,14 +1299,14 @@ export interface RecommendationPageRequest {
 }
 
 /** The level a dismissal applies at. It is permanent at that level. */
-export type RecommendationSubject = "recording" | "release_group" | "artist";
+export type RecommendationSubject = 'recording' | 'release_group' | 'artist';
 
-export type RecommendationFeedbackSignal = "more_like_this" | "less_like_this";
+export type RecommendationFeedbackSignal = 'more_like_this' | 'less_like_this';
 
 // Which list to read. ListenBrainz is the account's collaborative-filtered and
 // similar-recording answer; Schall is the own engine, built from the listens
 // already copied (ADR 0039). The two are ranked apart and read one at a time.
-export type RecommendationSource = "listenbrainz" | "schall";
+export type RecommendationSource = 'listenbrainz' | 'schall';
 
 // The weekly playlist. Schall picks a few suggestions a week, obtains them, and
 // puts them here; a song nobody kept is removed again a week later.
@@ -1339,7 +1316,7 @@ export type RecommendationSource = "listenbrainz" | "schall";
 export interface WeeklySettings {
   enabled: boolean;
   songsPerWeek: number;
-  mode: "report" | "remove";
+  mode: 'report' | 'remove';
   /** Percentage of the week's songs taken from the collection. */
   libraryShare: number;
   /** Keep at most one song from each artist in the week. */
@@ -1361,7 +1338,7 @@ export interface WeeklyLease {
   path: string;
   artist: string;
   title: string;
-  state: "held" | "leaving";
+  state: 'held' | 'leaving';
   grantedAt: string;
   expiresAt: string;
   removesAt: string | null;
@@ -1375,8 +1352,8 @@ export interface WeeklyLease {
  * slots it took back from wants that had a week and could not be proven. */
 export interface WeeklyRun {
   id: string;
-  mode: "report" | "remove";
-  status: "running" | "complete" | "partial" | "failed";
+  mode: 'report' | 'remove';
+  status: 'running' | 'complete' | 'partial' | 'failed';
   detail: string;
   chosen: number;
   wanted: number;
@@ -1401,8 +1378,8 @@ export interface WeeklyOverview {
 /** One answer about one signal for one song. `unreadable` is not `absent`: a
  * song nothing could be read about is kept, never removed. */
 export interface WeeklyKeepRead {
-  signal: "navidrome_star" | "schall_keep";
-  outcome: "kept" | "absent" | "unreadable";
+  signal: 'navidrome_star' | 'schall_keep';
+  outcome: 'kept' | 'absent' | 'unreadable';
   detail: string;
   readAt: string;
 }
@@ -1439,7 +1416,7 @@ export interface LibraryLayout {
 // holds. `eligible` is every file matched to a catalogue track, which is what a
 // pass covers; a file matched to nothing is never read or written.
 export interface LibraryTagRun {
-  status: "idle" | "queued" | "running" | "completed" | "failed" | "cancelled";
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   error?: string;
   startedAt?: string;
   completedAt?: string;
@@ -1464,7 +1441,7 @@ export interface LibraryMove {
   libraryFileId: string;
   fromPath: string;
   toPath: string;
-  status: "planned" | "moved" | "failed" | "reverted";
+  status: 'planned' | 'moved' | 'failed' | 'reverted';
   error?: string;
   movedAt?: string;
 }
@@ -1503,14 +1480,14 @@ export interface LibraryLayoutRun {
 // them. 'V0' is LAME's variable-rate setting, which spends bits where the
 // music needs them rather than at a fixed rate.
 export const transcodeBitrates = [
-  "V0",
-  "128",
-  "160",
-  "192",
-  "224",
-  "256",
-  "288",
-  "320",
+  'V0',
+  '128',
+  '160',
+  '192',
+  '224',
+  '256',
+  '288',
+  '320'
 ] as const;
 
 export type TranscodeBitrate = (typeof transcodeBitrates)[number];
@@ -1518,7 +1495,7 @@ export type TranscodeBitrate = (typeof transcodeBitrates)[number];
 export interface ImportSettings {
   // What Schall does with the provider's copy once it has imported a release.
   // 'keep' is the default and takes nothing away.
-  sourceRetention: "keep" | "delete";
+  sourceRetention: 'keep' | 'delete';
   inboxPath?: string;
   // Whether Schall could remove anything from that folder at all. The
   // completed-download folder is usually mounted read-only.
@@ -1535,9 +1512,9 @@ export interface ImportSettings {
   // to begin with; 'above_target' also takes a lossy file whose bit rate is
   // higher than the target's.
   transcodeEnabled: boolean;
-  transcodeTarget: "mp3";
+  transcodeTarget: 'mp3';
   transcodeBitrate: TranscodeBitrate;
-  transcodeWhen: "lossless" | "above_target";
+  transcodeWhen: 'lossless' | 'above_target';
   // Whether an encoder was found on this machine. transcodeEnabled cannot be
   // saved as true without one; this is why, and it is shown rather than
   // discovered as a background job that never does anything.
@@ -1551,16 +1528,16 @@ export interface ImportSettings {
 // keep its own list of the four that go.
 export interface InboxCleanupClass {
   class:
-    | "imported"
-    | "refused"
-    | "settled"
-    | "unknown"
-    | "kept_question"
-    | "kept_open"
-    | "kept_recent"
-    | "kept_unconfirmed"
-    | "kept_undecided"
-    | "kept_unsafe_path";
+    | 'imported'
+    | 'refused'
+    | 'settled'
+    | 'unknown'
+    | 'kept_question'
+    | 'kept_open'
+    | 'kept_recent'
+    | 'kept_unconfirmed'
+    | 'kept_undecided'
+    | 'kept_unsafe_path';
   files: number;
   bytes: number;
   // What this class chose and could not remove. Those files are still there.
@@ -1576,7 +1553,7 @@ export interface InboxCleanup {
   requestedBy?: string;
   requestedAt: string;
   dryRun: boolean;
-  status: "queued" | "running" | "finished" | "failed";
+  status: 'queued' | 'running' | 'finished' | 'failed';
   startedAt?: string;
   finishedAt?: string;
   error?: string;
@@ -1594,7 +1571,7 @@ export interface InboxCleanup {
 // MusicBrainz recording the policy would still shrink, whether or not a pass
 // has ever been asked for.
 export interface TranscodeSweep {
-  status: "idle" | "queued" | "running" | "completed" | "failed" | "cancelled";
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   error?: string;
   startedAt?: string;
   completedAt?: string;
@@ -1665,7 +1642,7 @@ export interface SourceRefusal {
   // The sentence to show. 'kind' is the rule that produced it: 'bit_rate' for
   // the floor, 'format' for the never-fetch list.
   reason: string;
-  kind: "format" | "bit_rate";
+  kind: 'format' | 'bit_rate';
 }
 
 export interface SourceSearchResult {
@@ -1678,7 +1655,7 @@ export interface SourceSearchResult {
   firstReleaseDate: string;
   // 'cancelled' is a release the run was stopped before reaching. It is not an
   // answer and never becomes one: nothing looked for it, and nothing will.
-  status: "queued" | "searching" | "found" | "none" | "failed" | "cancelled";
+  status: 'queued' | 'searching' | 'found' | 'none' | 'failed' | 'cancelled';
   query: string;
   candidates: SourceCandidate[];
   // The copies the format preferences took out of this search. A release whose
@@ -1708,7 +1685,7 @@ export interface SourceSearchResult {
 /** One thing that happened, or a run of the same thing. Everything here was
  * already recorded elsewhere; the feed reads it and writes nothing. */
 export interface ActivityEvent {
-  kind: "arrived" | "refused" | "asked" | "removed";
+  kind: 'arrived' | 'refused' | 'asked' | 'removed';
   /** When it happened, and for a run the most recent of them. */
   at: string;
   /** When a run started. The same as `at` for a single event. */
@@ -1764,7 +1741,7 @@ export interface SourcePreferences {
   lossy: Record<string, number>;
 }
 
-export type SourcePreferencesInput = Omit<SourcePreferences, "known" | "lossy">;
+export type SourcePreferencesInput = Omit<SourcePreferences, 'known' | 'lossy'>;
 
 // Whether the sweep that looks for library files below the source-preference
 // bit-rate floor is switched on, and how many files it would find right now.
@@ -1852,14 +1829,7 @@ export interface DownloadRequestFile {
 export interface DownloadFileTransfer {
   // The remote name, which is what a retry has to ask for.
   path: string;
-  status:
-    | "queued"
-    | "searching"
-    | "downloading"
-    | "importing"
-    | "completed"
-    | "failed"
-    | "cancelled";
+  status: 'queued' | 'searching' | 'downloading' | 'importing' | 'completed' | 'failed' | 'cancelled';
   transferredBytes: number;
   error?: string;
   // Whether this file alone can be asked for again.
@@ -1872,7 +1842,7 @@ export interface DownloadFileTransfer {
 
 export interface TransferAttempt {
   attempt: number;
-  outcome: "completed" | "failed" | "cancelled";
+  outcome: 'completed' | 'failed' | 'cancelled';
   detail?: string;
   transferredBytes: number;
   recordedAt: string;
@@ -1888,7 +1858,7 @@ export interface TransferAttempt {
  * artist credit. `ruledOut` counts the offers already struck off for this want.
  */
 export interface ReviewItem {
-  kind: "copies" | "resolution" | "stopped";
+  kind: 'copies' | 'resolution' | 'stopped';
   target: AcquisitionTarget;
   copies: AcquiredCopy[];
   candidates: AcquisitionCandidate[];
@@ -1909,7 +1879,7 @@ export interface ReviewItem {
    * ask about; 'library_identity' is a file the library has not finished
    * saying what it is. Absent means the evidence is in and a person is the
    * only thing that can move it. */
-  waitingFor?: "musicbrainz" | "library_identity";
+  waitingFor?: 'musicbrainz' | 'library_identity';
   /** When the next automatic look is due, for the kind that waits on a clock. */
   waitingUntil?: string;
 }
@@ -2019,7 +1989,7 @@ export interface AcquisitionTargets {
 /** The states a want passes through while nobody has to do anything about it:
  * waiting to be resolved to a recording, waiting for the next attempt, and out
  * searching this minute. One pile to whoever asked for the music. */
-export const lookingFor = ["unresolved", "pending", "searching"] as const;
+export const lookingFor = ['unresolved', 'pending', 'searching'] as const;
 
 /** One copy a peer offered for a want, and what it came to. */
 export interface AcquiredCopy {
@@ -2029,18 +1999,12 @@ export interface AcquiredCopy {
   path: string;
   name: string;
   sizeBytes?: number;
-  verdict:
-    | "fetching"
-    | "undelivered"
-    | "accepted"
-    | "discarded_audio"
-    | "discarded_tags"
-    | "held";
-  decidedBy: "schall" | "user";
+  verdict: 'fetching' | 'undelivered' | 'accepted' | 'discarded_audio' | 'discarded_tags' | 'held';
+  decidedBy: 'schall' | 'user';
   summary: string;
   evidence?: AcquiredCopyEvidence;
   decidedAt: string;
-  origin?: { kind: "soulseek" | "address"; label: string };
+  origin?: { kind: 'soulseek' | 'address'; label: string };
   /** The library file this copy became, once the scan has made one. It is what
    * lets a screen point at the file rather than only describe it. */
   libraryFileId?: string;
@@ -2149,7 +2113,7 @@ export interface DownloadRequest {
   provider: string;
   username: string;
   directory: string;
-  status: "requested" | "started" | "completed" | "failed" | "cancelled";
+  status: 'requested' | 'started' | 'completed' | 'failed' | 'cancelled';
   fileCount: number;
   expectedTrackCount: number;
   totalSizeBytes: number;
@@ -2169,12 +2133,7 @@ export interface DownloadRequest {
   error?: string;
   // 'discarded' is a copy fetched for a want that was not the recording it was
   // fetched for. Nothing is waiting on it and nobody has to look at it.
-  importStatus:
-    | "pending"
-    | "validating"
-    | "imported"
-    | "needs_review"
-    | "discarded";
+  importStatus: 'pending' | 'validating' | 'imported' | 'needs_review' | 'discarded';
   importError?: string;
   importPath?: string;
   importedAt: string | null;
@@ -2226,8 +2185,8 @@ export interface DuplicateEvidence {
 export interface DuplicateFile {
   id: string;
   path: string;
-  state: "owned" | "unresolved";
-  matchStatus: "matched" | "unmatched" | "ambiguous" | "duplicate";
+  state: 'owned' | 'unresolved';
+  matchStatus: 'matched' | 'unmatched' | 'ambiguous' | 'duplicate';
   // The catalogue track an owned file is matched to.
   track?: string;
   // What the file itself says, when it says anything.
@@ -2240,14 +2199,14 @@ export interface DuplicateFile {
 // also on importError; this is the record of every earlier one.
 export interface ImportReview {
   kind:
-    | "paused"
-    | "revalidated"
-    | "imported"
-    | "resolved"
-    | "withdrawn"
-    | "source_removed"
-    | "source_retained"
-    | "discarded";
+    | 'paused'
+    | 'revalidated'
+    | 'imported'
+    | 'resolved'
+    | 'withdrawn'
+    | 'source_removed'
+    | 'source_retained'
+    | 'discarded';
   detail?: string;
   recordedAt: string;
   evidence?: ImportEvidence;
@@ -2283,7 +2242,7 @@ export interface ImportFileEvidence {
 // the catalogue does not — recorded because it is worth knowing, not because
 // it stood in the way.
 export interface ImportMatch {
-  method: "recording-id" | "isrc" | "position-and-title" | "title-and-duration";
+  method: 'recording-id' | 'isrc' | 'position-and-title' | 'title-and-duration';
   summary: string;
   notes?: string[];
 }
@@ -2340,13 +2299,7 @@ export interface DownloadProgress {
  * way; the three after it are what became of a copy once it arrived; `failed`
  * is a transfer that did not; `all` is every request, whichever pile it is in
  * and whether or not it is in one. */
-export type DownloadView =
-  | "open"
-  | "review"
-  | "imported"
-  | "discarded"
-  | "failed"
-  | "all";
+export type DownloadView = 'open' | 'review' | 'imported' | 'discarded' | 'failed' | 'all';
 
 /** How many requests each pile holds. The server counts them in the same pass
  * that reads the page, so a figure on a filter and the rows behind it are one
@@ -2365,7 +2318,7 @@ export interface DownloadCounts {
 
 export interface DownloadFilters {
   /** `questions` is Review's read of the paused imports, not a Downloads pile. */
-  view?: DownloadView | "questions";
+  view?: DownloadView | 'questions';
   limit?: number;
   offset?: number;
 }
@@ -2393,19 +2346,9 @@ export interface SourceOffer {
  * landing and the job being written, and startup asks for it again. `failed`
  * keeps its files, so the reason and the files it names are both still there.
  */
-export type UploadStatus =
-  | "staged"
-  | "queued"
-  | "validating"
-  | "imported"
-  | "failed";
+export type UploadStatus = 'staged' | 'queued' | 'validating' | 'imported' | 'failed';
 
-export type UploadFileState =
-  | "importing"
-  | "imported"
-  | "waiting"
-  | "set_aside"
-  | "failed";
+export type UploadFileState = 'importing' | 'imported' | 'waiting' | 'set_aside' | 'failed';
 
 /** One file in an upload, read back from its exact landed path once scanning
  * has made a library row for it. */
@@ -2446,12 +2389,7 @@ export interface UploadList {
 
 /** The five lanes the worker divides its work into: searching, downloads,
  * anchors, judging, and everything else. */
-export type JobLane =
-  | "acquisition"
-  | "transfers"
-  | "anchors"
-  | "judging"
-  | "general";
+export type JobLane = 'acquisition' | 'transfers' | 'anchors' | 'judging' | 'general';
 
 /** One job as the queue reads it. `error` is what the last attempt failed with,
  * which a queued job carries while it waits out its backoff — so a queued job
@@ -2468,7 +2406,7 @@ export interface Job {
   id: string;
   kind: string;
   lane: JobLane;
-  status: "queued" | "running";
+  status: 'queued' | 'running';
   attempts: number;
   maxAttempts: number;
   runAfter: string | null;
@@ -2623,7 +2561,7 @@ export interface PlaylistFileSkippedRow {
 
 export interface PlaylistFilePreview {
   name: string;
-  format: "csv" | "m3u";
+  format: 'csv' | 'm3u';
   columns: string[];
   rowCount: number;
   rows: PlaylistFileRow[];
