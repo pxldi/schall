@@ -849,14 +849,6 @@ a {
     border-color: color-mix(in srgb, var(--color-duo-light) 55%, transparent);
   }
 
-  .topbar-search kbd {
-    margin-left: auto;
-    padding: 0 0.3rem;
-    border: 1px solid color-mix(in srgb, var(--color-duo-light) 30%, transparent);
-    border-radius: var(--radius-row);
-    font: 600 0.625rem var(--font-sans);
-  }
-
   /* The wordmark: the one face at 800, tracked tight, lowercase. */
   .wordmark {
     display: inline-block;

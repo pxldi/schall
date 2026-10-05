@@ -19,7 +19,7 @@
   }: {
     /** Usually the album id, or "artist title" where there is no id. */
     seed: string;
-    /** The thing's own inks or palette. Defaults to the open page's inks. */
+    /** The thing's own inks or palette. Defaults to the open page's two inks. */
     inks?: Partial<Inks> | null;
     class?: string;
   } = $props();
@@ -27,7 +27,9 @@
   let canvas = $state<HTMLCanvasElement>();
   let size = $state(0);
 
-  const pair = $derived(inks ?? duoton.inks);
+  // The page's palette belongs to the page's cover, not to this thing, so only
+  // the page's two inks are borrowed.
+  const pair = $derived(inks ?? { dark: duoton.inks.dark, light: duoton.inks.light });
 
   $effect(() => {
     if (!canvas || !canPaint()) return;

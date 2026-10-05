@@ -14,6 +14,7 @@ let sourceNumber = 0;
 type CoverTestProps = {
   src?: string;
   fallback?: string;
+  seed?: string;
   eager?: boolean;
   onmissing?: () => void;
   class?: string;

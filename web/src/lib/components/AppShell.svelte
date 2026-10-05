@@ -105,7 +105,6 @@
     <button class="topbar-search ml-auto" onclick={openSearch}>
       <Search size={14} strokeWidth={2} aria-hidden="true" />
       <span>Search</span>
-      <kbd aria-hidden="true">Ctrl K</kbd>
     </button>
   </header>
 
