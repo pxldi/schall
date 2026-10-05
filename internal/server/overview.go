@@ -100,6 +100,10 @@ type overviewAdded struct {
 	AddedAt  time.Time `json:"addedAt"`
 	TrackID  *string   `json:"trackId"`
 	CoverURL *string   `json:"coverUrl"`
+	// Inks are the stored inks of the release whose cover CoverURL names, so
+	// the page is printed in them as soon as it arrives rather than after
+	// the browser has read the picture. Null otherwise.
+	Inks *inksResponse `json:"inks"`
 }
 
 type overviewResponse struct {
@@ -204,13 +208,24 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 	}
 	out.Library.Storage = api.overviewStorage(ctx)
 
+	covered := make([]uuid.UUID, 0, len(data.RecentlyAdded))
+	for _, row := range data.RecentlyAdded {
+		if row.HasCover && row.AlbumID.Valid {
+			covered = append(covered, uuidFromPg(row.AlbumID))
+		}
+	}
+	inks := api.releaseInks(ctx, covered)
 	out.RecentlyAdded = make([]overviewAdded, 0, len(data.RecentlyAdded))
 	for _, row := range data.RecentlyAdded {
-		out.RecentlyAdded = append(out.RecentlyAdded, overviewAdded{
+		added := overviewAdded{
 			Title: row.Title, Artist: row.Artist, AddedAt: row.AddedAt,
 			TrackID:  uuidString(row.TrackID),
 			CoverURL: listenCoverURL(row.AlbumID, row.HasCover, row.FileID, pgtype.Text{}, pgtype.Text{}),
-		})
+		}
+		if row.HasCover && row.AlbumID.Valid {
+			added.Inks = rowInks(inks, uuidFromPg(row.AlbumID))
+		}
+		out.RecentlyAdded = append(out.RecentlyAdded, added)
 	}
 	api.writeJSON(response, http.StatusOK, out)
 }

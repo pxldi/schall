@@ -70,8 +70,9 @@ type overviewJSON struct {
 		} `json:"growth"`
 	} `json:"library"`
 	RecentlyAdded []struct {
-		Title    string  `json:"title"`
-		CoverURL *string `json:"coverUrl"`
+		Title    string        `json:"title"`
+		CoverURL *string       `json:"coverUrl"`
+		Inks     *inksResponse `json:"inks"`
 	} `json:"recentlyAdded"`
 }
 
@@ -304,5 +305,48 @@ func TestOverviewPicturesRowsFromTheHeldFile(t *testing.T) {
 	}
 	if len(got.RecentlyAdded) != 1 || got.RecentlyAdded[0].CoverURL == nil || *got.RecentlyAdded[0].CoverURL != want {
 		t.Errorf("recently added = %+v, want the file's own cover", got.RecentlyAdded)
+	}
+}
+
+// A recently added row whose cover is the release's carries that release's
+// stored inks, so the Overview is printed in them from its first draw.
+func TestOverviewCarriesTheInksOfRecentlyAddedCovers(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	var albumID string
+	if err := pool.QueryRow(ctx, `
+		WITH artist AS (
+			INSERT INTO artists (name, sort_name) VALUES ('Portishead', 'Portishead') RETURNING id
+		), album AS (
+			INSERT INTO albums (artist_id, title) SELECT id, 'Dummy' FROM artist RETURNING id
+		), track AS (
+			INSERT INTO tracks (album_id, title, track_number) SELECT id, 'Roads', 1 FROM album RETURNING id
+		), file AS (
+			INSERT INTO library_files (path, size_bytes, modified_at) VALUES ('/music/roads.flac', 1000, now())
+			RETURNING id
+		), mapping AS (
+			INSERT INTO track_mappings (track_id, library_file_id, method)
+			SELECT track.id, file.id, 'manual' FROM track, file
+		), cover AS (
+			INSERT INTO release_cover_art (album_id, content_type, source, image, ink_dark, ink_light)
+			SELECT id, 'image/jpeg', 'test', '\xffd8'::bytea, '#0d1420', '#f2b48c' FROM album
+		)
+		SELECT id::text FROM album`).Scan(&albumID); err != nil {
+		t.Fatalf("insert a release with inks: %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	if len(got.RecentlyAdded) != 1 {
+		t.Fatalf("recently added = %+v, want one row", got.RecentlyAdded)
+	}
+	row := got.RecentlyAdded[0]
+	if row.CoverURL == nil || *row.CoverURL != "/api/v1/albums/"+albumID+"/cover" {
+		t.Fatalf("cover = %v, want the release's cover", row.CoverURL)
+	}
+	if row.Inks == nil || row.Inks.Dark != "#0d1420" || row.Inks.Light != "#f2b48c" {
+		t.Fatalf("inks = %+v, want the release's stored inks", row.Inks)
 	}
 }

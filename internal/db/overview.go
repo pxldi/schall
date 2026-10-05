@@ -150,9 +150,8 @@ func (q *Queries) Overview(ctx context.Context, zone string, now time.Time) (Ove
 	}
 	err = q.db.QueryRow(ctx, `
 		SELECT count(*) FROM listens
-		WHERE (listened_at AT TIME ZONE $1)::date
-			BETWEEN ($2::timestamptz AT TIME ZONE $1)::date - 59
-			    AND ($2::timestamptz AT TIME ZONE $1)::date - 30`,
+		WHERE listened_at >= ((($2::timestamptz AT TIME ZONE $1)::date - 59)::timestamp AT TIME ZONE $1)
+		  AND listened_at < ((($2::timestamptz AT TIME ZONE $1)::date - 29)::timestamp AT TIME ZONE $1)`,
 		zone, now).Scan(&out.ListensBefore)
 	if err != nil {
 		return out, fmt.Errorf("count the listens before: %w", err)
@@ -244,7 +243,10 @@ func (q *Queries) dayCounts(
 // a few and scrolls the rest inside the panel.
 const listRows = "25"
 
-const thisMonth = `date_trunc('month', listened_at AT TIME ZONE $1) = date_trunc('month', $2::timestamptz AT TIME ZONE $1)`
+// thisMonth is the local calendar month of $2, written as a range on
+// listened_at itself so the index on it is used.
+const thisMonth = `listened_at >= (date_trunc('month', $2::timestamptz AT TIME ZONE $1) AT TIME ZONE $1)
+	AND listened_at < ((date_trunc('month', $2::timestamptz AT TIME ZONE $1) + interval '1 month') AT TIME ZONE $1)`
 
 func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([]OverviewPlayed, error) {
 	rows, err := q.db.Query(ctx, `
@@ -368,7 +370,7 @@ func (q *Queries) listenHeat(ctx context.Context, zone string, now time.Time) ([
 		       extract(hour FROM (listened_at AT TIME ZONE $1))::int,
 		       count(*)
 		FROM listens
-		WHERE (listened_at AT TIME ZONE $1)::date > ($2::timestamptz AT TIME ZONE $1)::date - 30
+		WHERE listened_at >= ((($2::timestamptz AT TIME ZONE $1)::date - 29)::timestamp AT TIME ZONE $1)
 		  AND listened_at <= $2::timestamptz
 		GROUP BY 1, 2`, zone, now)
 	if err != nil {
@@ -585,18 +587,32 @@ func (q *Queries) heldCopy(ctx context.Context, recordingMBID pgtype.Text, title
 		mbid = &recordingMBID.String
 	}
 	var row heldCopyRow
+	// The two ways in are read separately and joined, so each can use its
+	// index: one OR across both read every present file. The order is the
+	// one the single query had.
 	err := q.db.QueryRow(ctx, `
-		SELECT t.album_id, f.id,
+		WITH found AS (
+			SELECT t.album_id, f.id AS file_id, f.path,
+			       t.id IS NOT NULL AS mapped, t.musicbrainz_recording_id AS recording
+			FROM tracks t
+			JOIN track_mappings m ON m.track_id = t.id
+			JOIN library_files f ON f.id = m.library_file_id
+			WHERE t.musicbrainz_recording_id = $1::uuid AND f.missing_at IS NULL
+			UNION ALL
+			SELECT t.album_id, f.id, f.path,
+			       t.id IS NOT NULL, t.musicbrainz_recording_id
+			FROM library_files f
+			LEFT JOIN track_mappings m ON m.library_file_id = f.id
+			LEFT JOIN tracks t ON t.id = m.track_id
+			WHERE f.missing_at IS NULL
+			  AND lower(f.title_tag) = lower($2) AND lower(f.artist_tag) = lower($3)
+		)
+		SELECT album_id, file_id,
 		       coalesce((SELECT c.image IS NOT NULL FROM release_cover_art c
-		                 WHERE c.album_id = t.album_id), false) AS has_cover
-		FROM library_files f
-		LEFT JOIN track_mappings m ON m.library_file_id = f.id
-		LEFT JOIN tracks t ON t.id = m.track_id
-		WHERE f.missing_at IS NULL
-		  AND (t.musicbrainz_recording_id = $1::uuid
-		       OR (lower(f.title_tag) = lower($2) AND lower(f.artist_tag) = lower($3)))
-		ORDER BY (t.musicbrainz_recording_id = $1::uuid) DESC NULLS LAST,
-		         has_cover DESC, t.id IS NOT NULL DESC, f.path
+		                 WHERE c.album_id = found.album_id), false) AS has_cover
+		FROM found
+		ORDER BY (recording = $1::uuid) DESC NULLS LAST,
+		         has_cover DESC, mapped DESC, path
 		LIMIT 1`, mbid, title, artist).Scan(&row.AlbumID, &row.FileID, &row.HasCover)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return heldCopyRow{}, nil
@@ -613,11 +629,17 @@ func (q *Queries) heldCopy(ctx context.Context, recordingMBID pgtype.Text, title
 // date of leaving.
 func (q *Queries) libraryGrowth(ctx context.Context, zone string, now time.Time) ([]OverviewMonth, error) {
 	rows, err := q.db.Query(ctx, `
-		WITH local AS (SELECT date_trunc('month', ($2::timestamptz AT TIME ZONE $1))::date AS this_month)
+		WITH local AS (SELECT date_trunc('month', ($2::timestamptz AT TIME ZONE $1))::date AS this_month),
+		-- The files are counted per local month once, and each month sums the
+		-- months up to it, rather than every month counting the table again.
+		counted AS MATERIALIZED (
+			SELECT date_trunc('month', f.created_at AT TIME ZONE $1) AS month, count(*) AS n
+			FROM library_files f
+			WHERE f.missing_at IS NULL
+			GROUP BY 1
+		)
 		SELECT to_char(m, 'YYYY-MM'),
-		       (SELECT count(*) FROM library_files f
-		        WHERE f.missing_at IS NULL
-		          AND (f.created_at AT TIME ZONE $1) < (m + interval '1 month'))::bigint
+		       (SELECT coalesce(sum(n), 0) FROM counted WHERE month < m + interval '1 month')::bigint
 		FROM local,
 		     generate_series(local.this_month - interval '11 months', local.this_month, interval '1 month') AS m
 		ORDER BY m`, zone, now)

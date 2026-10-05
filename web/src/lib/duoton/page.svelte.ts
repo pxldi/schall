@@ -95,19 +95,26 @@ function apply(request: PagePrint | null | undefined) {
  *
  *    usePagePrint(() => ({ covers: [release.id], mode: 'single' }));
  *
- *  Return undefined while the data is loading to keep the default print. The
- *  page's request is withdrawn when the page goes away. */
+ *  Return undefined while the data is loading. The print and inks already up
+ *  stay until the page knows its own: resetting to the house inks for the
+ *  loading moment drew every page in navy and peach first and then switched.
+ *  The page's request is withdrawn when the page goes away. */
 export function usePagePrint(get: () => PagePrint | null | undefined) {
   const token = {};
   $effect(() => {
     const request = get();
     owner = token;
+    if (request === undefined) return;
     apply(request);
   });
   onDestroy(() => {
     if (owner !== token) return;
     owner = undefined;
-    apply(undefined);
+    // The next page claims the print while it is set up, before this runs.
+    // Only a page that never asks for one falls back to the default.
+    setTimeout(() => {
+      if (owner === undefined) apply(undefined);
+    });
   });
 }
 

@@ -105,7 +105,7 @@ function overview(overrides: Partial<Overview> = {}): Overview {
       storage: { usedBytes: 4_400_000_000_000, totalBytes: 9_800_000_000_000 }
     },
     recentlyAdded: [
-      { title: 'Nachtfalter', artist: 'Nemo Vice', addedAt: new Date(Date.now() - 3_600_000).toISOString(), trackId: null, coverUrl: null }
+      { title: 'Nachtfalter', artist: 'Nemo Vice', addedAt: new Date(Date.now() - 3_600_000).toISOString(), trackId: null, coverUrl: null, inks: null }
     ],
     ...overrides
   };
@@ -323,8 +323,8 @@ describe('the overview', () => {
     const data = overview();
     const addedAt = new Date(Date.now() - 60_000).toISOString();
     data.recentlyAdded = [
-      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null },
-      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null }
+      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null, inks: null },
+      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null, inks: null }
     ];
     answering(data);
     show();
