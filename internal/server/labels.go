@@ -61,6 +61,8 @@ type labelListItem struct {
 	// CoverAlbumIDs are up to two of the label's releases with a cached cover,
 	// most songs held first. The row and the page's print are drawn from them.
 	CoverAlbumIDs []uuid.UUID `json:"coverAlbumIds"`
+	// CoverInks are the stored inks of the first of those, or null.
+	CoverInks *inksResponse `json:"coverInks"`
 }
 
 type labelReleaseResponse struct {
@@ -154,9 +156,21 @@ func (api *API) listLabels(response http.ResponseWriter, request *http.Request) 
 		api.internalError(response, request, err)
 		return
 	}
+	leads := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		if len(row.CoverAlbumIds) > 0 {
+			leads = append(leads, row.CoverAlbumIds[0])
+		}
+	}
+	inks := api.releaseInks(request.Context(), leads)
+
 	items := make([]labelListItem, 0, len(rows))
 	followed := 0
 	for _, row := range rows {
+		var coverInks *inksResponse
+		if len(row.CoverAlbumIds) > 0 {
+			coverInks = rowInks(inks, row.CoverAlbumIds[0])
+		}
 		if row.FollowedAt.Valid {
 			followed++
 		}
@@ -179,6 +193,7 @@ func (api *API) listLabels(response http.ResponseWriter, request *http.Request) 
 			TrackCount:        row.TrackCount,
 			OwnedTrackCount:   row.OwnedTrackCount,
 			CoverAlbumIDs:     row.CoverAlbumIds,
+			CoverInks:         coverInks,
 		})
 	}
 	api.writeJSON(response, http.StatusOK, map[string]any{

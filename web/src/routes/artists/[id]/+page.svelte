@@ -272,7 +272,8 @@
     const second = shown.find((release) => release.hasCover && release.id !== lead)?.id;
     return {
       mode: 'single',
-      covers: [lead, second].filter((id): id is string => Boolean(id))
+      covers: [lead, second].filter((id): id is string => Boolean(id)),
+      inks: detail.inks
     };
   });
   // A long name steps down a size so it stays on two lines at most.

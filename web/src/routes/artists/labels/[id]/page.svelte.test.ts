@@ -34,6 +34,7 @@ function release(overrides: Partial<LabelRelease> = {}): LabelRelease {
     ownedTrackCount: 23,
     monitored: true,
     hasCover: true,
+    inks: null,
     ...overrides,
   };
 }

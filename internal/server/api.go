@@ -1829,6 +1829,9 @@ type artistListItemResponse struct {
 	// CoverAlbumIDs are up to two releases with a cached cover, most songs held
 	// first. A card prints them and takes its inks from the first (ADR Duoton).
 	CoverAlbumIDs []uuid.UUID `json:"coverAlbumIds"`
+	// CoverInks are the stored inks of the first of those, or null when it has
+	// none yet and the card reads them from the picture.
+	CoverInks *inksResponse `json:"coverInks"`
 }
 
 // listArtists returns the catalogue's artists. An explicit limit keeps API
@@ -1907,8 +1910,20 @@ func (api *API) listArtists(response http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	leads := make([]uuid.UUID, 0, len(artists))
+	for _, artist := range artists {
+		if len(artist.CoverAlbumIds) > 0 {
+			leads = append(leads, artist.CoverAlbumIds[0])
+		}
+	}
+	inks := api.releaseInks(request.Context(), leads)
+
 	result := make([]artistListItemResponse, 0, len(artists))
 	for _, artist := range artists {
+		var coverInks *inksResponse
+		if len(artist.CoverAlbumIds) > 0 {
+			coverInks = rowInks(inks, artist.CoverAlbumIds[0])
+		}
 		result = append(result, artistListItemResponse{
 			artistResponse: artistResponse{
 				ID:               artist.ID,
@@ -1932,6 +1947,7 @@ func (api *API) listArtists(response http.ResponseWriter, request *http.Request)
 			NeedsAttention:    artist.NeedsAttention,
 			HasImage:          artist.HasImage,
 			CoverAlbumIDs:     artist.CoverAlbumIds,
+			CoverInks:         coverInks,
 		})
 	}
 	// Both halves are reported whatever the scope is, so the page can always
@@ -2026,6 +2042,8 @@ type artistDetailResponse struct {
 	// one with the most songs held, among those with a cached cover. Null when
 	// no release has a cover.
 	LeadAlbumID *uuid.UUID `json:"leadAlbumId"`
+	// Inks are the lead release's stored inks, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 // artistDiscographyResponse is the completeness the artist's page states.
@@ -2067,6 +2085,14 @@ func (api *API) getArtist(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	var leadInks *inksResponse
+	if artist.LeadAlbumID.Valid {
+		leadInks = rowInks(
+			api.releaseInks(request.Context(), []uuid.UUID{artist.LeadAlbumID.UUID}),
+			artist.LeadAlbumID.UUID,
+		)
+	}
+
 	api.writeJSON(response, http.StatusOK, artistDetailResponse{
 		artistResponse: artistResponse{
 			ID:               artist.ID,
@@ -2090,6 +2116,7 @@ func (api *API) getArtist(response http.ResponseWriter, request *http.Request) {
 		// cannot show an attribution line under no words.
 		BiographySourceURL: biographyLink(artist.Biography, artist.BiographySourceUrl),
 		LeadAlbumID:        nullableUUID(artist.LeadAlbumID),
+		Inks:               leadInks,
 		Discography: artistDiscographyResponse{
 			Releases:  discography.Releases,
 			Owned:     discography.Owned,

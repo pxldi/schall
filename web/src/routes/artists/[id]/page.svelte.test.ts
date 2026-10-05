@@ -58,6 +58,7 @@ function detail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
       loading: 0,
     },
     leadAlbumId: null,
+    inks: null,
     genres: [],
     ...overrides,
   };

@@ -80,9 +80,13 @@
     if (!$labels.data) return undefined;
     return {
       covers: items
-        .map((label) => label.coverAlbumIds?.[0])
-        .filter(Boolean)
+        .filter((label) => label.coverAlbumIds?.length)
         .slice(0, 8)
+        .map((label) => ({
+          src: coverSrc(label.coverAlbumIds[0]),
+          seed: label.coverAlbumIds[0],
+          inks: label.coverInks
+        }))
     };
   });
 

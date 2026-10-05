@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { inksFor } from '$lib/duoton';
+  import { coverSrc, inksFor, type Inks } from '$lib/duoton';
   import Cover from '$lib/components/Cover.svelte';
   import GeneratedCover from '$lib/components/GeneratedCover.svelte';
   import Print from '$lib/components/Print.svelte';
@@ -16,8 +16,9 @@
   let {
     id,
     hasImage,
-    coverAlbumIds = []
-  }: { id: string; hasImage: boolean; coverAlbumIds?: string[] } =
+    coverAlbumIds = [],
+    coverInks = null
+  }: { id: string; hasImage: boolean; coverAlbumIds?: string[]; coverInks?: Inks | null } =
     $props();
 
   let box = $state<HTMLElement>();
@@ -43,9 +44,14 @@
   });
 
   const printed = $derived(!hasImage && coverAlbumIds.length > 0);
-  // The card's own inks, from its first cover. The print is drawn once they
-  // are known, so it never flashes through the page's inks first.
-  const inks = inksFor(() => (near && printed ? coverAlbumIds[0] : undefined));
+  // The card's own inks, from its first cover: the stored pair when the API
+  // has one, otherwise read from the picture. The print is drawn once they are
+  // known, so it never flashes through the page's inks first.
+  const inks = inksFor(() =>
+    near && printed
+      ? { src: coverSrc(coverAlbumIds[0]), seed: coverAlbumIds[0], inks: coverInks }
+      : undefined
+  );
 </script>
 
 <span bind:this={box} class="absolute inset-0 block bg-surface-regular">

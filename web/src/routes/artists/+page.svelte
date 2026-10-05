@@ -16,7 +16,7 @@
   import Chip from '$lib/components/Chip.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import Hero from '$lib/components/Hero.svelte';
-  import { usePagePrint } from '$lib/duoton';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import ArtistArt from './ArtistArt.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -285,9 +285,13 @@
     if (!$artists.data) return undefined;
     return {
       covers: shown
-        .map((artist) => artist.coverAlbumIds?.[0])
-        .filter(Boolean)
+        .filter((artist) => artist.coverAlbumIds?.length)
         .slice(0, 8)
+        .map((artist) => ({
+          src: coverSrc(artist.coverAlbumIds[0]),
+          seed: artist.coverAlbumIds[0],
+          inks: artist.coverInks
+        }))
     };
   });
 
@@ -553,7 +557,12 @@
     <span
       class="relative block aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px]"
     >
-      <ArtistArt id={artist.id} hasImage={artist.hasImage} coverAlbumIds={artist.coverAlbumIds} />
+      <ArtistArt
+        id={artist.id}
+        hasImage={artist.hasImage}
+        coverAlbumIds={artist.coverAlbumIds}
+        coverInks={artist.coverInks}
+      />
 
       {#if badge}
         <!-- A chip anywhere else in Schall sits on the application's own dark

@@ -7,7 +7,7 @@
   import { toStore } from 'svelte/store';
   import { api, type LabelRelease } from '$lib/api';
   import { calendarDate } from '$lib/utils';
-  import { usePagePrint } from '$lib/duoton';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -36,7 +36,7 @@
         .filter((release) => release.hasCover)
         .toSorted((a, b) => b.ownedTrackCount - a.ownedTrackCount)
         .slice(0, 6)
-        .map((release) => release.id)
+        .map((release) => ({ src: coverSrc(release.id), seed: release.id, inks: release.inks }))
     };
   });
 
