@@ -24,6 +24,7 @@
   import { isAuthError } from '$lib/errors';
   import { relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -163,11 +164,11 @@
     >
       <div class="flex items-center gap-2.5">
         <span class="label">This week</span>
-        <span class="h-4 w-48 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
+        <Skeleton class="h-4 w-48" />
       </div>
       <div class="flex flex-wrap gap-2" role="group" aria-label="Loading weekly settings">
-        <span class="h-8 w-36 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
-        <span class="h-8 w-36 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
+        <Skeleton class="h-8 w-36" />
+        <Skeleton class="h-8 w-36" />
       </div>
       <div class="-mx-4 overflow-hidden border-y border-line-thin" aria-label="Loading weekly songs">
         <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
@@ -290,10 +291,7 @@
                         <div aria-busy="true" aria-label="Loading weekly evidence" class="max-h-[calc(100dvh-14rem)] overflow-hidden">
                           <span class="text-meta text-ink-3">reading what was asked…</span>
                           {#each Array.from({ length: 40 }) as _}
-                            <div
-                              aria-hidden="true"
-                              class="mt-1.5 h-5 animate-pulse rounded-row bg-surface-thick"
-                            ></div>
+                            <Skeleton class="mt-1.5 h-5" />
                           {/each}
                         </div>
                       {:else if $evidence.error}

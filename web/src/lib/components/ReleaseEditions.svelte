@@ -2,6 +2,7 @@
   import { Check } from '@lucide/svelte';
   import type { ReleaseEdition } from '$lib/api';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
   // An edition is one pressing of a record: the 1994 British CD, the 2011
@@ -116,7 +117,7 @@
             class="h-28 border-b border-line-thin px-4 py-3 last:border-b-0"
             aria-hidden="true"
           >
-            <div class="h-full animate-pulse rounded-row bg-surface-regular"></div>
+            <Skeleton class="h-full" />
           </div>
         {/each}
         </div>

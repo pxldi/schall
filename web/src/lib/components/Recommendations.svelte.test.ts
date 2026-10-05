@@ -229,7 +229,7 @@ describe('Recommendations', () => {
 
     const loading = screen.getByLabelText('Loading recommendations');
     expect(loading.getAttribute('aria-busy')).toBe('true');
-    expect(loading.querySelectorAll('[aria-hidden="true"]')).toHaveLength(40);
+    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(40);
     expect(screen.getByText('reading your suggestions…')).toBeTruthy();
   });
 

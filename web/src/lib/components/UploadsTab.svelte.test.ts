@@ -69,7 +69,7 @@ it('does not show the empty state while recent uploads are loading', async () =>
   const release = openedLoading();
 
   expect(screen.queryByText('Nothing uploaded yet')).toBeNull();
-  expect(document.querySelectorAll('.animate-pulse')).toHaveLength(160);
+  expect(document.querySelectorAll('[data-placeholder-row]')).toHaveLength(40);
 
   release();
   expect(await screen.findByText('Nothing uploaded yet')).toBeTruthy();

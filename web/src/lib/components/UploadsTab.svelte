@@ -11,6 +11,7 @@
   import { describeError } from '$lib/errors';
   import { formatBytes } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -394,11 +395,11 @@
       {#snippet placeholder()}
         <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 18rem)">
         {#each Array(40) as _, placeholderIndex (placeholderIndex)}
-          <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
-            <div class="h-5 animate-pulse rounded-row bg-surface-regular"></div>
-            <div class="mt-1 h-4 w-2/3 animate-pulse rounded-row bg-surface-regular"></div>
-            <div class="mt-1 h-4 w-1/3 animate-pulse rounded-row bg-surface-regular"></div>
-            <div class="mt-2 h-4 w-1/4 animate-pulse rounded-row bg-surface-regular"></div>
+          <div data-placeholder-row class="border-b border-line-thin px-3 py-2 last:border-b-0">
+            <Skeleton class="h-5" />
+            <Skeleton class="mt-1 h-4 w-2/3" />
+            <Skeleton class="mt-1 h-4 w-1/3" />
+            <Skeleton class="mt-2 h-4 w-1/4" />
           </div>
         {/each}
         </div>
