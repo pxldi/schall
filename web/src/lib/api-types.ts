@@ -51,6 +51,8 @@ export interface OverviewAdded {
   addedAt: string;
   trackId: string | null;
   coverUrl: string | null;
+  /** The stored inks of the release the cover is, or null. */
+  inks: Inks | null;
 }
 
 /** The Overview's figures, every day, hour and month counted in the zone the

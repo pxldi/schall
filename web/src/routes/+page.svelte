@@ -42,7 +42,7 @@
       const key = file.coverUrl ?? `${file.artist}\u0000${file.title}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      covers.push({ src: file.coverUrl, seed: key });
+      covers.push({ src: file.coverUrl, seed: key, inks: file.inks });
       if (covers.length === 8) break;
     }
     return { covers, height: 20 };

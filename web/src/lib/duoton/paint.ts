@@ -189,10 +189,10 @@ function square(source: PrintSource, size: number): HTMLCanvasElement {
   return canvas;
 }
 
-/** Paints the print: the pictures drawn at size, softened (1.2px blur, 1.15
+/** Paints the print: the pictures drawn at size, softened (blur, 1.15
  *  contrast), then every pixel mapped between the two inks by its lightness,
- *  with light grain. `strip` lays the pictures side by side; `single` prints
- *  the first one large and screens a second over it when there is one. */
+ *  with light grain. `strip` lays the pictures side by side; `single` prints the first one
+ *  large and screens a second over it when there is one. */
 export function paintPrint(
   canvas: HTMLCanvasElement,
   sources: PrintSource[],
@@ -206,44 +206,55 @@ export function paintPrint(
   const dark = hexToRgb(inks.dark);
   const light = hexToRgb(inks.light);
 
-  g.clearRect(0, 0, w, h);
-  g.filter = 'blur(1.2px) contrast(1.15)';
+  // The covers are laid out and softened on a half-size canvas that is never
+  // read back, so the browser can filter it on the GPU, then drawn up to size.
+  // The same `blur()` on the canvas that is read back runs on the CPU and cost
+  // 120ms of every paint at page width, which held up each page change.
+  const soft = document.createElement('canvas');
+  soft.width = Math.max(1, Math.ceil(w / 2));
+  soft.height = Math.max(1, Math.ceil(h / 2));
+  const sg = context(soft);
+  if (!sg) return;
+  const sw = soft.width;
+  const sh = soft.height;
+  sg.filter = 'blur(0.6px) contrast(1.15)';
   if (mode === 'strip') {
-    const s = Math.ceil(w / sources.length);
+    const s = Math.ceil(sw / sources.length);
     sources.forEach((source, i) => {
       // Each square is cropped to its middle band, so a short print shows the
       // centre of each cover rather than its top.
-      const crop = Math.min(s, h);
-      g.drawImage(square(source, s), 0, Math.max(0, (s - h) / 2), s, crop, i * s, 0, s, h);
+      const crop = Math.min(s, sh);
+      sg.drawImage(square(source, s), 0, Math.max(0, (s - sh) / 2), s, crop, i * s, 0, s, sh);
     });
   } else {
-    const s = w;
-    g.drawImage(square(sources[0], s), 0, s * 0.2, s, s * (h / w), 0, 0, w, h);
+    const s = sw;
+    sg.drawImage(square(sources[0], s), 0, s * 0.2, s, s * (sh / sw), 0, 0, sw, sh);
     if (sources[1]) {
-      g.globalAlpha = 0.4;
-      g.globalCompositeOperation = 'screen';
-      g.drawImage(square(sources[1], s), 0, s * 0.4, s, s * (h / w), w * 0.1, 0, w, h);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
+      sg.globalAlpha = 0.4;
+      sg.globalCompositeOperation = 'screen';
+      sg.drawImage(square(sources[1], s), 0, s * 0.4, s, s * (sh / sw), sw * 0.1, 0, sw, sh);
     }
   }
-  g.filter = 'none';
+  g.clearRect(0, 0, w, h);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(soft, 0, 0, w, h);
 
   const image = g.getImageData(0, 0, w, h);
   const px = image.data;
+  const lightness = (i: number) => (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255;
   // The lightness range is read from a sample and stretched to fill both inks,
   // so a dim cover still prints from one ink to the other.
   let lo = 1;
   let hi = 0;
   for (let i = 0; i < px.length; i += 64) {
-    const v = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255;
+    const v = lightness(i);
     lo = Math.min(lo, v);
     hi = Math.max(hi, v);
   }
   const span = Math.max(0.15, hi - lo);
   const grain = seeded('grain');
   for (let i = 0; i < px.length; i += 4) {
-    let v = ((px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255 - lo) / span;
+    let v = (lightness(i) - lo) / span;
     v = Math.min(1, Math.max(0, v + (grain() - 0.5) * 0.06));
     px[i] = dark[0] + (light[0] - dark[0]) * v;
     px[i + 1] = dark[1] + (light[1] - dark[1]) * v;
