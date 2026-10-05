@@ -12,10 +12,12 @@ import {
   CircleAlert,
   Disc3,
   Download,
+  Ear,
   ExternalLink,
   Heart,
   Info,
   ListMusic,
+  ListPlus,
   Loader,
   Minus,
   Music,
@@ -29,6 +31,7 @@ import {
   Trash2,
   Upload,
   User,
+  UserRoundMinus,
   Users,
   X,
 } from "@lucide/svelte";
@@ -56,6 +59,8 @@ export const icons = {
   heart: Heart,
   info: Info,
   playlist: ListMusic,
+  listen: Ear,
+  want: ListPlus,
   busy: Loader,
   minus: Minus,
   track: Music,
@@ -70,6 +75,7 @@ export const icons = {
   upload: Upload,
   artist: User,
   artists: Users,
+  unfollow: UserRoundMinus,
   close: X,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } satisfies Record<string, Component<any>>;

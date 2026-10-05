@@ -9,7 +9,7 @@
     useQueryClient
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { ChevronRight, ListPlus, LoaderCircle, RefreshCw, UserRoundMinus } from '@lucide/svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import { api, type MonitorLevel, type Release, type ReleaseCompleteness } from '$lib/api';
   import { calendarDate, keepInUrl, urlChoice, wantedSummary } from '$lib/utils';
   import BackLink from '$lib/components/BackLink.svelte';
@@ -481,7 +481,7 @@
         disabled={$refresh.isPending || refreshing}
         onclick={() => $refresh.mutate()}
       >
-        <RefreshCw size={13} strokeWidth={2.2} class={refreshing ? 'animate-spin' : ''} />
+        <Icon name="refresh" size="sm" class={refreshing ? 'animate-spin' : ''} />
         {refreshing ? 'Refreshing' : 'Refresh'}
       </Button>
 
@@ -501,9 +501,9 @@
       {:else if missingCount > 0}
         <Button size="sm" disabled={$wantMissing.isPending} onclick={() => $wantMissing.mutate(true)}>
           {#if $wantMissing.isPending}
-            <LoaderCircle size={13} class="animate-spin" />
+            <Icon name="busy" size="sm" class="animate-spin" />
           {:else}
-            <ListPlus size={13} strokeWidth={2.2} />
+            <Icon name="want" size="sm" />
           {/if}
           Want {missingCount} missing
         </Button>
@@ -523,7 +523,7 @@
         class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
       >
         About
-        <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+        <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
       </summary>
       <p class="reveal mt-2 max-w-prose text-body leading-relaxed text-ink-2">
         {$artist.data.biography}
@@ -590,7 +590,7 @@
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <Button disabled={$unfollow.isPending} onclick={() => $unfollow.mutate()}>
-            <UserRoundMinus size={13} strokeWidth={2.2} />
+            <Icon name="unfollow" size="sm" />
             {$unfollow.isPending ? 'Unfollowing…' : 'Unfollow'}
           </Button>
           <Button variant="ghost" disabled={$unfollow.isPending} onclick={keepFollowing}>
@@ -715,7 +715,7 @@
             disabled={$refresh.isPending}
             onclick={() => $refresh.mutate()}
           >
-            <RefreshCw size={13} strokeWidth={2.2} /> Refresh discography
+            <Icon name="refresh" size="sm" /> Refresh discography
           </Button>
         {/if}
       </EmptyPanel>

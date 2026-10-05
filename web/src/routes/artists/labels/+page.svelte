@@ -10,7 +10,7 @@
   // small and reads as one list rather than a browse.
   import { createMutation, createQuery, queryOptions, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { Plus, RefreshCw, Search, UserRoundMinus } from '@lucide/svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import { api, type LabelListItem, type MonitorLevel } from '$lib/api';
   import { calendarDate } from '$lib/utils';
   import BackLink from '$lib/components/BackLink.svelte';
@@ -158,7 +158,7 @@
   {/snippet}
   {#snippet actions()}
     <Button onclick={() => (showAddLabel = true)}>
-      <Plus size={13} strokeWidth={2.3} /> Follow label
+      <Icon name="plus" size="sm" /> Follow label
     </Button>
   {/snippet}
 </Hero>
@@ -166,7 +166,7 @@
 <ControlRail>
   <form class="w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
     <label class="field flex w-full items-center gap-2">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
         placeholder="Filter labels"
@@ -315,18 +315,14 @@
                         disabled={$refresh.isPending || label.refreshStatus === 'running'}
                         onclick={() => $refresh.mutate(label.id)}
                       >
-                        <RefreshCw
-                          size={13}
-                          strokeWidth={2.2}
-                          class={label.refreshStatus === 'running' ? 'animate-spin' : ''}
-                        />
+                        <Icon name="refresh" size="sm" class={label.refreshStatus === 'running' ? 'animate-spin' : ''} />
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         onclick={() => (confirming = label.id)}
                       >
-                        <UserRoundMinus size={13} strokeWidth={2.2} /> Unfollow
+                        <Icon name="unfollow" size="sm" /> Unfollow
                       </Button>
                     {:else}
                       <!-- Held but not followed: an earlier follow was
