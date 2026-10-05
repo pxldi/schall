@@ -1,30 +1,31 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Download, House, Inbox, Library, ListMusic, Search, Settings, Users } from '@lucide/svelte';
+  import { Search } from '@lucide/svelte';
+  import { duoton } from '$lib/duoton/page.svelte';
+  import { openSearch } from '$lib/search';
+  import Print from './Print.svelte';
 
   let { children } = $props();
 
-  // The chrome is one 208px mast down the left edge: the seven destinations
-  // as icon-and-name rows from the top, and search at the foot. The mast is
-  // always open and every row prints its own name, so there are no tooltips.
-  // There is no readout and no per-room mark — the owner scrapped counts and
-  // dots alike to keep the mast clean, so what is waiting is read on the
-  // Overview and on the pages themselves. There is no phone form of the
-  // mast: the phone is served by the native app, decided 2026-09-20.
+  // The chrome is a top bar sitting on the page's print (ADR Duoton): the
+  // wordmark, the seven destinations as pills, and search pushed right. Every
+  // destination prints its own name, so there are no tooltips, and there are
+  // no counts or state marks on it: what is waiting is read on the Overview and
+  // on the pages themselves. There is no phone form; the phone is served by the
+  // native app, decided 2026-09-20.
   //
-  // The mast's own highlight is not a document heading — a screen reader
-  // does not read a `class="active"` row — so every page still carries its
-  // own `<h1>`, visible or not. `<main>` is the landing spot for the skip
+  // The bar's highlight is not a document heading, so every page still carries
+  // its own <h1>, visible or not. `<main>` is the landing spot for the skip
   // link, the first focusable element in the document.
 
   const destinations = [
-    { href: '/', label: 'Overview', icon: House },
-    { href: '/artists', label: 'Artists', icon: Users },
-    { href: '/playlists', label: 'Playlists', icon: ListMusic },
-    { href: '/downloads?view=open', label: 'Downloads', icon: Download },
-    { href: '/review', label: 'Review', icon: Inbox },
-    { href: '/library', label: 'Library', icon: Library },
-    { href: '/settings/jobs', label: 'Settings', icon: Settings }
+    { href: '/', label: 'Overview' },
+    { href: '/artists', label: 'Artists' },
+    { href: '/playlists', label: 'Playlists' },
+    { href: '/downloads?view=open', label: 'Downloads' },
+    { href: '/review', label: 'Review' },
+    { href: '/library', label: 'Library' },
+    { href: '/settings/jobs', label: 'Settings' }
   ];
 
   // A release and a source run are reached from the library and belong to it,
@@ -44,9 +45,32 @@
     if (root === '/library' && path.startsWith('/releases')) return true;
     return path.startsWith(root);
   }
+
+  // The page's two inks live on <html>, so the tokens that name them (the
+  // accent, the focus ring, the primary button) resolve to the page's colours
+  // everywhere, overlays included.
+  $effect(() => {
+    const root = document.documentElement.style;
+    root.setProperty('--color-duo-dark', duoton.inks.dark);
+    root.setProperty('--color-duo-light', duoton.inks.light);
+  });
+
+  // The bar is a wash over the print and turns solid once the print has
+  // scrolled out from under it.
+  let scrollY = $state(0);
+  let remPx = $state(16);
+  $effect(() => {
+    remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  });
+  const solid = $derived(scrollY > (duoton.height - 2.75) * remPx);
 </script>
 
-<div class="min-h-screen bg-ground text-ink">
+<svelte:window bind:scrollY />
+
+<div
+  class="duoton-app relative min-h-screen text-ink"
+  style="--print-height: {duoton.height}rem; --topbar-height: 2.75rem;"
+>
   <a
     href="#main"
     class="sr-only rounded-control border border-line-thin bg-surface-regular px-3 py-2 text-ink focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-40"
@@ -54,45 +78,38 @@
     Skip to content
   </a>
 
-  <!-- The mast, carried by the `.fascia` class: the one gradient in the
-       application running black at the top into plum at the bottom.
-       `env(safe-area-inset-left)` clears a notch turned sideways. -->
+  <div class="absolute inset-x-0 top-0 overflow-hidden" style="height: var(--print-height);">
+    <Print covers={duoton.covers} mode={duoton.mode} class="absolute inset-0" />
+    <div class="print-fade absolute inset-0" aria-hidden="true"></div>
+  </div>
+
   <header
-    class="fascia fixed inset-y-0 left-0 z-30 flex w-52 flex-col pb-3 pt-4"
-    style="padding-left: env(safe-area-inset-left);"
+    class="topbar sticky top-0 z-30 flex h-[var(--topbar-height)] items-center gap-0.5 px-4 sm:px-6"
+    class:solid
   >
-    <nav class="flex w-full flex-col gap-0.5" aria-label="Sections">
+    <a href="/" class="wordmark mr-4 text-[1.0625rem] text-ink" title="Build {__SCHALL_VERSION__}">schall</a>
+    <nav class="flex min-w-0 items-center gap-0.5" aria-label="Sections">
       {#each destinations as destination (destination.href)}
         {@const active = isActive(destination.href)}
         <a
           href={destination.href}
           class:active
           aria-current={active ? 'page' : undefined}
-          class="rail-item"
+          class="topbar-item whitespace-nowrap"
         >
-          <destination.icon size={18} strokeWidth={2} aria-hidden="true" />
-          <span>{destination.label}</span>
+          {destination.label}
         </a>
       {/each}
     </nav>
 
-    <button
-      class="rail-item mt-auto"
-      onclick={() => window.dispatchEvent(new CustomEvent('schall:search'))}
-    >
-      <Search size={18} strokeWidth={2} aria-hidden="true" />
+    <button class="topbar-search ml-auto" onclick={openSearch}>
+      <Search size={14} strokeWidth={2} aria-hidden="true" />
       <span>Search</span>
+      <kbd aria-hidden="true">Ctrl K</kbd>
     </button>
-
-    <!-- The wordmark at the foot, with the build it is. The version is what
-         CI tagged the image with, or "dev" outside CI. -->
-    <div class="mt-3 flex flex-col gap-1 px-5">
-      <a href="/" class="wordmark self-start whitespace-nowrap text-lg text-ink-2">schall</a>
-      <span class="font-mono text-micro text-ink-4" title="Build">{__SCHALL_VERSION__}</span>
-    </div>
   </header>
 
-  <main id="main" tabindex="-1" class="pl-52">
+  <main id="main" tabindex="-1" class="relative z-[2]">
     {@render children()}
   </main>
 </div>

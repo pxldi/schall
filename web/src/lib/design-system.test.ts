@@ -180,3 +180,20 @@ describe('the token file itself', () => {
     }
   });
 });
+
+describe('the inks are chrome, never state', () => {
+  // ADR Duoton: the accent is the page's light ink and changes with every
+  // cover. If it were a literal again, the primary button and the focus ring
+  // would stop following the page; if a state role pointed at it, a state
+  // would change colour with the cover.
+  it('the accent names the light ink and its ink the dark one', () => {
+    expect(css).toMatch(/--color-accent:\s*var\(--color-duo-light\);/);
+    expect(css).toMatch(/--color-accent-ink:\s*var\(--color-duo-dark\);/);
+  });
+
+  it('no state role is drawn in an ink', () => {
+    for (const role of ['ok', 'idle', 'decide', 'busy', 'fail', 'done']) {
+      expect(css, role).not.toMatch(new RegExp(String.raw`--color-${role}:\s*var\(--color-(duo|accent)`));
+    }
+  });
+});

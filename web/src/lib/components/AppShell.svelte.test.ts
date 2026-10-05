@@ -3,10 +3,10 @@ import { cleanup, render, screen, setup, within } from '@testing-library/svelte'
 import { createRawSnippet } from 'svelte';
 import { shimTheMissingBrowser } from './ui/test-window';
 
-// The mast is the chrome every screen is drawn inside: one 208px rail down
-// the left edge holding the seven destinations from the top as icon-and-name
-// rows, search, and the wordmark with the build at the foot. There is no top
-// bar, no readout, no per-room marks, and no phone form of it.
+// The top bar is the chrome every screen is drawn inside (ADR Duoton): the
+// wordmark, the seven destinations as named pills, and search, sitting on the
+// page's print. There is no side rail, no readout, no per-room marks, and no
+// phone form of it.
 
 // Where the reader is. The shell reads it to decide which destination is the
 // open one, and a test says so by writing here before it renders.
@@ -32,7 +32,7 @@ function opened() {
   });
 }
 
-/** The seven, in the order the mast draws them. */
+/** The seven, in the order the top bar draws them. */
 const seven = ['Overview', 'Artists', 'Playlists', 'Downloads', 'Review', 'Library', 'Settings'];
 
 beforeAll(setup);
@@ -56,7 +56,7 @@ describe('AppShell', () => {
     expect(document.querySelector('main')?.id).toBe('main');
   });
 
-  it('names every destination in the mast', () => {
+  it('names every destination in the top bar', () => {
     opened();
 
     const top = within(screen.getByRole('navigation', { name: 'Sections' }));
@@ -65,7 +65,7 @@ describe('AppShell', () => {
     }
   });
 
-  it('draws the mast as the only navigation', () => {
+  it('draws the top bar as the only navigation', () => {
     opened();
 
     expect(screen.getAllByRole('navigation')).toHaveLength(1);
@@ -108,5 +108,16 @@ describe('AppShell', () => {
     expect(screen.queryByRole('link', { name: 'Sources' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Matching' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('opens the command palette from the search button', () => {
+    opened();
+    const heard = vi.fn();
+    window.addEventListener('schall:search', heard);
+
+    screen.getByRole('button', { name: 'Search' }).click();
+
+    window.removeEventListener('schall:search', heard);
+    expect(heard).toHaveBeenCalledOnce();
   });
 });

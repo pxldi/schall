@@ -72,7 +72,7 @@
     // wins against plain text at any size, so it has to give the size back.
     // The words stay at --text-meta, because a state nobody can read is not a
     // quieter state, it is a missing one.
-    'inline-flex items-center gap-1.5 rounded-row px-1.5 py-[2px] text-meta font-normal',
+    'inline-flex items-center gap-1.5 rounded-pill px-2 py-[2px] text-meta font-normal',
     role ? tints[role] : 'bg-surface-thick text-ink-2',
     className
   )}
