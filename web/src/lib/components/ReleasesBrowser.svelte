@@ -908,7 +908,7 @@
                   release.artistMonitorLevel === 'owned'
                     ? release.ownedTrackCount
                     : release.trackCount - release.dismissedTrackCount}
-                <OwnedBar owned={release.ownedTrackCount} total={countable} width={48} noun="tracks" />
+                <OwnedBar owned={release.ownedTrackCount} total={countable} width={94} noun="tracks" />
               {:else}
                 <span
                   class="numeric text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"

@@ -15,6 +15,8 @@ export interface OverviewPlayed {
   coverUrl: string | null;
   /** The catalogue track with this recording, when there is one. */
   trackId: string | null;
+  /** The release of that catalogue track, which the row opens. */
+  releaseId: string | null;
   inLibrary: boolean;
   wanted: boolean;
 }
@@ -22,6 +24,8 @@ export interface OverviewPlayed {
 export interface OverviewArtist {
   name: string;
   artistMbid: string | null;
+  /** The catalogue artist the row opens, when an ID or a unique name names one. */
+  artistId: string | null;
   listens: number;
   pictureUrl: string | null;
 }
@@ -31,6 +35,8 @@ export interface OverviewAlbum {
   artist: string;
   listens: number;
   releaseMbid: string | null;
+  /** The catalogue release whose edition carries that release ID. */
+  releaseId: string | null;
   coverUrl: string | null;
 }
 
@@ -50,6 +56,7 @@ export interface OverviewAdded {
   artist: string;
   addedAt: string;
   trackId: string | null;
+  releaseId: string | null;
   coverUrl: string | null;
 }
 
