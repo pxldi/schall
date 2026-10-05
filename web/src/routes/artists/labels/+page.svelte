@@ -138,7 +138,7 @@
 
 <Hero title="Labels" size="xl">
   {#snippet back()}
-    <BackLink fallback="/artists" label="Back to artists" />
+    <BackLink fallback="/artists" label="Artists" />
   {/snippet}
   {#snippet sub()}
     {#if labelsTotal !== undefined}

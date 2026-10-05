@@ -56,7 +56,7 @@
 {#if label}
   <Hero title={label.name} size={heroSize}>
     {#snippet back()}
-      <BackLink fallback="/artists/labels" label="Back to labels" />
+      <BackLink fallback="/artists/labels" label="Labels" />
     {/snippet}
     {#snippet sub()}
       <span>

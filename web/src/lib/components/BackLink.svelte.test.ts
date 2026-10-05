@@ -71,7 +71,8 @@ describe('BackLink', () => {
   it('names the section it falls back to when there is nowhere to return to', () => {
     drawArrow();
 
-    expect(arrow().getAttribute('aria-label')).toBe('Library');
+    expect(arrow().textContent?.trim()).toBe('Library');
+    expect(arrow().getAttribute('aria-label')).toBe('Back to Library');
   });
 
   it('points at the page the reader came from', async () => {
@@ -110,12 +111,13 @@ describe('BackLink', () => {
     expect(arrow().getAttribute('href')).toBe('/artists/talk-talk');
   });
 
-  it('reads as Back once there is somewhere to go back to', async () => {
+  it('names the screen the reader came from once there is one', async () => {
     drawArrow();
 
     await navigate('http://localhost/artists/talk-talk', 'http://localhost/releases/laughing-stock');
 
-    expect(arrow().getAttribute('aria-label')).toBe('Back');
+    expect(arrow().textContent?.trim()).toBe('Artist');
+    expect(arrow().getAttribute('aria-label')).toBe('Back to Artist');
   });
 
   it('falls back to its section for a page that was opened directly', async () => {

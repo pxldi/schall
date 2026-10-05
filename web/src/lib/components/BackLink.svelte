@@ -1,6 +1,8 @@
 <script lang="ts">
+  import Button from './Button.svelte';
   import Icon from './Icon.svelte';
   import { previousScreen } from '$lib/navigation.svelte';
+  import { screenName } from '$lib/screen-name';
   import { cn } from '$lib/utils';
 
   let {
@@ -8,10 +10,11 @@
     // sent, a reload, a tab opened straight onto this page. The section this
     // page belongs to, which is what the arrow used to point at unconditionally.
     fallback,
+    // The name of that section, shown on the button when it is where the
+    // button leads.
     label,
-    size = 17,
     class: className
-  }: { fallback: string; label: string; size?: number; class?: string } = $props();
+  }: { fallback: string; label: string; class?: string } = $props();
 
   // Where the reader actually came from, which the application has been keeping
   // since it started. An artist reached from a release should go back to that
@@ -21,6 +24,10 @@
   // what lets this work on a page that draws its header only once its query has
   // answered, which is long after the navigation it would have had to hear.
   const href = $derived(previousScreen.href ?? fallback);
+
+  // The button says where it goes, so a reader can tell before pressing it
+  // whether it leads to the release they came from or to the whole library.
+  const name = $derived(previousScreen.href ? screenName(previousScreen.href) : label);
 
   // Left-click pops the history entry rather than pushing the same address on
   // top of it, so the browser's own back button and this arrow stay in step —
@@ -39,11 +46,16 @@
   }
 </script>
 
-<a
+<!-- A pill like the hero's other controls, on a frosted ground so it reads over
+     any print. -->
+<Button
   {href}
   onclick={back}
-  aria-label={previousScreen.href ? 'Back' : label}
-  class={cn('tap text-ink-4 transition hover:text-ink', className)}
+  variant="outline"
+  size="sm"
+  aria-label={`Back to ${name}`}
+  class={cn('bg-ground/40 backdrop-blur-[8px]', className)}
 >
-  <Icon name="arrow-left" {size} />
-</a>
+  <Icon name="arrow-left" size="sm" />
+  {name}
+</Button>
