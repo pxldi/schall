@@ -173,14 +173,14 @@
       <div class="-mx-4 overflow-hidden border-y border-line-thin" aria-label="Loading weekly songs">
         <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
         {#each Array.from({ length: 60 }) as _}
-          <div aria-hidden="true" class="h-14 animate-pulse border-b border-line-thin last:border-b-0"></div>
+          <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
         {/each}
       </div>
       <div class="flex flex-col gap-2" aria-label="Loading weekly history">
         <span class="label">What each refresh did</span>
         <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
         {#each Array.from({ length: 60 }) as _}
-          <div aria-hidden="true" class="h-10 animate-pulse border-b border-line-thin last:border-b-0"></div>
+          <div aria-hidden="true" class="flex h-10 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
         {/each}
       </div>
       </div>

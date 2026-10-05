@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import {
@@ -732,13 +733,13 @@
     role="status"
     aria-label="Loading releases"
   >
-    <span class="h-3 w-16 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
+    <Skeleton class="h-3 w-16" />
     <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
       {#each Array(48) as _, placeholderIndex (placeholderIndex)}
         <div class="flex flex-col gap-1.5" aria-hidden="true">
-          <div class="aspect-square animate-pulse rounded-card bg-surface-regular"></div>
-          <span class="h-4 w-full animate-pulse rounded-row bg-surface-regular"></span>
-          <span class="h-3 w-2/3 animate-pulse rounded-row bg-surface-regular"></span>
+          <Skeleton shape="block" class="aspect-square" />
+          <Skeleton class="h-4 w-full" />
+          <Skeleton class="h-3 w-2/3" />
         </div>
       {/each}
     </div>
@@ -753,8 +754,8 @@
       style="min-height: calc(var(--print-height) - var(--topbar-height));"
       aria-hidden="true"
     >
-      <span class="h-16 w-96 max-w-full animate-pulse rounded-row bg-surface-regular/60"></span>
-      <span class="h-4 w-56 animate-pulse rounded-row bg-surface-regular/60"></span>
+      <Skeleton class="h-16 w-96 max-w-full" />
+      <Skeleton class="h-4 w-56" />
     </section>
 
     <ControlRail label="Which releases to show">

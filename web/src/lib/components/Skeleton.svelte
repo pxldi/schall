@@ -10,9 +10,9 @@
   //   <Skeleton class="h-4 w-2/3" />
   //   <Skeleton shape="cover" class="size-12" />
   //
-  // It is decoration. Whatever holds a set of them says it is loading, once,
-  // with `aria-busy` and a label; forty boxes each saying so would be read out
-  // forty times.
+  // It is decoration and empty, so assistive technology passes over it.
+  // Whatever holds a set of them says it is loading, once, with `aria-busy` and
+  // a label; forty boxes each saying so would be read out forty times.
 
   let {
     shape = 'line',
@@ -32,4 +32,4 @@
   };
 </script>
 
-<span aria-hidden="true" class={cn('skeleton', shapes[shape], className)}></span>
+<span class={cn('skeleton', shapes[shape], className)}></span>

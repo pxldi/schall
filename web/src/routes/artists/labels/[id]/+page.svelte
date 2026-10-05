@@ -9,6 +9,7 @@
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
@@ -75,8 +76,8 @@
     style="min-height: calc(var(--print-height) - var(--topbar-height));"
     aria-hidden="true"
   >
-    <span class="h-16 w-96 max-w-full animate-pulse rounded-row bg-surface-regular/60"></span>
-    <span class="h-4 w-56 animate-pulse rounded-row bg-surface-regular/60"></span>
+    <Skeleton class="h-16 w-96 max-w-full" />
+    <Skeleton class="h-4 w-56" />
   </section>
 {:else}
   <h1 class="sr-only">Label</h1>
@@ -95,9 +96,9 @@
         >
           {#each Array(48) as _, placeholderIndex (placeholderIndex)}
             <div class="flex flex-col gap-1.5" aria-hidden="true">
-              <div class="aspect-square animate-pulse rounded-card bg-surface-regular"></div>
-              <span class="h-4 w-full animate-pulse rounded-row bg-surface-regular"></span>
-              <span class="h-3 w-2/3 animate-pulse rounded-row bg-surface-regular"></span>
+              <Skeleton shape="block" class="aspect-square" />
+              <Skeleton class="h-4 w-full" />
+              <Skeleton class="h-3 w-2/3" />
             </div>
           {/each}
         </div>

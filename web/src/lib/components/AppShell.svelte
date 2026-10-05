@@ -108,7 +108,7 @@
     </button>
   </header>
 
-  <main id="main" tabindex="-1" class="relative z-[2]">
+  <main id="main" tabindex="-1" class="page-view relative z-[2]">
     {@render children()}
   </main>
 </div>

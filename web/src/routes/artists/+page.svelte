@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import {
     createMutation,
     createQuery,
@@ -308,10 +309,7 @@
       {#if $dashboard.data}
         <b class="numeric font-semibold text-ink">{followedCount.toLocaleString()}</b> followed
       {:else}
-        <span
-          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
-          aria-hidden="true"
-        ></span>
+        <Skeleton class="numeric inline-block h-2.5 w-[2ch]" />
         followed
       {/if}
     </span>
@@ -418,11 +416,11 @@
           {#each Array(artistSkeletonCount) as _, placeholderIndex (placeholderIndex)}
             <div class="flex flex-col gap-2" aria-hidden="true">
               <div
-                class="aspect-square animate-pulse rounded-card border border-line-regular bg-surface-regular"
+                class="skeleton aspect-square rounded-card border border-line-regular"
               ></div>
               <span class="flex flex-col gap-1">
-                <span class="h-4 w-2/3 animate-pulse rounded-row bg-surface-regular"></span>
-                <span class="h-4 w-full animate-pulse rounded-row bg-surface-regular"></span>
+                <Skeleton class="h-4 w-2/3" />
+                <Skeleton class="h-4 w-full" />
               </span>
             </div>
           {/each}

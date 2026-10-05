@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, type Overview, type OverviewDay } from '$lib/api';
   import { formatBytes, relativeTime } from '$lib/utils';
@@ -266,15 +267,15 @@
      hides its boxes; the grid says busy. -->
 {#snippet loadingChart(title: string, height: string)}
   <div class="flex grow flex-col gap-3" aria-busy="true" aria-label="Loading {title}">
-    <span class="h-9 w-28 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
-    <span class="h-0 {height} w-full grow animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
+    <Skeleton class="h-9 w-28" />
+    <Skeleton class="h-0 {height} w-full grow" />
   </div>
 {/snippet}
 
 {#snippet loadingRows(title: string, height: string)}
   <div class="flex flex-col gap-2 {height}" aria-busy="true" aria-label="Loading {title}">
     {#each Array.from({ length: 5 }) as _, index (index)}
-      <span class="h-8 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
+      <Skeleton class="h-8" />
     {/each}
   </div>
 {/snippet}
@@ -283,10 +284,10 @@
   <div class="flex flex-col gap-3" aria-busy="true" aria-label="Loading {title}">
     <div class="flex gap-3">
       {#each Array.from({ length: 3 }) as _, index (index)}
-        <span class="h-11 w-20 animate-pulse rounded-row bg-surface-thick" aria-hidden="true"></span>
+        <Skeleton class="h-11 w-20" />
       {/each}
     </div>
-    <span class="h-1 animate-pulse rounded-full bg-surface-thick" aria-hidden="true"></span>
+    <Skeleton class="h-1 rounded-full" />
   </div>
 {/snippet}
 

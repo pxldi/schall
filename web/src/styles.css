@@ -1239,6 +1239,27 @@ a {
   }
 }
 
+/* One page becoming the next (pageTransitions in $lib/motion.svelte). The
+   chrome crossfades on the arriving step; the page itself leaves on the
+   surface step and the new one rises into place the way a card does. */
+.page-view {
+  view-transition-name: page;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--motion-enter);
+  animation-timing-function: var(--motion-ease);
+}
+
+::view-transition-old(page) {
+  animation: schall-fade var(--motion-surface) var(--motion-ease) reverse both;
+}
+
+::view-transition-new(page) {
+  animation: schall-rise var(--motion-enter) var(--motion-ease-arrive) both;
+}
+
 @keyframes schall-breathe {
   50% {
     opacity: 0.5;

@@ -14,6 +14,7 @@
 // own `fade`, which takes a number of milliseconds rather than reading CSS.
 
 import { untrack } from 'svelte';
+import { onNavigate } from '$app/navigation';
 import { reducedMotion } from '$lib/utils';
 
 // changed watches one value and says whether it has just become something else.
@@ -118,4 +119,29 @@ export function leave(
       return `overflow: hidden; min-height: 0; opacity: ${seen}; transform: translateX(${(1 - seen) * -8}px); ${sizes}`;
     }
   };
+}
+
+// pageTransitions crossfades one page into the next when the reader goes to
+// another address, with the browser's view transitions. The print at the top
+// changes covers in the same fade, so a page arrives already in its inks.
+//
+// Only a change of path is a new page. A filter, a tab or a pager writes the
+// query string, and the list under it already settles on its own; fading the
+// whole screen for it would make every press of a filter feel like a reload.
+// A browser without view transitions, and a reader who asked for less motion,
+// get the cut.
+//
+// Call it once from the root layout, while it is setting up.
+export function pageTransitions() {
+  onNavigate((navigation) => {
+    if (typeof document === 'undefined' || !('startViewTransition' in document)) return;
+    if (reducedMotion()) return;
+    if (!navigation.to || navigation.from?.url.pathname === navigation.to.url.pathname) return;
+    return new Promise((resolve) => {
+      document.startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+    });
+  });
 }
