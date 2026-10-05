@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import {
     createMutation,
     createQuery,
@@ -7,7 +8,6 @@
     useQueryClient
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { Check, Download, Ear, LoaderCircle, Plus, Search, X } from '@lucide/svelte';
   import { page } from '$app/state';
   import { api, type ArtistListItem } from '$lib/api';
   import { isAuthError } from '$lib/errors';
@@ -333,7 +333,7 @@
   </div>
 
   <Button class="ml-auto" onclick={() => (showAddArtist = true)}>
-    <Plus size={13} strokeWidth={2.3} /> Follow artist
+    <Icon name="plus" size={13} /> Follow artist
   </Button>
 </ControlRail>
 
@@ -363,7 +363,7 @@
 
   <form class="ml-auto w-full sm:w-48" onsubmit={applySearch}>
     <label class="field flex w-full items-center gap-2">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:value={searchInput}
         placeholder="Search artists, then Enter"
@@ -466,7 +466,7 @@
         >
           <div class="flex flex-wrap gap-2">
             <Button class="w-fit" onclick={() => (showAddArtist = true)}>
-              <Plus size={13} strokeWidth={2.3} /> Follow artist
+              <Icon name="plus" size={13} /> Follow artist
             </Button>
             {#if tab}
               <Button variant="outline" class="w-fit" onclick={() => setTab('')}>Show all</Button>
@@ -582,13 +582,13 @@
         >
           <!-- Paired with a glyph, because no state may be readable by hue alone. -->
           {#if badge.role === 'decide'}
-            <Ear size={9} strokeWidth={2.4} />
+            <Icon name="listen" size={9} />
           {:else if badge.role === 'busy'}
-            <Download size={9} strokeWidth={2.4} />
+            <Icon name="download" size={9} />
           {:else if badge.role === 'fail'}
-            <X size={9} strokeWidth={3} />
+            <Icon name="close" size={9} />
           {:else}
-            <LoaderCircle size={9} strokeWidth={2.4} />
+            <Icon name="busy" size={9} />
           {/if}
           {badge.label}
         </Chip>
@@ -599,7 +599,7 @@
           class="absolute right-2 top-2 grid size-[18px] place-items-center rounded-row bg-ground/85 text-busy backdrop-blur-sm"
           title="Refreshing this artist's discography"
         >
-          <LoaderCircle size={10} class="animate-spin" />
+          <Icon name="busy" size={10} class="animate-spin" />
         </span>
       {/if}
     </span>
@@ -622,7 +622,7 @@
       {:else}
         <span class="flex items-center gap-1">
           {#if artist.followed && artist.ownedReleaseCount === artist.releaseCount}
-            <Check size={9} strokeWidth={3} class="shrink-0 text-ok" />
+            <Icon name="check" size={9} class="shrink-0 text-ok" />
           {/if}
           <OwnedBar
             owned={artist.ownedReleaseCount}

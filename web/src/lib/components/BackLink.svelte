@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import { previousScreen } from '$lib/navigation.svelte';
   import { cn } from '$lib/utils';
 
@@ -45,5 +45,5 @@
   aria-label={previousScreen.href ? 'Back' : label}
   class={cn('tap text-ink-4 transition hover:text-ink', className)}
 >
-  <ArrowLeft {size} />
+  <Icon name="arrow-left" {size} />
 </a>

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { Select as SelectPrimitive } from 'bits-ui';
-  import { ChevronDown, ChevronUp } from '@lucide/svelte';
   import { cn } from '$lib/utils';
 
   // The list of choices.
@@ -49,13 +49,13 @@
     {...rest}
   >
     <SelectPrimitive.ScrollUpButton class="flex h-5 items-center justify-center text-ink-3">
-      <ChevronUp size={13} aria-hidden="true" />
+      <Icon name="chevron-up" size={13} />
     </SelectPrimitive.ScrollUpButton>
     <SelectPrimitive.Viewport class="max-h-[16rem] overflow-y-auto">
       {@render children?.()}
     </SelectPrimitive.Viewport>
     <SelectPrimitive.ScrollDownButton class="flex h-5 items-center justify-center text-ink-3">
-      <ChevronDown size={13} aria-hidden="true" />
+      <Icon name="chevron-down" size={13} />
     </SelectPrimitive.ScrollDownButton>
   </SelectPrimitive.Content>
 </SelectPrimitive.Portal>

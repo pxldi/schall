@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { toStore } from 'svelte/store';
   import {
     createMutation,
@@ -7,7 +8,6 @@
     useQueryClient,
     type Query
   } from '@tanstack/svelte-query';
-  import { Check } from '@lucide/svelte';
   import { api, lookingFor, type AcquisitionTarget, type AcquisitionTargets } from '$lib/api';
   import { relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
@@ -287,7 +287,7 @@
           >
             <span class="grid size-4 shrink-0 place-items-center rounded-row {chips[mark.role]}">
               {#if mark.role === 'ok'}
-                <Check size={10} strokeWidth={3.2} />
+                <Icon name="check" size={10} />
               {:else}
                 <span class="numeric text-micro font-bold">
                   {mark.role === 'decide'

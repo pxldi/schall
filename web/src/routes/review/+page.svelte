@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import {
     createInfiniteQuery,
     createMutation,
@@ -8,7 +9,6 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { RotateCw, Volume2 } from '@lucide/svelte';
   import { api, type AcquisitionCandidate } from '$lib/api';
   import { isAuthError } from '$lib/errors';
   import {
@@ -504,7 +504,7 @@
       />
       {#if !isAuthError(loadError)}
         <Button onclick={retryQueue}>
-          <RotateCw size={13} strokeWidth={2.3} />
+          <Icon name="refresh" size={13} />
           Retry
         </Button>
       {/if}
@@ -565,7 +565,7 @@
       </div>
 
       <div class="mt-auto hidden items-center gap-2.5 border-t border-line-thin p-4 lg:flex">
-        <Volume2 size={14} strokeWidth={1.8} class="shrink-0 text-ink-3" />
+        <Icon name="volume" size={14} class="shrink-0 text-ink-3" />
         <input
           type="range"
           min="0"

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { Dialog as DialogPrimitive } from 'bits-ui';
-  import { X } from '@lucide/svelte';
   import { cn } from '$lib/utils';
   import DialogOverlay from './DialogOverlay.svelte';
 
@@ -65,7 +65,7 @@
         class="press tap absolute right-3 top-3 grid size-7 place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink"
         aria-label="Close"
       >
-        <X size={15} aria-hidden="true" />
+        <Icon name="close" size={15} />
       </DialogPrimitive.Close>
     {/if}
   </DialogPrimitive.Content>

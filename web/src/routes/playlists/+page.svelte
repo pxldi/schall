@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { FileUp, LoaderCircle, Plus, RotateCw, Send, UserRoundMinus } from '@lucide/svelte';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
@@ -147,7 +147,7 @@
 
   <div class="ml-auto flex flex-wrap items-center gap-2">
     <Button type="button" variant="ghost" onclick={() => (fileModalOpen = true)}>
-      <FileUp size={13} strokeWidth={2.2} />
+      <Icon name="upload" size={13} />
       Import file
     </Button>
     <form
@@ -166,9 +166,9 @@
       />
       <Button type="submit" disabled={!url.trim() || $follow.isPending}>
         {#if $follow.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size={13} class="animate-spin" />
         {:else}
-          <Plus size={13} strokeWidth={2.2} />
+          <Icon name="plus" size={13} />
         {/if}
         Follow
       </Button>
@@ -252,7 +252,7 @@
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
                     >
-                      <RotateCw size={13} strokeWidth={2.2} /> Re-import
+                      <Icon name="refresh" size={13} /> Re-import
                     </Button>
                   {/if}
                   <Button
@@ -261,7 +261,7 @@
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
                   >
-                    <Send size={13} strokeWidth={2.2} /> Send to player
+                    <Icon name="send" size={13} /> Send to player
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
@@ -270,7 +270,7 @@
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
                     >
-                      <UserRoundMinus size={13} strokeWidth={2.2} /> Stop following
+                      <Icon name="unfollow" size={13} /> Stop following
                     </Button>
                   {/if}
                 </span>

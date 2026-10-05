@@ -755,6 +755,8 @@ a {
      without any surface changing colour. The print fades into that same wash
      at its foot. */
   .duoton-app {
+    /* The second plate of every icon (see Icon.svelte). */
+    --plate: var(--color-duo-light);
     background-color: color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground));
   }
 

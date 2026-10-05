@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   // Music the library does not hold, suggested from what the connected
   // ListenBrainz account has listened to.
   //
@@ -32,7 +33,6 @@
     useQueryClient
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { ChevronRight, ListMusic } from '@lucide/svelte';
   import {
     api,
     type AcquisitionTarget,
@@ -448,7 +448,7 @@
         <summary
           class="tap-tall flex w-fit cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
         >
-          <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+          <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
           What is this
         </summary>
         <p class="reveal mt-1 max-w-[64ch] text-meta leading-5 text-ink-2">
@@ -638,7 +638,7 @@
           </div>
         {/snippet}
         <EmptyPanel class="items-start gap-2">
-          <ListMusic size={18} class="text-ink-4" />
+          <Icon name="playlist" size={18} class="text-ink-4" />
           {#if !snapshot?.fetched && stalled}
           <!--
             A list is stored only when a sweep walks the whole answer. A sweep

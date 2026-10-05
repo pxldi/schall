@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
-  import { ChevronRight } from '@lucide/svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -59,7 +59,7 @@
         <summary
           class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
         >
-          <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+          <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
           What went wrong
         </summary>
         <p class="reveal mt-1 text-meta leading-[1.65] text-ink-2">{page.error.message}</p>

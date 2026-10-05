@@ -1,18 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import {
-    Check,
-    ExternalLink,
-    Fingerprint,
-    FolderPlus,
-    Link2,
-    LoaderCircle,
-    Pause,
-    Play,
-    RefreshCw,
-    Search
-  } from '@lucide/svelte';
   import { page } from '$app/state';
   import { replaceState } from '$app/navigation';
   import {
@@ -541,14 +530,14 @@
       placeholder="Search files"
       class="field min-w-0 max-w-44 flex-1"
     />
-    <Button type="submit" variant="outline"><Search size={12} strokeWidth={2.2} /> Search</Button>
+    <Button type="submit" variant="outline"><Icon name="search" size={12} /> Search</Button>
   </form>
 
   <Button onclick={() => $scan.mutate()} disabled={scanning || rootCount === 0}>
     {#if scanning}
-      <LoaderCircle size={13} class="animate-spin" /> Scanning
+      <Icon name="busy" size={13} class="animate-spin" /> Scanning
     {:else}
-      <RefreshCw size={13} strokeWidth={2.3} /> {scanned ? 'Rescan' : 'Scan'}
+      <Icon name="refresh" size={13} /> {scanned ? 'Rescan' : 'Scan'}
     {/if}
   </Button>
 </ControlRail>
@@ -586,7 +575,7 @@
           class="field min-w-0 flex-1"
         />
         <Button type="submit" disabled={$addRoot.isPending}>
-          <FolderPlus size={13} strokeWidth={2.2} /> Add
+          <Icon name="folder-add" size={13} /> Add
         </Button>
       </form>
       <span class="text-meta leading-relaxed text-ink-3">
@@ -774,9 +763,9 @@
                       onclick={() => hear(file.id)}
                     >
                       {#if sounding === file.id}
-                        <Pause size={13} strokeWidth={2.2} />
+                        <Icon name="pause" size={13} />
                       {:else}
-                        <Play size={13} strokeWidth={2.2} />
+                        <Icon name="play" size={13} />
                       {/if}
                     </button>
                   {/if}
@@ -835,7 +824,7 @@
               <Table.Cell>
                 <span class="flex flex-wrap items-center gap-1.5">
                   {#if standing.kind === 'tick'}
-                    <StateMark role="ok"><Check size={10} strokeWidth={3.2} /></StateMark>
+                    <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
                     {#if file.matchStatus === 'matched'}
                       <span class="max-w-44 truncate text-meta text-ink-2" title={standing.title}>
                         {file.mappingManual
@@ -867,7 +856,7 @@
                           title="What is this file?"
                           onclick={() => showIdentity(file.id)}
                         >
-                          <Fingerprint size={13} />
+                          <Icon name="fingerprint" size={13} />
                         </Button>
                       {/if}
                       <!-- A track MusicBrainz has never heard of is named by its
@@ -883,7 +872,7 @@
                           title="This is a SoundCloud track"
                           onclick={() => nameFromSoundCloud(file)}
                         >
-                          <Link2 size={13} />
+                          <Icon name="link" size={13} />
                         </Button>
                       {:else if file.identityUrl}
                         <Button
@@ -893,7 +882,7 @@
                           href={file.identityUrl}
                           title="Open on SoundCloud"
                         >
-                          <ExternalLink size={13} />
+                          <Icon name="external" size={13} />
                         </Button>
                       {/if}
                       <!-- Every decision about a file is taken in Review, a

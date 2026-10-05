@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
@@ -8,7 +9,6 @@
     type Query,
     useQueryClient
   } from '@tanstack/svelte-query';
-  import { Check, ChevronDown, LoaderCircle, Play, RotateCcw, Search } from '@lucide/svelte';
   import { page } from '$app/state';
   import {
     api,
@@ -522,7 +522,7 @@
          page; the wishlist and uploads tabs are their own components with no
          search of their own to hand it to. -->
     <label class="field ml-auto flex w-full items-center gap-2 sm:w-56">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
         placeholder="Filter downloads"
@@ -596,7 +596,7 @@
                    as a verdict it cannot give; the state mark leads the row instead. -->
               <StateMark role={mark}>
                 {#if mark === 'ok'}
-                  <Check size={10} strokeWidth={3.2} />
+                  <Icon name="check" size={10} />
                 {:else}
                   {mark === 'decide' ? '?' : mark === 'fail' ? '!' : mark === 'busy' ? '·' : '–'}
                 {/if}
@@ -652,7 +652,7 @@
                     disabled={$startDownload.isPending}
                     onclick={() => $startDownload.mutate({ requestId: item.id })}
                   >
-                    <Play size={12} /> Start
+                    <Icon name="play" size={12} /> Start
                   </Button>
                 {:else if item.status === 'started'}
                   <!-- The counter is a second reading of the tag whenever it
@@ -667,7 +667,7 @@
                   <span class="flex items-center gap-1.5 text-meta text-busy">
                     <!-- A spinner beside a request nobody has started sending
                          claims motion there is none of. -->
-                    {#if !waiting(item)}<LoaderCircle size={12} class="animate-spin" />{/if}
+                    {#if !waiting(item)}<Icon name="busy" size={12} class="animate-spin" />{/if}
                     {#if counted}
                       <span class="numeric whitespace-nowrap">
                         {item.progress.completedCount}/{item.progress.transferCount} files
@@ -681,7 +681,7 @@
                     disabled={$retryDownload.isPending}
                     onclick={() => $retryDownload.mutate({ requestId: item.id })}
                   >
-                    <RotateCcw size={12} />
+                    <Icon name="undo" size={12} />
                     Retry {item.retryableCount === 1 ? '1 file' : `${item.retryableCount} files`}
                   </Button>
                 {/if}
@@ -706,7 +706,7 @@
                   aria-label="Show requested files"
                   onclick={() => (expanded = expanded === item.id ? null : item.id)}
                 >
-                  <ChevronDown size={14} class={expanded === item.id ? 'rotate-180' : ''} />
+                  <Icon name="chevron-down" size={14} class={expanded === item.id ? 'rotate-180' : ''} />
                 </Button>
               </span>
 

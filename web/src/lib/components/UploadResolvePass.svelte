@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation } from '@tanstack/svelte-query';
-  import { ListChecks, Music2 } from '@lucide/svelte';
   import { api, type UploadFile } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
   import ReviewMatch from '$lib/components/ReviewMatch.svelte';
@@ -60,7 +60,7 @@
 {#if files.length > 1}
   <section class="flex flex-col gap-3 rounded-panel border border-line-regular p-4">
     <div class="flex flex-wrap items-center gap-2">
-      <ListChecks size={15} class="text-ink-3" />
+      <Icon name="checklist" size={15} class="text-ink-3" />
       <span class="label">Files in this upload</span>
       <span class="numeric text-meta text-ink-4">{files.length}</span>
       <span class="h-px flex-1 bg-line-thin"></span>
@@ -90,7 +90,7 @@
     {#if active}
       <div class="flex flex-col gap-3 border-t border-line-thin pt-3">
         <div class="flex items-start gap-2.5">
-          <Music2 size={15} class="mt-0.5 shrink-0 text-ink-3" />
+          <Icon name="track" size={15} class="mt-0.5 shrink-0 text-ink-3" />
           <div class="min-w-0">
             <p class="text-body font-semibold text-ink">{active.name} needs an answer</p>
             <p class="mt-1 text-meta text-ink-3">Choose how to name this file.</p>

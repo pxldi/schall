@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, useQueryClient } from '@tanstack/svelte-query';
-  import { LoaderCircle, RefreshCw, Search, Unlink } from '@lucide/svelte';
   import { api, type LibraryFile, type MatchCandidate } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -187,13 +187,13 @@
       class="field min-w-0 flex-1"
     />
     <Button type="submit" variant="outline" disabled={search.trim().length < 2}>
-      <Search size={12} strokeWidth={2.2} /> Search
+      <Icon name="search" size={12} /> Search
     </Button>
   </form>
 
   {#if loading}
     <div class="flex min-h-[17.5rem] items-start gap-2 text-meta text-ink-3">
-      <LoaderCircle size={12} class="animate-spin" /> Loading matches…
+      <Icon name="busy" size={12} class="animate-spin" /> Loading matches…
     </div>
   {:else}
     <div class="flex flex-col">
@@ -230,11 +230,11 @@
 
   <div class="flex flex-wrap gap-2">
     <Button variant="ghost" disabled={pending} onclick={() => $reconcile.mutate()}>
-      <RefreshCw size={14} /> Ask again
+      <Icon name="refresh" size={14} /> Ask again
     </Button>
     {#if file.mappingManual}
       <Button variant="ghost" class="text-fail" disabled={pending} onclick={() => $clear.mutate()}>
-        <Unlink size={14} /> Withdraw match
+        <Icon name="unlink" size={14} /> Withdraw match
       </Button>
     {/if}
   </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, Check, FileQuestion, Undo2, UserRoundCheck } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import type {
     ImportDecision,
     ImportEvidence,
@@ -104,7 +104,7 @@
     <ul class="mt-2 space-y-1">
       {#each problems as problem}
         <li class="flex items-start gap-2 text-meta text-decide/90">
-          <AlertTriangle size={12} class="mt-0.5 shrink-0" />
+          <Icon name="alert" size={12} class="mt-0.5 shrink-0" />
           <span>{problem}</span>
         </li>
       {/each}
@@ -138,17 +138,17 @@
                    difference in colour to see the difference. -->
               {#if decision}
                 <span class="flex items-center gap-1.5 text-busy">
-                  <UserRoundCheck size={13} class="shrink-0" />
+                  <Icon name="follow" size={13} class="shrink-0" />
                   <span>Resolved</span>
                 </span>
               {:else if file.problems.length}
                 <span class="flex items-center gap-1.5 text-decide">
-                  <AlertTriangle size={13} class="shrink-0" />
+                  <Icon name="alert" size={13} class="shrink-0" />
                   <span>Disagrees</span>
                 </span>
               {:else}
                 <span class="flex items-center gap-1.5 text-ok">
-                  <Check size={13} class="shrink-0" />
+                  <Icon name="check" size={13} class="shrink-0" />
                   <span>Agrees</span>
                 </span>
               {/if}
@@ -202,7 +202,7 @@
                 </ul>
               {:else}
                 <p class="flex items-center gap-1.5 text-ink-4">
-                  <FileQuestion size={12} /> No track of this edition
+                  <Icon name="file-unknown" size={12} /> No track of this edition
                 </p>
               {/if}
             </td>
@@ -271,7 +271,7 @@
                     disabled={pending}
                     onclick={() => onwithdraw(decision.id)}
                   >
-                    <Undo2 size={12} /> Undo
+                    <Icon name="undo" size={12} /> Undo
                   </button>
                 </div>
               </td>

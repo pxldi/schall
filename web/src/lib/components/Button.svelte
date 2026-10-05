@@ -57,7 +57,9 @@
   // view: the action the screen exists to offer. Everything else is an outline or a ghost, so that a page full of
   // buttons still points somewhere.
   const variants = {
-    primary: 'bg-accent font-semibold text-accent-ink hover:bg-accent-soft',
+    // The icon plate takes the text colour here: the light ink would vanish
+    // into a light-ink fill.
+    primary: 'bg-accent font-semibold text-accent-ink hover:bg-accent-soft [--plate:currentColor]',
     outline: 'border border-line-regular font-medium text-ink hover:border-line-thick',
     danger: 'border border-fail/40 bg-fail/14 font-medium text-fail hover:bg-fail/24',
     ghost: 'font-medium text-ink-2 hover:bg-surface-thick hover:text-ink'

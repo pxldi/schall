@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { Select as SelectPrimitive } from 'bits-ui';
-  import { Check } from '@lucide/svelte';
   import { cn } from '$lib/utils';
 
   // One choice.
@@ -45,7 +45,7 @@
   {#snippet children({ selected })}
     <span class="grid size-4 shrink-0 place-items-center text-accent">
       {#if selected}
-        <Check size={13} aria-hidden="true" />
+        <Icon name="check" size={13} />
       {/if}
     </span>
     <span class="min-w-0">{@render label?.()}</span>

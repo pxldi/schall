@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { Select as SelectPrimitive } from 'bits-ui';
-  import { ChevronDown } from '@lucide/svelte';
   import { cn } from '$lib/utils';
 
   // The control that shows the chosen value and opens the list.
@@ -36,9 +36,7 @@
   {...rest}
 >
   <span class="min-w-0 truncate">{@render children?.()}</span>
-  <ChevronDown
+  <Icon name="chevron-down"
     size={14}
-    aria-hidden="true"
-    class="shrink-0 text-ink-3 transition-transform in-data-[state=open]:rotate-180"
-  />
+    class="shrink-0 text-ink-3 transition-transform in-data-[state=open]:rotate-180" />
 </SelectPrimitive.Trigger>

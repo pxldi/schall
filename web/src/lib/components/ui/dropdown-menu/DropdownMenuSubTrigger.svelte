@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { DropdownMenu as MenuPrimitive } from 'bits-ui';
-  import { ChevronRight } from '@lucide/svelte';
   import { cn } from '$lib/utils';
 
   // An item that opens a list of its own instead of doing something. The
@@ -25,5 +25,5 @@
   {...rest}
 >
   <span class="min-w-0 flex-1">{@render children?.()}</span>
-  <ChevronRight size={13} class="shrink-0 text-ink-3" aria-hidden="true" />
+  <Icon name="chevron-right" size={13} class="shrink-0 text-ink-3" />
 </MenuPrimitive.SubTrigger>

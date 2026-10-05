@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   // Labels a person follows the way they follow an artist: a standing request
   // to keep what the label publishes complete. The follow feed brings in a
   // followed label's new releases as ordinary wants, the same loop and the
@@ -10,7 +11,6 @@
   // small and reads as one list rather than a browse.
   import { createMutation, createQuery, queryOptions, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { Plus, RefreshCw, Search, UserRoundMinus } from '@lucide/svelte';
   import { api, type LabelListItem, type MonitorLevel } from '$lib/api';
   import { calendarDate } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
@@ -147,7 +147,7 @@
 
   <form class="ml-auto w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
     <label class="field flex w-full items-center gap-2">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
         placeholder="Filter labels"
@@ -158,7 +158,7 @@
   </form>
 
   <Button onclick={() => (showAddLabel = true)}>
-    <Plus size={13} strokeWidth={2.3} /> Follow label
+    <Icon name="plus" size={13} /> Follow label
   </Button>
 </ControlRail>
 
@@ -290,18 +290,16 @@
                         disabled={$refresh.isPending || label.refreshStatus === 'running'}
                         onclick={() => $refresh.mutate(label.id)}
                       >
-                        <RefreshCw
+                        <Icon name="refresh"
                           size={13}
-                          strokeWidth={2.2}
-                          class={label.refreshStatus === 'running' ? 'animate-spin' : ''}
-                        />
+                          class={label.refreshStatus === 'running' ? 'animate-spin' : ''} />
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         onclick={() => (confirming = label.id)}
                       >
-                        <UserRoundMinus size={13} strokeWidth={2.2} /> Unfollow
+                        <Icon name="unfollow" size={13} /> Unfollow
                       </Button>
                     {:else}
                       <!-- Held but not followed: an earlier follow was

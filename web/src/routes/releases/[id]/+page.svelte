@@ -1,18 +1,9 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { onMount } from 'svelte';
   import { toStore } from 'svelte/store';
   import { page } from '$app/state';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import {
-    Ban,
-    Check,
-    ChevronDown,
-    Download,
-    ListPlus,
-    LoaderCircle,
-    Search,
-    Users
-  } from '@lucide/svelte';
   import {
     api,
     DuplicateProtection,
@@ -598,9 +589,9 @@
       {:else if missingCount > 0}
         <Button disabled={$wantRelease.isPending} onclick={() => $wantRelease.mutate()}>
           {#if $wantRelease.isPending}
-            <LoaderCircle size={16} class="animate-spin" />
+            <Icon name="busy" size={16} class="animate-spin" />
           {:else}
-            <ListPlus size={16} />
+            <Icon name="want" size={16} />
           {/if}
           Want {missingCount} missing
         </Button>
@@ -610,7 +601,7 @@
           onclick={() => $dismissRemainder.mutate()}
         >
           {#if $dismissRemainder.isPending}
-            <LoaderCircle size={16} class="animate-spin" />
+            <Icon name="busy" size={16} class="animate-spin" />
           {/if}
           Dismiss {missingCount === 1 ? 'it' : 'the rest'}
         </Button>
@@ -621,9 +612,9 @@
         disabled={sourcesLoading}
       >
         {#if sourcesLoading}
-          <LoaderCircle size={16} class="animate-spin" />
+          <Icon name="busy" size={16} class="animate-spin" />
         {:else}
-          <Search size={16} />
+          <Icon name="search" size={16} />
         {/if}
         Find sources
       </Button>
@@ -727,7 +718,7 @@
               </span>
               <span class="flex w-24 shrink-0 items-center justify-end gap-1.5">
                 {#if trackDone(track)}
-                  <StateMark role="ok"><Check size={10} strokeWidth={3.2} /></StateMark>
+                  <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
                 {:else}
                   {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
                   {#if tag}<StateTag tone={tag.tone}>{tag.label}</StateTag>{/if}
@@ -750,9 +741,9 @@
                           })}
                       >
                         {#if busy}
-                          <LoaderCircle size={13} class="animate-spin" />
+                          <Icon name="busy" size={13} class="animate-spin" />
                         {:else}
-                          <ListPlus size={14} />
+                          <Icon name="want" size={14} />
                         {/if}
                       </Button>
                     {:else if track.wantStatus}
@@ -767,9 +758,9 @@
                         onclick={() => $toggleTrack.mutate({ kind: 'dismiss', trackId: track.id })}
                       >
                         {#if busy}
-                          <LoaderCircle size={13} class="animate-spin" />
+                          <Icon name="busy" size={13} class="animate-spin" />
                         {:else}
-                          <Ban size={14} />
+                          <Icon name="ban" size={14} />
                         {/if}
                       </Button>
                     {:else}
@@ -781,9 +772,9 @@
                         onclick={() => $toggleTrack.mutate({ kind: 'want', trackId: track.id })}
                       >
                         {#if busy}
-                          <LoaderCircle size={13} class="animate-spin" />
+                          <Icon name="busy" size={13} class="animate-spin" />
                         {:else}
-                          <ListPlus size={13} />
+                          <Icon name="want" size={13} />
                         {/if}
                         Want
                       </Button>
@@ -797,7 +788,7 @@
                         aria-label="Not wanted"
                         onclick={() => $toggleTrack.mutate({ kind: 'dismiss', trackId: track.id })}
                       >
-                        <Ban size={14} />
+                        <Icon name="ban" size={14} />
                       </Button>
                     {/if}
                   {/if}
@@ -813,7 +804,7 @@
         <div
           class="flex min-h-56 flex-col items-center justify-center rounded-panel border border-line-thin text-center"
         >
-          <LoaderCircle size={25} class="animate-spin text-busy" />
+          <Icon name="busy" size={25} class="animate-spin text-busy" />
           <p class="mt-4 text-body text-ink-2">Importing the track list…</p>
         </div>
       {/if}
@@ -863,7 +854,7 @@
                       disabled={$startDownload.isPending}
                       onclick={() => $startDownload.mutate({ requestId: item.id })}
                     >
-                      <Download size={13} /> Start
+                      <Icon name="download" size={13} /> Start
                     </Button>
                   {/if}
                   <Button
@@ -912,7 +903,7 @@
                 <div class="h-24 animate-pulse rounded-card bg-surface-thick" aria-hidden="true"></div>
               {/each}
               <p class="flex items-center gap-2 text-body text-ink-3">
-                <LoaderCircle size={15} class="animate-spin" /> Searching peers for “{sourceQuery}”…
+                <Icon name="busy" size={15} class="animate-spin" /> Searching peers for “{sourceQuery}”…
               </p>
             </div>
           {:else if sourcesError}
@@ -941,7 +932,7 @@
                       title={candidate.match.summary}
                     >
                       {#if candidate.match.complete}
-                        <Check size={11} strokeWidth={3} />
+                        <Icon name="check" size={11} />
                       {:else if candidate.match.checked}
                         {candidate.match.confirmed}/{candidate.match.expected}
                       {:else}
@@ -951,7 +942,7 @@
                     <span class="min-w-0 flex-1">
                       <span class="block truncate text-body font-medium text-ink">{candidate.directory || candidate.username}</span>
                       <span class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ink-3">
-                        <span class="flex items-center gap-1"><Users size={12} /> {candidate.username}</span>
+                        <span class="flex items-center gap-1"><Icon name="artists" size={12} /> {candidate.username}</span>
                         <span>{quality(candidate)}</span>
                         <span>{candidate.trackCount} tracks</span>
                         <span>{formatBytes(candidate.totalSizeBytes)}</span>
@@ -961,7 +952,7 @@
                         {#if candidate.freeUploadSlot}<span class="text-ok">Free slot</span>{/if}
                       </span>
                     </span>
-                    <ChevronDown size={16} class="shrink-0 text-ink-4 transition {expandedSource === sourceKey(candidate) ? 'rotate-180' : ''}" />
+                    <Icon name="chevron-down" size={16} class="shrink-0 text-ink-4 transition {expandedSource === sourceKey(candidate) ? 'rotate-180' : ''}" />
                   </button>
 
                   {#if expandedSource === sourceKey(candidate)}
@@ -983,7 +974,7 @@
                       <div class="mt-3 flex flex-wrap items-center gap-3">
                         {#if requestedKeys.has(sourceKey(candidate))}
                           <span class="flex items-center gap-1.5 text-meta text-ok">
-                            <Check size={13} strokeWidth={3} /> Requested
+                            <Icon name="check" size={13} /> Requested
                           </span>
                         {:else}
                           <Button
@@ -992,7 +983,7 @@
                             disabled={$requestDownload.isPending}
                             onclick={() => $requestDownload.mutate({ candidate })}
                           >
-                            <Download size={13} /> Request
+                            <Icon name="download" size={13} /> Request
                           </Button>
                         {/if}
                       </div>

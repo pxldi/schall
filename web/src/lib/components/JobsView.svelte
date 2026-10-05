@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { ChevronRight, LoaderCircle, RotateCcw, X } from '@lucide/svelte';
   import {
     api,
     type FailedJob,
@@ -829,9 +829,9 @@
                     onclick={() => confirmCancelKind(backlog)}
                   >
                     {#if press?.pending}
-                      <LoaderCircle size={12} class="animate-spin" />
+                      <Icon name="busy" size={12} class="animate-spin" />
                     {:else}
-                      <X size={12} />
+                      <Icon name="close" size={12} />
                     {/if}
                     Cancel all
                   </Button>
@@ -894,9 +894,9 @@
                         onclick={() => $cancel.mutate(job)}
                       >
                         {#if $cancel.isPending && $cancel.variables?.id === job.id}
-                          <LoaderCircle size={12} class="animate-spin" />
+                          <Icon name="busy" size={12} class="animate-spin" />
                         {:else}
-                          <X size={12} />
+                          <Icon name="close" size={12} />
                         {/if}
                         Cancel
                       </Button>
@@ -1007,9 +1007,9 @@
                 onclick={() => $retryCause.mutate(cause)}
               >
                 {#if row.spinning}
-                  <LoaderCircle size={12} class="animate-spin" />
+                  <Icon name="busy" size={12} class="animate-spin" />
                 {:else if !row.held}
-                  <RotateCcw size={12} />
+                  <Icon name="undo" size={12} />
                 {/if}
                 {row.label}
               </Button>
@@ -1036,7 +1036,7 @@
               <summary
                 class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
               >
-                <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+                <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
                 What went wrong
               </summary>
 
@@ -1075,9 +1075,9 @@
                           onclick={() => $retry.mutate(failure)}
                         >
                           {#if jobRow.spinning}
-                            <LoaderCircle size={12} class="animate-spin" />
+                            <Icon name="busy" size={12} class="animate-spin" />
                           {:else if !jobRow.held}
-                            <RotateCcw size={12} />
+                            <Icon name="undo" size={12} />
                           {/if}
                           {jobRow.label}
                         </Button>

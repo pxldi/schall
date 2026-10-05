@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import { DropdownMenu as MenuPrimitive } from 'bits-ui';
-  import { Check } from '@lucide/svelte';
   import { cn } from '$lib/utils';
 
   // An item that is on or off rather than an action. The tick sits in a column
@@ -44,7 +44,7 @@
       {#if partly}
         <span aria-hidden="true" class="h-[2px] w-[9px] rounded-full bg-accent"></span>
       {:else if on}
-        <Check size={13} aria-hidden="true" />
+        <Icon name="check" size={13} />
       {/if}
     </span>
     <span class="min-w-0">{@render label?.()}</span>
