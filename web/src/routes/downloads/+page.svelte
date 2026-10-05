@@ -752,14 +752,9 @@
                   aria-valuenow={transferred(item)}
                   aria-valuemin="0"
                   aria-valuemax="100"
-                  class="block h-1.5 overflow-hidden rounded-full bg-surface-thick {showProgress
-                    ? ''
-                    : 'invisible'}"
+                  class="dot-track block {showProgress ? '' : 'invisible'}"
                 >
-                  <span
-                    class="block h-full rounded-full bg-busy transition-[width]"
-                    style={`width: ${transferred(item)}%`}
-                  ></span>
+                  <span class="dot-fill block transition-[width]" style={`width: ${transferred(item)}%`}></span>
                 </span>
                 <span
                   class="numeric mt-1 block whitespace-nowrap text-meta text-ink-4 {showProgress ? '' : 'invisible'}"

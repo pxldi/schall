@@ -1101,6 +1101,40 @@ a {
     }
   }
 
+  /* Progress printed as a row of dots (ADR Duoton, halftone tables): unlit
+     dots for the whole, lit ones in the busy colour for what has arrived.
+     Progress is a state, so it never takes the page's ink. */
+  .dot-track,
+  .dot-fill {
+    height: 7px;
+    background-size: 9px 7px;
+    background-repeat: repeat-x;
+  }
+  .dot-track {
+    overflow: hidden;
+    background-image: radial-gradient(circle at 3.5px 3.5px, var(--color-line-thick) 2.6px, transparent 3px);
+  }
+  .dot-fill {
+    background-image: radial-gradient(circle at 3.5px 3.5px, var(--color-busy) 2.6px, transparent 3px);
+  }
+
+  /* The row under the pointer or keyboard focus takes a wash of the page's
+     light ink and a rule at its left edge (ADR Duoton, halftone tables). The
+     ink is chrome; the row's state keeps its own colour. */
+  .want-row {
+    transition: background-color var(--motion-state) var(--motion-ease);
+  }
+  .want-row:hover,
+  .want-row:has(:focus-visible) {
+    background-color: color-mix(in srgb, var(--color-duo-light) 8%, transparent);
+  }
+  tr.want-row:hover > td:first-child,
+  tr.want-row:has(:focus-visible) > td:first-child,
+  div.want-row:hover,
+  div.want-row:has(:focus-visible) {
+    box-shadow: inset 2px 0 0 var(--color-duo-light);
+  }
+
   .want-toggle[data-wanted='true'] {
     color: var(--color-duo-dark);
     box-shadow: inset 0 0 0 1.5px var(--color-duo-light);
