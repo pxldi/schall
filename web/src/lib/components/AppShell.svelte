@@ -3,6 +3,7 @@
   import { Search } from '@lucide/svelte';
   import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
+  import Icon from './Icon.svelte';
   import Print from './Print.svelte';
 
   let { children } = $props();
@@ -103,7 +104,7 @@
     </nav>
 
     <button class="topbar-search ml-auto" onclick={openSearch}>
-      <Search size={14} strokeWidth={2} aria-hidden="true" />
+      <Icon icon={Search} size="sm" />
       <span>Search</span>
     </button>
   </header>
