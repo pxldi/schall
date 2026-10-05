@@ -18,6 +18,8 @@
   import { holding, progress, quiet } from '$lib/vocabulary';
   import Chip from '$lib/components/Chip.svelte';
   import Cover from '$lib/components/Cover.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { usePagePrint } from '$lib/duoton';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -259,21 +261,25 @@
   }
 
   const shown = $derived($releases.data?.items ?? []);
+
+  // The page is printed from the artist's lead release, the one with the most
+  // songs held, and takes its inks from it (ADR Duoton). A second pictured
+  // release is screened over it when the discography has one.
+  usePagePrint(() => {
+    const detail = $artist.data;
+    if (!detail) return undefined;
+    const lead = detail.leadAlbumId;
+    const second = shown.find((release) => release.hasCover && release.id !== lead)?.id;
+    return {
+      mode: 'single',
+      covers: [lead, second].filter((id): id is string => Boolean(id))
+    };
+  });
+  // A long name steps down a size so it stays on two lines at most.
+  const heroSize = $derived(($artist.data?.name.length ?? 0) > 18 ? 'm' : 'l');
   // 'pending' means a refresh has never run, not that one is under way: showing
   // a spinner for it would claim work that nothing is doing.
   const refreshing = $derived(['queued', 'running'].includes($artist.data?.refreshStatus ?? ''));
-
-  function initialsOf(name: string): string {
-    const words = name
-      .split(/[\s.]+/)
-      .filter((word) => word && !['of', 'the', 'and', 'a'].includes(word.toLowerCase()));
-    if (words.length < 2) return (words[0] ?? name).slice(0, 2).toUpperCase();
-    return words
-      .slice(0, 3)
-      .map((word) => word[0])
-      .join('')
-      .toUpperCase();
-  }
 
   // What is still worth counting: the tracks nobody dismissed — except at
   // 'owned', where the denominator is what the library already maps and a
@@ -400,7 +406,9 @@
     if (state === 'partial') {
       return {
         text: `${year} · ${release.ownedTrackCount} of ${countable(release)}`,
-        tone: 'text-accent'
+        // Not the accent: the inks are chrome and never say what state a
+        // release is in (ADR Duoton).
+        tone: 'text-ink-2'
       };
     }
     return { text: year, tone: 'text-ink-3' };
@@ -420,99 +428,44 @@
       {@render ArtistSkeleton()}
     {/snippet}
   {#if $artist.data}
-  <div class="px-4 sm:px-6 pt-6 pb-3">
-    <BackLink fallback="/artists" label="Back to artists" />
-  </div>
-
-  <!-- The artist, at the size an artist is looked at. Pictured by the sweep,
-       from the image MusicBrainz holds against this artist's own identifier.
-       An artist nobody has a picture of keeps their initials in the same
-       circle instead. -->
-  <section class="flex items-start gap-5 px-4 sm:px-6 pb-2">
-    <Cover
-      eager
-      src={`/api/v1/artists/${artistID}/image`}
-      fallback={initialsOf($artist.data.name)}
-      class="size-24 shrink-0 rounded-full border border-line-thin bg-surface-regular text-3xl font-semibold object-cover"
-    />
-
-    <div class="flex min-w-0 flex-1 flex-col gap-2 pt-1">
-      <h1 class="text-quiet-display font-semibold text-ink">{$artist.data.name}</h1>
-
-      <p class="text-body text-ink-2">
+  <Hero title={$artist.data.name} size={heroSize}>
+    {#snippet back()}
+      <BackLink fallback="/artists" label="Back to artists" />
+    {/snippet}
+    {#snippet sub()}
+      <span>
         {#if countedReleases}
-          <span class="numeric font-semibold text-ink">{ownedCount}</span>
-          of <span class="numeric font-semibold text-ink">{countedReleases}</span>
+          <b class="numeric font-semibold text-ink">{ownedCount}</b>
+          of <b class="numeric font-semibold text-ink">{countedReleases}</b>
           {basis} owned
-          {#if dismissedReleaseCount}
-            · {dismissedReleaseCount} dismissed
-          {/if}
         {:else if dismissedReleaseCount}
           everything left was dismissed
         {:else}
-          <span class="numeric font-semibold text-ink-3">—</span> {basis} owned
+          <span class="numeric text-ink-3">—</span> {basis} owned
         {/if}
-      </p>
-
+      </span>
+      {#if countedReleases && dismissedReleaseCount}
+        <span>{dismissedReleaseCount} dismissed</span>
+      {/if}
       <!-- Releases the catalogue knows about and has no tracklist for yet.
-           They are neither owned nor missing, and without this line the
-           header's denominator looks smaller than the grid below it. -->
+           They are neither owned nor missing, and without this the header's
+           denominator looks smaller than the grid below it. -->
       {#if loadingReleases > 0}
-        <p class="numeric text-meta text-ink-3">
+        <span class="numeric">
           {loadingReleases}
           {loadingReleases === 1 ? 'release' : 'releases'} still loading
-        </p>
+        </span>
       {/if}
-
-      <!-- What MusicBrainz's community voted this artist is. A tag rather
-           than a filter chip, because a genre here is not something to narrow
-           by. An artist with no votes shows nothing, and the row disappears
-           rather than standing empty. -->
+      <!-- What MusicBrainz's community voted this artist is. Display only, so
+           it is words in the line rather than chips to press. -->
       {#if $artist.data.genres?.length}
-        <ul class="flex flex-wrap items-center gap-1.5">
-          {#each $artist.data.genres as genre (genre)}
-            <li><StateTag>{genre}</StateTag></li>
-          {/each}
-        </ul>
+        <span>{$artist.data.genres.slice(0, 3).join(', ')}</span>
       {/if}
-
-      <!-- Who this is, from Wikipedia. Collapsed, because somebody on this
-           page is usually here for the music rather than the reading; and
-           behind a disclosure rather than trimmed, so the words stay in the
-           product without being the first thing on it.
-           The attribution is not chrome. Wikipedia text is CC BY-SA and the
-           line under it satisfies the licence. An artist no encyclopaedia has
-           heard of shows nothing at all. -->
-      {#if $artist.data.biography}
-        <details class="group mt-1">
-          <summary
-            class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
-          >
-            About
-            <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
-          </summary>
-          <p class="reveal mt-2 max-w-prose text-body leading-relaxed text-ink-2">
-            {$artist.data.biography}
-          </p>
-          {#if $artist.data.biographySourceUrl}
-            <p class="mt-1.5 text-meta text-ink-4">
-              From
-              <a
-                href={$artist.data.biographySourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                class="underline transition hover:text-accent-soft">Wikipedia</a
-              >
-            </p>
-          {/if}
-        </details>
-      {/if}
-    </div>
-
-    <!-- Follow, unfollow and how much to monitor are one control: a single
-         select rather than a Following button beside a separate level picker
-         competing for the same decision. -->
-    <div class="flex shrink-0 items-center gap-2 pt-1">
+    {/snippet}
+    {#snippet actions()}
+      <!-- Follow, unfollow and how much to monitor are one control: a single
+           select rather than a Following button beside a separate level picker
+           competing for the same decision. -->
       {#key `${monitorValue}:${followControlReset}`}
         <PillSelect
           options={monitorOptions}
@@ -555,8 +508,39 @@
           Want {missingCount} missing
         </Button>
       {/if}
-    </div>
-  </section>
+    {/snippet}
+  </Hero>
+
+  <!-- Who this is, from Wikipedia. Collapsed, because somebody on this page is
+       usually here for the music rather than the reading; and behind a
+       disclosure rather than trimmed, so the words stay in the product without
+       being the first thing on it. The attribution is not chrome: Wikipedia
+       text is CC BY-SA and the line under it satisfies the licence. An artist
+       no encyclopaedia has heard of shows nothing at all. -->
+  {#if $artist.data.biography}
+    <details class="group px-4 pb-3 sm:px-6">
+      <summary
+        class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
+      >
+        About
+        <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+      </summary>
+      <p class="reveal mt-2 max-w-prose text-body leading-relaxed text-ink-2">
+        {$artist.data.biography}
+      </p>
+      {#if $artist.data.biographySourceUrl}
+        <p class="mt-1.5 text-meta text-ink-4">
+          From
+          <a
+            href={$artist.data.biographySourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            class="underline transition hover:text-accent-soft">Wikipedia</a
+          >
+        </p>
+      {/if}
+    </details>
+  {/if}
 
   <!-- The answer sits under the button that asked, because "wanted 3 across 7
        releases" is what somebody pressing it needs to see and a page-level
@@ -670,25 +654,31 @@
             {/if}
           </div>
 
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-[22px] gap-y-3.5">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
             {#each visible as release (release.id)}
               {@const info = describe(release)}
-              <a href={`/releases/${release.id}`} class="flex w-[7.5rem] min-w-0 flex-col gap-1.5">
+              <a href={`/releases/${release.id}`} class="group flex min-w-0 flex-col gap-1.5">
                 <!-- Only what Schall already holds, and only where the row
                      says it holds one: a page of tiles asks this installation
                      for the pictures it has and never sets an archive working.
-                     A release nobody has pictured yet keeps the hatched square
-                     it always had, and the sweep fills it in its own time. -->
+                     A release nobody has pictured gets generated art in its
+                     place (ADR Duoton). A release with nothing held is faded,
+                     so the ones in the library stand out from the ones that
+                     are not. -->
                 <div
-                  class="aspect-square w-[7.5rem] overflow-hidden rounded-row border border-line-thin bg-[repeating-linear-gradient(135deg,rgba(255,255,255,.05)_0_1px,transparent_1px_8px)]"
+                  class="aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px] {release.ownedTrackCount ===
+                  0
+                    ? 'opacity-[0.38]'
+                    : ''}"
+                  data-held={release.ownedTrackCount > 0 ? 'some' : 'none'}
                 >
                   <Cover
                     src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
-                    fallback="♪"
+                    seed={release.id}
                     class="size-full object-cover"
                   />
                 </div>
-                <span class="block truncate text-body font-medium text-ink" title={release.title}>
+                <span class="block truncate text-body font-bold tracking-[-0.01em] text-ink" title={release.title}>
                   {release.title}
                 </span>
                 <!-- Never cut off. The line is a year and then how much of the
@@ -696,7 +686,7 @@
                      the denominator, which is the half that makes the other
                      half mean anything. A second line is cheaper than a fact
                      that ends in an ellipsis. -->
-                <span class="numeric block min-w-0 text-meta {info.tone}" title={info.text}
+                <span class="numeric -mt-1 block min-w-0 text-meta {info.tone}" title={info.text}
                   >{info.text}</span
                 >
               </a>
@@ -742,10 +732,10 @@
     aria-label="Loading releases"
   >
     <span class="h-3 w-16 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-[22px] gap-y-3.5">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
       {#each Array(48) as _, placeholderIndex (placeholderIndex)}
-        <div class="flex w-[7.5rem] flex-col gap-1.5" aria-hidden="true">
-          <div class="aspect-square w-[7.5rem] animate-pulse rounded-row bg-surface-regular"></div>
+        <div class="flex flex-col gap-1.5" aria-hidden="true">
+          <div class="aspect-square animate-pulse rounded-card bg-surface-regular"></div>
           <span class="h-4 w-full animate-pulse rounded-row bg-surface-regular"></span>
           <span class="h-3 w-2/3 animate-pulse rounded-row bg-surface-regular"></span>
         </div>
@@ -756,21 +746,14 @@
 
 {#snippet ArtistSkeleton()}
   <div role="status" aria-label="Loading artist page">
-    <div class="px-4 sm:px-6 pt-6 pb-3">
-      <span class="block h-4 w-4 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
-    </div>
-
-    <section class="flex items-start gap-5 px-4 sm:px-6 pb-2" aria-hidden="true">
-      <div class="size-24 shrink-0 animate-pulse rounded-full bg-surface-regular"></div>
-      <div class="flex min-w-0 flex-1 flex-col gap-2 pt-1">
-        <span class="h-8 w-64 animate-pulse rounded-row bg-surface-regular"></span>
-        <span class="h-4 w-48 animate-pulse rounded-row bg-surface-regular"></span>
-        <span class="h-5 w-32 animate-pulse rounded-row bg-surface-regular"></span>
-      </div>
-      <div class="flex shrink-0 items-center gap-2 pt-1">
-        <span class="h-7 w-36 animate-pulse rounded-full bg-surface-regular"></span>
-        <span class="h-7 w-24 animate-pulse rounded-row bg-surface-regular"></span>
-      </div>
+    <!-- The same box the hero fills, so nothing moves when the artist lands. -->
+    <section
+      class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
+      style="min-height: calc(var(--print-height) - var(--topbar-height));"
+      aria-hidden="true"
+    >
+      <span class="h-16 w-96 max-w-full animate-pulse rounded-row bg-surface-regular/60"></span>
+      <span class="h-4 w-56 animate-pulse rounded-row bg-surface-regular/60"></span>
     </section>
 
     <ControlRail label="Which releases to show">
