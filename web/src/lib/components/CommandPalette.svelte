@@ -10,6 +10,7 @@
   import { cn } from '$lib/utils';
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Cover from '$lib/components/Cover.svelte';
 
   // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
@@ -143,16 +144,16 @@
   }
 
   const rowClass =
-    'relative grid grid-cols-[16px_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
+    'relative grid grid-cols-[36px_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
     'rounded-row border-b border-line-thin px-[18px] py-2 text-inherit no-underline ' +
-    'transition-[background] last:border-b-0 hover:bg-surface-thick';
+    'transition-[background] last:border-b-0 hover:bg-duo-light/10';
 
   // The keyboard selection mark: --raise-2, one step above the hover tint, plus
   // a 2px --ink-2 bar at the leading edge. Not the accent, which is chrome and
   // never encodes state, and not the focus ring, which would say keystrokes go
   // to the row when they are still going to the field.
   const chosenClass =
-    "bg-surface-thick before:absolute before:inset-y-1 before:left-0 before:w-0.5 " +
+    "bg-duo-light/10 before:absolute before:inset-y-1 before:left-0 before:w-0.5 " +
     "before:rounded-full before:bg-ink-2 before:content-['']";
 
   function summon() {
@@ -292,7 +293,7 @@
       aria-label="Search Schall"
       in:drop={{ duration: motionMs('surface') }}
       out:drop={{ duration: motionMs('state') }}
-      class="palette-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden rounded-[16px] border border-[rgba(232,233,231,0.12)] bg-[rgba(24,26,31,0.82)]"
+      class="palette-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden rounded-[16px]"
     >
       <div
         class={cn(
@@ -377,17 +378,38 @@
                       }}
                       onmouseenter={() => selectRow(row.id)}
                     >
-                      <span
-                        aria-hidden="true"
-                        class={cn('grid size-4 place-items-center rounded-row', markTones[row.role])}
-                      >
-                        {#if row.role === 'ok'}
-                          <Check size={10} strokeWidth={3.2} />
-                        {:else}
-                          <span class="font-mono text-micro font-bold leading-none"
-                            >{markGlyphs[row.role]}</span
-                          >
+                      <span aria-hidden="true" class="relative size-9">
+                        {#if row.cover}
+                          <Cover
+                            src={row.cover.src}
+                            seed={row.cover.seed}
+                            class="size-9 rounded-[6px] object-cover"
+                          />
                         {/if}
+                        <!-- The thing's state, pinned to the picture's corner
+                             on a solid chip so it reads on any cover, or
+                             standing alone where there is no picture. -->
+                        <span
+                          class={cn(
+                            'absolute rounded-row',
+                            row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
+                          )}
+                        >
+                          <span
+                            class={cn(
+                              'grid size-4 place-items-center rounded-row',
+                              markTones[row.role]
+                            )}
+                          >
+                            {#if row.role === 'ok'}
+                              <Check size={10} strokeWidth={3.2} />
+                            {:else}
+                              <span class="text-micro font-bold leading-none"
+                                >{markGlyphs[row.role]}</span
+                              >
+                            {/if}
+                          </span>
+                        </span>
                       </span>
                       <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="truncate text-body text-ink"
@@ -472,20 +494,33 @@
 {/if}
 
 <style>
-  /* Frosted like the other floating surfaces, with a deeper shadow so the
-     panel sits clearly above the dimmed page. Entry and exit are Svelte
-     transitions on the element, so the close animates too. */
+  /* Glass tinted with the page's dark ink: the print and the covers behind
+     show through as colour, and the blur keeps text behind unreadable. Poldi
+     chose this over an opaque panel on 2026-10-05. */
   .palette-panel {
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
+    background: color-mix(
+      in srgb,
+      var(--color-duo-dark) 45%,
+      rgb(20 22 27 / 0.42)
+    );
+    backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    -webkit-backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    border: 1px solid rgb(255 255 255 / 0.14);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 30px 80px rgb(0 0 0 / 0.55);
   }
 
-  /* The dim behind the panel, as the Duoton prototype draws it. */
+  /* A light dim, so the page stays visible around the glass. */
   .palette-scrim {
-    background: rgb(5 6 8 / 0.6);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgb(5 6 8 / 0.28);
+  }
+
+  /* The state badge sits on the picture, in a solid chip so it reads on any
+     cover. */
+  .palette-badge {
+    background-color: var(--color-ground);
+    box-shadow: 0 0 0 2px rgb(5 6 8 / 0.5);
   }
 
   /* The focus ring goes round the whole search row, inside the panel. Drawn
