@@ -237,7 +237,7 @@
   };
 </script>
 
-<div class="layout-width flex flex-col gap-4 px-6 py-5">
+<div class="flex flex-col gap-4 px-6 py-5">
   <Segmented
     options={piles}
     value={pile}

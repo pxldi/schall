@@ -155,6 +155,21 @@ describe('CommandPalette', () => {
     expect(asked).toEqual(['/api/v1/search?q=r']);
   });
 
+  it('keeps every key typed while it opens', async () => {
+    mount();
+
+    // A burst faster than the palette opens: no task runs between the keys.
+    for (const key of 'ok ') await fireEvent.keyDown(document.body, { key });
+    await vi.advanceTimersByTimeAsync(0);
+    // Open, but the keys still land on the page rather than the field.
+    (field() as HTMLInputElement).blur();
+    for (const key of 'co ') await fireEvent.keyDown(document.body, { key });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect((field() as HTMLInputElement).value).toBe('ok co ');
+    expect(document.activeElement).toBe(field());
+  });
+
   it('no longer opens on Ctrl K or any held modifier', async () => {
     mount();
 

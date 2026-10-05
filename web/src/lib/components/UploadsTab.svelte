@@ -209,7 +209,7 @@
   });
 </script>
 
-<div class="layout-width flex flex-col gap-4 px-6 py-4">
+<div class="flex flex-col gap-4 px-6 py-4">
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
     <span
       class="numeric truncate rounded-row border border-line-thin bg-surface-regular px-2 py-[3px] text-meta font-medium text-ink-2"
