@@ -810,7 +810,13 @@ VALUES ('keep', '', false);
 -- in use, and the sweep that fills this table picks rows that are absent, so
 -- seeding them is also what stops a seeded database from calling an archive on
 -- every boot.
-INSERT INTO release_cover_art (album_id, image, content_type, source, fetched_at)
+--
+-- The inks are written beside them because an SVG cannot be read for inks, and
+-- they are the colours each picture is drawn in. A row with no palette would be
+-- read by the next sweep.
+INSERT INTO release_cover_art (
+    album_id, image, content_type, source, fetched_at, ink_dark, ink_light, palette
+)
 SELECT
     albums.id,
     convert_to(
@@ -829,7 +835,10 @@ SELECT
     ),
     'image/svg+xml',
     'embedded',
-    now() - interval '3 hours'
+    now() - interval '3 hours',
+    shade.dark,
+    shade.ink,
+    ARRAY[shade.background, shade.ink]
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 JOIN LATERAL (
@@ -840,6 +849,11 @@ JOIN LATERAL (
         (ARRAY['#1f4b57', '#4a2f5c', '#5c3a20', '#204a2f', '#4a2030', '#2a3560'])[
             (get_byte(decode(md5(albums.title), 'hex'), 0) % 6) + 1
         ] AS background,
+        -- The same colour clamped to the dark ink's luminance, as ReadInks
+        -- would store it.
+        (ARRAY['#15333a', '#3d274b', '#3e2715', '#153220', '#4a2030', '#222b4f'])[
+            (get_byte(decode(md5(albums.title), 'hex'), 0) % 6) + 1
+        ] AS dark,
         '#f2ece4'::text AS ink
 ) AS shade ON true;
 

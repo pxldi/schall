@@ -133,7 +133,7 @@ func (q *Queries) EnsureWeeklyPlaylist(ctx context.Context, name string) (Playli
 			name = EXCLUDED.name,
 			description = EXCLUDED.description,
 			updated_at = now()
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		name, "Songs Schall picked for this week. Star one in your player to keep it.",
 	))
 }
@@ -142,7 +142,7 @@ func (q *Queries) EnsureWeeklyPlaylist(ctx context.Context, name string) (Playli
 // refresh has made one.
 func (q *Queries) WeeklyPlaylist(ctx context.Context) (PlaylistRow, error) {
 	return scanPlaylist(q.db.QueryRow(ctx, `
-		SELECT`+playlistColumns+`,`+playlistEntryCounts+`
+		SELECT`+playlistColumns+`,`+playlistReadings+`
 		FROM playlists
 		WHERE source = 'weekly'
 	`))

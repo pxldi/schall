@@ -26,6 +26,9 @@ type fakeCoverStore struct {
 	// day the chain last changed reaches the database.
 	askedArtists []db.ArtistsMissingImageParams
 
+	withoutInks []db.ReleaseCoversWithoutInksRow
+	savedInks   []db.SaveReleaseInksParams
+
 	biographiesWaiting []db.ArtistsMissingBiographyRow
 	savedBiographies   []db.SaveArtistBiographyParams
 
@@ -85,6 +88,19 @@ func (store *fakeCoverStore) SaveReleaseCoverArt(
 		store.onSave()
 	}
 	return store.saveReleaseErr
+}
+
+func (store *fakeCoverStore) ReleaseCoversWithoutInks(
+	context.Context, int32,
+) ([]db.ReleaseCoversWithoutInksRow, error) {
+	return store.withoutInks, nil
+}
+
+func (store *fakeCoverStore) SaveReleaseInks(
+	_ context.Context, params db.SaveReleaseInksParams,
+) (int64, error) {
+	store.savedInks = append(store.savedInks, params)
+	return 1, nil
 }
 
 func sweeperFor(t *testing.T, store *fakeCoverStore, handler http.HandlerFunc) *Sweeper {

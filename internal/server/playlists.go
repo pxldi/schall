@@ -264,10 +264,32 @@ type playlistResponse struct {
 	OwnedCount     int64      `json:"ownedCount"`
 	ImportedAt     *time.Time `json:"importedAt"`
 	CreatedAt      *time.Time `json:"createdAt"`
+	// CoverReleaseID is the release the playlist is pictured by: the release
+	// of its first entry that leads to one. Inks are that release's inks. Both
+	// are null when no entry leads to a release.
+	CoverReleaseID *uuid.UUID    `json:"coverReleaseId"`
+	Inks           *inksResponse `json:"inks"`
+}
+
+// withCoverInks fills the inks of each playlist's cover release in one read.
+func (api *API) withCoverInks(ctx context.Context, playlists []playlistResponse) {
+	albumIDs := make([]uuid.UUID, 0, len(playlists))
+	for _, playlist := range playlists {
+		if playlist.CoverReleaseID != nil {
+			albumIDs = append(albumIDs, *playlist.CoverReleaseID)
+		}
+	}
+	inks := api.releaseInks(ctx, albumIDs)
+	for index := range playlists {
+		if id := playlists[index].CoverReleaseID; id != nil {
+			playlists[index].Inks = rowInks(inks, *id)
+		}
+	}
 }
 
 func toPlaylistResponse(row db.PlaylistRow) playlistResponse {
 	return playlistResponse{
+		CoverReleaseID: nullableUUID(row.CoverAlbumID),
 		ID:             row.ID,
 		Source:         row.Source,
 		SourceID:       textPointer(row.SourceID),
@@ -298,6 +320,9 @@ type playlistEntryResponse struct {
 	Source         *string    `json:"source,omitempty"`
 	ExternalURL    *string    `json:"externalUrl,omitempty"`
 	MinimumBitrate *int32     `json:"minimumBitrate,omitempty"`
+	// ReleaseID is the release the entry is pictured by: the release its file
+	// is mapped onto, else the release its want leads to. Absent when neither.
+	ReleaseID *uuid.UUID `json:"releaseId,omitempty"`
 	// MusicBrainzSeed is the release editor filled in for this entry, and it is
 	// here only for the entries MusicBrainz has had nothing for. Its presence is
 	// the whole signal: a reader cannot tell an entry waiting for its first
@@ -334,6 +359,7 @@ func (api *API) listPlaylists(response http.ResponseWriter, request *http.Reques
 	for _, row := range rows {
 		items = append(items, toPlaylistResponse(row))
 	}
+	api.withCoverInks(request.Context(), items)
 	api.writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
 
@@ -383,12 +409,13 @@ func (api *API) getPlaylist(response http.ResponseWriter, request *http.Request)
 	items := make([]playlistEntryResponse, 0, len(entries))
 	for _, entry := range entries {
 		item := playlistEntryResponse{
-			ID:       entry.ID,
-			Position: entry.Position,
-			Artist:   entry.EntryArtist,
-			Title:    entry.EntryTitle,
-			Album:    entry.EntryAlbum,
-			ISRC:     textPointer(entry.EntryISRC),
+			ID:        entry.ID,
+			Position:  entry.Position,
+			Artist:    entry.EntryArtist,
+			Title:     entry.EntryTitle,
+			Album:     entry.EntryAlbum,
+			ISRC:      textPointer(entry.EntryISRC),
+			ReleaseID: nullableUUID(entry.ReleaseID),
 		}
 		if entry.EntryDurationMS.Valid {
 			duration := entry.EntryDurationMS.Int32
@@ -418,8 +445,10 @@ func (api *API) getPlaylist(response http.ResponseWriter, request *http.Request)
 		}
 		items = append(items, item)
 	}
+	header := []playlistResponse{toPlaylistResponse(playlist)}
+	api.withCoverInks(request.Context(), header)
 	api.writeJSON(response, http.StatusOK, map[string]any{
-		"playlist": toPlaylistResponse(playlist),
+		"playlist": header[0],
 		"entries":  items,
 	})
 }

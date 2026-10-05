@@ -75,7 +75,7 @@ func (q *Queries) EnsureNewReleasesPlaylist(ctx context.Context, name string) (P
 		VALUES ('new_releases', $1, $2)
 		ON CONFLICT ((source = 'new_releases')) WHERE source = 'new_releases' DO UPDATE SET
 			updated_at = now()
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		name, "New music from the artists and labels you follow, newest release first.",
 	))
 }
@@ -84,7 +84,7 @@ func (q *Queries) EnsureNewReleasesPlaylist(ctx context.Context, name string) (P
 // before the first refresh has made one.
 func (q *Queries) NewReleasesPlaylist(ctx context.Context) (PlaylistRow, error) {
 	return scanPlaylist(q.db.QueryRow(ctx, `
-		SELECT`+playlistColumns+`,`+playlistEntryCounts+`
+		SELECT`+playlistColumns+`,`+playlistReadings+`
 		FROM playlists
 		WHERE source = 'new_releases'
 	`))
