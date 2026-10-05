@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Search } from '@lucide/svelte';
   import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
   import Icon from './Icon.svelte';
@@ -104,7 +103,7 @@
     </nav>
 
     <button class="topbar-search ml-auto" onclick={openSearch}>
-      <Icon icon={Search} size="sm" />
+      <Icon name="search" size="sm" />
       <span>Search</span>
     </button>
   </header>
