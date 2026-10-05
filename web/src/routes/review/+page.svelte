@@ -21,6 +21,8 @@
   } from '$lib/review';
   import { listening, setVolume } from '$lib/preview.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { usePagePrint } from '$lib/duoton';
   import CopyCard from '$lib/components/CopyCard.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -168,6 +170,15 @@
   let at = $state(0);
   const current = $derived(filtered[Math.min(at, Math.max(filtered.length - 1, 0))]);
 
+  // The print is the cover of the song being decided, printed large, so each
+  // question carries its own inks (ADR Duoton). A want names the album it came
+  // from when it did; a folder names the release it was fetched for.
+  const currentAlbum = $derived(current?.want?.target.originAlbumId ?? current?.download?.albumId);
+  usePagePrint(() => {
+    if (loading) return undefined;
+    return { covers: currentAlbum ? [currentAlbum] : [], mode: 'single', height: 16 };
+  });
+
   let held = $state('');
   // Whether the reader has put themselves anywhere yet. Nothing is held until
   // they do, so the position is the top of the list wherever the two reads
@@ -205,8 +216,7 @@
     return { destroy: () => observer.disconnect() };
   }
 
-  /** Moves to another question by position, wrapping at either end — there is
-   * no count on screen to say where the ends are any more. */
+  /** Moves to another question by position, wrapping at either end. */
   function step(index: number) {
     placed = true;
     if (filtered.length === 0) {
@@ -487,16 +497,58 @@
 <svelte:head><title>Review · Schall</title></svelte:head>
 <svelte:window onkeydown={onKey} />
 
-<div class="flex min-h-screen flex-1 flex-col lg:flex-row">
-  <!-- The current track is the visible h1 below once there is one; loading,
-       failed and empty all lack it, so this hidden one stands in. -->
-  {#if !current}<h1 class="sr-only">Review</h1>{/if}
+<!-- The song being decided is the page's title once there is one; loading,
+     failed and empty name the page instead. -->
+{#if current && !loading && !loadError}
+  <Hero title={current.title} size="m">
+    {#snippet kicker()}
+      Review · <span class="numeric">{(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}</span>
+    {/snippet}
+    {#snippet sub()}
+      {#if current.detail}<span class="font-medium text-ink">{current.detail}</span>{/if}
+      {#if current.want?.target.durationMs}
+        <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
+      {/if}
+      {#if waiting}<span>{waiting}</span>{/if}
+      {#if current.want?.target.anchorUnavailable}
+        <span>
+          {#if current.want.target.anchorNextAttemptAt}
+            Sample retry {relativeTime(current.want.target.anchorNextAttemptAt)}
+          {:else}
+            No sample · {current.want.target.anchorUnavailable}
+          {/if}
+        </span>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      {#if current.kind === 'downloaded' && current.want}
+        <Button
+          variant="ghost"
+          size="sm"
+          onclick={() => $wrongSong.mutate(current.want!.target.id)}
+          disabled={deciding}
+        >
+          Wrong song
+        </Button>
+      {/if}
+    {/snippet}
+  </Hero>
+{:else}
+  <Hero title="Review" size="xl" />
+{/if}
+
+<!-- The queue and the question share one panel, the queue down its left. -->
+<div
+  class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6 lg:flex-row {current && !loading && !loadError
+    ? 'overflow-hidden rounded-panel border border-line-thin bg-surface-thin lg:min-h-[32rem]'
+    : ''}"
+>
   {#if loading}
-    <div class="flex flex-1 items-center justify-center px-4 sm:px-6 py-10" aria-busy="true">
+    <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
       <p class="text-body text-ink-3">Loading…</p>
     </div>
   {:else if loadError}
-    <div class="flex flex-col items-start gap-3 px-4 sm:px-6 py-10">
+    <div class="flex flex-col items-start gap-3 py-10">
       <ErrorNote
         error={loadError}
         fallback="The review queue could not be read."
@@ -510,11 +562,11 @@
       {/if}
     </div>
   {:else if !current && moreToRead}
-    <div class="flex flex-1 items-center justify-center px-4 sm:px-6 py-10" aria-busy="true">
+    <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
       <p class="text-body text-ink-3">Loading…</p>
     </div>
   {:else if !current}
-    <div class="px-4 sm:px-6 py-5">
+    <div class="py-5">
       <EmptyPanel role="ok" heading="Nothing to decide" />
     </div>
   {:else}
@@ -550,7 +602,7 @@
             onclick={() => step(index)}
             class="flex flex-col gap-0.5 border-b border-line-thin px-4 py-2.5 text-left {index ===
             at
-              ? 'bg-surface-regular'
+              ? 'queue-current'
               : 'hover:bg-surface-thick'}"
           >
             <span class="truncate text-body {index === at ? 'font-medium text-ink' : 'text-ink-2'}">
@@ -579,42 +631,6 @@
     </nav>
 
     <section aria-label="Review" class="flex min-w-0 flex-1 flex-col">
-      <header
-        class="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-line-thin px-4 sm:px-6 py-5 lg:px-8"
-      >
-        <h1 class="text-quiet-display font-semibold leading-none text-ink">{current.title}</h1>
-        {#if current.detail}
-          <span class="text-body font-medium text-ink-2">{current.detail}</span>
-        {/if}
-        {#if waiting}
-          <span class="rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-3">
-            {waiting}
-          </span>
-        {/if}
-        {#if current.want?.target.durationMs}
-          <span class="numeric text-body text-ink">{clock(current.want.target.durationMs / 1000)}</span>
-        {/if}
-        {#if current.want?.target.anchorUnavailable}
-          <span class="text-meta text-ink-3">
-            {#if current.want.target.anchorNextAttemptAt}
-              Sample retry {relativeTime(current.want.target.anchorNextAttemptAt)}
-            {:else}
-              No sample · {current.want.target.anchorUnavailable}
-            {/if}
-          </span>
-        {/if}
-        <span class="flex-1"></span>
-        {#if current.kind === 'downloaded' && current.want}
-          <button
-            type="button"
-            class="text-meta text-ink-3 hover:text-ink"
-            onclick={() => $wrongSong.mutate(current.want!.target.id)}
-            disabled={deciding}
-          >
-            Wrong song
-          </button>
-        {/if}
-      </header>
 
       <div class="flex flex-col gap-3 px-4 sm:px-6 pb-6 pt-5 lg:px-8">
         {#if failure}
@@ -699,7 +715,7 @@
       </div>
 
       <footer
-        class="sticky bottom-14 flex flex-wrap items-center justify-end gap-2 border-t border-line-regular bg-ground px-4 sm:px-6 py-3 lg:bottom-0 lg:px-8"
+        class="sticky bottom-14 mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-line-regular bg-surface-thin px-4 sm:px-6 py-3 lg:bottom-0 lg:px-8"
         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
       >
         {#if current.kind === 'folder' && current.download}
@@ -742,3 +758,12 @@
     </section>
   {/if}
 </div>
+
+<style>
+  /* The question on screen, marked in the page's light ink: the inks are chrome,
+     and which row is open is a place, not a state. */
+  .queue-current {
+    background: color-mix(in srgb, var(--color-duo-light) 9%, transparent);
+    box-shadow: inset 3px 0 0 var(--color-duo-light);
+  }
+</style>
