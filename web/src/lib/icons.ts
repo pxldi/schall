@@ -24,7 +24,6 @@ import {
   Heart,
   Info,
   ListMusic,
-  ListPlus,
   Loader,
   Minus,
   Music,
@@ -38,7 +37,6 @@ import {
   Trash2,
   Upload,
   User,
-  UserRoundMinus,
   Users,
   X,
 } from "@lucide/svelte";
@@ -90,8 +88,6 @@ export const icons = {
   player: MonitorSpeaker,
   "player-check": SearchCheck,
   send: Send,
-  unfollow: UserRoundMinus,
-  want: ListPlus,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } satisfies Record<string, Component<any>>;
 
