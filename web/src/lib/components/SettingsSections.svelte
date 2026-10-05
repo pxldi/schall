@@ -1223,7 +1223,7 @@
   });
 </script>
 
-<div class="flex max-w-[760px] flex-col">
+<div class="flex max-w-[880px] flex-col">
   {#if show === 'sources'}
     <div class="flex flex-col">
       {@render SourcesStatus()}
