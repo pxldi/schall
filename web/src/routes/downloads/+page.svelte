@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
@@ -580,10 +581,10 @@
       <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
         {#each Array(40) as _, placeholderIndex (placeholderIndex)}
           <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
-            <div class="h-5 animate-pulse rounded-row bg-surface-regular"></div>
-            <div class="mt-1 h-4 w-2/3 animate-pulse rounded-row bg-surface-regular"></div>
-            <div class="mt-2 h-1.5 animate-pulse rounded-full bg-surface-regular"></div>
-            <div class="mt-1 h-4 w-1/3 animate-pulse rounded-row bg-surface-regular"></div>
+            <Skeleton class="h-5" />
+            <Skeleton class="mt-1 h-4 w-2/3" />
+            <Skeleton class="mt-2 h-1.5 rounded-full" />
+            <Skeleton class="mt-1 h-4 w-1/3" />
           </div>
         {/each}
       </div>

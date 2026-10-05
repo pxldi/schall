@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
   import {
@@ -249,9 +250,9 @@
         role="status"
         aria-label="Loading source search summary"
       >
-        <span class="h-4 w-20 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
-        <span class="h-4 w-24 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
-        <span class="h-4 w-24 animate-pulse rounded-row bg-surface-regular" aria-hidden="true"></span>
+        <Skeleton class="h-4 w-20" />
+        <Skeleton class="h-4 w-24" />
+        <Skeleton class="h-4 w-24" />
       </div>
     {:else}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -380,7 +381,7 @@
     aria-label="Loading source results"
   >
     {#each Array(40) as _, placeholderIndex (placeholderIndex)}
-      <div class="h-48 animate-pulse rounded-card bg-surface-regular" aria-hidden="true"></div>
+      <Skeleton shape="block" class="h-48" />
     {/each}
       </div>
     {/snippet}

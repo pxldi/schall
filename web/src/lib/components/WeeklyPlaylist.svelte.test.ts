@@ -310,7 +310,7 @@ describe('WeeklyPlaylist', () => {
     await fireEvent.click(screen.getByText("Why it's leaving"));
 
     const loading = await screen.findByLabelText('Loading weekly evidence');
-    expect(loading.querySelectorAll('[aria-hidden="true"]')).toHaveLength(40);
+    expect(loading.querySelectorAll('span:empty')).toHaveLength(40);
     expect(screen.getByText('reading what was asked…')).toBeTruthy();
   });
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   // Labels a person follows the way they follow an artist: a standing request
   // to keep what the label publishes complete. The follow feed brings in a
   // followed label's new releases as ordinary wants, the same loop and the
@@ -194,9 +195,9 @@
         >
           {#each Array(labelSkeletonCount) as _, placeholderIndex (placeholderIndex)}
             <li class="flex items-center gap-3 px-1 py-3.5" aria-hidden="true">
-              <span class="h-4 w-40 animate-pulse rounded-row bg-surface-regular"></span>
-              <span class="h-4 w-28 animate-pulse rounded-row bg-surface-regular"></span>
-              <span class="ml-auto h-4 w-36 animate-pulse rounded-row bg-surface-regular"></span>
+              <Skeleton class="h-4 w-40" />
+              <Skeleton class="h-4 w-28" />
+              <Skeleton class="ml-auto h-4 w-36" />
             </li>
           {/each}
         </ul>

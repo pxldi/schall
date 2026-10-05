@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
@@ -225,8 +226,8 @@
         >
           {#each Array.from({ length: playlistSkeletonCount }) as _, placeholderIndex (placeholderIndex)}
             <li class="flex items-center gap-3 px-1 py-4" aria-hidden="true">
-              <span class="h-4 w-48 animate-pulse rounded-row bg-surface-regular"></span>
-              <span class="ml-auto h-4 w-36 animate-pulse rounded-row bg-surface-regular"></span>
+              <Skeleton class="h-4 w-48" />
+              <Skeleton class="ml-auto h-4 w-36" />
             </li>
           {/each}
         </ul>

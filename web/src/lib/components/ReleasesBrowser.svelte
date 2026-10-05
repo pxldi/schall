@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { goto } from '$app/navigation';
@@ -757,7 +758,7 @@
           class="h-[3.46875rem] border-b border-line-thin px-3 py-2 last:border-b-0"
           aria-hidden="true"
         >
-          <div class="h-full animate-pulse rounded-row bg-surface-regular"></div>
+          <Skeleton class="h-full" />
         </div>
       {/each}
     </div>
