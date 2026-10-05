@@ -10,42 +10,23 @@
          hardware — the top of the mobile header, the bottom of the drawer and of
          the review answer bar. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0e0b10" />
+    <meta name="theme-color" content="#0d0f12" />
     <!-- The mark the app already wears, at the one size nothing controls. It is
          drawn on transparency, so a browser puts it on its own tab colour and it
          reads in a light chrome and a dark one alike. -->
     <link rel="icon" href="%sveltekit.assets%/logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="%sveltekit.assets%/logo.svg" />
-    <!-- The three faces the first screen draws, asked for here rather than left
+    <!-- The one face the first screen draws, asked for here rather than left
          to be found later. A browser does not know a font exists until it has
-         downloaded the stylesheet, read it, and met text that needs the font —
-         three steps in a row, each waiting on the one before. That is the half
-         second in which the page is drawn in whatever face the operating system
-         supplies, and the reason it jumps when the real face arrives. Naming the
-         files here starts them downloading beside the stylesheet instead of
-         after it.
+         downloaded the stylesheet, read it, and met text that needs the font.
+         Naming the file here starts it downloading beside the stylesheet.
 
-         `crossorigin` is required even though the files are served from this
+         `crossorigin` is required even though the file is served from this
          same server. A font is always fetched anonymously, so a preload without
-         it is treated as a different request, and the browser downloads every
-         file twice. -->
+         it is treated as a different request and downloaded twice. -->
     <link
       rel="preload"
-      href="%sveltekit.assets%/fonts/schibsted-grotesk-latin-var.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="%sveltekit.assets%/fonts/azeret-mono-latin-400.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="%sveltekit.assets%/fonts/syne-latin-800.woff2"
+      href="%sveltekit.assets%/fonts/bricolage-grotesque-latin-var.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -59,7 +40,7 @@
          wordmark worse than a plain ground (2026-09-08). -->
     <style>
       html {
-        background: #0e0b10;
+        background: #0d0f12;
       }
     </style>
     %sveltekit.head%

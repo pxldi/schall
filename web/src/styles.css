@@ -1,87 +1,39 @@
 @import 'tailwindcss';
 
 /* Served from the image rather than a font CDN: a self-hosted tool should not
-   make a third-party request on every page load. Latin subsets.
+   make a third-party request on every page load.
 
-   Three faces now, one job each (ADR 0017, its monospace amended by
-   0020, the serif voice retired by 0022). Schibsted Grotesk carries everything
-   that is read, headings included — hierarchy is weight and size, not a change
-   of face. Azeret Mono carries every identifier, path, label, chip and figure,
-   the same job IBM Plex Mono did before the Schall rebrand replaced it. Syne
-   800 is new and carries the wordmark alone — it is not a reading face and is
-   never asked for anywhere else.
+   One face (ADR Duoton). Bricolage Grotesque carries every word, every figure
+   and the wordmark; it replaced Schibsted Grotesk, Azeret Mono and Syne. The
+   file is variable on weight and optical size, so the 160px page titles draw
+   the display cut and the 12px labels the text cut from the same download.
+   Latin is preloaded in app.html; Latin Extended is only fetched when a name
+   needs it, through its unicode-range.
 
-   The monospace ships as three static weights rather than one variable file,
-   because Azeret Mono has no variable release. 400 is every figure and
-   identifier; 500 and 600 are the few places a figure is emphasis rather than
-   information. The italic cut of 400 is self-hosted alongside them but is not
-   asked for anywhere yet — it is here so a future call site does not reach for
-   a synthesised slant instead. `font-synthesis: none` below means a weight or
-   a slant nothing here asked for is drawn at 400 upright instead of being
-   faked.
-
-   `font-display: fallback` decides what the browser draws in the moment before
-   a face has arrived. It gives the download about a tenth of a second, then
+   `font-display: fallback` gives the download about a tenth of a second, then
    draws the fallback, and swaps the real face in only if it lands within the
-   next three seconds; after that the fallback stays for the load. The previous
-   setting, `optional`, closed that swap window entirely, and on a connection
-   slow enough to miss the tenth of a second — the instance is reached over the
-   internet, not localhost — whole sessions rendered in the fallback with the
-   real faces sitting unused on the server. `fallback` keeps the late-page
-   reflow of `swap` off the table while still letting a cold load get the real
-   face within a beat.
-
-   `app.html` preloads the three faces the first screen draws — the grotesque,
-   the mono's 400, and Syne for the wordmark — so on most loads the tenth of a
-   second is enough and no swap is seen at all. The mono's 500, 600 and italic
-   are not preloaded, because each draws a handful of glyphs and none is the
-   first thing read. */
+   next three seconds. `font-synthesis: none` below means a slant nothing here
+   asked for is drawn upright instead of being faked. */
 @font-face {
-  font-family: 'Schibsted Grotesk';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 400 800;
+  font-weight: 200 800;
   font-display: fallback;
-  src: url('/fonts/schibsted-grotesk-latin-var.woff2') format('woff2');
+  src: url('/fonts/bricolage-grotesque-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Syne';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 800;
+  font-weight: 200 800;
   font-display: fallback;
-  src: url('/fonts/syne-latin-800.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Azeret Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: fallback;
-  src: url('/fonts/azeret-mono-latin-400.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Azeret Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: fallback;
-  src: url('/fonts/azeret-mono-latin-500.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Azeret Mono';
-  font-style: normal;
-  font-weight: 600;
-  font-display: fallback;
-  src: url('/fonts/azeret-mono-latin-600.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Azeret Mono';
-  font-style: italic;
-  font-weight: 400;
-  font-display: fallback;
-  src: url('/fonts/azeret-mono-latin-400-italic.woff2') format('woff2');
+  src: url('/fonts/bricolage-grotesque-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* ── The motion scale ───────────────────────────────────────────────────────
@@ -170,20 +122,15 @@
 }
 
 @theme {
-  --font-sans: 'Schibsted Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
-  /* The display role keeps its own token although it names the same face now:
-     what a heading is is a role, and a role that borrowed --font-sans directly
-     would leave nowhere to tune display-size tracking when the two need to
-     differ again. The serif that used to sit here is retired in 0022. */
-  --font-display: 'Schibsted Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
-  /* Named at last. Four places asked the operating system for a monospace and
-     got a different one on every machine; they all ask here now. Azeret Mono
-     replaced IBM Plex Mono in the Schall rebrand. */
-  --font-mono: 'Azeret Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  /* The wordmark's face and nowhere else's. Syne 800 is not a reading face —
-     it is drawn once, at one or two sizes, by the brand mark in the mast
-     rail. Nothing else in the application may ask for it. */
-  --font-wordmark: 'Syne', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-sans: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+  /* The display role keeps its own token although it names the same face: what
+     a heading is is a role, and display sizes take their own tracking. */
+  --font-display: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+  /* Figures and identifiers. The Duoton ADR retired the monospace, so this is
+     the same face; `.numeric` adds tabular figures so columns still line up. */
+  --font-mono: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+  /* The wordmark, set in the same face at 800. */
+  --font-wordmark: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
 
   /* ── Two type scales ──────────────────────────────────────────────────────
      A type scale is the fixed set of text sizes a product is allowed to draw.
@@ -252,6 +199,22 @@
   --text-quiet-display--line-height: 1.15;
   --text-quiet-display--letter-spacing: -0.025em;
 
+  /* ── The poster steps ─────────────────────────────────────────────────────
+     A page title set over the print (ADR Duoton): 72 to 160px at 800, tracked
+     tight and set solid so two lines of it still sit inside the print. They
+     are rem like everything else, so at the owner's 133% root `poster-l` is
+     the prototype's 112px. `poster-xl` grows with the window for the strip
+     pages, whose titles are one or two words. */
+  --text-poster-m: 4rem;
+  --text-poster-m--line-height: 0.86;
+  --text-poster-m--letter-spacing: -0.05em;
+  --text-poster-l: 5.25rem;
+  --text-poster-l--line-height: 0.84;
+  --text-poster-l--letter-spacing: -0.055em;
+  --text-poster-xl: clamp(4.5rem, 8.25vw, 7.5rem);
+  --text-poster-xl--line-height: 0.82;
+  --text-poster-xl--letter-spacing: -0.055em;
+
   /* Data uses the mono face and the same relative size wherever it appears.
      Fields and numeric figures share this role. */
   --text-data: 0.9375em;
@@ -266,112 +229,86 @@
   --text-body: var(--text-dense-body);
   --text-lead: var(--text-dense-lead);
 
-  /* The brand accent is chrome, never state: wordmark, active room, primary
-     button, focus ring, and nowhere else. Anything that encodes meaning uses a
-     status colour below, so that no reading of the interface depends on
-     knowing which purple means what. Lilac replaced ember in the Schall
-     rebrand and inherits the Chrome Rule exactly. */
-  --color-accent: #bfa3e8;
-  --color-accent-soft: #d9c8f0;
-  --color-accent-ink: #2a1c3d;
+  /* ── The two inks (ADR Duoton) ───────────────────────────────────────────
+     Every page is printed in two inks taken from the cover of the music on it.
+     These are the house inks, used when nothing on the page has a cover. A page
+     replaces them at runtime through `usePagePrint` in $lib/duoton, which
+     writes both variables on <html>, so everything below that reads them
+     re-inks with the page.
+
+     The inks are chrome and never state: the print, the top bar's open
+     destination, the primary button, the active tab, the focus ring. A state
+     keeps its own colour below on every page, whatever the cover. */
+  --color-duo-dark: #13204a;
+  --color-duo-light: #ffb59e;
+
+  /* The accent names the light ink, so every call site that already marks
+     chrome with it (primary button, active tab, focus ring) follows the page.
+     `accent-ink` is what is written on an accent fill: the dark ink, which the
+     luminance clamp keeps at least 7:1 from the light one. */
+  --color-accent: var(--color-duo-light);
+  --color-accent-soft: color-mix(in srgb, var(--color-duo-light) 85%, white);
+  --color-accent-ink: var(--color-duo-dark);
 
   /* The roles that carry every state the API reports. Each one pairs with a
      glyph wherever it appears, because no state may be identifiable by hue
-     alone. `ok` and `fail` are drawn in the palette's agrees/objects hues —
-     the words a matching decision is argued in — and keep their names because
-     the roles are unchanged; only the hue moved. */
-  --color-ok: #7fb387;
-  --color-ok-border: #3d5647;
-  /* Lifted from #8d8390 on 2026-09-07: text-idle on bg-idle/14 over Surface
-     Regular measured 3.84:1, axe read it as 3.82:1, and both are under 4.5:1.
-     Lightened at the same hue and saturation until the tint over Surface
-     Regular, the darker of the two chip backgrounds, cleared the floor. */
-  --color-idle: #a59da7;
-  --color-decide: #a3b7e8;
-  --color-busy: #7dd3fc;
-  /* Lifted from #cd5f4c the same day and for the same reason: the tint over
-     Surface Regular measured 3.62:1. Lightened at the same hue and
-     saturation. */
-  --color-fail: #da8a7c;
-  --color-fail-border: #5c3733;
+     alone. Four are the ADR's: own (`ok`), wanted or waiting on a decision
+     (`decide`), failed (`fail`) and busy (`busy`). */
+  --color-ok: #9be0b0;
+  --color-ok-border: #36513f;
+  --color-idle: #a5aab2;
+  --color-decide: #f2c66d;
+  --color-busy: #8ec5ff;
+  --color-fail: #f08a7a;
+  --color-fail-border: #5c3530;
 
   /* A sixth role, for a thing that is finished rather than good. A manual
      decision, a resolved conflict, a merged recording: none of them is a
      success and none of them is still running, and green says the wrong word
-     about all three. It pairs with a glyph like the roles above, for the same
-     reason. */
+     about all three. */
   --color-done: #5eead4;
 
-  --color-ink: #ece5ea;
   /* ── The ink ramp ─────────────────────────────────────────────────────────
-     Four greys for words, from the brightest to the quietest. `ink` draws a
-     title, `ink-2` a line beside it, `ink-3` the artist and release under it,
-     and `ink-4` a count beside a heading or the line saying what the connection
-     to slskd is doing. All four carry words.
-
-     The Bühne palette names only two of these directly — text (`ink`,
-     `#ece5ea`) and muted (`ink-3`, `#aaa0aa`) — because most of the ramp reads
-     against the near-black ground. `ink-2` and `ink-4` are this
-     ramp's own steps between and below them, kept so a title, the line beside
-     it, and a count beneath that still read as three weights rather than two.
-
-     The lightest surface is `surface-ultra` (`#362838`), so the lower steps
-     have to clear the reading floor there as well as on the ground. `ink-3`
-     and `ink-4` are therefore lighter than the original ramp, while keeping
-     their order. `ink-muted-plum` remains the palette's own answer for a muted
-     line that sits on the regular plum. */
-  --color-ink-2: #bcb2b8;
-  --color-ink-3: #aaa0aa;
-  --color-ink-4: #9b919b;
-  --color-ink-muted-plum: #a396a0;
+     Four neutral greys for words, brightest first. `ink` draws a title, `ink-2`
+     a line beside it, `ink-3` the artist and release under it, `ink-4` a count
+     beside a heading. The ADR names `#eef0f2`, `#a5aab2` and `#7c828b`; the
+     last is lifted to `#8a9099` here so a count on the hover surface still
+     clears 4.5:1 (it measured 3.92:1). */
+  --color-ink: #eef0f2;
+  --color-ink-2: #c6cad0;
+  --color-ink-3: #a5aab2;
+  --color-ink-4: #8a9099;
 
   /* ── The ground and the surfaces ──────────────────────────────────────────
-     A surface is the colour a box is filled with. A call site names the one it
-     wants rather than writing a value: `bg-surface-regular`, `bg-inset`.
+     A fixed neutral dark that no cover changes (ADR Duoton). The shell lays a
+     14% wash of the dark ink over it, which is the only way the page colour
+     reaches the work area.
 
-     `ground` is the page, near-black and never a gradient. Cards and panels
-     sit on `surface-regular`, the palette's plum — a second colour, not a
-     wash of white over the ground, which is the one thing this palette
-     changes about how a surface is made. The plum sits in the surfaces and
-     never in the ground.
-
-     `inset` is the one surface below the page, a well rather than a raise —
-     the field, the checkbox, the cycling placeholder's box.
-
-     The four steps above the page are named rather than numbered, because a
-     name says what a step is for and a number does not.
-
-       thin      the rail, chips, anything that is barely a surface
-       regular   cards and raised panels — the plum itself
+       inset     a well below the page: a field, a checkbox
+       ground    the page
+       thin      chips, anything that is barely a surface
+       regular   cards and raised panels
        thick     hover
        ultra     selected, active */
-  --color-inset: #08060a;
-  --color-ground: #0e0b10;
-  --color-surface-thin: #1a1420;
-  --color-surface-regular: #241a27;
-  --color-surface-thick: #2d212f;
-  --color-surface-ultra: #362838;
+  --color-inset: #090a0d;
+  --color-ground: #0d0f12;
+  --color-surface-thin: #14171c;
+  --color-surface-regular: #1b1f25;
+  --color-surface-thick: #22262c;
+  --color-surface-ultra: #2a2f36;
 
   /* ── The lines ────────────────────────────────────────────────────────────
-     A line is a border. The palette names two: the card line (`#3d2f42`, used
-     on `thin` and `regular`, the hairline a reader meets most) and the
-     shell/rail line (`#2c2233`, `shell-line` below, reserved for the mast
-     and the chrome around it). `thick` and `live` are this ramp's own steps
-     lightened off the card line, for an edge that has to read as emphasis or
-     as state without becoming the focus ring.
-
        thin      a divider between rows
        regular   the edge of a control
        thick     an edge that is emphasis
        live      an edge that is state
-       shell     the mast's own border, never a card's */
-  --color-line-thin: #3d2f42;
-  /* Divider drawn inside an inset well. */
-  --color-line-inset: #17121b;
-  --color-line-regular: #4a3a50;
-  --color-line-thick: #5c4864;
-  --color-line-live: #7a6280;
-  --color-shell-line: #2c2233;
+       shell     the top bar's edge once it is solid */
+  --color-line-thin: #22262c;
+  --color-line-inset: #121418;
+  --color-line-regular: #2d3239;
+  --color-line-thick: #3a4048;
+  --color-line-live: #4f5660;
+  --color-shell-line: #22262c;
 
   /* ── Radius ───────────────────────────────────────────────────────────────
      A corner is geometry, not text, so these are px and stay px regardless of
@@ -387,6 +324,9 @@
   --radius-control: 8px;
   --radius-panel: 12px;
   --radius-card: 16px;
+  /* A button, a tab, a chip and the search field: the prototype draws every
+     control you press as a pill. */
+  --radius-pill: 999px;
 
   /* Tailwind draws motion from four of its own variables, and every one of them
      shipped with a value of its own. Pointing them at the scale is what makes a
@@ -401,6 +341,33 @@
   --default-transition-timing-function: var(--motion-ease);
   --animate-spin: spin var(--motion-ambient) var(--motion-ease-loop) infinite;
   --animate-pulse: pulse calc(var(--motion-ambient) * 2) var(--motion-ease) infinite;
+}
+
+/* Registered so a change of inks eases rather than cuts: an unregistered custom
+   property cannot be interpolated. Two arriving steps, because a whole page
+   changing colour is the largest arrival there is and nobody waits on it. */
+@property --color-duo-dark {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #13204a;
+}
+
+@property --color-duo-light {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ffb59e;
+}
+
+html {
+  transition:
+    --color-duo-dark calc(var(--motion-enter) * 2) var(--motion-ease-arrive),
+    --color-duo-light calc(var(--motion-enter) * 2) var(--motion-ease-arrive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    transition: none;
+  }
 }
 
 :root {
@@ -500,7 +467,7 @@ a {
   .check:checked {
     border-color: var(--color-accent);
     background-color: var(--color-accent);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232a1c3d' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d0f12' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
     background-size: 11px 11px;
     background-position: center;
     background-repeat: no-repeat;
@@ -782,66 +749,114 @@ a {
     }
   }
 
-  /* The one gradient in the application, "Die Blende": black at the top
-     easing into plum at the bottom, so the mast reads as one lit strip rather
-     than a flat bar. Nothing else in Schall carries a gradient; a second one
-     anywhere else is drift. */
-  .fascia {
-    background: linear-gradient(180deg, #0c0a0e 0%, #2a1b31 100%);
-    border-right: 1px solid var(--color-shell-line);
+  /* ── The shell (ADR Duoton) ──────────────────────────────────────────────
+     The work area is the neutral ground with a 14% wash of the page's dark
+     ink, as in the prototype, so a page reads as belonging to its cover
+     without any surface changing colour. The print fades into that same wash
+     at its foot. */
+  .duoton-app {
+    background-color: color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground));
   }
 
-  /* A room in the mast: icon and name side by side in a 40px row. The name
-     is always printed, so there is no tooltip. The active room takes the
-     accent on the row and on a 2px left edge — the accent marking chrome,
-     which is the one thing the Chrome Rule lets it mark. */
-  .rail-item {
+  /* The same wash, for something that sticks under the top bar and has to
+     hide the rows scrolling beneath it. */
+  .shell-ground {
+    background-color: color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground));
+  }
+
+  .print-fade {
+    background: linear-gradient(
+      180deg,
+      transparent 30%,
+      color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground)) 100%
+    );
+  }
+
+  /* The line under a hero title: each part separated by a quiet dot. */
+  .hero-sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.25rem;
+  }
+
+  .hero-sub > * + *::before {
+    content: '·';
+    margin: 0 0.5rem;
+    color: var(--color-ink-4);
+  }
+
+  /* ── The top bar (ADR Duoton) ────────────────────────────────────────────
+     The navigation sits on the print. Over the print it is a wash of the dark
+     ink fading to nothing, so the print shows through; once the print has
+     scrolled away it turns solid. The open destination is the one pill filled
+     with the light ink and lettered in the dark one: a dark-ink pill vanished
+     wherever the print under it was dark. */
+  .topbar {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-duo-dark) 80%, transparent),
+      transparent
+    );
+    transition:
+      background-color var(--motion-surface) var(--motion-ease),
+      box-shadow var(--motion-surface) var(--motion-ease);
+  }
+
+  .topbar.solid {
+    background: color-mix(in srgb, var(--color-duo-dark) 55%, var(--color-ground));
+    backdrop-filter: blur(14px);
+    box-shadow: 0 1px 0 var(--color-shell-line);
+  }
+
+  .topbar-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem 0.66rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-duo-light) 45%, white);
+    transition:
+      background-color var(--motion-state) var(--motion-ease),
+      color var(--motion-state) var(--motion-ease);
+  }
+
+  .topbar-item:hover {
+    background: color-mix(in srgb, var(--color-duo-dark) 60%, transparent);
+    color: #fff;
+  }
+
+  .topbar-item.active {
+    background: var(--color-duo-light);
+    color: var(--color-duo-dark);
+  }
+
+  .topbar-search {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    height: 2.5rem;
-    width: 100%;
-    padding: 0 1rem;
-    border-left: 2px solid transparent;
-    color: var(--color-ink-3);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    transition: color var(--motion-state) var(--motion-ease);
+    gap: 0.5rem;
+    min-width: 13rem;
+    padding: 0.3rem 0.4rem 0.3rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-duo-light) 30%, transparent);
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    color: color-mix(in srgb, var(--color-duo-light) 45%, white);
+    transition: border-color var(--motion-state) var(--motion-ease);
   }
 
-  .rail-item:hover {
-    color: var(--color-ink-2);
+  .topbar-search:hover {
+    border-color: color-mix(in srgb, var(--color-duo-light) 55%, transparent);
   }
 
-  .rail-item.active {
-    color: var(--color-accent);
-    border-left-color: var(--color-accent);
-  }
-
-  /* The wordmark's own face and case, nowhere else in the application. Syne is
-     drawn tighter as it grows: -0.045em at hero size (the sign-in screen, the
-     empty states), -0.02em at the mast's own nav size — a display face this
-     bold opens its counters at small sizes and wants less of its letter-fit
-     given back than the grotesque does. Schall's wordmark is text alone; there
-     is no mark beside it, so there is no icon here to animate any more — the
-     five-clip arrival and the hover key-strike that drew Schall's mark left
-     with it.
-
-     The mark leans 10° forward with two copies trailing behind it, a sound
-     source moving past the listener. The trails are em-sized so they scale
-     with the mark, and they take their hue from currentColor so the mark keeps
-     working wherever it is recolored. Skew needs a box, so the rule sets
-     inline-block. */
+  /* The wordmark: the one face at 800, tracked tight, lowercase. */
   .wordmark {
     display: inline-block;
     font-family: var(--font-wordmark);
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
     text-transform: lowercase;
-    transform: skewX(-10deg);
-    text-shadow:
-      -0.17em 0 0 color-mix(in srgb, currentColor 30%, transparent),
-      -0.34em 0 0 color-mix(in srgb, currentColor 14%, transparent);
   }
 
   .wordmark-hero {

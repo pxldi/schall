@@ -6,11 +6,10 @@
   // The row of column names, held at the top of the scrolling box while the
   // rows run under it.
   //
-  // The fill is the ground and not a surface. Every surface in this product is
-  // white laid over the ground at a low opacity, which is see-through by
-  // definition, and a see-through header shows the rows sliding underneath the
-  // column names. The ground is the one opaque colour there is, so it is the
-  // one a sticky header can take.
+  // The fill is the shell's ground (the ground with the page's dark-ink wash)
+  // and not a surface. A see-through header shows the rows sliding underneath
+  // the column names, and the shell's ground is opaque and matches the page
+  // behind the table.
   let {
     class: className,
     children,
@@ -22,7 +21,7 @@
   data-sticky="true"
   data-surface="ground"
   class={cn(
-    'sticky top-0 z-1 bg-ground [&_tr]:border-b [&_tr]:border-line-regular',
+    'shell-ground sticky top-0 z-1 [&_tr]:border-b [&_tr]:border-line-regular',
     className
   )}
   {...rest}

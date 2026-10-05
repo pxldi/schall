@@ -35,7 +35,9 @@
   // stand for a row that needs a person's attention rather than a failure.
   const tones: Record<Tone, string> = {
     neutral: 'border-line-thin text-ink-2',
-    attention: 'border-accent text-accent',
+    // Not the accent: the accent is the page's ink now and changes with the
+    // cover, and a state may not (ADR Duoton).
+    attention: 'border-line-live text-ink',
     broken: 'border-fail text-fail',
     warn: 'border-decide text-decide'
   };
@@ -45,7 +47,7 @@
   data-tone={tone}
   {title}
   class={cn(
-    'inline-flex h-5 items-center whitespace-nowrap rounded-row px-1.5 text-meta bg-surface-thin border',
+    'inline-flex h-5 items-center whitespace-nowrap rounded-pill px-2 text-meta bg-surface-thin border',
     tones[tone],
     className
   )}

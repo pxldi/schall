@@ -3,6 +3,9 @@
 </script>
 
 <script lang="ts">
+  import GeneratedCover from './GeneratedCover.svelte';
+  import type { Inks } from '$lib/duoton/inks';
+
   // A picture that arrives instead of appearing.
   //
   // Every cover and every artist photograph in Schall was a bare image tag, so
@@ -18,8 +21,8 @@
   // size and colour, so nothing moves — only the picture resolves into a frame
   // that was always there.
   //
-  // A missing picture keeps the frame's existing treatment or the fallback a
-  // caller supplies. The source is remembered so a known absence is not asked
+  // A missing picture is drawn as generated art when the caller gives a seed
+  // (ADR Duoton), or as the text fallback a caller supplies. The source is remembered so a known absence is not asked
   // for again after a component remounts.
 
   let {
@@ -28,13 +31,20 @@
     class: className = '',
     eager = false,
     onmissing,
-    fallback
+    fallback,
+    seed,
+    inks
   }: {
     src?: string;
     alt?: string;
     class?: string;
     eager?: boolean;
     fallback?: string;
+    /** Draws generated art in place of a missing picture, seeded with this
+     * (usually the album id). Wins over `fallback`. */
+    seed?: string;
+    /** The thing's own inks or palette, for the generated art. */
+    inks?: Partial<Inks> | null;
     /** Told once, when there turns out to be no picture. The release page uses
      * it to take down the caption that qualifies the picture: a note saying the
      * cover was matched by name, over no cover, is a note about nothing. */
@@ -60,6 +70,8 @@
     }}
     class="cover-arrive {state === 'shown' ? 'is-here' : ''} {className}"
   />
+{:else if seed}
+  <GeneratedCover {seed} {inks} class={className} />
 {:else if fallback}
   <span class="cover-fallback {className}" aria-hidden="true">{fallback}</span>
 {/if}
