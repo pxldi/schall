@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
   import type { Snippet } from 'svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
   import {
     api,
@@ -1223,7 +1223,7 @@
   });
 </script>
 
-<div class="flex max-w-[760px] flex-col">
+<div class="flex max-w-[880px] flex-col">
   {#if show === 'sources'}
     <div class="flex flex-col">
       {@render SourcesStatus()}
@@ -2937,7 +2937,9 @@
                 {move.status}
               </Chip>
               <span class="numeric min-w-0 truncate text-meta text-ink-3">
-                {move.fromPath} → {move.toPath}
+                {move.fromPath}
+                <Icon name="arrow-right" size="sm" class="mx-1 inline align-[-0.125em]" />
+                {move.toPath}
               </span>
               {#if move.status === 'failed' && move.error}
                 <span class="w-full text-meta leading-relaxed text-fail">

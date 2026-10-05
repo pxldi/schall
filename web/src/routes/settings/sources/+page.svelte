@@ -3,7 +3,7 @@
 </script>
 
 <!-- Hidden: the mast highlights Settings and the section nav highlights
-     Sources, but neither is a document heading. -->
-<h1 class="sr-only">Settings · Sources</h1>
+     Sources, but neither is a heading. The Hero above is the h1. -->
+<h2 class="sr-only">Settings · Sources</h2>
 
 <SettingsSections show="sources" />

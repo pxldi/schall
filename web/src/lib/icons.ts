@@ -62,6 +62,10 @@ export const icons = {
     { d: 'M4 20l1-5L16 4l4 4L9 19Z', plate: 'fill' },
     { d: 'M14 6l4 4', plate: 'stroke' }
   ],
+  enter: [
+    { d: 'M20 4v7a3 3 0 0 1-3 3H5', plate: 'stroke' },
+    { d: 'M9 10l-4 4 4 4', plate: 'stroke' }
+  ],
   external: [
     { d: 'M4 6h6M4 6v14h14v-6', plate: 'stroke' },
     { d: 'M14 4h6v6M20 4l-9 9', plate: 'stroke' }

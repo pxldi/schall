@@ -74,10 +74,10 @@ test('an address that names nothing is answered inside the application, with a w
   // somewhere rather than nowhere.
   await expect(page.getByRole('navigation', { name: 'Sections', exact: true })).toBeVisible();
 
-  await expect(page.getByRole('heading', { name: 'That address is not part of Schall' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '404', level: 1 })).toBeVisible();
   // The address is named, because the ordinary cause is a typed or stale link
   // and the reader cannot check one they are not shown.
-  await expect(page.getByText('/nothing-answers-to-this')).toBeVisible();
+  await expect(page.getByText('Nothing at /nothing-answers-to-this')).toBeVisible();
 
   // And the way out is a control, not a sentence about pressing Back.
   await page.getByRole('link', { name: 'Go to Overview' }).click();
