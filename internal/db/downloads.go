@@ -175,7 +175,14 @@ const (
 	downloadViewFailed = `download_requests.status = 'failed'`
 	// A copy is judged after it arrives, which is why these three read the
 	// second column and still insist on a finished transfer.
-	downloadViewReview    = `download_requests.status = 'completed' AND download_requests.import_status = 'needs_review'`
+	// A copy whose want has since been acquired, dropped or replaced asks
+	// nothing any more, so review leaves it out. The row stays where it is.
+	downloadViewReview = `download_requests.status = 'completed' AND download_requests.import_status = 'needs_review'
+		AND NOT EXISTS (
+			SELECT 1 FROM acquisition_targets finished
+			WHERE finished.id = download_requests.acquisition_target_id
+			  AND finished.status IN ('acquired', 'not_wanted', 'superseded')
+		)`
 	downloadViewImported  = `download_requests.status = 'completed' AND download_requests.import_status = 'imported'`
 	downloadViewDiscarded = `download_requests.status = 'completed' AND download_requests.import_status = 'discarded'`
 	// The paused imports Review can ask about: the latest pause recorded what
