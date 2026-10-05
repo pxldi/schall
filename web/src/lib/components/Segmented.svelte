@@ -39,12 +39,14 @@
     variant?: Variant;
   } = $props();
 
+  // From md up the plain strip wraps. It scrolls sideways on a phone, but a
+  // desktop shows no scrollbar or fade, so the last chips were cut off.
   const containerClass = $derived(
     variant === 'tabs'
       ? 'no-scrollbar flex w-fit max-w-full items-center gap-x-5 overflow-x-auto'
       : variant === 'filter'
         ? 'no-scrollbar inline-flex h-7 max-w-full items-center gap-0.5 overflow-x-auto rounded-full border border-line-thin p-0.5'
-        : 'no-scrollbar flex w-fit max-w-full items-center gap-1.5 overflow-x-auto'
+        : 'no-scrollbar flex w-fit max-w-full items-center gap-1.5 overflow-x-auto md:flex-wrap'
   );
 
   function buttonClass(selected: boolean): string {

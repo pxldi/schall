@@ -665,7 +665,10 @@ a {
     padding: 0 0.625rem;
     color: var(--color-ink);
     font-family: var(--font-mono);
-    font-size: var(--text-data);
+    /* --text-data is relative to the text around it, and a field usually sits
+       in a wrapper with no size of its own, where it came out at 20px beside
+       16px labels. Anchored to body text, every field is the same size. */
+    font-size: calc(var(--text-body) * 0.9375);
     font-weight: 400;
   }
 
@@ -1194,6 +1197,12 @@ a {
    which wins because it forbids wrapping at all. */
 body {
   overflow-wrap: anywhere;
+}
+
+/* A column heading is one or two short words, and the table can always make
+   room for them. Broken anywhere, a narrow column printed "LENGT" over "H". */
+th {
+  overflow-wrap: normal;
 }
 
 ::selection {

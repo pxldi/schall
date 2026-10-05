@@ -849,11 +849,11 @@
             {/each}
 
             <div
-              class="hidden text-ink-3 md:grid md:grid-cols-[minmax(0,1.4fr)_92px_64px_minmax(0,1fr)_84px] md:gap-x-3 md:border-b md:border-line-thin md:px-3 md:pb-1.5"
+              class="hidden text-ink-3 md:grid md:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] md:gap-x-3 md:border-b md:border-line-thin md:px-3 md:pb-1.5"
             >
               <span class="label">Job</span>
               <span class="label">Status</span>
-              <span class="label text-right">Attempt</span>
+              <span class="label whitespace-nowrap text-right">Attempt</span>
               <span class="label"></span>
               <span class="label"></span>
             </div>
@@ -865,7 +865,7 @@
                    one. -->
               <div class="border-b border-line-thin last:border-b-0">
                 <div
-                  class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[minmax(0,1.4fr)_92px_64px_minmax(0,1fr)_84px] md:gap-y-0"
+                  class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] md:gap-y-0"
                 >
                   <span class="truncate text-body text-ink" title={primaryOf(job)}>
                     {primaryOf(job)}
@@ -1209,7 +1209,7 @@
                      fail — idle is the colour of a thing that is fine and not
                      doing anything. -->
                 <span
-                  class="whitespace-nowrap text-meta leading-[1.4] text-ink-3"
+                  class="text-meta leading-[1.4] text-ink-3"
                   data-role="idle"
                   title={item.detail}
                 >
