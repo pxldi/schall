@@ -29,6 +29,9 @@
      *  round glyph alone, which is what a row of tracks uses. */
     label?: [string, string];
     size?: 'xs' | 'sm';
+    /** Draw the + only while the row is hovered or holds focus. The row says
+     *  where it starts with the `want-row` class. A wanted toggle always shows. */
+    reveal?: boolean;
     disabled?: boolean;
     class?: string;
   };
@@ -40,6 +43,7 @@
     title,
     label,
     size = 'xs',
+    reveal = false,
     disabled = false,
     class: className
   }: Props = $props();
@@ -94,6 +98,7 @@
   )}
   data-wanted={shown ? 'true' : 'false'}
   data-fresh={fresh ? 'true' : 'false'}
+  data-reveal={reveal ? 'true' : 'false'}
   aria-pressed={shown}
   aria-label={label ? undefined : name}
   aria-busy={inFlight}

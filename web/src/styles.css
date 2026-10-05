@@ -1074,6 +1074,28 @@ a {
     color: var(--color-ink);
   }
 
+  /* In a list of tracks the + is drawn only on the row a pointer rests on or
+     focus is inside, so the list reads as titles and not as forty rings. A
+     wanted track keeps its disc on every row, because that is a state worth
+     reading at a glance. A screen with no hover shows every +, since a finger
+     has nothing to rest on. */
+  @media (hover: hover) {
+    .want-toggle[data-reveal='true'][data-wanted='false'] {
+      opacity: 0;
+      transition:
+        opacity var(--motion-state) var(--motion-ease),
+        background-color var(--motion-state) var(--motion-ease),
+        color var(--motion-state) var(--motion-ease),
+        box-shadow var(--motion-state) var(--motion-ease);
+    }
+
+    .want-row:hover .want-toggle[data-reveal='true'],
+    .want-row:focus-within .want-toggle[data-reveal='true'],
+    .want-toggle[data-reveal='true']:focus-visible {
+      opacity: 1;
+    }
+  }
+
   .want-toggle[data-wanted='true'] {
     background-color: var(--color-decide);
     color: var(--color-ground);
