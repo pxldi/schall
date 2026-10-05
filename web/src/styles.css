@@ -1049,14 +1049,15 @@ a {
 
   /* ── The want toggle ─────────────────────────────────────────────────────
      The round + on a track, drawn by WantToggle.svelte. Unwanted it is a ring
-     holding a plus; wanted it is a disc in the want colour holding a tick, the
-     colour the prototype gives the word "Wanted". The plus is one drawing that
-     turns: a quarter turn and out when the tick draws in, and an eighth turn
-     back in as a cross when a pointer rests on a wanted toggle, so the press
-     that removes the want shows a cross turning back into the plus.
+     holding a plus. Pressed, the ring fills from the bottom with the page's
+     light ink, like ink drawn up a nib, and the tick prints in the dark ink
+     once it is full. The wanted mark is drawn in the cover's inks, so it
+     changes with every release (the one state the Duoton ADR lets the inks
+     carry). A pointer resting on a wanted toggle turns the plus back in as a
+     cross, and pressing it drains the ink back out.
 
-     Only transform, opacity and the tick's stroke offset move. The stroke
-     offset is paint and moves nothing around it. */
+     Only transform, opacity, the fill's clip and the tick's stroke offset
+     move. All of them are paint and move nothing around the toggle. */
   .want-toggle {
     display: inline-grid;
     place-items: center;
@@ -1099,18 +1100,44 @@ a {
   }
 
   .want-toggle[data-wanted='true'] {
-    background-color: var(--color-decide);
-    color: var(--color-ground);
-    box-shadow: inset 0 0 0 1.5px var(--color-decide);
+    color: var(--color-duo-dark);
+    box-shadow: inset 0 0 0 1.5px var(--color-duo-light);
   }
 
   .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) {
-    background-color: color-mix(in srgb, var(--color-fail) 18%, var(--color-surface-regular));
     color: var(--color-fail);
     box-shadow: inset 0 0 0 1.5px currentColor;
   }
 
+  /* The ink. It drains on the arriving step and rises a little slower,
+     because filling is the moment the press is about. */
+  /* Inside the ring rather than over it, so the ring stays drawn when the
+     ink turns to the remove tint. */
+  .want-ink {
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    background-color: var(--color-duo-light);
+    clip-path: inset(100% 0 0 0);
+    pointer-events: none;
+    transition:
+      clip-path var(--motion-enter) var(--motion-ease),
+      background-color var(--motion-state) var(--motion-ease);
+  }
+
+  .want-toggle[data-wanted='true'] .want-ink {
+    clip-path: inset(0 0 0 0);
+    transition:
+      clip-path calc(var(--motion-enter) * 1.5) var(--motion-ease-arrive),
+      background-color var(--motion-state) var(--motion-ease);
+  }
+
+  .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) .want-ink {
+    background-color: color-mix(in srgb, var(--color-fail) 22%, var(--color-surface-regular));
+  }
+
   .want-toggle svg {
+    position: relative;
     width: 62%;
     height: 62%;
     overflow: visible;
@@ -1133,8 +1160,8 @@ a {
     opacity: 1;
   }
 
-  /* The tick draws on after the plus has started to turn away, one stagger
-     step later, so the two read as one drawing becoming the other. */
+  /* The tick prints once the ink is most of the way up, a surface step after
+     the press, so it reads as printed onto the ink. */
   .want-toggle .want-tick {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
@@ -1147,33 +1174,11 @@ a {
   .want-toggle[data-wanted='true'] .want-tick {
     stroke-dashoffset: 0;
     opacity: 1;
-    transition-delay: var(--motion-stagger), 0ms;
+    transition-delay: var(--motion-surface), 0ms;
   }
 
   .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) .want-tick {
     opacity: 0;
-  }
-
-  /* Pressed to want: the disc gives and comes back past its size, and a ring
-     in the want colour leaves it. Played only on the press, never when the
-     list is drawn or the server says a track is wanted. */
-  .want-toggle.want-pop {
-    animation: schall-pop var(--motion-enter) var(--motion-ease-arrive);
-  }
-
-  .want-burst {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow: 0 0 0 1.5px var(--color-decide);
-    pointer-events: none;
-    animation: schall-burst calc(var(--motion-enter) * 2) var(--motion-ease-arrive) forwards;
-  }
-
-  /* Pressed to stop wanting: a smaller give and no ring. Taking a want back
-     is quieter than making one. */
-  .want-toggle.want-drop {
-    animation: schall-drop var(--motion-enter) var(--motion-ease-arrive);
   }
 
   /* The server said no, and the toggle has gone back to what it was. A short
@@ -1235,44 +1240,6 @@ a {
 @keyframes schall-breathe {
   50% {
     opacity: 0.5;
-  }
-}
-
-@keyframes schall-pop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(0.86);
-  }
-  70% {
-    transform: scale(1.08);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes schall-drop {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes schall-burst {
-  from {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.9);
   }
 }
 
@@ -1391,22 +1358,18 @@ a {
   .scrim,
   .overlay-panel,
   details[open] > .reveal,
-  .want-toggle.want-pop,
-  .want-toggle.want-drop,
   .refuse {
     animation: none;
   }
 
   /* The want toggle changes state on the cut: colours still ease on the state
-     step, the plus and the tick swap without turning or drawing, and no ring
-     leaves the disc. */
+     step, the plus and the tick swap without turning or drawing, and the ink
+     is there or gone without rising. */
   .want-toggle .want-plus,
-  .want-toggle .want-tick {
+  .want-toggle .want-tick,
+  .want-ink,
+  .want-toggle[data-wanted='true'] .want-ink {
     transition: opacity var(--motion-state) var(--motion-ease);
-  }
-
-  .want-burst {
-    display: none;
   }
 
   /* The sheen travels, so it stops. The box keeps breathing on the pulse, for

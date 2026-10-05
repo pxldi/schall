@@ -10,8 +10,8 @@
   // which words go with it. The server's answer arriving later moves nothing,
   // since it says what the toggle already shows.
   //
-  // Unwanted is a ring with a plus. Wanted is a disc in the want colour with a
-  // tick. A pointer resting on a wanted toggle turns the plus back in as a
+  // Unwanted is a ring with a plus. Wanted, the ring has filled with the
+  // page's light ink and holds a tick in the dark ink. A pointer resting on a wanted toggle turns the plus back in as a
   // cross, which is what pressing it will do, except straight after the press
   // that wanted it: a cross under the pointer that just pressed + reads as the
   // press having failed.
@@ -52,8 +52,7 @@
   let asked = $state<boolean | null>(null);
   let inFlight = $state(false);
   let fresh = $state(false);
-  let played = $state<'want-pop' | 'want-drop' | 'refuse' | null>(null);
-  let bursts = $state(0);
+  let refused = $state(false);
 
   const shown = $derived(asked ?? wanted);
 
@@ -66,15 +65,14 @@
     const next = !shown;
     asked = next;
     fresh = next;
-    played = next ? 'want-pop' : 'want-drop';
-    if (next) bursts += 1;
+    refused = false;
     inFlight = true;
     try {
       await (next ? onwant() : onunwant());
     } catch {
       asked = null;
       fresh = false;
-      played = 'refuse';
+      refused = true;
     } finally {
       inFlight = false;
     }
@@ -93,7 +91,7 @@
     'want-toggle tap relative cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
     label ? sizes[size].pill : sizes[size].round,
     label && 'inline-flex font-medium',
-    played,
+    refused && 'refuse',
     className
   )}
   data-wanted={shown ? 'true' : 'false'}
@@ -107,10 +105,11 @@
   onclick={press}
   onpointerleave={() => (fresh = false)}
   onanimationend={(event) => {
-    if (event.target === event.currentTarget) played = null;
+    if (event.target === event.currentTarget) refused = false;
   }}
 >
-  <span class={cn('grid place-items-center', label ? sizes[size].glyph : 'size-full')}>
+  <span class="want-ink" aria-hidden="true"></span>
+  <span class={cn('relative grid place-items-center', label ? sizes[size].glyph : 'size-full')}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <g class="want-plus"><path d="M12 6v12M6 12h12" /></g>
       <path class="want-tick" pathLength="1" d="M6.5 12.5l3.75 3.75L17.5 8.5" />
@@ -119,14 +118,9 @@
   {#if label}
     <!-- Both words share one cell, so the button is as wide as the longer one
          and nothing beside it moves when the word changes. -->
-    <span class="grid">
+    <span class="relative grid">
       <span class="[grid-area:1/1]" class:invisible={shown} aria-hidden={shown}>{label[0]}</span>
       <span class="[grid-area:1/1]" class:invisible={!shown} aria-hidden={!shown}>{label[1]}</span>
     </span>
   {/if}
-  {#key bursts}
-    {#if bursts > 0}
-      <span class="want-burst" aria-hidden="true"></span>
-    {/if}
-  {/key}
 </button>
