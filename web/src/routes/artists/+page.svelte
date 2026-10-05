@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Icon from '$lib/components/Icon.svelte';
   import {
     createMutation,
     createQuery,
@@ -8,6 +7,7 @@
     useQueryClient
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
+  import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
   import { api, type ArtistListItem } from '$lib/api';
   import { isAuthError } from '$lib/errors';
@@ -15,7 +15,9 @@
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
-  import Cover from '$lib/components/Cover.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import ArtistArt from './ArtistArt.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import FollowArtistModal from '$lib/components/FollowArtistModal.svelte';
@@ -242,21 +244,6 @@
     return null;
   }
 
-  // Up to three initials, skipping the words nobody thinks of as part of a name.
-  // A single word keeps two letters, so "Burial" reads BU rather than B.
-  function initialsOf(name: string): string {
-    const words = name
-      .split(/[\s.]+/)
-      .filter((word) => word && !['of', 'the', 'and', 'a'].includes(word.toLowerCase()));
-    if (words.length === 0) return name.slice(0, 2).toUpperCase();
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return words
-      .slice(0, 3)
-      .map((word) => word[0])
-      .join('')
-      .toUpperCase();
-  }
-
   function applySearch(event: SubmitEvent) {
     event.preventDefault();
     search = searchInput.trim();
@@ -292,6 +279,22 @@
     sort = 'name';
   }
 
+  // The print is a strip of the listed artists' covers, one each, and the page
+  // takes its inks from the first (ADR Duoton).
+  usePagePrint(() => {
+    if (!$artists.data) return undefined;
+    return {
+      covers: shown
+        .filter((artist) => artist.coverAlbumIds?.length)
+        .slice(0, 8)
+        .map((artist) => ({
+          src: coverSrc(artist.coverAlbumIds[0]),
+          seed: artist.coverAlbumIds[0],
+          inks: artist.coverInks
+        }))
+    };
+  });
+
   const hasFilters = $derived(
     Boolean(searchInput || search || scope || tab || genre || sort !== 'name')
   );
@@ -299,45 +302,43 @@
 
 <svelte:head><title>Artists · Schall</title></svelte:head>
 
-<!-- Hidden: the mast's highlight already says this is Artists, but that
-     highlight is not a document heading. -->
-<h1 class="sr-only">Artists</h1>
-
-<ControlRail>
-  <!-- Not a fourth scope: it leaves this list for the labels one, so it sits
-       apart from the group it is not a member of. The pair reads the same as
-       it does on the Labels page, with the page you are on lit. -->
-  <div class="flex items-center gap-5">
-    <span aria-current="page" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink">
-      Artists
+<Hero title="Artists" size="xl">
+  {#snippet sub()}
+    <span>
       {#if $dashboard.data}
-        <span class="numeric text-meta text-ink-3">{followedCount.toLocaleString()}</span>
+        <b class="numeric font-semibold text-ink">{followedCount.toLocaleString()}</b> followed
       {:else}
         <span
           class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
           aria-hidden="true"
         ></span>
+        followed
       {/if}
     </span>
-    <a href="/artists/labels" class="flex h-8 shrink-0 items-center gap-1.5 text-body text-ink-2 hover:text-ink">
-      Labels
+    {#if heldTotal !== undefined}
+      <span><span class="numeric">{heldTotal.toLocaleString()}</span> in your library</span>
+    {/if}
+    <!-- Labels are the other half of this room, so the way there sits in the
+         line that counts this half. -->
+    <a href="/artists/labels" class="transition hover:text-ink">
+      <span class="underline underline-offset-3">
       {#if labelsTotal !== undefined}
-        <span class="numeric text-meta text-ink-3">{labelsTotal.toLocaleString()}</span>
+        <span class="numeric">{labelsTotal.toLocaleString()}</span>
+        {labelsTotal === 1 ? 'label' : 'labels'}
       {:else}
-        <span
-          class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10"
-          aria-hidden="true"
-        ></span>
+        Labels
       {/if}
+      </span>
     </a>
-  </div>
+  {/snippet}
+  {#snippet actions()}
+    <Button onclick={() => (showAddArtist = true)}>
+      <Icon name="plus" size="sm" /> Follow artist
+    </Button>
+  {/snippet}
+</Hero>
 
-  <Button class="ml-auto" onclick={() => (showAddArtist = true)}>
-    <Icon name="plus" size={13} /> Follow artist
-  </Button>
-</ControlRail>
-
-<ControlRail sticky={false}>
+<ControlRail>
   <Segmented
     options={scopeChoices.map((choice) => ({
       value: choice.value,
@@ -363,7 +364,7 @@
 
   <form class="ml-auto w-full sm:w-48" onsubmit={applySearch}>
     <label class="field flex w-full items-center gap-2">
-      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
+      <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
       <input
         bind:value={searchInput}
         placeholder="Search artists, then Enter"
@@ -410,7 +411,7 @@
     <Settle pending={$artists.isPending}>
       {#snippet placeholder()}
         <div
-          class="max-h-[calc(100dvh-16rem)] grid grid-cols-2 gap-x-4 gap-y-5 overflow-hidden sm:grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))]"
+          class="max-h-[calc(100dvh-16rem)] grid grid-cols-2 gap-x-4 gap-y-5 overflow-hidden sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]"
           role="status"
           aria-label="Loading artists"
         >
@@ -440,7 +441,7 @@
              motion. -->
         {#key `${tab}|${scope}|${sort}`}
           <div
-            class="rise grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))]"
+            class="rise grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]"
           >
             {#each shown as artist (artist.id)}{@render Card(artist)}{/each}
           </div>
@@ -466,7 +467,7 @@
         >
           <div class="flex flex-wrap gap-2">
             <Button class="w-fit" onclick={() => (showAddArtist = true)}>
-              <Icon name="plus" size={13} /> Follow artist
+              <Icon name="plus" size="sm" /> Follow artist
             </Button>
             {#if tab}
               <Button variant="outline" class="w-fit" onclick={() => setTab('')}>Show all</Button>
@@ -554,17 +555,13 @@
       : `${artist.name} — ${artist.ownedReleaseCount} of ${artist.releaseCount} releases owned`}
   >
     <span
-      class="relative grid aspect-square place-items-center overflow-hidden rounded-card border border-line-regular bg-surface-thin transition group-hover:border-line-thick"
+      class="relative block aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px]"
     >
-      <span class="font-display text-[2rem] font-semibold text-ink-4">
-        {initialsOf(artist.name)}
-      </span>
-      <!-- Over the initials rather than instead of them: an artist nobody has a
-           picture of keeps the letters, and one who has covers them. Only a
-           card whose row says a picture is cached asks for it. -->
-      <Cover
-        src={artist.hasImage ? `/api/v1/artists/${artist.id}/image` : undefined}
-        class="absolute inset-0 size-full object-cover"
+      <ArtistArt
+        id={artist.id}
+        hasImage={artist.hasImage}
+        coverAlbumIds={artist.coverAlbumIds}
+        coverInks={artist.coverInks}
       />
 
       {#if badge}
@@ -582,13 +579,13 @@
         >
           <!-- Paired with a glyph, because no state may be readable by hue alone. -->
           {#if badge.role === 'decide'}
-            <Icon name="listen" size={9} />
+            <Icon name="listen" size="sm" />
           {:else if badge.role === 'busy'}
-            <Icon name="download" size={9} />
+            <Icon name="download" size="sm" />
           {:else if badge.role === 'fail'}
-            <Icon name="close" size={9} />
+            <Icon name="close" size="sm" />
           {:else}
-            <Icon name="busy" size={9} />
+            <Icon name="busy" size="sm" />
           {/if}
           {badge.label}
         </Chip>
@@ -599,13 +596,13 @@
           class="absolute right-2 top-2 grid size-[18px] place-items-center rounded-row bg-ground/85 text-busy backdrop-blur-sm"
           title="Refreshing this artist's discography"
         >
-          <Icon name="busy" size={10} class="animate-spin" />
+          <Icon name="busy" size="sm" class="animate-spin" />
         </span>
       {/if}
     </span>
 
     <span class="flex min-w-0 flex-col gap-1.5">
-      <span class="truncate text-body font-medium text-ink">{artist.name}</span>
+      <span class="truncate text-body font-bold tracking-[-0.01em] text-ink">{artist.name}</span>
       <!-- Owned is always the bar and the fraction, never a percentage alone.
            An artist with no discography fetched yet, or one on a service
            MusicBrainz has never heard of, has no fraction to state — saying
@@ -622,7 +619,7 @@
       {:else}
         <span class="flex items-center gap-1">
           {#if artist.followed && artist.ownedReleaseCount === artist.releaseCount}
-            <Icon name="check" size={9} class="shrink-0 text-ok" />
+            <Icon name="check" size="sm" class="shrink-0 text-ok" />
           {/if}
           <OwnedBar
             owned={artist.ownedReleaseCount}

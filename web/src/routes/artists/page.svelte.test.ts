@@ -41,7 +41,7 @@ describe('the artists loading grid', () => {
 });
 
 describe('the page heading', () => {
-  it('names the room in a hidden level-1 heading', () => {
+  it('names the room in its level-1 heading', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     opened();
 
@@ -137,7 +137,9 @@ describe('artist pictures', () => {
       inFlightCount: 0,
       reviewCount: 0,
       needsAttention: false,
-      hasImage
+      hasImage,
+      coverAlbumIds: [],
+      coverInks: null
     });
     vi.stubGlobal(
       'fetch',
@@ -168,6 +170,62 @@ describe('artist pictures', () => {
 
     const pictures = Array.from(document.querySelectorAll('img')).map((img) => img.getAttribute('src'));
     expect(pictures).toEqual(['/api/v1/artists/a1/image']);
+  });
+
+  it('draws generated art for an artist with no photo and no covers', async () => {
+    pageState.url = new URL('http://localhost/artists');
+    const card = (id: string, name: string, coverAlbumIds: string[]) => ({
+      id,
+      musicbrainzId: null,
+      name,
+      sortName: name,
+      followed: true,
+      followedAt: '2026-01-01T00:00:00Z',
+      lastRefreshedAt: '2026-01-01T00:00:00Z',
+      refreshStatus: 'completed',
+      releaseCount: 1,
+      ownedReleaseCount: 1,
+      trackCount: 1,
+      ownedTrackCount: 1,
+      inFlightCount: 0,
+      reviewCount: 0,
+      needsAttention: false,
+      hasImage: false,
+      coverAlbumIds,
+      coverInks: null
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === '/api/v1/artists') {
+          return body({
+            items: [card('a1', 'Burial', ['r1']), card('a2', 'Sewerslvt', [])],
+            total: 2,
+            limit: 50,
+            offset: 0,
+            followedCount: 2,
+            heldCount: 0,
+            allCount: 2,
+            incompleteCount: 0,
+            completeCount: 2,
+            attentionCount: 0,
+            refreshingCount: 0
+          });
+        }
+        return body({});
+      })
+    );
+
+    opened();
+    await screen.findByText('Sewerslvt');
+
+    const generated = Array.from(document.querySelectorAll('[data-generated]')).map((node) =>
+      node.getAttribute('data-generated')
+    );
+    expect(generated).toContain('a2');
+    expect(generated).not.toContain('a1');
   });
 });
 

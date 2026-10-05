@@ -58,6 +58,11 @@ type labelListItem struct {
 	OwnedReleaseCount int64 `json:"ownedReleaseCount"`
 	TrackCount        int64 `json:"trackCount"`
 	OwnedTrackCount   int64 `json:"ownedTrackCount"`
+	// CoverAlbumIDs are up to two of the label's releases with a cached cover,
+	// most songs held first. The row and the page's print are drawn from them.
+	CoverAlbumIDs []uuid.UUID `json:"coverAlbumIds"`
+	// CoverInks are the stored inks of the first of those, or null.
+	CoverInks *inksResponse `json:"coverInks"`
 }
 
 type labelReleaseResponse struct {
@@ -74,6 +79,9 @@ type labelReleaseResponse struct {
 	// An unmonitored release stays listed and can still be wanted by hand; it
 	// just stops being missing.
 	Monitored bool `json:"monitored"`
+	// HasCover says whether a cover is cached, so a tile asks only for the
+	// pictures that exist.
+	HasCover bool `json:"hasCover"`
 	// Inks are the two inks read from the cover, or null.
 	Inks *inksResponse `json:"inks"`
 }
@@ -148,9 +156,21 @@ func (api *API) listLabels(response http.ResponseWriter, request *http.Request) 
 		api.internalError(response, request, err)
 		return
 	}
+	leads := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		if len(row.CoverAlbumIds) > 0 {
+			leads = append(leads, row.CoverAlbumIds[0])
+		}
+	}
+	inks := api.releaseInks(request.Context(), leads)
+
 	items := make([]labelListItem, 0, len(rows))
 	followed := 0
 	for _, row := range rows {
+		var coverInks *inksResponse
+		if len(row.CoverAlbumIds) > 0 {
+			coverInks = rowInks(inks, row.CoverAlbumIds[0])
+		}
 		if row.FollowedAt.Valid {
 			followed++
 		}
@@ -172,6 +192,8 @@ func (api *API) listLabels(response http.ResponseWriter, request *http.Request) 
 			OwnedReleaseCount: row.OwnedReleaseCount,
 			TrackCount:        row.TrackCount,
 			OwnedTrackCount:   row.OwnedTrackCount,
+			CoverAlbumIDs:     row.CoverAlbumIds,
+			CoverInks:         coverInks,
 		})
 	}
 	api.writeJSON(response, http.StatusOK, map[string]any{
@@ -224,6 +246,7 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 			TrackCount:                release.TrackCount,
 			OwnedTrackCount:           release.OwnedTrackCount,
 			Monitored:                 release.Monitored,
+			HasCover:                  release.HasCover,
 			Inks:                      rowInks(inks, release.ID),
 		}
 		if release.ReleaseDate.Valid {

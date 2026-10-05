@@ -31,6 +31,8 @@ function label(overrides: Partial<LabelListItem> = {}): LabelListItem {
     ownedReleaseCount: 4,
     trackCount: 80,
     ownedTrackCount: 30,
+    coverAlbumIds: [],
+    coverInks: null,
     ...overrides
   };
 }
@@ -92,7 +94,7 @@ describe('the labels list', () => {
     expect(status.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(60);
   });
 
-  it('names the room in a hidden level-1 heading', () => {
+  it('names the room in its level-1 heading', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     opened();
 

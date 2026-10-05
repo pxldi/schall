@@ -140,6 +140,11 @@ export interface ArtistListItem extends Artist {
   /** Whether a picture of the artist is cached. The index asks for the
    * pictures that exist and not for every card. */
   hasImage: boolean;
+  /** Up to two releases with a cached cover, most songs held first. A card
+   * prints them and takes its inks from the first (ADR Duoton). */
+  coverAlbumIds: string[];
+  /** The stored inks of the first of those, or null until they are read. */
+  coverInks: Inks | null;
 }
 
 /** One page of artists. `total` counts the current scope narrowed by
@@ -204,6 +209,11 @@ export interface ArtistDetail extends Artist {
    * and link the article — the two arrive together or not at all. */
   biography?: string;
   biographySourceUrl?: string;
+  /** The release the page takes its inks and print from: the one with the
+   * most songs held, among those with a cached cover. Null when none has one. */
+  leadAlbumId: string | null;
+  /** The lead release's stored inks, or null. */
+  inks: Inks | null;
 }
 
 /** A record label, held the way an artist is: by its MusicBrainz identifier,
@@ -227,6 +237,11 @@ export interface LabelListItem extends Label {
   ownedReleaseCount: number;
   trackCount: number;
   ownedTrackCount: number;
+  /** Up to two of the label's releases with a cached cover, most songs held
+   * first. */
+  coverAlbumIds: string[];
+  /** The stored inks of the first of those, or null. */
+  coverInks: Inks | null;
 }
 
 export interface LabelList {
@@ -260,6 +275,8 @@ export interface LabelRelease {
   /** Whether the label's monitor level counts this release. An unmonitored
    * release stays listed and can still be wanted by hand. */
   monitored: boolean;
+  /** Whether a cover is cached, so a tile asks only for pictures that exist. */
+  hasCover: boolean;
   inks: Inks | null;
 }
 
