@@ -2,23 +2,26 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { goto } from '$app/navigation';
   import { toStore } from 'svelte/store';
-  import { Check, LoaderCircle, Search, TriangleAlert, X } from '@lucide/svelte';
+  import { fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { motionMs } from '$lib/motion.svelte';
   import { api } from '$lib/api';
   import { cn } from '$lib/utils';
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Cover from '$lib/components/Cover.svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
-  // One search field, summoned from anywhere with ⌘K, answering across the five
+  // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
   // exists: every row is a link to the page that owns the thing, and the palette
   // never grows a filter, a sort, a second page of results or an action of its
   // own. When the answer is bigger than five, the way forward is out of the
   // palette and into that category's own list with the query pre-filled.
   //
-  // It is not a dialog. Nothing behind it is blocked and nothing is dimmed — the
-  // frosting does that work, so the page stays visible through the blur and the
-  // panel reads as something resting on the page rather than a screen thrown
-  // over it. The layer catches presses on the panel and nowhere else.
+  // It is not a dialog. Nothing behind it is blocked: the page dims and blurs
+  // so the panel is the one thing to read, but presses go through the dim to
+  // the page, and a press outside the panel closes it.
 
   // How long a keystroke waits before the question is asked. Long enough that
   // typing a word is one search rather than five, short enough that stopping
@@ -128,24 +131,41 @@
     fail: '!'
   };
 
+  // The panel drops 8px into place while it fades in, and lifts away faster
+  // than it came. Both are 0 under reduced motion, which Svelte reads as no
+  // transition.
+  function drop(_node: Element, { duration }: { duration: number }) {
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) =>
+        `opacity: ${t}; transform: translateY(${(1 - t) * -8}px) scale(${0.98 + t * 0.02})`
+    };
+  }
+
   const rowClass =
-    'relative grid grid-cols-[16px_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
-    'rounded-row border-b border-line-thin px-3 py-2 text-inherit no-underline ' +
-    'transition-[background] last:border-b-0 hover:bg-surface-thick';
+    'relative grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
+    'rounded-row border-b border-line-thin px-[1.125rem] py-2 text-inherit no-underline ' +
+    'transition-[background] last:border-b-0 hover:bg-duo-light/10';
 
   // The keyboard selection mark: --raise-2, one step above the hover tint, plus
   // a 2px --ink-2 bar at the leading edge. Not the accent, which is chrome and
   // never encodes state, and not the focus ring, which would say keystrokes go
   // to the row when they are still going to the field.
   const chosenClass =
-    "bg-surface-thick before:absolute before:inset-y-1 before:left-0 before:w-0.5 " +
+    "bg-duo-light/10 before:absolute before:inset-y-1 before:left-0 before:w-0.5 " +
     "before:rounded-full before:bg-ink-2 before:content-['']";
 
   function summon() {
     opener = document.activeElement;
     open = true;
     // The field does not exist yet on the frame the palette opens.
-    queueMicrotask(() => box?.focus());
+    queueMicrotask(() => {
+      box?.focus();
+      // A palette opened by typing holds that first character; the caret goes
+      // after it so the next key continues the word.
+      box?.setSelectionRange(typed.length, typed.length);
+    });
   }
 
   function dismiss() {
@@ -178,8 +198,7 @@
     selected = Math.min(Math.max(selected + by, 0), entries.length - 1);
   }
 
-  // The button in the sidebar, which is how somebody who does not know the key
-  // opens this. It is an event rather than a prop because the palette is
+  // The search button in the shell, and the 404 page's Search button. It is an event rather than a prop because the palette is
   // mounted by the root layout and the button lives inside the shell, and
   // neither is the other's parent.
   $effect(() => {
@@ -191,13 +210,31 @@
     return () => window.removeEventListener('schall:search', summoned);
   });
 
-  // ⌘K from anywhere. The palette is reachable from every page, so the listener
-  // is on the window rather than on any one of them.
+  // Typing anywhere opens search with what was typed, so there is no shortcut
+  // to learn. A key is left alone when something else could be its reader: a
+  // field, an open dialog or menu, a modifier held for the browser, or a page
+  // shortcut that took the key first (the review queue's j, k and 1–9 call
+  // preventDefault). That last check waits a task, because the page's own
+  // window listener may run after this one.
+  const typingTargets =
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], dialog[open], [role="menu"], [role="listbox"]';
+
+  function startsSearch(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented || event.isComposing) return false;
+    if (event.metaKey || event.ctrlKey || event.altKey) return false;
+    if (event.key.length !== 1 || event.key.trim() === '') return false;
+    const target = event.target;
+    if (target instanceof Element && target.closest(typingTargets)) return false;
+    return document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]') === null;
+  }
+
   function onWindowKeydown(event: KeyboardEvent) {
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
-    event.preventDefault();
-    if (open) box?.select();
-    else summon();
+    if (open || !startsSearch(event)) return;
+    setTimeout(() => {
+      if (open || event.defaultPrevented) return;
+      typed = event.key;
+      summon();
+    });
   }
 
   function onFieldKeydown(event: KeyboardEvent) {
@@ -245,20 +282,26 @@
 
 {#if open}
   <div
-    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[18px] pb-[26px] pt-[62px]"
+    class="palette-scrim pointer-events-none fixed inset-0 z-50"
+    transition:fade={{ duration: motionMs('surface') }}
+  ></div>
+  <div
+    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[1.125rem] pb-[26px] pt-[90px]"
   >
     <aside
       bind:this={panel}
       aria-label="Search Schall"
-      class="palette-panel pointer-events-auto relative flex max-h-full w-[560px] max-w-full flex-col self-start overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)]"
+      in:drop={{ duration: motionMs('surface') }}
+      out:drop={{ duration: motionMs('state') }}
+      class="palette-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden rounded-[16px]"
     >
       <div
         class={cn(
-          'palette-row grid h-[34px] shrink-0 grid-cols-[16px_minmax(0,1fr)_28px] items-center gap-x-3 px-3',
+          'palette-row grid h-[3.25rem] shrink-0 grid-cols-[1.25rem_minmax(0,1fr)_1.5rem] items-center gap-x-3 px-[1.125rem]',
           hasBody && 'border-b border-line-thin'
         )}
       >
-        <span class="text-ink-4"><Search size={14} /></span>
+        <span class="grid place-items-center text-ink-3"><Icon name="search" size="lg" /></span>
         <input
           bind:this={box}
           bind:value={typed}
@@ -273,7 +316,7 @@
           aria-controls="palette-results"
           aria-activedescendant={current?.id ?? undefined}
           aria-autocomplete="list"
-          class="palette-field min-w-0 border-0 bg-transparent p-0 font-mono text-body font-medium text-ink placeholder:text-ink-4 focus:outline-none"
+          class="palette-field min-w-0 border-0 bg-transparent p-0 text-[17px] font-medium text-ink placeholder:text-ink-4 focus:outline-none"
         />
       </div>
 
@@ -281,7 +324,7 @@
         <div class="min-h-0 flex-1 overflow-y-auto py-2">
           {#if waiting}
             <p class="flex items-center gap-2 px-3 py-3.5 text-meta leading-[1.6] text-ink-4">
-              <LoaderCircle size={12} class="animate-spin" />
+              <Icon name="busy" size="sm" class="animate-spin" />
               Searching five categories…
             </p>
           {:else if failed}
@@ -291,7 +334,7 @@
             <div
               class="mx-3 my-1.5 flex items-start gap-2 rounded-row border border-line-regular bg-fail/14 px-[11px] py-[9px]"
             >
-              <TriangleAlert size={12} class="mt-px shrink-0 text-fail" />
+              <Icon name="alert" size="sm" class="mt-px shrink-0 text-fail" />
               <!-- The button that said Try again did one thing: ask the search
                    the question that had just failed. The palette asks it now,
                    twice, and says it is asking. -->
@@ -314,7 +357,7 @@
                      category of a result is never implied by being the only
                      one. -->
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
-                  <div class="mb-0.5 border-b border-line-thin px-3 pb-1.5">
+                  <div class="mb-0.5 border-b border-line-thin px-[1.125rem] pb-1.5">
                     <span
                       class="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-3"
                       >{category.label}</span
@@ -335,17 +378,38 @@
                       }}
                       onmouseenter={() => selectRow(row.id)}
                     >
-                      <span
-                        aria-hidden="true"
-                        class={cn('grid size-4 place-items-center rounded-row', markTones[row.role])}
-                      >
-                        {#if row.role === 'ok'}
-                          <Check size={10} strokeWidth={3.2} />
-                        {:else}
-                          <span class="font-mono text-micro font-bold leading-none"
-                            >{markGlyphs[row.role]}</span
-                          >
+                      <span aria-hidden="true" class="relative size-9">
+                        {#if row.cover}
+                          <Cover
+                            src={row.cover.src}
+                            seed={row.cover.seed}
+                            class="size-9 rounded-[6px] object-cover"
+                          />
                         {/if}
+                        <!-- The thing's state, pinned to the picture's corner
+                             on a solid chip so it reads on any cover, or
+                             standing alone where there is no picture. -->
+                        <span
+                          class={cn(
+                            'absolute rounded-row',
+                            row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
+                          )}
+                        >
+                          <span
+                            class={cn(
+                              'grid size-4 place-items-center rounded-row',
+                              markTones[row.role]
+                            )}
+                          >
+                            {#if row.role === 'ok'}
+                              <Icon name="check" size="sm" class="size-2.5" />
+                            {:else}
+                              <span class="text-micro font-bold leading-none"
+                                >{markGlyphs[row.role]}</span
+                              >
+                            {/if}
+                          </span>
+                        </span>
                       </span>
                       <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="truncate text-body text-ink"
@@ -404,11 +468,19 @@
 
         <!-- Always present, so the keys are learnable by looking. -->
         <div
-          class="flex shrink-0 flex-wrap gap-3 border-t border-line-thin px-3 py-[7px] font-mono text-micro text-ink-4"
+          class="flex shrink-0 flex-wrap items-center gap-5 border-t border-line-thin px-[1.125rem] py-2.5 text-meta text-ink-3"
         >
-          <span>↑↓ move</span>
-          <span>↵ open</span>
-          <span>esc close</span>
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><span class="inline-flex"
+              ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /></span
+            >move</span
+          >
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><Icon name="enter" size="sm" />open</span
+          >
+          <span class="inline-flex items-center gap-1.5 leading-none"
+            ><kbd class="font-sans text-meta font-semibold leading-none">Esc</kbd>close</span
+          >
         </div>
       {/if}
 
@@ -421,31 +493,42 @@
         type="button"
         onclick={dismiss}
         aria-label="Close search"
-        class="tap absolute right-3 top-[5px] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
+        class="tap absolute right-[1.125rem] top-[0.875rem] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
       >
-        <X size={14} />
+        <Icon name="close" size="sm" />
       </button>
     </aside>
   </div>
 {/if}
 
 <style>
-  /* The glass this layer shares with every other floating surface in Schall:
-     `rgba(32,34,39,0.55)` over a 14px backdrop blur, behind a
-     `rgba(232,233,231,0.09)` hairline. The page behind is present and
-     unreadable, which is why the palette needs no scrim. Entry is a plain
-     fade on the surface step, the one every surface in the application opens
-     at — no slide, no scale, no bounce. It was 120ms, which was a duration the
-     scale did not have.
-
-     The fill and the border are written as utilities on the element, in the
-     same class names the menu and the modal use, so the three surfaces cannot
-     drift apart. What is left here is the blur and the entry, neither of
-     which a utility can carry. */
+  /* Glass tinted with the page's dark ink: the print and the covers behind
+     show through as colour, and the blur keeps text behind unreadable. Poldi
+     chose this over an opaque panel on 2026-10-05. */
   .palette-panel {
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    animation: palette-in var(--motion-surface) var(--motion-ease-arrive);
+    background: color-mix(
+      in srgb,
+      var(--color-duo-dark) 45%,
+      rgb(20 22 27 / 0.42)
+    );
+    backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    -webkit-backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    border: 1px solid rgb(255 255 255 / 0.14);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 30px 80px rgb(0 0 0 / 0.55);
+  }
+
+  /* A light dim, so the page stays visible around the glass. */
+  .palette-scrim {
+    background: rgb(5 6 8 / 0.28);
+  }
+
+  /* The state badge sits on the picture, in a solid chip so it reads on any
+     cover. */
+  .palette-badge {
+    background-color: var(--color-ground);
+    box-shadow: 0 0 0 2px rgb(5 6 8 / 0.5);
   }
 
   /* The focus ring goes round the whole search row, inside the panel. Drawn
@@ -461,20 +544,5 @@
     outline-offset: -2px;
     border-top-left-radius: inherit;
     border-top-right-radius: inherit;
-  }
-
-  @keyframes palette-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .palette-panel {
-      animation: none;
-    }
   }
 </style>

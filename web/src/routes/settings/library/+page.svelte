@@ -3,7 +3,7 @@
 </script>
 
 <!-- Hidden: the mast highlights Settings and the section nav highlights
-     Library, but neither is a document heading. -->
-<h1 class="sr-only">Settings · Library</h1>
+     Library, but neither is a heading. The Hero above is the h1. -->
+<h2 class="sr-only">Settings · Library</h2>
 
 <SettingsSections show="library" />

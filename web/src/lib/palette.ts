@@ -1,5 +1,6 @@
 import type { GlobalSearchResults } from './api';
 import { formatBytes } from './utils';
+import { coverSrc } from './duoton/page.svelte';
 
 // What the palette shows, worked out away from the component that draws it.
 //
@@ -21,6 +22,9 @@ export interface PaletteRow {
   meta: string;
   role: PaletteRole;
   href: string;
+  /** The picture the row is drawn with: a release's cover, or generated art
+   * from the seed when there is none. Files have no picture. */
+  cover?: { src?: string; seed: string };
 }
 
 export type PaletteKey = 'artists' | 'releases' | 'tracks' | 'files' | 'playlists';
@@ -136,7 +140,8 @@ export function paletteCategories(
           : 'In your library, not followed',
         meta: counted(artist.fileCount, 'file'),
         role: artist.followed ? 'ok' : 'idle',
-        href: `/artists/${artist.id}`
+        href: `/artists/${artist.id}`,
+        cover: { seed: artist.name }
       }))
     },
     {
@@ -159,7 +164,8 @@ export function paletteCategories(
           release.trackCount > 0 && release.ownedTrackCount === release.trackCount
             ? 'ok'
             : 'idle',
-        href: `/releases/${release.id}`
+        href: `/releases/${release.id}`,
+        cover: { src: coverSrc(release.id), seed: release.id }
       }))
     },
     {
@@ -173,7 +179,8 @@ export function paletteCategories(
         meta: minutesSeconds(track.durationMs),
         role: track.owned ? 'ok' : 'idle',
         // A catalogue track has no page; it is a line on the release.
-        href: `/releases/${track.albumId}`
+        href: `/releases/${track.albumId}`,
+        cover: { src: coverSrc(track.albumId), seed: track.albumId }
       }))
     },
     {
@@ -207,7 +214,8 @@ export function paletteCategories(
         // A playlist is not in a state. Nothing is waiting on it and nothing is
         // wrong with it, so it takes the mark for having none.
         role: 'idle',
-        href: `/playlists/${playlist.id}`
+        href: `/playlists/${playlist.id}`,
+        cover: { seed: playlist.id }
       }))
     }
   ];

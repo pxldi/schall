@@ -434,6 +434,9 @@
     if (/^[1-9]$/.test(event.key)) {
       const index = Number(event.key) - 1;
       const max = current.kind === 'version' ? candidates.length : !filed ? groups.length : 0;
+      // Claimed even when out of range, so typing a digit here never opens
+      // search instead.
+      event.preventDefault();
       if (index < max) {
         chosen = index;
         saidWhich = true;
@@ -448,11 +451,13 @@
       case 'arrowup':
       case 'arrowleft':
       case 'k':
+        event.preventDefault();
         step(at - 1);
         break;
       case 'arrowdown':
       case 'arrowright':
       case 'j':
+        event.preventDefault();
         step(at + 1);
         break;
     }

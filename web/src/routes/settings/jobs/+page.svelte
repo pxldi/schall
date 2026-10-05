@@ -15,7 +15,7 @@
      machinery, and it says `job 48044` out loud. -->
 
 <!-- Hidden: the mast highlights Settings and the section nav highlights
-     Jobs, but neither is a document heading. -->
-<h1 class="sr-only">Settings · Jobs</h1>
+     Jobs, but neither is a heading. The Hero above is the h1. -->
+<h2 class="sr-only">Settings · Jobs</h2>
 
 <JobsView />

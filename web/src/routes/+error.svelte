@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { ChevronRight } from '@lucide/svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { useNewestPrint } from '$lib/duoton';
+  import { openSearch } from '$lib/search';
 
   // What SvelteKit draws when a page cannot be reached: an address that names
   // nothing, or a load that threw. Until now this file did not exist, so the
@@ -19,51 +20,55 @@
   // one with an ordinary cause a reader can act on. Everything else is the
   // application failing, and the reader can do the same one thing about it.
   const missing = $derived(page.status === 404);
-  const heading = $derived(missing ? 'That address is not part of Schall' : 'This page did not load');
+
+  // Printed from the three newest arrivals, tall, so a wrong address still
+  // lands on the collection rather than on a blank page.
+  useNewestPrint({ height: 26, count: 3 });
 </script>
 
 <svelte:head>
   <title>{missing ? 'Not found' : 'Error'} · Schall</title>
 </svelte:head>
 
-<PageHeader>
-  <h1 class="font-display text-2xl font-bold text-ink">
-    {missing ? 'Not found' : 'Error'}
-  </h1>
-</PageHeader>
-
-<div class="px-4 sm:px-6 py-5">
-  <EmptyPanel role={missing ? 'idle' : 'fail'} {heading}>
+<Hero title={missing ? '404' : 'Error'} size="xl">
+  {#snippet sub()}
     {#if missing}
-      <p class="text-body leading-[1.65] text-ink-2">
-        Nothing answers to <span class="numeric text-ink">{page.url.pathname}</span>.
-      </p>
+      <!-- The address is named, because the ordinary cause is a typed or
+           stale link and the reader cannot check one they are not shown. -->
+      <b class="font-semibold text-ink">Nothing at {page.url.pathname}</b>
+      <span>It may have moved, or the link is wrong.</span>
+    {:else}
+      <b class="font-semibold text-ink">This page did not load.</b>
+      <span>Reload it, or go back to Overview.</span>
     {/if}
+  {/snippet}
+</Hero>
 
-    <!-- `data-sveltekit-reload` is what makes the link work from an error the
-         router itself raised: it leaves the client-side router out of it and
-         asks the server for the page, so a broken route cannot swallow the way
-         out of itself. -->
-    <div class="flex flex-wrap items-center gap-2">
-      <Button href="/" data-sveltekit-reload>Go to Overview</Button>
-      {#if !missing}
-        <Button variant="outline" onclick={() => location.reload()}>Reload</Button>
-      {/if}
-    </div>
-
-    {#if !missing && page.error?.message}
-      <!-- The exact words the failure left behind. Two sentences are on the
-           screen; this is the third thing, and it is behind a disclosure so it
-           stays in the product without being the first thing read. -->
-      <details class="group border-t border-line-thin pt-2">
-        <summary
-          class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
-        >
-          <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
-          What went wrong
-        </summary>
-        <p class="reveal mt-1 text-meta leading-[1.65] text-ink-2">{page.error.message}</p>
-      </details>
+<div class="flex flex-col gap-4 px-4 pb-10 pt-5 sm:px-6">
+  <!-- `data-sveltekit-reload` is what makes the link work from an error the
+       router itself raised: it leaves the client-side router out of it and
+       asks the server for the page, so a broken route cannot swallow the way
+       out of itself. -->
+  <div class="flex flex-wrap items-center gap-2">
+    <Button href="/" data-sveltekit-reload>Go to Overview</Button>
+    {#if missing}
+      <Button variant="outline" onclick={openSearch}>Search</Button>
+    {:else}
+      <Button variant="outline" onclick={() => location.reload()}>Reload</Button>
     {/if}
-  </EmptyPanel>
+  </div>
+
+  {#if !missing && page.error?.message}
+    <!-- The exact words the failure left behind, behind a disclosure so they
+         stay in the product without being the first thing read. -->
+    <details class="group max-w-[40rem]">
+      <summary
+        class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
+      >
+        <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
+        What went wrong
+      </summary>
+      <p class="reveal mt-1 text-meta leading-[1.65] text-ink-2">{page.error.message}</p>
+    </details>
+  {/if}
 </div>

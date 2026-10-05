@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, setup } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 
 // The five category links are drawn twice: a scrollable row above the
 // content below `lg`, and the side rail at `lg` and up. Both sit in the DOM
@@ -18,9 +19,17 @@ vi.mock('$app/state', () => ({
 const { default: SettingsLayout } = await import('./+layout.svelte');
 
 function opened() {
-  return render(SettingsLayout, {
-    children: createRawSnippet(() => ({ render: () => '<p>a page</p>' }))
-  });
+  // The print reads the Overview's newest arrivals; an empty answer is enough.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ recentlyAdded: [] }), { status: 200 }))
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    SettingsLayout,
+    { children: createRawSnippet(() => ({ render: () => '<p>a page</p>' })) },
+    { wrapper: QueryClientProvider, wrapperProps: { client } }
+  );
 }
 
 const categories = ['Sources', 'Library', 'Automation', 'Phone', 'Jobs'];
@@ -32,7 +41,16 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
+});
+
+describe('the settings page', () => {
+  it('is titled Settings', () => {
+    opened();
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+  });
 });
 
 describe('the settings category navigation', () => {
