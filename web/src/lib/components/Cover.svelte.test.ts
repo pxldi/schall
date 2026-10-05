@@ -40,7 +40,20 @@ describe('a picture that has not arrived', () => {
 
     await fireEvent.load(image()!);
 
-    expect(image()?.getAttribute('data-state')).toBe('shown');
+    await vi.waitFor(() => expect(image()?.getAttribute('data-state')).toBe('shown'));
+  });
+
+  it('is shown with the other pictures that landed beside it', async () => {
+    const first = draw();
+    const second = draw({ src: '/api/v1/albums/two/cover' });
+
+    await fireEvent.load(first.image()!);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(first.image()?.getAttribute('data-state')).toBe('loading');
+    await fireEvent.load(second.image()!);
+
+    await vi.waitFor(() => expect(first.image()?.getAttribute('data-state')).toBe('shown'));
+    expect(second.image()?.getAttribute('data-state')).toBe('shown');
   });
 
   it('is left to the browser to fetch when it is below the fold', () => {
