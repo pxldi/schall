@@ -1352,7 +1352,8 @@ func (api *API) reviewQueue(response http.ResponseWriter, request *http.Request)
 	}
 	api.warmPreviews(page.Items)
 	api.writeJSON(response, http.StatusOK, map[string]any{
-		"items": items, "total": page.Total, "limit": limit, "offset": offset,
+		"items": items, "total": page.Total, "resolutions": page.Resolutions,
+		"limit": limit, "offset": offset,
 	})
 }
 

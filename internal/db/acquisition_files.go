@@ -881,6 +881,9 @@ type AcquisitionReviewItem struct {
 type AcquisitionReviewPage struct {
 	Items []AcquisitionReviewItem
 	Total int64
+	// Resolutions is how many of Total are entries that fit more than one
+	// recording, so a screen can count each kind without reading every page.
+	Resolutions int64
 }
 
 // reviewQuestions is every want that has stopped and is waiting on a person,
@@ -1031,8 +1034,10 @@ func (q *Queries) AcquisitionReviewQueue(
 	var page AcquisitionReviewPage
 	if err := q.db.QueryRow(ctx, `
 		WITH`+reviewQuestions+`
-		SELECT count(*) FROM questions
-	`).Scan(&page.Total); err != nil {
+		SELECT count(*),
+		       count(*) FILTER (WHERE target_id IN (SELECT target_id FROM asked))
+		FROM questions
+	`).Scan(&page.Total, &page.Resolutions); err != nil {
 		return AcquisitionReviewPage{}, fmt.Errorf("count wants awaiting a decision: %w", err)
 	}
 	if page.Total == 0 {

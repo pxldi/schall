@@ -205,11 +205,16 @@ function answer(url: string) {
   if (url.startsWith('/api/v1/review-queue/copies') && url.endsWith('/waveform')) {
     return new Response(null, { status: 404 });
   }
-  if (url.startsWith('/api/v1/review-queue')) return listing(piles.wants);
+  if (url.startsWith('/api/v1/review-queue')) {
+    return {
+      ...listing(piles.wants),
+      resolutions: piles.wants.filter((item) => item.kind === 'resolution').length
+    };
+  }
   if (url.startsWith('/api/v1/downloads?')) {
     return {
       ...listing(piles.downloads),
-      counts: { open: 0, review: piles.downloads.length, imported: 0, discarded: 0, failed: 0, all: 0 }
+      counts: { open: 0, review: piles.downloads.length, questions: piles.downloads.length, imported: 0, discarded: 0, failed: 0, all: 0 }
     };
   }
   if (url.startsWith('/api/v1/library/files?')) return listing([]);
@@ -355,6 +360,48 @@ describe('the rail', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Version 1' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Use recording' })).toBeTruthy());
+  });
+});
+
+describe('a queue longer than one page', () => {
+  it('counts from the server and reads the next page near the end', async () => {
+    const first = want('copies');
+    const second = want('copies', 'ffffffff-0000-4000-8000-000000000042');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requested.push(url);
+        let body: unknown = {};
+        if (url.includes('/waveform')) return new Response(null, { status: 404 });
+        if (url.startsWith('/api/v1/review-queue')) {
+          const offset = Number(new URL(url, 'http://x').searchParams.get('offset'));
+          body = { items: offset ? [second] : [first], total: 2, resolutions: 0, limit: 100, offset };
+        } else if (url.startsWith('/api/v1/downloads?')) {
+          body = {
+            items: [],
+            total: 8532,
+            limit: 100,
+            offset: 0,
+            counts: { open: 0, review: 8532, questions: 0, imported: 0, discarded: 0, failed: 0, all: 0 }
+          };
+        }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    await open('Evensong');
+
+    // The Folder figure is the server's, not the length of a page it sent.
+    expect(screen.getByRole('button', { name: 'All 8534' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Folder 8532' })).toBeTruthy();
+    // One row loaded and one more on the server is inside the read-ahead
+    // window, so the second page is asked for at the offset the first ended.
+    await waitFor(() =>
+      expect(requested.some((url) => url.startsWith('/api/v1/review-queue?limit=100&offset=1'))).toBe(true)
+    );
   });
 });
 
