@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
-  import { Check, LoaderCircle, Trash2, Upload as UploadIcon } from '@lucide/svelte';
   import {
     api,
     type SoundCloudNamingFields,
@@ -242,9 +242,9 @@
         onclick={() => $send.mutate(chosen)}
       >
         {#if $send.isPending}
-          <LoaderCircle size={13} class="animate-spin" /> Uploading
+          <Icon name="busy" size={13} class="animate-spin" /> Uploading
         {:else}
-          <UploadIcon size={13} strokeWidth={2.3} /> Upload
+          <Icon name="upload" size={13} /> Upload
         {/if}
       </Button>
     </div>
@@ -416,7 +416,7 @@
                  a violet mark saying nothing, which is worse than no mark. -->
             <span class="grid size-4 shrink-0 place-items-center rounded-row {chips[state.role]}">
               {#if state.role === 'ok'}
-                <Check size={10} strokeWidth={3.2} />
+                <Icon name="check" size={10} />
               {:else}
                 <span class="numeric text-micro font-bold">
                   {state.role === 'decide'
@@ -468,7 +468,7 @@
                   disabled={$discard.isPending || busyStatuses.includes(upload.status)}
                   onclick={() => $discard.mutate(upload.id)}
                 >
-                  <Trash2 size={13} strokeWidth={2} />
+                  <Icon name="delete" size={13} />
                 </Button>
               {/if}
             </span>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Library, X } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import type { DuplicateEvidence } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
 
@@ -24,7 +24,7 @@
 
 <div class="rounded-panel border border-line-regular bg-decide/14 px-5 py-4">
   <div class="flex items-start gap-3">
-    <Library size={17} class="mt-0.5 shrink-0 text-decide" />
+    <Icon name="library" size={17} class="mt-0.5 shrink-0 text-decide" />
     <div class="min-w-0">
       <p class="text-body font-semibold text-decide">This release may already be in the library</p>
       <p class="mt-1 text-body text-ink-2">{evidence.summary}</p>
@@ -62,10 +62,10 @@
 
   <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-line-thin pt-4">
     <Button disabled={pending} onclick={onconfirm}>
-      <Check size={15} /> Download anyway
+      <Icon name="check" size={15} /> Download anyway
     </Button>
     <Button variant="ghost" disabled={pending} onclick={oncancel}>
-      <X size={15} /> Keep what I have
+      <Icon name="close" size={15} /> Keep what I have
     </Button>
     <a href="/library" class="text-meta font-semibold text-ink-3 transition hover:text-ink">
       Open Library

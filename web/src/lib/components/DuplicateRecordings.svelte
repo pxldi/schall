@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   // Where the library holds the same recording twice, and which of the copies
   // it can prove is the lesser one.
   //
@@ -15,7 +16,6 @@
   // happens on its own.
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { Pause, Play } from '@lucide/svelte';
   import { api, type DuplicateCopy, type DuplicateRecording } from '$lib/api';
   import { formatBytes, formatDuration } from '$lib/utils';
   import { listening } from '$lib/preview.svelte';
@@ -433,9 +433,9 @@
               <span class="flex shrink-0 items-center justify-end gap-1">
                 <Button variant="ghost" size="sm" onclick={() => hear(copy.id)}>
                   {#if sounding === copy.id}
-                    <Pause size={12} strokeWidth={2.2} /> Stop
+                    <Icon name="pause" size={12} /> Stop
                   {:else}
-                    <Play size={12} strokeWidth={2.2} /> Play
+                    <Icon name="play" size={12} /> Play
                   {/if}
                 </Button>
                 {#if view === 'to-decide'}

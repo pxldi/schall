@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronFirst, ChevronLast } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import Button from '$lib/components/Button.svelte';
 
   // Four pages paginate and four had written this out by hand, agreeing on the
@@ -54,7 +54,7 @@
         disabled={offset === 0}
         onclick={() => onchange(0)}
       >
-        <ChevronFirst size={14} />
+        <Icon name="first" size={14} />
       </Button>
       <Button
         variant="outline"
@@ -81,7 +81,7 @@
         disabled={offset + pageSize >= total}
         onclick={() => onchange(lastOffset)}
       >
-        <ChevronLast size={14} />
+        <Icon name="last" size={14} />
       </Button>
     </div>
   </div>

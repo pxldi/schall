@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { Snippet } from 'svelte';
-  import { Check } from '@lucide/svelte';
 
   let {
     number,
@@ -27,7 +27,7 @@
     : 'border border-line-thin'}"
 >
   <span class:complete class="step-number">
-    {#if complete}<Check size={13} strokeWidth={3} />{:else}{number}{/if}
+    {#if complete}<Icon name="check" size={13} />{:else}{number}{/if}
   </span>
 
   <span class="flex min-w-0 flex-1 flex-col gap-1">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import type { ReleaseEdition } from '$lib/api';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
@@ -160,7 +160,7 @@
             </p>
             {#if selected}
               <span class="flex shrink-0 items-center gap-1.5 text-meta text-ok">
-                <Check size={13} strokeWidth={3} /> Selected
+                <Icon name="check" size={13} /> Selected
               </span>
             {:else}
               <button

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Pause, Play, X } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import { onDestroy } from 'svelte';
   import { api, type AcquiredCopy } from '$lib/api';
   import { clock, verdict } from '$lib/review';
@@ -246,9 +246,9 @@
       aria-label={playing ? `Pause ${heading}` : `Play ${heading}`}
     >
       {#if playing}
-        <Pause size={16} fill="currentColor" />
+        <Icon name="pause" size={16} />
       {:else}
-        <Play size={16} fill="currentColor" />
+        <Icon name="play" size={16} />
       {/if}
     </button>
     <div
@@ -303,10 +303,10 @@
     <span class="text-ink-3">Length</span>
     <span class="flex items-center gap-1.5">
       {#if lengthVerdict === 'bad'}
-        <X aria-label="differs" size={11} strokeWidth={2.5} class="shrink-0 text-fail" />
+        <Icon name="close" aria-label="differs" size={11} class="shrink-0 text-fail" />
         <span class="numeric text-body text-fail">{lengthText}</span>
       {:else}
-        {#if lengthVerdict === 'ok'}<Check aria-label="agrees" size={11} strokeWidth={2.5} class="shrink-0 text-ok" />{/if}
+        {#if lengthVerdict === 'ok'}<Icon name="check" aria-label="agrees" size={11} class="shrink-0 text-ok" />{/if}
         <span class="numeric text-body text-ink">{lengthText}</span>
       {/if}
     </span>
@@ -334,12 +334,12 @@
       </span>
     {:else if albumVerdict === 'ok'}
       <span class="flex items-center gap-1.5">
-        <Check aria-label="agrees" size={11} strokeWidth={2.5} class="shrink-0 text-ok" />
+        <Icon name="check" aria-label="agrees" size={11} class="shrink-0 text-ok" />
         <span class="truncate">{album}</span>
       </span>
     {:else if albumVerdict === 'bad'}
       <span class="flex items-center gap-1.5">
-        <X aria-label="differs" size={11} strokeWidth={2.5} class="shrink-0 text-fail" />
+        <Icon name="close" aria-label="differs" size={11} class="shrink-0 text-fail" />
         <span class="truncate text-fail">{album}</span>
       </span>
     {:else}

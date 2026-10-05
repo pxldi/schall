@@ -1,18 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import {
-    ArrowDown,
-    ArrowUp,
-    Check,
-    EyeOff,
-    LoaderCircle,
-    RefreshCw,
-    RotateCcw,
-    Search,
-    UserRound,
-    X
-  } from '@lucide/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type Release, type ReleaseStatus } from '$lib/api';
@@ -560,7 +549,7 @@
 <ControlRail label="Which releases to show" sticky={false}>
   <form class="w-full sm:w-48" onsubmit={applySearch}>
     <label class="field flex w-full items-center gap-2">
-      <Search size={13} strokeWidth={2} class="shrink-0 text-ink-4" />
+      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:this={searchBox}
         bind:value={searchInput}
@@ -580,7 +569,7 @@
        offer the way back out to everybody. -->
   {#if artistId}
     <div class="flex items-center gap-1.5 rounded-row bg-surface-thick py-1 pr-1 pl-2">
-      <UserRound size={11} strokeWidth={2.2} class="shrink-0 text-ink-4" />
+      <Icon name="artist" size={11} class="shrink-0 text-ink-4" />
       <span class="max-w-44 truncate text-meta font-medium text-ink">{artistName}</span>
       <button
         type="button"
@@ -588,7 +577,7 @@
         aria-label="Show every artist"
         onclick={clearArtist}
       >
-        <X size={11} strokeWidth={2.4} />
+        <Icon name="close" size={11} />
       </button>
     </div>
   {/if}
@@ -644,7 +633,7 @@
         setSelecting(true);
       }}
     >
-      <Search size={13} strokeWidth={2.3} /> Find missing
+      <Icon name="search" size={13} /> Find missing
     </Button>
   </div>
 
@@ -674,33 +663,33 @@
            runs on its own. -->
       <Button variant="outline" size="sm" disabled={deciding} onclick={() => $rematching.mutate()}>
         {#if $rematching.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size={13} class="animate-spin" />
         {:else}
-          <RefreshCw size={13} strokeWidth={2.1} />
+          <Icon name="refresh" size={13} />
         {/if}
         Match again
       </Button>
       <Button variant="outline" size="sm" disabled={deciding} onclick={() => $retrying.mutate()}>
         {#if $retrying.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size={13} class="animate-spin" />
         {:else}
-          <RotateCcw size={13} strokeWidth={2.1} />
+          <Icon name="undo" size={13} />
         {/if}
         Try again
       </Button>
       <Button variant="outline" size="sm" disabled={deciding} onclick={() => $ignoring.mutate()}>
         {#if $ignoring.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size={13} class="animate-spin" />
         {:else}
-          <EyeOff size={13} strokeWidth={2.1} />
+          <Icon name="hide" size={13} />
         {/if}
         Ignore
       </Button>
       <Button size="sm" disabled={deciding} onclick={() => $sourceRun.mutate()}>
         {#if $sourceRun.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size={13} class="animate-spin" />
         {:else}
-          <Search size={13} strokeWidth={2.3} />
+          <Icon name="search" size={13} />
         {/if}
         Find sources for {selected.length}
       </Button>
@@ -938,7 +927,7 @@
                    begin with, so it is drawn as a gap rather than as a
                    word. -->
               {#if current.kind === 'tick'}
-                <StateMark role="ok"><Check size={10} strokeWidth={3.2} /></StateMark>
+                <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
               {:else if current.kind === 'dash'}
                 <span
                   class="numeric text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
@@ -1037,7 +1026,7 @@
         ? 'bg-accent'
         : 'border border-line-thick hover:border-line-live'}"
     >
-      {#if checked}<Check size={10} strokeWidth={3.6} class="text-accent-ink" />{/if}
+      {#if checked}<Icon name="check" size={10} class="text-accent-ink" />{/if}
     </span>
   </span>
 {/snippet}
@@ -1050,9 +1039,9 @@
     {label}
     {#if sort === key}
       {#if descending}
-        <ArrowDown size={11} strokeWidth={2.2} class="text-ink" />
+        <Icon name="arrow-down" size={11} class="text-ink" />
       {:else}
-        <ArrowUp size={11} strokeWidth={2.2} class="text-ink" />
+        <Icon name="arrow-up" size={11} class="text-ink" />
       {/if}
     {/if}
   </button>

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { Check, ChevronLeft, ChevronRight, LoaderCircle, X } from '@lucide/svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
   import {
@@ -1464,7 +1463,7 @@
           disabled={!canTest || $test.isPending || !$settings.isSuccess}
           onclick={() => $test.mutate()}
         >
-          {#if $test.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $test.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           Test
         </Button>
         <SettingsSaveButton
@@ -1575,7 +1574,7 @@
           disabled={!canTestNavidrome || $testNavidrome.isPending || !$navidrome.isSuccess}
           onclick={() => $testNavidrome.mutate()}
         >
-          {#if $testNavidrome.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $testNavidrome.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           Test
         </Button>
         <Button
@@ -1585,7 +1584,7 @@
           disabled={!canRescanNavidrome || $rescanNavidrome.isPending || !$navidrome.isSuccess}
           onclick={() => $rescanNavidrome.mutate()}
         >
-          {#if $rescanNavidrome.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $rescanNavidrome.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           Tell it now
         </Button>
         <SettingsSaveButton
@@ -1678,7 +1677,7 @@
                   disabled={!$preferences.isSuccess || position === 0}
                   onclick={() => moveFormat(position, position - 1)}
                 >
-                  <ChevronLeft size={13} strokeWidth={2.4} />
+                  <Icon name="chevron-left" size={13} />
                 </button>
                 <button
                   type="button"
@@ -1687,7 +1686,7 @@
                   disabled={!$preferences.isSuccess || position === preferred.length - 1}
                   onclick={() => moveFormat(position, position + 1)}
                 >
-                  <ChevronRight size={13} strokeWidth={2.4} />
+                  <Icon name="chevron-right" size={13} />
                 </button>
                 <button
                   type="button"
@@ -1696,7 +1695,7 @@
                   disabled={!$preferences.isSuccess}
                   onclick={() => (preferred = preferred.filter((named) => named !== format))}
                 >
-                  <X size={13} strokeWidth={2.4} />
+                  <Icon name="close" size={13} />
                 </button>
               </span>
             {/each}
@@ -1798,7 +1797,7 @@
           <summary
             class="tap-tall flex w-fit cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
           >
-            <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+            <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
             How a bit rate is read
           </summary>
           <div class="reveal mt-1 flex flex-col gap-1.5 text-meta leading-[1.5] text-ink-3">
@@ -1895,7 +1894,7 @@
           onclick={() => $scanForUpgrades.mutate()}
         >
           {#if $scanForUpgrades.isPending}
-            <LoaderCircle size={13} class="animate-spin" />
+            <Icon name="busy" size={13} class="animate-spin" />
           {/if}
           Scan now
         </Button>
@@ -1940,7 +1939,7 @@
         disabled={!canTestNotification || $testNotification.isPending || !$notifications.isSuccess}
         onclick={() => $testNotification.mutate()}
       >
-        {#if $testNotification.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+        {#if $testNotification.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
         Send a test
       </Button>
     </div>
@@ -2154,7 +2153,7 @@
           disabled={!canTestListenBrainz || $testListenBrainz.isPending || !$listenbrainz.isSuccess}
           onclick={() => $testListenBrainz.mutate()}
         >
-          {#if $testListenBrainz.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $testListenBrainz.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           Test
         </Button>
         <SettingsSaveButton
@@ -2410,7 +2409,7 @@
           ? 'border-line-live bg-ink'
           : 'border-line-thick group-hover:border-line-live'}"
       >
-        {#if chosen}<Check size={10} strokeWidth={3.6} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2476,7 +2475,7 @@
           disabled={!$spotify.data?.configured || $connectSpotify.isPending || !$spotify.isSuccess}
           onclick={() => $connectSpotify.mutate()}
         >
-          {#if $connectSpotify.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $connectSpotify.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           {$spotify.data?.connected ? 'Reconnect' : 'Connect account'}
         </Button>
         <SettingsSaveButton
@@ -2630,7 +2629,7 @@
         <summary
           class="tap-tall flex w-fit cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
         >
-          <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+          <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
           What counts as proven
         </summary>
         <div class="reveal mt-1 flex flex-col gap-1.5 text-meta leading-[1.5] text-ink-3">
@@ -2784,7 +2783,7 @@
           ? 'border-line-live bg-ink'
           : 'border-line-thick group-hover:border-line-live'}"
       >
-        {#if chosen}<Check size={10} strokeWidth={3.6} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2878,7 +2877,7 @@
         disabled={!$layout.isSuccess || !$layoutRun.isSuccess || layoutBusy || run?.active}
         onclick={() => $planLayout.mutate()}
       >
-        {#if $planLayout.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+        {#if $planLayout.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
         Plan
       </Button>
       <!-- The one control on this screen the accent fills, and only while
@@ -2896,7 +2895,7 @@
           disabled={!$layoutRun.isSuccess || layoutBusy}
           onclick={() => $applyLayout.mutate(run.runId)}
         >
-          {#if $applyLayout.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+          {#if $applyLayout.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
           Apply
         </Button>
         <Button
@@ -3016,7 +3015,7 @@
         disabled={!$tags.isSuccess || writing || $writeTags.isPending || ($tags.data?.eligible ?? 0) === 0}
         onclick={() => $writeTags.mutate()}
       >
-        {#if writing || $writeTags.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+        {#if writing || $writeTags.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
         Write tags
       </Button>
     </div>

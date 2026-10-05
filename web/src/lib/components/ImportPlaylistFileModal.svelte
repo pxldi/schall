@@ -1,8 +1,8 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, useQueryClient } from '@tanstack/svelte-query';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { FileUp, LoaderCircle, Upload, X } from '@lucide/svelte';
   import { api, type PlaylistFilePreview } from '$lib/api';
   import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
@@ -181,7 +181,7 @@
             disabled={inFlight}
             aria-label="Close"
           >
-            <X size={18} />
+            <Icon name="close" size={18} />
           </button>
         </div>
 
@@ -202,10 +202,10 @@
               disabled={inFlight}
             >
               {#if $preview.isPending}
-                <LoaderCircle size={18} class="animate-spin text-ink-3" />
+                <Icon name="busy" size={18} class="animate-spin text-ink-3" />
                 <span class="text-body font-medium text-ink">Reading {chosen?.name}…</span>
               {:else}
-                <FileUp size={18} class="text-ink-3" />
+                <Icon name="upload" size={18} class="text-ink-3" />
                 <span class="text-body font-medium text-ink">Choose a CSV or M3U file</span>
                 <span class="text-meta text-ink-3">or drop one here</span>
               {/if}
@@ -285,9 +285,9 @@
           {#if result}
             <Button type="submit" disabled={!listName.trim() || inFlight}>
               {#if $importFile.isPending}
-                <LoaderCircle size={13} class="animate-spin" /> Importing
+                <Icon name="busy" size={13} class="animate-spin" /> Importing
               {:else}
-                <Upload size={13} strokeWidth={2.2} />
+                <Icon name="upload" size={13} />
                 Import
               {/if}
             </Button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   // The one confirm before Schall deletes music on purpose.
   //
   // The person has picked the copy to keep on the duplicates list. This names
@@ -7,7 +8,6 @@
   // handed and asks for nothing of its own.
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { LoaderCircle, X } from '@lucide/svelte';
   import type { DuplicateCopy, DuplicateRecording } from '$lib/api';
   import { formatBytes } from '$lib/utils';
   import { motionMs } from '$lib/motion.svelte';
@@ -136,7 +136,7 @@
         disabled={busy}
         aria-label="Close"
       >
-        <X size={18} />
+        <Icon name="close" size={18} />
       </button>
     </div>
 
@@ -182,7 +182,7 @@
       <Button type="button" variant="ghost" onclick={oncancel} disabled={busy}>Cancel</Button>
       <Button type="button" onclick={onconfirm} disabled={busy || going.length === 0}>
         {#if busy}
-          <LoaderCircle size={13} class="animate-spin" /> Deleting
+          <Icon name="busy" size={13} class="animate-spin" /> Deleting
         {:else}
           {#if going.length === 0}
             Nothing to delete

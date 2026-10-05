@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pause, Play, Volume2 } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import { clock } from '$lib/review';
   import { listening, setVolume as persistVolume } from '$lib/preview.svelte';
 
@@ -142,9 +142,9 @@
       aria-label={started && !paused ? `Pause ${name}` : `Play ${name} from the middle`}
     >
       {#if started && !paused}
-        <Pause size={12} fill="currentColor" />
+        <Icon name="pause" size={12} />
       {:else}
-        <Play size={12} fill="currentColor" />
+        <Icon name="play" size={12} />
       {/if}
     </button>
     <div class="flex min-w-0 flex-1 items-center gap-2.5">
@@ -173,7 +173,7 @@
       </span>
     </div>
     {#if showVolume}
-      <Volume2 size={13} strokeWidth={1.8} class="shrink-0 text-ink-3" />
+      <Icon name="volume" size={13} class="shrink-0 text-ink-3" />
       <input
         type="range"
         min="0"

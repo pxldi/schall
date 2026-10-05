@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   // The weekly playlist: the songs Schall fetched for this week, and what
   // becomes of each one.
   //
@@ -19,7 +20,6 @@
     useQueryClient
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { ChevronRight } from '@lucide/svelte';
   import { api, type WeeklyKeepRead, type WeeklyLease } from '$lib/api';
   import { isAuthError } from '$lib/errors';
   import { relativeTime } from '$lib/utils';
@@ -281,7 +281,7 @@
                   <summary
                     class="tap-tall flex w-fit cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
                   >
-                    <ChevronRight size={12} class="transition-transform group-open:rotate-90" />
+                    <Icon name="chevron-right" size={12} class="transition-transform group-open:rotate-90" />
                     Why it's leaving
                   </summary>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LoaderCircle } from '@lucide/svelte';
+  import Icon from './Icon.svelte';
   import { api, type FileResolution } from '$lib/api';
   import { CANDIDATE_COLUMNS, candidateRow, clock } from '$lib/review';
   import AudioPreview from '$lib/components/AudioPreview.svelte';
@@ -46,7 +46,7 @@
 <div class="flex flex-col gap-3">
   {#if loading}
     <div class="flex min-h-[520px] items-start gap-2 text-body text-ink-3">
-      <LoaderCircle size={14} class="animate-spin" /> Loading…
+      <Icon name="busy" size={14} class="animate-spin" /> Loading…
     </div>
   {:else if error}
     <!-- The read, the answer and asking again all fail the same way here: the

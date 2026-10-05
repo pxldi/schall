@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { Check, LoaderCircle } from '@lucide/svelte';
   import { api, transcodeBitrates, type ImportSettings, type TranscodeBitrate } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
   import Card from '$lib/components/Card.svelte';
@@ -142,11 +142,9 @@
               ? 'bg-accent'
               : 'border border-line-thick group-hover:border-line-live'}"
           >
-            {#if when === 'lossless'}<Check
+            {#if when === 'lossless'}<Icon name="check"
                 size={10}
-                strokeWidth={3.6}
-                class="text-accent-ink"
-              />{/if}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -170,11 +168,9 @@
               ? 'bg-accent'
               : 'border border-line-thick group-hover:border-line-live'}"
           >
-            {#if when === 'above_target'}<Check
+            {#if when === 'above_target'}<Icon name="check"
                 size={10}
-                strokeWidth={3.6}
-                class="text-accent-ink"
-              />{/if}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -227,7 +223,7 @@
           eligible === 0}
         onclick={() => $queueSweep.mutate()}
       >
-        {#if sweeping || $queueSweep.isPending}<LoaderCircle size={12} class="animate-spin" />{/if}
+        {#if sweeping || $queueSweep.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
         Transcode the library
       </Button>
     </div>

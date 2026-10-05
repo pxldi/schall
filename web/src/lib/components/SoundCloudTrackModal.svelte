@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { createMutation, useQueryClient } from '@tanstack/svelte-query';
   import { fade } from 'svelte/transition';
-  import { X } from '@lucide/svelte';
   import { api, type SoundCloudNamingFields, type SoundCloudTrack } from '$lib/api';
   import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
@@ -175,7 +175,7 @@
             disabled={inFlight}
             aria-label="Close"
           >
-            <X size={18} />
+            <Icon name="close" size={18} />
           </button>
         </div>
 
