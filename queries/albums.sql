@@ -192,14 +192,56 @@ WHERE album_id = $1;
 
 -- A row with no image is the answer "asked, and there is none", which is what
 -- stops the archive being asked again on every page view.
+--
+-- The inks travel with the picture they were read from, so a new picture never
+-- sits under the old one's inks. NULL inks and palette leave the reading to the
+-- sweep.
 -- name: SaveReleaseCoverArt :exec
-INSERT INTO release_cover_art (album_id, image, content_type, source, fetched_at)
-VALUES ($1, $2, $3, $4, now())
+INSERT INTO release_cover_art (
+    album_id, image, content_type, source, fetched_at, ink_dark, ink_light, palette
+)
+VALUES (
+    $1, $2, $3, $4, now(),
+    sqlc.narg(ink_dark), sqlc.narg(ink_light), sqlc.narg(palette)::text[]
+)
 ON CONFLICT (album_id) DO UPDATE
 SET image = EXCLUDED.image,
     content_type = EXCLUDED.content_type,
     source = EXCLUDED.source,
-    fetched_at = EXCLUDED.fetched_at;
+    fetched_at = EXCLUDED.fetched_at,
+    ink_dark = EXCLUDED.ink_dark,
+    ink_light = EXCLUDED.ink_light,
+    palette = EXCLUDED.palette;
+
+-- The cached pictures nobody has read inks from yet: the covers cached before
+-- inks existed, and any whose reading was skipped. fetched_at comes along so
+-- the write below lands only on the picture that was read.
+-- name: ReleaseCoversWithoutInks :many
+SELECT album_id, image, fetched_at
+FROM release_cover_art
+WHERE image IS NOT NULL AND palette IS NULL
+ORDER BY album_id
+LIMIT $1;
+
+-- An empty palette with NULL inks records "read, and nothing decoded", so the
+-- picture is not read again until it changes.
+-- name: SaveReleaseInks :execrows
+UPDATE release_cover_art
+SET ink_dark = sqlc.narg(ink_dark),
+    ink_light = sqlc.narg(ink_light),
+    palette = sqlc.arg(palette)::text[]
+WHERE album_id = sqlc.arg(album_id)
+  AND fetched_at = sqlc.arg(fetched_at)
+  AND image IS NOT NULL;
+
+-- The inks of several releases at once, for the lists and pages that print in
+-- them. A release with no picture, or a picture with no inks, has no row.
+-- name: ReleaseInks :many
+SELECT album_id, ink_dark::text AS ink_dark, ink_light::text AS ink_light,
+       COALESCE(palette, '{}')::text[] AS palette
+FROM release_cover_art
+WHERE album_id = ANY(sqlc.arg(album_ids)::uuid[])
+  AND ink_dark IS NOT NULL;
 
 -- Takes back a cover a person set by hand, and only that.
 --

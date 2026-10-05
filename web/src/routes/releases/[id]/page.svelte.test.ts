@@ -47,6 +47,7 @@ function detail(overrides: Partial<ReleaseDetail> = {}): ReleaseDetail {
     selectedAutomatically: true,
     trackRefreshStatus: 'completed',
     genres: [],
+    inks: null,
     ...overrides
   };
 }

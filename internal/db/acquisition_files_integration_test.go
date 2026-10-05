@@ -865,6 +865,9 @@ func TestTheReviewQueueOffersTheCopiesNothingCouldDecideAbout(t *testing.T) {
 	if page.Total != 1 || len(page.Items) != 1 {
 		t.Fatalf("queue = %d items of %d, want the one want waiting", len(page.Items), page.Total)
 	}
+	if page.Resolutions != 0 {
+		t.Fatalf("resolutions = %d, want none: a held copy is not a choice between recordings", page.Resolutions)
+	}
 	item := page.Items[0]
 	if item.Target.ID != targetID {
 		t.Fatalf("target = %s, want %s", item.Target.ID, targetID)
@@ -1424,6 +1427,11 @@ func TestTheReviewQueueOffersTheEntriesNothingCouldResolve(t *testing.T) {
 	if page.Total != 1 || len(page.Items) != 1 {
 		t.Fatalf("queue = %d items of %d, want the entry waiting on an answer",
 			len(page.Items), page.Total)
+	}
+	// Review counts this kind from the figure rather than from the rows it has
+	// read, so the figure has to name it.
+	if page.Resolutions != 1 {
+		t.Fatalf("resolutions = %d, want the one entry that fits more than one recording", page.Resolutions)
 	}
 	item := page.Items[0]
 	if item.Target.ID != targetID {

@@ -34,6 +34,8 @@ function playlist(overrides: Partial<Playlist> = {}): Playlist {
     ownedCount: 12,
     importedAt: '2026-08-01T00:00:00Z',
     createdAt: '2026-08-01T00:00:00Z',
+    coverReleaseId: null,
+    inks: null,
     ...overrides
   };
 }

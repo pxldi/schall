@@ -74,6 +74,8 @@ type labelReleaseResponse struct {
 	// An unmonitored release stays listed and can still be wanted by hand; it
 	// just stops being missing.
 	Monitored bool `json:"monitored"`
+	// Inks are the two inks read from the cover, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 type labelSearchItem struct {
@@ -205,6 +207,11 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	albumIDs := make([]uuid.UUID, 0, len(releases))
+	for _, release := range releases {
+		albumIDs = append(albumIDs, release.ID)
+	}
+	inks := api.releaseInks(request.Context(), albumIDs)
 	items := make([]labelReleaseResponse, 0, len(releases))
 	for _, release := range releases {
 		item := labelReleaseResponse{
@@ -217,6 +224,7 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 			TrackCount:                release.TrackCount,
 			OwnedTrackCount:           release.OwnedTrackCount,
 			Monitored:                 release.Monitored,
+			Inks:                      rowInks(inks, release.ID),
 		}
 		if release.ReleaseDate.Valid {
 			item.ReleaseDate = release.ReleaseDate.Time.Format("2006-01-02")

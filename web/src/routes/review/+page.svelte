@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
+  import {
+    createInfiniteQuery,
+    createMutation,
+    keepPreviousData,
+    useQueryClient
+  } from '@tanstack/svelte-query';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -54,9 +59,22 @@
     };
   });
 
-  const wants = createQuery({
+  // Both reads are paged, 100 at a time, the most the server gives in one
+  // read. The queue used to read one page of each and count what came back,
+  // so a queue of thousands said 100 and ended there. The chips now take the
+  // server's figures, and the next page is read as the reader nears the end
+  // of what is loaded (`readAhead` below).
+  const PAGE = 100;
+  const nextOffset = (last: { total: number; offset: number; items: unknown[] }) =>
+    last.items.length > 0 && last.offset + last.items.length < last.total
+      ? last.offset + last.items.length
+      : undefined;
+
+  const wants = createInfiniteQuery({
     queryKey: ['review-queue'],
-    queryFn: () => api.reviewQueue(100),
+    queryFn: ({ pageParam }) => api.reviewQueue(PAGE, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset,
     placeholderData: keepPreviousData
   });
   // Only the folders that recorded what they found. One that gave up before it
@@ -65,9 +83,13 @@
   // question: there is nothing to decide, and the only thing to do is ask the
   // machine to try what it already tried. That belongs beside the other
   // failures on the download, not in this queue.
-  const downloads = createQuery({
-    queryKey: ['downloads', 'review'],
-    queryFn: () => api.downloads({ view: 'review', limit: 100 }),
+  // The server leaves those out itself (the `questions` view), so its count
+  // is the Folder chip and every page it sends is folders that ask something.
+  const downloads = createInfiniteQuery({
+    queryKey: ['downloads', 'questions'],
+    queryFn: ({ pageParam }) => api.downloads({ view: 'questions', limit: PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset,
     placeholderData: keepPreviousData
   });
 
@@ -85,19 +107,40 @@
   }
 
   const paused = $derived(
-    ($downloads.data?.items ?? []).filter((item) => item.importStatus === 'needs_review')
+    ($downloads.data?.pages.flatMap((page) => page.items) ?? []).filter(
+      (item) => item.importStatus === 'needs_review'
+    )
   );
 
-  const questions = $derived(
-    questionsFrom({ wants: $wants.data?.items ?? [], imports: paused })
-  );
-
-  const counts = $derived({
-    all: questions.length,
-    downloaded: questions.filter((q) => q.kind === 'downloaded').length,
-    version: questions.filter((q) => q.kind === 'version').length,
-    folder: questions.filter((q) => q.kind === 'folder').length
+  // A question that moved between two pages while they were read would be
+  // listed twice. The first sighting is kept.
+  const questions = $derived.by(() => {
+    const seen = new Set<string>();
+    return questionsFrom({
+      wants: $wants.data?.pages.flatMap((page) => page.items) ?? [],
+      imports: paused
+    }).filter((question) => !seen.has(question.id) && Boolean(seen.add(question.id)));
   });
+
+  const wantTotal = $derived($wants.data?.pages[0]?.total ?? 0);
+  const resolutions = $derived($wants.data?.pages[0]?.resolutions ?? 0);
+  const folderTotal = $derived($downloads.data?.pages[0]?.total ?? 0);
+  const counts = $derived({
+    all: wantTotal + folderTotal,
+    downloaded: Math.max(wantTotal - resolutions, 0),
+    version: resolutions,
+    folder: folderTotal
+  });
+
+  const moreToRead = $derived(Boolean($wants.hasNextPage || $downloads.hasNextPage));
+
+  /** Reads the next page of whichever list has one. Called as the reader
+   * comes within a few rows of the end of what is loaded, by stepping or by
+   * scrolling the rail. */
+  function readAhead() {
+    if ($wants.hasNextPage && !$wants.isFetchingNextPage) void $wants.fetchNextPage();
+    if ($downloads.hasNextPage && !$downloads.isFetchingNextPage) void $downloads.fetchNextPage();
+  }
 
   const FILTERS: { key: QuestionKind | 'all'; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -143,6 +186,24 @@
       else held = current?.id ?? '';
     });
   });
+
+  // Within five rows of the end of what is loaded, the next page is read, so
+  // stepping through the queue does not wrap back to the top while thousands
+  // remain. A filter whose kind the loaded pages hold none of reads on until
+  // it finds one or the lists end.
+  $effect(() => {
+    if (moreToRead && filtered.length - at <= 5) untrack(readAhead);
+  });
+
+  /** Reads ahead when the foot of the rail scrolls into view. */
+  function nearEnd(sentinel: HTMLElement) {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) readAhead();
+    });
+    observer.observe(sentinel);
+    return { destroy: () => observer.disconnect() };
+  }
 
   /** Moves to another question by position, wrapping at either end — there is
    * no count on screen to say where the ends are any more. */
@@ -448,6 +509,10 @@
         </Button>
       {/if}
     </div>
+  {:else if !current && moreToRead}
+    <div class="flex flex-1 items-center justify-center px-4 sm:px-6 py-10" aria-busy="true">
+      <p class="text-body text-ink-3">Loading…</p>
+    </div>
   {:else if !current}
     <div class="px-4 sm:px-6 py-5">
       <EmptyPanel role="ok" heading="Nothing to decide" />
@@ -494,6 +559,9 @@
             <span class="truncate text-meta text-ink-4">{question.detail}</span>
           </button>
         {/each}
+        {#if moreToRead}
+          <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
+        {/if}
       </div>
 
       <div class="mt-auto hidden items-center gap-2.5 border-t border-line-thin p-4 lg:flex">

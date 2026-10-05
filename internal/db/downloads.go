@@ -178,11 +178,22 @@ const (
 	downloadViewReview    = `download_requests.status = 'completed' AND download_requests.import_status = 'needs_review'`
 	downloadViewImported  = `download_requests.status = 'completed' AND download_requests.import_status = 'imported'`
 	downloadViewDiscarded = `download_requests.status = 'completed' AND download_requests.import_status = 'discarded'`
+	// The paused imports Review can ask about: the latest pause recorded what
+	// validation compared. One that stopped before comparing anything is a
+	// failure with nothing to decide, and Review leaves it out, so its count
+	// and its pages have to leave it out too.
+	downloadViewQuestion = downloadViewReview + ` AND coalesce((
+		SELECT latest.evidence FROM download_import_reviews latest
+		WHERE latest.download_request_id = download_requests.id AND latest.kind = 'paused'
+		ORDER BY latest.recorded_at DESC, latest.id DESC
+		LIMIT 1
+	), 'null'::jsonb) <> 'null'::jsonb`
 )
 
 var downloadRequestViews = map[string]string{
 	"open":      downloadViewOpen,
 	"review":    downloadViewReview,
+	"questions": downloadViewQuestion,
 	"imported":  downloadViewImported,
 	"discarded": downloadViewDiscarded,
 	"failed":    downloadViewFailed,
@@ -208,6 +219,7 @@ func DownloadRequestView(name string) (string, bool) {
 type DownloadRequestCounts struct {
 	Open      int64 `json:"open"`
 	Review    int64 `json:"review"`
+	Questions int64 `json:"questions"`
 	Imported  int64 `json:"imported"`
 	Discarded int64 `json:"discarded"`
 	Failed    int64 `json:"failed"`
@@ -222,6 +234,8 @@ func (counts DownloadRequestCounts) forView(name string) int64 {
 		return counts.Open
 	case "review":
 		return counts.Review
+	case "questions":
+		return counts.Questions
 	case "imported":
 		return counts.Imported
 	case "discarded":
@@ -1001,6 +1015,7 @@ func (q *Queries) ListDownloadRequests(ctx context.Context, params ListDownloadR
 	if err := q.db.QueryRow(ctx, `
 		SELECT count(*) FILTER (WHERE `+downloadViewOpen+`)::bigint,
 		       count(*) FILTER (WHERE `+downloadViewReview+`)::bigint,
+		       count(*) FILTER (WHERE `+downloadViewQuestion+`)::bigint,
 		       count(*) FILTER (WHERE `+downloadViewImported+`)::bigint,
 		       count(*) FILTER (WHERE `+downloadViewDiscarded+`)::bigint,
 		       count(*) FILTER (WHERE `+downloadViewFailed+`)::bigint,
@@ -1008,7 +1023,7 @@ func (q *Queries) ListDownloadRequests(ctx context.Context, params ListDownloadR
 		FROM download_requests`+scope,
 		params.AlbumID.Valid, params.AlbumID.UUID, params.Status,
 	).Scan(
-		&result.Counts.Open, &result.Counts.Review, &result.Counts.Imported,
+		&result.Counts.Open, &result.Counts.Review, &result.Counts.Questions, &result.Counts.Imported,
 		&result.Counts.Discarded, &result.Counts.Failed, &result.Counts.All,
 	); err != nil {
 		return result, err

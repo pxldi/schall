@@ -48,6 +48,7 @@ function releaseRow(overrides: Partial<Release> = {}): Release {
     musicbrainzReleaseId: null,
     trackRefreshStatus: 'completed',
     hasCover: true,
+    inks: null,
     ...overrides
   };
 }
