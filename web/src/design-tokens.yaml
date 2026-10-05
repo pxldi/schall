@@ -159,5 +159,5 @@ components:
     padding: "0 0.125rem"
     typography: "{typography.dense-body}"
   nav-item-active:
-    backgroundColor: "{colors.duo-dark}"
-    textColor: "{colors.duo-light}"
+    backgroundColor: "{colors.duo-light}"
+    textColor: "{colors.duo-dark}"
