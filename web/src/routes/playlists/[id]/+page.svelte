@@ -8,6 +8,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
+  import WantToggle from '$lib/components/WantToggle.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
@@ -55,7 +56,6 @@
     mutationFn: (entryId: string) => api.wantPlaylistEntry(playlistId, entryId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['playlists'] })
   });
-  const wantingEntryId = $derived($wantEntry.isPending ? ($wantEntry.variables ?? null) : null);
 
   // This asks the player about every file Schall holds, one question each, so it
   // is asked for and never on arrival: disabled, and fetched by the button.
@@ -405,7 +405,7 @@
               {@const state = entryState(entry)}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
-              <tr class="group {state.note ? '' : 'border-b border-line-thin last:border-b-0'}">
+              <tr class="want-row {state.note ? '' : 'border-b border-line-thin last:border-b-0'}">
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{entry.position}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
                   <span class="block truncate">{entry.title}</span>
@@ -447,20 +447,17 @@
                       <Icon name="chevron-right" size="sm" class="size-3" />
                     </a>
                   {:else if state.label === 'no want'}
-                    <!-- Offered on the hovered or focused row only, one song at
-                         a time; always on a touch screen. -->
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      class="transition-opacity focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 {wantingEntryId ===
-                      entry.id
-                        ? ''
-                        : 'opacity-0'}"
-                      disabled={wantingEntryId === entry.id}
-                      onclick={() => $wantEntry.mutate(entry.id)}
-                    >
-                      {wantingEntryId === entry.id ? 'Wanting…' : 'Want'}
-                    </Button>
+                    <!-- The + on the hovered or focused row only, the way a
+                         player offers it. Once the want exists the row shows
+                         its state instead, so there is nothing to take back
+                         here. -->
+                    <WantToggle
+                      reveal
+                      wanted={false}
+                      title={entry.title}
+                      onwant={() => $wantEntry.mutateAsync(entry.id)}
+                      onunwant={() => {}}
+                    />
                   {:else}
                     <StateTag>{state.label}</StateTag>
                   {/if}

@@ -16,6 +16,7 @@
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import WantToggle from '$lib/components/WantToggle.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
@@ -174,9 +175,13 @@
       ]);
     }
   });
-  const togglingTrack = $derived(
-    $toggleTrack.isPending ? ($toggleTrack.variables?.trackId ?? null) : null
-  );
+  // Wanted for the toggle: somebody asked for it and it is still being looked
+  // for. A dismissal is the other answer, and an acquired one is settled.
+  function isWanted(track: Track) {
+    return Boolean(
+      track.wantStatus && track.wantStatus !== 'not_wanted' && track.wantStatus !== 'acquired'
+    );
+  }
   // A track already proven in the library, or one whose acquisition already
   // settled: both draw the tick and nothing else. `held` alone is what the
   // arithmetic above counts by; this is only for choosing what the row draws.
@@ -693,6 +698,7 @@
           <div class="flex h-7 items-center gap-3.5 border-b border-line-regular px-3">
             <span class="label w-7 shrink-0 text-center">#</span>
             <span class="label min-w-0 flex-1"></span>
+            <span class="w-6 shrink-0"></span>
             <span class="label w-16 shrink-0 whitespace-nowrap text-right">Length</span>
             <span class="label w-24 shrink-0"></span>
           </div>
@@ -703,7 +709,7 @@
                  that do appear are decisions somebody took — dismissed, wanted,
                  needs review — and those stay. -->
             <div
-              class="group flex h-10 items-center gap-3.5 px-3 {index ? 'border-t border-line-thin' : ''}"
+              class="want-row flex h-10 items-center gap-3.5 px-3 {index ? 'border-t border-line-thin' : ''}"
             >
               <span
                 class="numeric w-7 shrink-0 text-center text-meta {held(track)
@@ -722,6 +728,27 @@
               >
                 {track.title}
               </p>
+              <!-- The + sits just before the length, the way a player offers
+                   it, and shows on the hovered or focused row only; a wanted
+                   track keeps its filled tick. Pressing it on a dismissed track
+                   takes the dismissal back, and pressing a wanted one dismisses
+                   it. -->
+              <span class="flex w-6 shrink-0 items-center justify-center">
+                {#if !trackDone(track) && track.musicbrainzRecordingId}
+                  <WantToggle
+                    reveal
+                    wanted={isWanted(track)}
+                    title={track.title}
+                    onwant={() =>
+                      $toggleTrack.mutateAsync(
+                        track.wantStatus === 'not_wanted'
+                          ? { kind: 'pursue', trackId: track.id, targetId: track.wantId }
+                          : { kind: 'want', trackId: track.id }
+                      )}
+                    onunwant={() => $toggleTrack.mutateAsync({ kind: 'dismiss', trackId: track.id })}
+                  />
+                {/if}
+              </span>
               <span class="numeric w-16 shrink-0 text-right text-meta text-ink-3">
                 {duration(track.durationMs)}
               </span>
@@ -731,86 +758,6 @@
                 {:else}
                   {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
                   {#if tag}<StateTag tone={tag.tone}>{tag.label}</StateTag>{/if}
-                  {#if track.musicbrainzRecordingId}
-                    {@const busy = togglingTrack === track.id}
-                    <!-- The controls show on the hovered or focused row only,
-                         the way a player offers "add" on one song at a time;
-                         the tag beside them stays. A touch screen has no hover,
-                         so there they always show. -->
-                    <span
-                      class="flex items-center gap-1.5 transition-opacity focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 {busy
-                        ? ''
-                        : 'opacity-0'}"
-                    >
-                    {#if track.wantStatus === 'not_wanted'}
-                      <Button
-                        icon
-                        size="xs"
-                        variant="ghost"
-                        tall
-                        disabled={busy}
-                        title="Want it after all"
-                        aria-label="Want it after all"
-                        onclick={() =>
-                          $toggleTrack.mutate({
-                            kind: 'pursue',
-                            trackId: track.id,
-                            targetId: track.wantId
-                          })}
-                      >
-                        {#if busy}
-                          <Icon name="busy" size="sm" class="animate-spin" />
-                        {:else}
-                          <Icon name="want" size="md" />
-                        {/if}
-                      </Button>
-                    {:else if track.wantStatus}
-                      <Button
-                        icon
-                        size="xs"
-                        variant="ghost"
-                        tall
-                        disabled={busy}
-                        title="Not wanted"
-                        aria-label="Not wanted"
-                        onclick={() => $toggleTrack.mutate({ kind: 'dismiss', trackId: track.id })}
-                      >
-                        {#if busy}
-                          <Icon name="busy" size="sm" class="animate-spin" />
-                        {:else}
-                          <Icon name="dismiss" size="md" />
-                        {/if}
-                      </Button>
-                    {:else}
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        tall
-                        disabled={busy}
-                        onclick={() => $toggleTrack.mutate({ kind: 'want', trackId: track.id })}
-                      >
-                        {#if busy}
-                          <Icon name="busy" size="sm" class="animate-spin" />
-                        {:else}
-                          <Icon name="want" size="sm" />
-                        {/if}
-                        Want
-                      </Button>
-                      <Button
-                        icon
-                        size="xs"
-                        variant="ghost"
-                        tall
-                        disabled={busy}
-                        title="Not wanted"
-                        aria-label="Not wanted"
-                        onclick={() => $toggleTrack.mutate({ kind: 'dismiss', trackId: track.id })}
-                      >
-                        <Icon name="dismiss" size="md" />
-                      </Button>
-                    {/if}
-                    </span>
-                  {/if}
                 {/if}
               </span>
             </div>
