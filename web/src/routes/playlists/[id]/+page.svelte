@@ -405,7 +405,7 @@
               {@const state = entryState(entry)}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
-              <tr class={state.note ? '' : 'border-b border-line-thin last:border-b-0'}>
+              <tr class="group {state.note ? '' : 'border-b border-line-thin last:border-b-0'}">
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{entry.position}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
                   <span class="block truncate">{entry.title}</span>
@@ -447,9 +447,15 @@
                       <Icon name="chevron-right" size="sm" class="size-3" />
                     </a>
                   {:else if state.label === 'no want'}
+                    <!-- Offered on the hovered or focused row only, one song at
+                         a time; always on a touch screen. -->
                     <Button
                       size="xs"
                       variant="ghost"
+                      class="transition-opacity focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 {wantingEntryId ===
+                      entry.id
+                        ? ''
+                        : 'opacity-0'}"
                       disabled={wantingEntryId === entry.id}
                       onclick={() => $wantEntry.mutate(entry.id)}
                     >

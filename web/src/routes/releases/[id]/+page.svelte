@@ -703,7 +703,7 @@
                  that do appear are decisions somebody took — dismissed, wanted,
                  needs review — and those stay. -->
             <div
-              class="flex h-10 items-center gap-3.5 px-3 {index ? 'border-t border-line-thin' : ''}"
+              class="group flex h-10 items-center gap-3.5 px-3 {index ? 'border-t border-line-thin' : ''}"
             >
               <span
                 class="numeric w-7 shrink-0 text-center text-meta {held(track)
@@ -733,6 +733,15 @@
                   {#if tag}<StateTag tone={tag.tone}>{tag.label}</StateTag>{/if}
                   {#if track.musicbrainzRecordingId}
                     {@const busy = togglingTrack === track.id}
+                    <!-- The controls show on the hovered or focused row only,
+                         the way a player offers "add" on one song at a time;
+                         the tag beside them stays. A touch screen has no hover,
+                         so there they always show. -->
+                    <span
+                      class="flex items-center gap-1.5 transition-opacity focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 {busy
+                        ? ''
+                        : 'opacity-0'}"
+                    >
                     {#if track.wantStatus === 'not_wanted'}
                       <Button
                         icon
@@ -800,6 +809,7 @@
                         <Icon name="dismiss" size="md" />
                       </Button>
                     {/if}
+                    </span>
                   {/if}
                 {/if}
               </span>
