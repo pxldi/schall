@@ -5,6 +5,8 @@
   import type { OverviewSession } from '$lib/api-types';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { usePagePrint, type CoverRef } from '$lib/duoton';
 
   // The first screen: mostly what was listened to, and a little on how much
   // music arrived. Every figure comes from one read, counted on the server in
@@ -28,6 +30,23 @@
   const data = $derived($overview.data);
   const listening = $derived(data?.listening);
 
+  // The print is the newest arrivals side by side, inked from the newest one
+  // (ADR Duoton). Recently added lists files, and an album's tracks share one
+  // cover, so each picture is taken once.
+  usePagePrint(() => {
+    if (!data) return undefined;
+    const seen = new Set<string>();
+    const covers: CoverRef[] = [];
+    for (const file of data.recentlyAdded) {
+      const key = file.coverUrl ?? `${file.artist}\u0000${file.title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      covers.push({ src: file.coverUrl, seed: key });
+      if (covers.length === 8) break;
+    }
+    return { covers, height: 20 };
+  });
+
   // ---- figures --------------------------------------------------------------
 
   const change = $derived.by(() => {
@@ -48,7 +67,13 @@
   });
 
   const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const HEAT = ['#1a1420', '#2e2236', '#4a3556', '#6b4c80', '#9478b0', '#bfa3e8'];
+  // The ramp runs from the panel to the page's light ink. The inks are chrome,
+  // and how often somebody listens at an hour is not a state.
+  const HEAT = [0, 18, 34, 52, 74, 100].map((share) =>
+    share === 0
+      ? 'var(--color-surface-thin)'
+      : `color-mix(in srgb, var(--color-duo-light) ${share}%, var(--color-inset))`
+  );
   const heatMax = $derived(Math.max(1, ...(listening?.whenYouListen.cells.flat() ?? [0])));
   function heatColour(count: number): string {
     if (count === 0) return HEAT[0];
@@ -279,7 +304,7 @@
 
 {#snippet row(cover: string | null, title: string, artist: string)}
   <span role="img" aria-label="Cover for {title}" class="h-8 w-8 shrink-0 overflow-hidden rounded-row border border-line-thin bg-surface-thin">
-    <Cover src={cover ?? undefined} alt="" class="h-8 w-8 rounded-row object-cover" />
+    <Cover src={cover ?? undefined} seed={`${artist} – ${title}`} alt="" class="h-8 w-8 rounded-row object-cover" />
   </span>
   <span class="flex min-w-0 flex-1 flex-col">
     <span class="truncate text-body font-medium text-ink">{title}</span>
@@ -287,10 +312,10 @@
   </span>
 {/snippet}
 
-<div class="flex flex-col gap-4 px-4 sm:px-6 py-6 lg:px-8">
-  <!-- Hidden: the mast's highlight already says this is Overview, but that
-       highlight is not a document heading. -->
-  <h1 class="sr-only">Overview</h1>
+<!-- No line under the title: every figure it could carry is already in a
+     panel below, and saying it twice is noise. -->
+<Hero title="Overview" size="xl" />
+<div class="flex flex-col gap-4 px-4 pb-6 pt-2 sm:px-6">
   {#if $overview.isError}
     <ErrorNote error={$overview.error} retry={() => $overview.refetch()} />
   {:else}
@@ -302,7 +327,7 @@
         {@render loadingChart('Listens', 'min-h-[112px]')}
       {:else if listening?.available}
         <div class="flex items-baseline gap-3">
-          <span class="font-mono text-quiet-display font-medium tabular-nums text-ink"
+          <span class="numeric text-quiet-display font-extrabold tracking-tight text-ink"
             >{listening.listens.total.toLocaleString()}</span
           >
           {#if change !== null}
@@ -317,7 +342,7 @@
         {@const columns = bars(listening.listens.days, 110)}
         <svg viewBox="0 0 {BAR_W} 112" preserveAspectRatio="none" class="h-0 min-h-[112px] w-full grow" aria-hidden="true">
           {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" fill={bar.today ? '#bfa3e8' : '#8f79b3'} />
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
             <rect
               x={bar.x - 1.5}
               y="0"
@@ -468,7 +493,7 @@
           {#each listening.topAlbums as album, index (index)}
             <li class="flex h-12 shrink-0 items-center gap-2.5">
               <span role="img" aria-label="Cover for {album.title}" class="h-10 w-10 shrink-0 overflow-hidden rounded-row border border-line-thin bg-surface-thin">
-                <Cover src={album.coverUrl ?? undefined} alt="" class="h-10 w-10 rounded-row object-cover" />
+                <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-10 w-10 rounded-row object-cover" />
               </span>
               <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-body font-medium text-ink">{album.title}</span>
@@ -561,7 +586,7 @@
         {@const columns = bars(data.arrived.days, 96)}
         <svg viewBox="0 0 {BAR_W} 98" preserveAspectRatio="none" class="h-0 min-h-[98px] w-full grow" aria-hidden="true">
           {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" fill={bar.today ? '#bfa3e8' : '#8f79b3'} />
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
             <rect
               x={bar.x - 1.5}
               y="0"
@@ -600,11 +625,11 @@
         </div>
         {@const growth = growthPath(data.library.growth, 240, 64)}
         <svg viewBox="0 0 240 64" preserveAspectRatio="none" class="h-0 min-h-16 w-full grow" aria-label="Library files over the last year">
-          <path d={growth.area} fill="#bfa3e8" fill-opacity="0.12" />
-          <path d={growth.line} fill="none" stroke="#bfa3e8" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <path d={growth.area} class="growth-area" />
+          <path d={growth.line} class="growth-line" stroke-width="2" vector-effect="non-scaling-stroke" />
           {#if growth.points.length > 0}
             {@const end = growth.points[growth.points.length - 1]}
-            <circle cx={end.x} cy={end.y} r="3" fill="#bfa3e8" />
+            <circle cx={end.x} cy={end.y} r="3" class="growth-end" />
           {/if}
           {#each growth.points as point, index (point.month)}
             <rect
@@ -642,6 +667,25 @@
 </div>
 
 <style>
+  /* Chart marks in the page's light ink. Set as properties, because an SVG
+     presentation attribute does not read a custom property everywhere. */
+  .bar {
+    fill: color-mix(in srgb, var(--color-duo-light) 62%, var(--color-inset));
+  }
+  .bar-today {
+    fill: var(--color-duo-light);
+  }
+  .growth-area {
+    fill: var(--color-duo-light);
+    fill-opacity: 0.14;
+  }
+  .growth-line {
+    fill: none;
+    stroke: var(--color-duo-light);
+  }
+  .growth-end {
+    fill: var(--color-duo-light);
+  }
   .panel {
     display: flex;
     flex-direction: column;

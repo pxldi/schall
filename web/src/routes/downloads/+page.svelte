@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Icon from '$lib/components/Icon.svelte';
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
@@ -31,6 +30,10 @@
     urlText
   } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Cover from '$lib/components/Cover.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { coverSrc, usePagePrint, type CoverRef } from '$lib/duoton';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -121,6 +124,24 @@
   );
   const counts = $derived($downloads.data?.counts);
 
+  // The print is the covers of the pile on screen, the transfers moving now
+  // first, so the page takes its inks from what is arriving (ADR Duoton). A
+  // request for a recording with no release has no cover to give.
+  usePagePrint(() => {
+    if (!$downloads.data) return undefined;
+    const moving = items.filter((item) => item.status === 'started');
+    const rest = items.filter((item) => item.status !== 'started');
+    const albums = new Set<string>();
+    const covers: CoverRef[] = [];
+    for (const item of [...moving, ...rest]) {
+      if (!item.albumId || albums.has(item.albumId)) continue;
+      albums.add(item.albumId);
+      covers.push(item.albumId);
+      if (covers.length === 6) break;
+    }
+    return { covers, height: 15 };
+  });
+
   // Release and artist, in the order the row draws them: the release named
   // plainly, the artist beside it in ink-3 only when there is a release to
   // set it apart from. A request with no release names the wanted recording
@@ -190,9 +211,9 @@
   // open requests, which is the figure the navigation badge carries and the
   // figure the open filter shows — one rule, counted once.
   const tabs = $derived([
-    { value: 'wanted', name: 'Wishlist', count: $looking.data?.total || undefined },
-    { value: 'peers', name: 'From peers', count: counts?.open || undefined },
-    { value: 'uploads', name: 'Uploaded', count: openUploads || undefined }
+    { value: 'wanted', name: 'Wishlist', count: $looking.data ? $looking.data.total || null : undefined },
+    { value: 'peers', name: 'From peers', count: counts ? counts.open || null : undefined },
+    { value: 'uploads', name: 'Uploaded', count: $uploads.data ? openUploads || null : undefined }
   ]);
 
   // The name of each pile, in the words the rows in it already use. The counts
@@ -504,9 +525,7 @@
   <title>{tab === 'uploads' ? 'Uploads' : tab === 'wanted' ? 'Wishlist' : 'Downloads'} · Schall</title>
 </svelte:head>
 
-<!-- Hidden: the mast highlight says where you are, but that highlight is not
-     a document heading. Nothing visible here repeats it. -->
-<h1 class="sr-only">Downloads</h1>
+<Hero title="Downloads" size="xl" />
 
 <ControlRail label="Incoming">
   <Segmented
@@ -589,18 +608,29 @@
                  and left a state column that wandered down the page. Only the
                  name flexes now, so the other four line up. -->
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_72px_184px] md:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_2.5rem_minmax(0,1fr)_128px_72px_184px] md:gap-y-0"
             >
               <!-- No badge for the score. It measures how good a copy is and knows
                    nothing about which release it holds, so a green number here read
                    as a verdict it cannot give; the state mark leads the row instead. -->
               <StateMark role={mark}>
-                {#if mark === 'ok'}
-                  <Icon name="check" size={10} />
-                {:else}
-                  {mark === 'decide' ? '?' : mark === 'fail' ? '!' : mark === 'busy' ? '·' : '–'}
-                {/if}
+                <!-- Icons, never typed glyphs: a "?" or "!" sat on its own
+                     baseline and read as text inside the mark. Pause is an
+                     import held for a person. -->
+                <Icon
+                  name={mark === 'ok' ? 'check' : mark === 'decide' ? 'pause' : mark === 'fail' ? 'close' : mark === 'busy' ? 'busy' : 'minus'}
+                  size="sm"
+                  class="size-2.5 stroke-[3]"
+                />
               </StateMark>
+
+              <span class="hidden h-10 w-10 shrink-0 overflow-hidden rounded-row bg-surface-thin md:block" aria-hidden="true">
+                <Cover
+                  src={item.albumId ? coverSrc(item.albumId) : undefined}
+                  seed={item.albumId ?? item.id}
+                  class="h-10 w-10 object-cover"
+                />
+              </span>
 
               <!-- On a phone the name takes the whole line and everything after
                    it wraps underneath. Sharing one line with the state, the
@@ -714,7 +744,7 @@
                    fills it after Start; a settled row keeps the same height.
                    Indented past the mark, so the fill reads as the row's own
                    rather than a bar for the whole width of the list. -->
-              <span class="mt-2 w-full md:col-span-4 md:col-start-2" aria-hidden={!showProgress}>
+              <span class="mt-2 w-full md:col-span-4 md:col-start-3" aria-hidden={!showProgress}>
                 <span
                   role="progressbar"
                   aria-label={`Download progress for ${downloadName(item)}`}

@@ -864,21 +864,20 @@
                  to read. Everything beside it is metadata and takes the
                  ellipsis instead. -->
             <Table.Cell class="min-w-56">
-              <a href={`/releases/${release.id}`} class="tap-tall flex min-w-0 items-center gap-2">
+              <a href={`/releases/${release.id}`} class="tap-tall flex min-w-0 items-center gap-3">
                 <!-- Cached covers only, and only where the row says one is
                      cached: a page of a hundred rows asks this installation
                      for the pictures it holds and nobody for the rest. A
-                     release with no picture simply has none, and the slot
-                     stays the size and border it would have held a picture in
-                     — a title beside a missing cover does not creep left to
-                     fill the gap. -->
+                     release with no picture gets generated art in the same
+                     slot (ADR Duoton), so no title creeps left. -->
                 <span
                   role="img"
                   aria-label={`Cover for ${release.title}`}
-                  class="grid size-7 shrink-0 place-items-center overflow-hidden rounded-row border border-line-thin"
+                  class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-row"
                 >
                   <Cover
                     src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
+                    seed={release.id}
                     class="size-full object-cover"
                   />
                 </span>
