@@ -475,7 +475,7 @@
        want" in. -->
   <Hero title={$release.data.title} size={$release.data.title.length > 24 ? 'm' : 'l'}>
     {#snippet back()}
-      <BackLink fallback="/library" label="Back to the library" class="text-ink-2" />
+      <BackLink fallback="/library" label="Library" />
     {/snippet}
     {#snippet kicker()}<span class="capitalize">{$release.data?.albumType}</span>{/snippet}
     {#snippet sub()}

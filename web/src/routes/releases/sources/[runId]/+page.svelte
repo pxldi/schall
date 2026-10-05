@@ -232,11 +232,7 @@
      its counts under the title and Stop beside them. -->
 <Hero title="Sources" size="m">
   {#snippet back()}
-  <BackLink
-    fallback="/library?status=missing"
-    label="Back to the releases this run came from"
-    class="text-ink-2"
-  />
+  <BackLink fallback="/library?status=missing" label="Library" />
   {/snippet}
   {#snippet sub()}
   <!-- Counts occupy a reserved row from the first paint. The run query fills
