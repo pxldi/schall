@@ -45,19 +45,16 @@
     ...props
   }: Props = $props();
 
-  // The corner follows the height. `button.html` gives 8px to the two sizes that
-  // stand on their own and 6px to the one that sits inside a row: an 8px radius
-  // on a 24px control is a proportion the rest of the system never uses, and it
-  // reads as a different component beside the 32px button it is meant to be a
-  // smaller version of.
+  // Every size is a pill (ADR Duoton): the prototype draws every control a
+  // person presses that way, so the corner no longer follows the height.
   const sizes = {
-    md: { box: 'h-8 text-body', pad: 'px-3', square: 'w-8', radius: 'rounded-control' },
-    sm: { box: 'h-7 text-meta', pad: 'px-2.5', square: 'w-7', radius: 'rounded-control' },
-    xs: { box: 'h-6 text-meta', pad: 'px-2', square: 'w-6', radius: 'rounded-row' }
+    md: { box: 'h-8 text-body', pad: 'px-3', square: 'w-8', radius: 'rounded-pill' },
+    sm: { box: 'h-7 text-meta', pad: 'px-2.5', square: 'w-7', radius: 'rounded-pill' },
+    xs: { box: 'h-6 text-meta', pad: 'px-2', square: 'w-6', radius: 'rounded-pill' }
   };
 
-  // The accent fills exactly one control per view: the action the screen exists
-  // to offer. Everything else is an outline or a ghost, so that a page full of
+  // The accent, which is the page's light ink, fills exactly one control per
+  // view: the action the screen exists to offer. Everything else is an outline or a ghost, so that a page full of
   // buttons still points somewhere.
   const variants = {
     primary: 'bg-accent font-semibold text-accent-ink hover:bg-accent-soft',
