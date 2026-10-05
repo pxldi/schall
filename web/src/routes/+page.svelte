@@ -334,7 +334,7 @@
 {#snippet dotKey(per: number, noun: string)}
   <span class="ml-auto inline-flex items-center gap-1.5 font-mono text-micro text-ink-4">
     <svg width="8" height="8" aria-hidden="true"><circle cx="4" cy="4" r="3.5" class="key-dot" /></svg>
-    {plural(per, noun)}
+    one dot, {plural(per, noun)}
   </span>
 {/snippet}
 
