@@ -316,13 +316,15 @@
     {/if}
     <!-- Labels are the other half of this room, so the way there sits in the
          line that counts this half. -->
-    <a href="/artists/labels" class="underline underline-offset-3 transition hover:text-ink">
+    <a href="/artists/labels" class="transition hover:text-ink">
+      <span class="underline underline-offset-3">
       {#if labelsTotal !== undefined}
         <span class="numeric">{labelsTotal.toLocaleString()}</span>
         {labelsTotal === 1 ? 'label' : 'labels'}
       {:else}
         Labels
       {/if}
+      </span>
     </a>
   {/snippet}
   {#snippet actions()}

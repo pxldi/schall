@@ -145,13 +145,15 @@
     {#if followedTotal !== undefined}
       <span><span class="numeric">{followedTotal.toLocaleString()}</span> followed</span>
     {/if}
-    <a href="/artists" class="underline underline-offset-3 transition hover:text-ink">
+    <a href="/artists" class="transition hover:text-ink">
+      <span class="underline underline-offset-3">
       {#if artistsTotal !== undefined}
         <span class="numeric">{artistsTotal.toLocaleString()}</span>
         {artistsTotal === 1 ? 'artist' : 'artists'}
       {:else}
         Artists
       {/if}
+      </span>
     </a>
   {/snippet}
   {#snippet actions()}
