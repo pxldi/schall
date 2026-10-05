@@ -5,12 +5,12 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { motionMs } from '$lib/motion.svelte';
-  import { Check, LoaderCircle, Search, TriangleAlert, X } from '@lucide/svelte';
   import { api } from '$lib/api';
   import { cn } from '$lib/utils';
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Cover from '$lib/components/Cover.svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
   // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
@@ -301,7 +301,7 @@
           hasBody && 'border-b border-line-thin'
         )}
       >
-        <span class="text-ink-3"><Search size={18} /></span>
+        <span class="text-ink-3"><Icon name="search" size="lg" /></span>
         <input
           bind:this={box}
           bind:value={typed}
@@ -324,7 +324,7 @@
         <div class="min-h-0 flex-1 overflow-y-auto py-2">
           {#if waiting}
             <p class="flex items-center gap-2 px-3 py-3.5 text-meta leading-[1.6] text-ink-4">
-              <LoaderCircle size={12} class="animate-spin" />
+              <Icon name="busy" size="sm" class="animate-spin" />
               Searching five categories…
             </p>
           {:else if failed}
@@ -334,7 +334,7 @@
             <div
               class="mx-3 my-1.5 flex items-start gap-2 rounded-row border border-line-regular bg-fail/14 px-[11px] py-[9px]"
             >
-              <TriangleAlert size={12} class="mt-px shrink-0 text-fail" />
+              <Icon name="alert" size="sm" class="mt-px shrink-0 text-fail" />
               <!-- The button that said Try again did one thing: ask the search
                    the question that had just failed. The palette asks it now,
                    twice, and says it is asking. -->
@@ -402,7 +402,7 @@
                             )}
                           >
                             {#if row.role === 'ok'}
-                              <Check size={10} strokeWidth={3.2} />
+                              <Icon name="check" size="sm" class="size-2.5" />
                             {:else}
                               <span class="text-micro font-bold leading-none"
                                 >{markGlyphs[row.role]}</span
@@ -470,9 +470,13 @@
         <div
           class="flex shrink-0 flex-wrap gap-4 border-t border-line-thin px-[18px] py-2.5 text-meta text-ink-3"
         >
-          <span>↑↓ move</span>
-          <span>↵ open</span>
-          <span>esc close</span>
+          <span class="inline-flex items-center gap-1"
+            ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /> move</span
+          >
+          <span class="inline-flex items-center gap-1"><Icon name="enter" size="sm" /> open</span>
+          <span class="inline-flex items-center gap-1"
+            ><kbd class="font-sans text-micro font-semibold">Esc</kbd> close</span
+          >
         </div>
       {/if}
 
@@ -487,7 +491,7 @@
         aria-label="Close search"
         class="tap absolute right-[14px] top-[14px] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
       >
-        <X size={14} />
+        <Icon name="close" size="sm" />
       </button>
     </aside>
   </div>

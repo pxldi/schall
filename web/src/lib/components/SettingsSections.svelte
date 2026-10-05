@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { Check, ChevronLeft, ChevronRight, LoaderCircle, X } from '@lucide/svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
   import {
     api,
@@ -2937,7 +2938,9 @@
                 {move.status}
               </Chip>
               <span class="numeric min-w-0 truncate text-meta text-ink-3">
-                {move.fromPath} → {move.toPath}
+                {move.fromPath}
+                <Icon name="arrow-right" size="sm" class="mx-1 inline align-[-0.125em]" />
+                {move.toPath}
               </span>
               {#if move.status === 'failed' && move.error}
                 <span class="w-full text-meta leading-relaxed text-fail">

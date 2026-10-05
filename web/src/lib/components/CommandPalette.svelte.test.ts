@@ -217,7 +217,7 @@ describe('CommandPalette', () => {
 
     await summon();
 
-    expect(screen.queryByText(/↑↓ move/)).toBeNull();
+    expect(screen.queryByText(/move$/)).toBeNull();
     expect(asked).toEqual([]);
   });
 
@@ -420,8 +420,8 @@ describe('CommandPalette', () => {
     await ask('radiohead');
     await answered();
 
-    expect(screen.getByText('↑↓ move')).toBeTruthy();
-    expect(screen.getByText('↵ open')).toBeTruthy();
+    expect(screen.getByText(/move$/)).toBeTruthy();
+    expect(screen.getByText(/open$/)).toBeTruthy();
     expect(screen.queryByText(/all in category/)).toBeNull();
   });
 });
