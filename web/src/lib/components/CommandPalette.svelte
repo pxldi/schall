@@ -2,6 +2,9 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { goto } from '$app/navigation';
   import { toStore } from 'svelte/store';
+  import { fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { motionMs } from '$lib/motion.svelte';
   import { Check, LoaderCircle, Search, TriangleAlert, X } from '@lucide/svelte';
   import { api } from '$lib/api';
   import { cn } from '$lib/utils';
@@ -15,10 +18,9 @@
   // own. When the answer is bigger than five, the way forward is out of the
   // palette and into that category's own list with the query pre-filled.
   //
-  // It is not a dialog. Nothing behind it is blocked and nothing is dimmed — the
-  // frosting does that work, so the page stays visible through the blur and the
-  // panel reads as something resting on the page rather than a screen thrown
-  // over it. The layer catches presses on the panel and nowhere else.
+  // It is not a dialog. Nothing behind it is blocked: the page dims and blurs
+  // so the panel is the one thing to read, but presses go through the dim to
+  // the page, and a press outside the panel closes it.
 
   // How long a keystroke waits before the question is asked. Long enough that
   // typing a word is one search rather than five, short enough that stopping
@@ -128,9 +130,21 @@
     fail: '!'
   };
 
+  // The panel drops 8px into place while it fades in, and lifts away faster
+  // than it came. Both are 0 under reduced motion, which Svelte reads as no
+  // transition.
+  function drop(_node: Element, { duration }: { duration: number }) {
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) =>
+        `opacity: ${t}; transform: translateY(${(1 - t) * -8}px) scale(${0.98 + t * 0.02})`
+    };
+  }
+
   const rowClass =
     'relative grid grid-cols-[16px_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
-    'rounded-row border-b border-line-thin px-3 py-2 text-inherit no-underline ' +
+    'rounded-row border-b border-line-thin px-[18px] py-2 text-inherit no-underline ' +
     'transition-[background] last:border-b-0 hover:bg-surface-thick';
 
   // The keyboard selection mark: --raise-2, one step above the hover tint, plus
@@ -267,20 +281,26 @@
 
 {#if open}
   <div
-    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[18px] pb-[26px] pt-[62px]"
+    class="palette-scrim pointer-events-none fixed inset-0 z-50"
+    transition:fade={{ duration: motionMs('surface') }}
+  ></div>
+  <div
+    class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[18px] pb-[26px] pt-[90px]"
   >
     <aside
       bind:this={panel}
       aria-label="Search Schall"
-      class="palette-panel pointer-events-auto relative flex max-h-full w-[560px] max-w-full flex-col self-start overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)]"
+      in:drop={{ duration: motionMs('surface') }}
+      out:drop={{ duration: motionMs('state') }}
+      class="palette-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden rounded-[16px] border border-[rgba(232,233,231,0.12)] bg-[rgba(24,26,31,0.82)]"
     >
       <div
         class={cn(
-          'palette-row grid h-[34px] shrink-0 grid-cols-[16px_minmax(0,1fr)_28px] items-center gap-x-3 px-3',
+          'palette-row grid h-[52px] shrink-0 grid-cols-[18px_minmax(0,1fr)_28px] items-center gap-x-3 px-[18px]',
           hasBody && 'border-b border-line-thin'
         )}
       >
-        <span class="text-ink-4"><Search size={14} /></span>
+        <span class="text-ink-3"><Search size={18} /></span>
         <input
           bind:this={box}
           bind:value={typed}
@@ -295,7 +315,7 @@
           aria-controls="palette-results"
           aria-activedescendant={current?.id ?? undefined}
           aria-autocomplete="list"
-          class="palette-field min-w-0 border-0 bg-transparent p-0 font-mono text-body font-medium text-ink placeholder:text-ink-4 focus:outline-none"
+          class="palette-field min-w-0 border-0 bg-transparent p-0 text-[17px] font-medium text-ink placeholder:text-ink-4 focus:outline-none"
         />
       </div>
 
@@ -336,7 +356,7 @@
                      category of a result is never implied by being the only
                      one. -->
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
-                  <div class="mb-0.5 border-b border-line-thin px-3 pb-1.5">
+                  <div class="mb-0.5 border-b border-line-thin px-[18px] pb-1.5">
                     <span
                       class="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-3"
                       >{category.label}</span
@@ -426,7 +446,7 @@
 
         <!-- Always present, so the keys are learnable by looking. -->
         <div
-          class="flex shrink-0 flex-wrap gap-3 border-t border-line-thin px-3 py-[7px] font-mono text-micro text-ink-4"
+          class="flex shrink-0 flex-wrap gap-4 border-t border-line-thin px-[18px] py-2.5 text-meta text-ink-3"
         >
           <span>↑↓ move</span>
           <span>↵ open</span>
@@ -443,7 +463,7 @@
         type="button"
         onclick={dismiss}
         aria-label="Close search"
-        class="tap absolute right-3 top-[5px] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
+        class="tap absolute right-[14px] top-[14px] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
       >
         <X size={14} />
       </button>
@@ -452,22 +472,20 @@
 {/if}
 
 <style>
-  /* The glass this layer shares with every other floating surface in Schall:
-     `rgba(32,34,39,0.55)` over a 14px backdrop blur, behind a
-     `rgba(232,233,231,0.09)` hairline. The page behind is present and
-     unreadable, which is why the palette needs no scrim. Entry is a plain
-     fade on the surface step, the one every surface in the application opens
-     at — no slide, no scale, no bounce. It was 120ms, which was a duration the
-     scale did not have.
-
-     The fill and the border are written as utilities on the element, in the
-     same class names the menu and the modal use, so the three surfaces cannot
-     drift apart. What is left here is the blur and the entry, neither of
-     which a utility can carry. */
+  /* Frosted like the other floating surfaces, with a deeper shadow so the
+     panel sits clearly above the dimmed page. Entry and exit are Svelte
+     transitions on the element, so the close animates too. */
   .palette-panel {
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    animation: palette-in var(--motion-surface) var(--motion-ease-arrive);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
+  }
+
+  /* The dim behind the panel, as the Duoton prototype draws it. */
+  .palette-scrim {
+    background: rgb(5 6 8 / 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
 
   /* The focus ring goes round the whole search row, inside the panel. Drawn
@@ -483,20 +501,5 @@
     outline-offset: -2px;
     border-top-left-radius: inherit;
     border-top-right-radius: inherit;
-  }
-
-  @keyframes palette-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .palette-panel {
-      animation: none;
-    }
   }
 </style>
