@@ -65,7 +65,7 @@ function request(overrides: Partial<DownloadRequest> = {}): DownloadRequest {
 }
 
 function counts(overrides: Partial<DownloadCounts> = {}): DownloadCounts {
-  return { open: 20, review: 3, imported: 620, discarded: 40, failed: 288, all: 971, ...overrides };
+  return { open: 20, review: 3, questions: 3, imported: 620, discarded: 40, failed: 288, all: 971, ...overrides };
 }
 
 function listing(overrides: Partial<DownloadRequests> = {}): DownloadRequests {
@@ -293,7 +293,7 @@ describe('an open pile with nothing in it', () => {
       listing({
         items: [],
         total: 0,
-        counts: { open: 0, review: 0, imported: 0, discarded: 0, failed: 0, all: 0 }
+        counts: { open: 0, review: 0, questions: 0, imported: 0, discarded: 0, failed: 0, all: 0 }
       })
     );
     opened();

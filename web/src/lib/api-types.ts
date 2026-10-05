@@ -1870,6 +1870,8 @@ export interface AcquisitionCandidate {
 export interface ReviewQueue {
   items: ReviewItem[];
   total: number;
+  /** How many of `total` fit more than one recording. The rest are copies. */
+  resolutions: number;
   limit: number;
   offset: number;
 }
@@ -2263,6 +2265,9 @@ export type DownloadView = 'open' | 'review' | 'imported' | 'discarded' | 'faile
 export interface DownloadCounts {
   open: number;
   review: number;
+  /** The paused imports Review asks about: those whose latest pause recorded
+   * what it compared. Not a pile of the Downloads page. */
+  questions: number;
   imported: number;
   discarded: number;
   failed: number;
@@ -2270,7 +2275,8 @@ export interface DownloadCounts {
 }
 
 export interface DownloadFilters {
-  view?: DownloadView;
+  /** `questions` is Review's read of the paused imports, not a Downloads pile. */
+  view?: DownloadView | 'questions';
   limit?: number;
   offset?: number;
 }
