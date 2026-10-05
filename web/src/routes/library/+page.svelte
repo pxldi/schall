@@ -2,7 +2,9 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { page } from '$app/state';
   import { api } from '$lib/api';
-  import { urlChoice } from '$lib/utils';
+  import { formatBytes, urlChoice } from '$lib/utils';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import Hero from '$lib/components/Hero.svelte';
   import DuplicateRecordings from '$lib/components/DuplicateRecordings.svelte';
   import LibraryFiles from '$lib/components/LibraryFiles.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
@@ -45,12 +47,27 @@
   });
 
   // The counts beside the three view chips. Each is a cheap read of its own —
-  // one row of releases, the library summary, the held-twice total — and each
+  // the first eight releases (the print is made of them), the library summary, the held-twice total — and each
   // is kept under the query key its own view already reads by, so opening that
   // view never asks twice for what this row already knows.
   const releaseTotal = createQuery({
-    queryKey: ['releases', 'library-count'],
-    queryFn: () => api.releases({ scope: 'library', limit: 1 })
+    queryKey: ['releases', 'library-head'],
+    queryFn: () => api.releases({ scope: 'library', limit: 8 })
+  });
+
+  // The print is the first releases in the catalogue's own order, artist A to
+  // Z, inked from the first (ADR Duoton). Only cached covers are asked for,
+  // as the list below does; the rest are drawn as generated art.
+  usePagePrint(() => {
+    const items = $releaseTotal.data?.items;
+    if (!items) return undefined;
+    return {
+      covers: items.map((release) => ({
+        src: release.hasCover ? `${coverSrc(release.id)}?cached=1` : null,
+        seed: release.id
+      })),
+      height: 15
+    };
   });
   const librarySummary = createQuery({ queryKey: ['library'], queryFn: api.library });
   const heldTwiceTotal = createQuery({
@@ -70,17 +87,26 @@
 
 <svelte:head><title>Library · Schall</title></svelte:head>
 
-<!-- Hidden: the mast's highlight already says this is Library, but that
-     highlight is not a document heading. -->
-<h1 class="sr-only">Library</h1>
+<!-- Only the size under the title: the release and file counts are on the
+     chips below. -->
+<!-- In the table's box, so the title, the rail and the rows share one left
+     edge at every width. -->
+<div class="layout-width">
+  <Hero title="Library" size="xl">
+    {#snippet sub()}
+      {#if $librarySummary.data}
+        <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
+      {/if}
+    {/snippet}
+  </Hero>
+</div>
 
 <!-- One page for the music, in the two shapes it comes in. They were two pages
      saying the same thing from either end: the catalogue is what the library is
      meant to hold, and the files are what is actually on the disk. Which one
      answers a question depends on the question, not on which page you opened.
 
-     No visible heading here: the mast highlight already says this is Library,
-     and the three chips below say which of it is showing. -->
+     The three chips below say which of it is showing. -->
 <ControlRail label="Which part of the library to show" width="layout">
   <Segmented
     options={[

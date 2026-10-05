@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
+  import Hero from '$lib/components/Hero.svelte';
+  import { useNewestPrint } from '$lib/duoton';
 
   // Settings was one page: eleven cards stacked in a single column, 3,400
   // pixels of scroll, and no way to reach the one you wanted except to
@@ -26,6 +28,10 @@
 
   let { children }: { children: Snippet } = $props();
 
+  // Settings has no music of its own, so it is printed from the newest
+  // arrivals: a short strip, since the page is a form and not a poster.
+  useNewestPrint({ height: 12, count: 4 });
+
   const current = $derived(
     categories.find((category) => page.url.pathname.startsWith(category.href))
   );
@@ -33,18 +39,21 @@
 
 <svelte:head><title>{current?.name ?? 'Settings'} · Schall</title></svelte:head>
 
-<!-- No visible page title: the mast's own highlight already says this is
-     Settings, and the rail says which part of it. Each category page carries
-     its own hidden h1, since neither highlight is a document heading. -->
-<div class="flex flex-row gap-8 px-4 sm:px-6 py-5">
-  <nav aria-label="Settings sections" class="flex w-[9.375rem] shrink-0 flex-col gap-0.5">
+<Hero title="Settings" size="m" />
+
+<!-- Each category page carries a hidden h2 naming itself, under the Hero's h1. -->
+<div class="flex flex-row gap-10 px-4 pb-10 pt-6 sm:px-6">
+  <nav
+    aria-label="Settings sections"
+    class="sticky top-[calc(var(--topbar-height)+1.5rem)] flex w-[10.5rem] shrink-0 flex-col gap-0.5 self-start"
+  >
     {#each categories as category (category.href)}
       {@const active = category.href === current?.href}
       <a
         href={category.href}
         aria-current={active ? 'page' : undefined}
-        class="flex h-8 items-center rounded-control px-2.5 text-body transition {active
-          ? 'bg-surface-regular font-medium text-ink'
+        class="flex h-9 items-center rounded-[0.625rem] px-3 text-body font-semibold transition {active
+          ? 'bg-duo-light/12 text-ink'
           : 'text-ink-2 hover:text-ink'}"
       >
         {category.name}
@@ -52,7 +61,7 @@
     {/each}
   </nav>
 
-  <div class="min-w-0 flex-1">
+  <div class="settings-body min-w-0 flex-1">
     {@render children()}
   </div>
 </div>
@@ -77,3 +86,26 @@
     >.
   </p>
 </footer>
+
+<style>
+  /* Settings in Duoton (ADR Duoton): sections are blocks on the ground with a
+     bold heading, as the prototype draws them. Card and FormGrid keep their
+     look on the other pages that use them, so the change is scoped here. */
+  .settings-body :global(section.rounded-card) {
+    border: 0;
+    border-radius: 0;
+    padding: 0 0 2.125rem;
+  }
+
+  .settings-body :global(section.rounded-card h2),
+  .settings-body :global(section > h2) {
+    font-size: 1.375rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .settings-body :global(form label) {
+    font-weight: 600;
+  }
+</style>
