@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { toStore } from 'svelte/store';
   import { page } from '$app/state';
@@ -453,15 +454,15 @@
           style="min-height: calc(var(--print-height) - var(--topbar-height));"
           aria-hidden="true"
         >
-          <span class="h-3 w-16 animate-pulse rounded-row bg-surface-regular"></span>
-          <span class="h-20 w-[28rem] max-w-full animate-pulse rounded-row bg-surface-regular"></span>
-          <span class="h-4 w-72 animate-pulse rounded-row bg-surface-regular"></span>
+          <Skeleton class="h-3 w-16" />
+          <Skeleton class="h-20 w-[28rem] max-w-full" />
+          <Skeleton class="h-4 w-72" />
         </div>
         <div class="grid gap-8 px-4 pt-4 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]" aria-hidden="true">
-          <div class="aspect-square w-full max-w-60 animate-pulse rounded-card bg-surface-regular"></div>
+          <Skeleton shape="block" class="aspect-square w-full max-w-60" />
           <div class="flex flex-col gap-2">
             {#each Array(8) as _, placeholderIndex (placeholderIndex)}
-              <span class="h-9 animate-pulse rounded-row bg-surface-regular"></span>
+              <Skeleton class="h-9" />
             {/each}
           </div>
         </div>
@@ -492,7 +493,7 @@
            counts by, said once at the top rather than read off the rows. -->
       {#if $tracks.isPending}
         <span
-          class="block h-4 w-40 animate-pulse rounded-row bg-surface-regular"
+          class="skeleton h-4 w-40"
           role="status"
           aria-label="Loading track summary"
           aria-hidden="true"
@@ -689,7 +690,7 @@
           <!-- Fill about 2160px of rows so a 4K viewport does not outgrow the wait. -->
           {#each Array(60) as _, placeholderIndex (placeholderIndex)}
             <div class="h-9 border-b border-line-thin px-3 py-2 last:border-b-0" aria-hidden="true">
-              <div class="h-full animate-pulse rounded-row bg-surface-regular"></div>
+              <Skeleton class="h-full" />
             </div>
           {/each}
         </div>
@@ -866,7 +867,7 @@
               aria-label="Loading source results"
             >
               {#each Array(40) as _, placeholderIndex (placeholderIndex)}
-                <div class="h-24 animate-pulse rounded-card bg-surface-thick" aria-hidden="true"></div>
+                <Skeleton shape="block" class="h-24" />
               {/each}
               <p class="flex items-center gap-2 text-body text-ink-3">
                 <Icon name="busy" size="md" class="animate-spin" /> Searching peers for “{sourceQuery}”…
