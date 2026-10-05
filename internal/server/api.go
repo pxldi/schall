@@ -112,6 +112,7 @@ type CoverArtStore interface {
 	ReleaseCoverArt(context.Context, uuid.UUID) (db.ReleaseCoverArtRow, error)
 	SaveReleaseCoverArt(context.Context, db.SaveReleaseCoverArtParams) error
 	DeleteUserReleaseCoverArt(context.Context, uuid.UUID) (int64, error)
+	ReleaseInks(context.Context, []uuid.UUID) ([]db.ReleaseInksRow, error)
 	ArtistImage(context.Context, uuid.UUID) (db.ArtistImageRow, error)
 }
 
@@ -2316,6 +2317,8 @@ type albumResponse struct {
 	// HasCover says whether a picture is cached for this release, so a list
 	// asks for covers that exist and not for every row once an hour.
 	HasCover bool `json:"hasCover"`
+	// Inks are the two inks read from the cover, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 // The shapes a release can be in, as the browser names them, and the orders it
@@ -2411,6 +2414,11 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 
+	albumIDs := make([]uuid.UUID, 0, len(albums.Items))
+	for _, album := range albums.Items {
+		albumIDs = append(albumIDs, album.ID)
+	}
+	inks := api.releaseInks(request.Context(), albumIDs)
 	result := make([]albumResponse, 0, len(albums.Items))
 	for _, album := range albums.Items {
 		firstReleaseDate := album.FirstReleaseDate
@@ -2435,6 +2443,7 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 			EditionSelectionReason:    album.EditionSelectionReason,
 			TrackRefreshStatus:        album.TrackRefreshStatus,
 			HasCover:                  album.HasCover,
+			Inks:                      rowInks(inks, album.ID),
 		})
 	}
 	body := map[string]any{
@@ -2495,6 +2504,8 @@ type albumDetailResponse struct {
 	// voted first. Display, and empty both when nobody voted and when nobody has
 	// asked yet.
 	Genres []string `json:"genres"`
+	// Inks are the two inks read from the cover and its palette, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 func (api *API) getAlbum(response http.ResponseWriter, request *http.Request) {
@@ -2515,6 +2526,10 @@ func (api *API) getAlbum(response http.ResponseWriter, request *http.Request) {
 	if firstReleaseDate == "" && album.ReleaseDate.Valid {
 		firstReleaseDate = album.ReleaseDate.Time.Format("2006-01-02")
 	}
+	var inks *inksResponse
+	if found, ok := api.releaseInks(request.Context(), []uuid.UUID{album.ID})[album.ID]; ok {
+		inks = &found
+	}
 	api.writeJSON(response, http.StatusOK, albumDetailResponse{
 		ID: album.ID, ArtistID: album.ArtistID, ArtistName: album.ArtistName,
 		ArtistFollowed:            album.ArtistFollowed,
@@ -2528,6 +2543,7 @@ func (api *API) getAlbum(response http.ResponseWriter, request *http.Request) {
 		SelectedAutomatically: album.SelectedAutomatically, SelectionReason: album.SelectionReason,
 		TrackRefreshStatus: album.TrackRefreshStatus,
 		Genres:             stringList(album.Genres),
+		Inks:               inks,
 	})
 }
 
@@ -2768,9 +2784,10 @@ func (api *API) albumCover(response http.ResponseWriter, request *http.Request) 
 	// way is looked for again by nothing and has nothing to show, which leaves it
 	// blank for good.
 	stored := coverart.Saved(artwork)
+	inkDark, inkLight, palette := coverart.InkColumns(stored.Image)
 	if saveErr := api.covers.SaveReleaseCoverArt(request.Context(), db.SaveReleaseCoverArtParams{
 		AlbumID: albumID, Image: stored.Image, ContentType: stored.ContentType,
-		Source: stored.Source,
+		Source: stored.Source, InkDark: inkDark, InkLight: inkLight, Palette: palette,
 	}); saveErr != nil {
 		// The picture is still servable; only the remembering failed.
 		api.logger.Warn().Err(saveErr).Str("album_id", albumID.String()).Msg("cache cover art")
@@ -2839,9 +2856,10 @@ func (api *API) setAlbumCover(response http.ResponseWriter, request *http.Reques
 	if !ok {
 		return
 	}
+	inkDark, inkLight, palette := coverart.InkColumns(artwork.Image)
 	if err := api.covers.SaveReleaseCoverArt(request.Context(), db.SaveReleaseCoverArtParams{
 		AlbumID: albumID, Image: artwork.Image, ContentType: artwork.ContentType,
-		Source: artwork.Source,
+		Source: artwork.Source, InkDark: inkDark, InkLight: inkLight, Palette: palette,
 	}); err != nil {
 		api.internalError(response, request, err)
 		return

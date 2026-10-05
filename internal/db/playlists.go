@@ -29,6 +29,9 @@ type PlaylistRow struct {
 	// both sides of the question — see answeringFile.
 	EntryCount int64
 	OwnedCount int64
+	// CoverAlbumID is the release the playlist is pictured by (playlistCover),
+	// or none when no entry leads to a release.
+	CoverAlbumID uuid.NullUUID
 }
 
 const playlistColumns = `
@@ -97,6 +100,71 @@ const playlistEntryCounts = `
 	 WHERE playlist_entries.playlist_id = playlists.id)
 `
 
+// entryRelease is the release a playlist entry is pictured by, as a lateral
+// over playlist_entries beside answeringFile: one row when the entry leads to a
+// release, none when it does not. It is display only, the release whose cover
+// and inks a page prints the entry and its playlist in.
+//
+// The file that answers the entry comes first, by the tracks it is mapped to.
+// Then the live want's own release, for a want made from a release page. Then
+// any catalogue release carrying the recording the want resolved to, oldest
+// first. Every arm follows rows Schall already proved; nothing is compared.
+const entryRelease = `
+	WITH live_want AS (
+		SELECT coalesce(survivor.origin_album_id, joined.origin_album_id) AS origin_album_id,
+		       coalesce(survivor.musicbrainz_recording_id, joined.musicbrainz_recording_id)
+		           AS musicbrainz_recording_id
+		FROM playlist_entry_targets
+		JOIN acquisition_targets joined
+		    ON joined.id = playlist_entry_targets.acquisition_target_id
+		LEFT JOIN acquisition_targets survivor
+		    ON survivor.id = joined.superseded_by_id
+		WHERE playlist_entry_targets.playlist_entry_id = playlist_entries.id
+		ORDER BY playlist_entry_targets.created_at DESC
+		LIMIT 1
+	)
+	SELECT candidates.album_id
+	FROM (
+		SELECT tracks.album_id, 1 AS preference, albums.release_date
+		FROM track_mappings
+		JOIN tracks ON tracks.id = track_mappings.track_id
+		JOIN albums ON albums.id = tracks.album_id
+		WHERE track_mappings.library_file_id = answering.library_file_id
+
+		UNION ALL
+
+		SELECT live_want.origin_album_id, 2, NULL::date
+		FROM live_want
+		WHERE live_want.origin_album_id IS NOT NULL
+
+		UNION ALL
+
+		SELECT tracks.album_id, 3, albums.release_date
+		FROM live_want
+		JOIN tracks ON tracks.musicbrainz_recording_id = live_want.musicbrainz_recording_id
+		JOIN albums ON albums.id = tracks.album_id
+	) candidates
+	ORDER BY candidates.preference, candidates.release_date NULLS LAST, candidates.album_id
+	LIMIT 1
+`
+
+// playlistCover is the release a playlist is pictured by: the release of its
+// first entry that has one (ADR on Duoton). It is read the same way the rows
+// of the playlist page read theirs, so the header and the first pictured row
+// show the same release.
+const playlistCover = `
+	(SELECT entry_release.album_id
+	 FROM playlist_entries
+	 LEFT JOIN LATERAL (` + answeringFile + `) answering ON true
+	 JOIN LATERAL (` + entryRelease + `) entry_release ON true
+	 WHERE playlist_entries.playlist_id = playlists.id
+	 ORDER BY playlist_entries.position, playlist_entries.id
+	 LIMIT 1)
+`
+
+// playlistReadings is every column a PlaylistRow reads beyond the stored ones.
+const playlistReadings = playlistEntryCounts + `,` + playlistCover
+
 // UpsertSpotifyPlaylist records that a Spotify playlist is followed. Adding a
 // list that is already followed is answered with the list, not refused; the
 // name refreshes because Spotify's copy is authoritative for what it is called.
@@ -107,7 +175,7 @@ func (q *Queries) UpsertSpotifyPlaylist(ctx context.Context, sourceID, name stri
 		ON CONFLICT (source, source_id) WHERE source_id IS NOT NULL DO UPDATE SET
 			name = excluded.name,
 			updated_at = now()
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		sourceID, name,
 	))
 }
@@ -126,7 +194,7 @@ func (q *Queries) UpsertNavidromePlaylist(ctx context.Context, sourceID, name st
 		ON CONFLICT (source, source_id) WHERE source_id IS NOT NULL DO UPDATE SET
 			name = excluded.name,
 			updated_at = now()
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		sourceID, name,
 	))
 }
@@ -146,7 +214,7 @@ func (q *Queries) UpsertFilePlaylist(ctx context.Context, sourceID, name string)
 		ON CONFLICT (source, source_id) WHERE source_id IS NOT NULL DO UPDATE SET
 			name = excluded.name,
 			updated_at = now()
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		sourceID, name,
 	))
 }
@@ -166,7 +234,7 @@ func (q *Queries) CompleteFilePlaylistImport(
 			imported_at = now(),
 			updated_at = now()
 		WHERE id = $1
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		id, name, trackCount,
 	))
 }
@@ -174,7 +242,7 @@ func (q *Queries) CompleteFilePlaylistImport(
 // Playlist returns one playlist, or pgx.ErrNoRows.
 func (q *Queries) Playlist(ctx context.Context, id uuid.UUID) (PlaylistRow, error) {
 	return scanPlaylist(q.db.QueryRow(ctx, `
-		SELECT`+playlistColumns+`,`+playlistEntryCounts+`
+		SELECT`+playlistColumns+`,`+playlistReadings+`
 		FROM playlists
 		WHERE playlists.id = $1
 	`, id))
@@ -183,7 +251,7 @@ func (q *Queries) Playlist(ctx context.Context, id uuid.UUID) (PlaylistRow, erro
 // Playlists lists every playlist, newest first.
 func (q *Queries) Playlists(ctx context.Context) ([]PlaylistRow, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT`+playlistColumns+`,`+playlistEntryCounts+`
+		SELECT`+playlistColumns+`,`+playlistReadings+`
 		FROM playlists
 		ORDER BY playlists.created_at DESC, playlists.id
 	`)
@@ -233,7 +301,7 @@ func (q *Queries) CompletePlaylistImport(
 			imported_at = now(),
 			updated_at = now()
 		WHERE id = $1
-		RETURNING`+playlistColumns+`,`+playlistEntryCounts,
+		RETURNING`+playlistColumns+`,`+playlistReadings,
 		id, revision, name, description, ownerName, trackCount,
 	))
 }
@@ -244,7 +312,7 @@ func scanPlaylist(row pgx.Row) (PlaylistRow, error) {
 		&result.ID, &result.Source, &result.SourceID, &result.SourceRevision,
 		&result.Name, &result.Description, &result.OwnerName, &result.TrackCount,
 		&result.ImportedAt, &result.CreatedAt, &result.UpdatedAt,
-		&result.EntryCount, &result.OwnedCount,
+		&result.EntryCount, &result.OwnedCount, &result.CoverAlbumID,
 	)
 	return result, err
 }
@@ -280,6 +348,10 @@ type PlaylistEntryRow struct {
 	TargetSource         pgtype.Text
 	TargetExternalURL    pgtype.Text
 	TargetMinimumBitrate pgtype.Int4
+
+	// ReleaseID is the release the entry is pictured by (entryRelease). Filled
+	// by PlaylistEntry and PlaylistEntries alone, like AnsweringFileID.
+	ReleaseID uuid.NullUUID
 }
 
 // PlaylistEntry returns one entry by its own id, with the same reading
@@ -295,9 +367,11 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
 			live_target.id, live_target.status, live_target.summary,
-			live_target.source, live_target.external_url, live_target.minimum_bitrate
+			live_target.source, live_target.external_url, live_target.minimum_bitrate,
+			entry_release.album_id
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
+		LEFT JOIN LATERAL (`+entryRelease+`) entry_release ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
@@ -323,6 +397,7 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 		&entry.OwnedFileID, &entry.AnsweringFileID,
 		&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
 		&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
+		&entry.ReleaseID,
 	)
 	return entry, err
 }
@@ -337,9 +412,11 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
 			live_target.id, live_target.status, live_target.summary,
-			live_target.source, live_target.external_url, live_target.minimum_bitrate
+			live_target.source, live_target.external_url, live_target.minimum_bitrate,
+			entry_release.album_id
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
+		LEFT JOIN LATERAL (`+entryRelease+`) entry_release ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
@@ -374,6 +451,7 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			&entry.OwnedFileID, &entry.AnsweringFileID,
 			&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
 			&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
+			&entry.ReleaseID,
 		); err != nil {
 			return nil, err
 		}

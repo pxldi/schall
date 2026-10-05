@@ -80,6 +80,8 @@ type labelReleaseResponse struct {
 	// HasCover says whether a cover is cached, so a tile asks only for the
 	// pictures that exist.
 	HasCover bool `json:"hasCover"`
+	// Inks are the two inks read from the cover, or null.
+	Inks *inksResponse `json:"inks"`
 }
 
 type labelSearchItem struct {
@@ -212,6 +214,11 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	albumIDs := make([]uuid.UUID, 0, len(releases))
+	for _, release := range releases {
+		albumIDs = append(albumIDs, release.ID)
+	}
+	inks := api.releaseInks(request.Context(), albumIDs)
 	items := make([]labelReleaseResponse, 0, len(releases))
 	for _, release := range releases {
 		item := labelReleaseResponse{
@@ -225,6 +232,7 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 			OwnedTrackCount:           release.OwnedTrackCount,
 			Monitored:                 release.Monitored,
 			HasCover:                  release.HasCover,
+			Inks:                      rowInks(inks, release.ID),
 		}
 		if release.ReleaseDate.Valid {
 			item.ReleaseDate = release.ReleaseDate.Time.Format("2006-01-02")

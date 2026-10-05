@@ -244,6 +244,18 @@ export interface LabelList {
   followedCount: number;
 }
 
+/** The two inks a page is printed in, read from a release's cover (ADR on
+ * Duoton). Both are already clamped for legibility: dark has a relative
+ * luminance of at most 0.035 and light at least 0.42. palette is the cover's
+ * colours, most common first, and only a release's own page carries it. A
+ * release with no cover, or one nothing could be read from, has null inks and
+ * the page uses the house inks. */
+export interface Inks {
+  dark: string;
+  light: string;
+  palette?: string[];
+}
+
 export interface LabelRelease {
   id: string;
   title: string;
@@ -259,6 +271,7 @@ export interface LabelRelease {
   monitored: boolean;
   /** Whether a cover is cached, so a tile asks only for pictures that exist. */
   hasCover: boolean;
+  inks: Inks | null;
 }
 
 export interface LabelDetail {
@@ -344,6 +357,7 @@ export interface Release {
    * that exist and not for every row; a release nobody has pictured yet, or
    * one the archives have no sleeve for, has none. */
   hasCover: boolean;
+  inks: Inks | null;
 }
 
 /** Which releases the browser is asking for. Scope is why a release is worth
@@ -424,6 +438,8 @@ export interface ReleaseDetail {
   /** What MusicBrainz's community voted this release is, most voted first.
    * Display only. Empty both when nobody voted and when nobody has asked. */
   genres: string[];
+  /** The cover's inks with its palette. */
+  inks: Inks | null;
 }
 
 /** What a release's cover became after somebody set one. The picture itself is
@@ -585,6 +601,7 @@ export interface GlobalSearchRelease {
   releaseDate?: string;
   trackCount: number;
   ownedTrackCount: number;
+  inks: Inks | null;
 }
 
 /** A catalogue track has no page of its own, so it is linked to through the
@@ -976,6 +993,11 @@ export interface Playlist {
   ownedCount: number;
   importedAt: string | null;
   createdAt: string | null;
+  /** The release the playlist is pictured by: that of its first entry that
+   * leads to one. inks are that release's inks. Both null when no entry
+   * leads to a release. */
+  coverReleaseId: string | null;
+  inks: Inks | null;
 }
 
 // MusicBrainz's release editor, filled in from an entry, as the form fields it
@@ -1004,6 +1026,9 @@ export interface PlaylistEntry {
   externalUrl?: string;
   sourceLookup?: SourceLookup;
   minimumBitrate?: number;
+  /** The release this entry is pictured by: the one its file is mapped onto,
+   * else the one its want leads to. Absent when neither. */
+  releaseId?: string;
   // Present only for the entries MusicBrainz has had no recording for, which is
   // the only state where adding the release is what helps. An entry still
   // waiting to be asked about carries none, and looks the same on the wire
@@ -1881,6 +1906,8 @@ export interface AcquisitionCandidate {
 export interface ReviewQueue {
   items: ReviewItem[];
   total: number;
+  /** How many of `total` fit more than one recording. The rest are copies. */
+  resolutions: number;
   limit: number;
   offset: number;
 }
@@ -2274,6 +2301,9 @@ export type DownloadView = 'open' | 'review' | 'imported' | 'discarded' | 'faile
 export interface DownloadCounts {
   open: number;
   review: number;
+  /** The paused imports Review asks about: those whose latest pause recorded
+   * what it compared. Not a pile of the Downloads page. */
+  questions: number;
   imported: number;
   discarded: number;
   failed: number;
@@ -2281,7 +2311,8 @@ export interface DownloadCounts {
 }
 
 export interface DownloadFilters {
-  view?: DownloadView;
+  /** `questions` is Review's read of the paused imports, not a Downloads pile. */
+  view?: DownloadView | 'questions';
   limit?: number;
   offset?: number;
 }
