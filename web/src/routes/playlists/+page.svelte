@@ -1,14 +1,17 @@
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { FileUp, LoaderCircle, Plus, RotateCw, Send, UserRoundMinus } from '@lucide/svelte';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import { calendarDate, keepInUrl, urlChoice } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
+  import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import ImportPlaylistFileModal from '$lib/components/ImportPlaylistFileModal.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Recommendations from '$lib/components/Recommendations.svelte';
@@ -16,7 +19,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import WeeklyPlaylist from '$lib/components/WeeklyPlaylist.svelte';
 
-  const COLUMNS = 'grid-cols-[minmax(0,1fr)_180px_300px]';
+  const COLUMNS = 'grid-cols-[2.5rem_minmax(0,1fr)_180px_300px]';
 
   const queryClient = useQueryClient();
 
@@ -64,6 +67,21 @@
   });
 
   const items = $derived($playlists.data?.items ?? []);
+  // Each playlist's cover is its first entry's release (ADR Duoton). One
+  // without a release yet draws generated art seeded with its own id.
+  function coverOf(playlist: Playlist) {
+    return {
+      src: playlist.coverReleaseId ? coverSrc(playlist.coverReleaseId) : null,
+      seed: playlist.id,
+      inks: playlist.inks
+    };
+  }
+
+  // A strip of the lists' covers, in the inks of the first one.
+  usePagePrint(() =>
+    items.length ? { covers: items.slice(0, 6).map(coverOf), inks: items[0].inks } : undefined
+  );
+
   const playlistSkeletonCount = $derived(Math.max($playlists.data?.items.length ?? 0, 4));
 
   let url = $state('');
@@ -128,26 +146,12 @@
 
 <svelte:head><title>Playlists · Schall</title></svelte:head>
 
-<!-- Hidden: the mast's highlight already says this is Playlists, but that
-     highlight is not a document heading. -->
-<h1 class="sr-only">Playlists</h1>
-
-<ControlRail>
-  <Segmented
-    options={[
-      { value: 'playlists', name: 'Followed', count: $playlists.data ? items.length : undefined },
-      { value: 'recommended', name: 'Recommended' },
-      { value: 'weekly', name: 'Weekly' }
-    ]}
-    value={view}
-    onchange={chooseView}
-    label="What to look at"
-    pending={$playlists.isPending}
-  />
-
-  <div class="ml-auto flex flex-wrap items-center gap-2">
-    <Button type="button" variant="ghost" onclick={() => (fileModalOpen = true)}>
-      <FileUp size={13} strokeWidth={2.2} />
+<!-- The page's name over a strip of its playlists' covers, with the ways to
+     follow a new one beside it. -->
+<Hero title="Playlists" size="xl">
+  {#snippet actions()}
+    <Button type="button" variant="outline" onclick={() => (fileModalOpen = true)}>
+      <Icon name="upload" size="sm" />
       Import file
     </Button>
     <form
@@ -166,14 +170,28 @@
       />
       <Button type="submit" disabled={!url.trim() || $follow.isPending}>
         {#if $follow.isPending}
-          <LoaderCircle size={13} class="animate-spin" />
+          <Icon name="busy" size="sm" class="animate-spin" />
         {:else}
-          <Plus size={13} strokeWidth={2.2} />
+          <Icon name="plus" size="sm" />
         {/if}
         Follow
       </Button>
     </form>
-  </div>
+  {/snippet}
+</Hero>
+
+<ControlRail>
+  <Segmented
+    options={[
+      { value: 'playlists', name: 'Followed', count: $playlists.data ? items.length : undefined },
+      { value: 'recommended', name: 'Recommended' },
+      { value: 'weekly', name: 'Weekly' }
+    ]}
+    value={view}
+    onchange={chooseView}
+    label="What to look at"
+    pending={$playlists.isPending}
+  />
 </ControlRail>
 
 <ImportPlaylistFileModal bind:open={fileModalOpen} />
@@ -224,6 +242,7 @@
       {:else}
         <div class="flex flex-col">
           <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3`}>
+            <span class="flex h-7 items-center"></span>
             <span class="flex h-7 items-center">Playlist</span>
             <span class="flex h-7 items-center">Owned</span>
             <span class="flex h-7 items-center"></span>
@@ -231,7 +250,14 @@
 
           <ul class="flex flex-col divide-y divide-line-thin">
             {#each items as playlist (playlist.id)}
+              {@const cover = coverOf(playlist)}
               <li class={`grid ${COLUMNS} min-h-[52px] items-center gap-x-4 px-1 py-2`}>
+                <Cover
+                  src={cover.src ?? undefined}
+                  seed={cover.seed}
+                  inks={cover.inks}
+                  class="size-10 rounded-row object-cover"
+                />
                 <a
                   href={`/playlists/${playlist.id}`}
                   class="flex min-w-0 flex-col gap-0.5"
@@ -252,7 +278,7 @@
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
                     >
-                      <RotateCw size={13} strokeWidth={2.2} /> Re-import
+                      <Icon name="refresh" size="sm" /> Re-import
                     </Button>
                   {/if}
                   <Button
@@ -261,7 +287,7 @@
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
                   >
-                    <Send size={13} strokeWidth={2.2} /> Send to player
+                    <Icon name="send" size="sm" /> Send to player
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
@@ -270,7 +296,7 @@
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
                     >
-                      <UserRoundMinus size={13} strokeWidth={2.2} /> Stop following
+                      <Icon name="unfollow" size="sm" /> Stop following
                     </Button>
                   {/if}
                 </span>
