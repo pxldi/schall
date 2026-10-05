@@ -58,6 +58,9 @@ type labelListItem struct {
 	OwnedReleaseCount int64 `json:"ownedReleaseCount"`
 	TrackCount        int64 `json:"trackCount"`
 	OwnedTrackCount   int64 `json:"ownedTrackCount"`
+	// CoverAlbumIDs are up to two of the label's releases with a cached cover,
+	// most songs held first. The row and the page's print are drawn from them.
+	CoverAlbumIDs []uuid.UUID `json:"coverAlbumIds"`
 }
 
 type labelReleaseResponse struct {
@@ -74,6 +77,9 @@ type labelReleaseResponse struct {
 	// An unmonitored release stays listed and can still be wanted by hand; it
 	// just stops being missing.
 	Monitored bool `json:"monitored"`
+	// HasCover says whether a cover is cached, so a tile asks only for the
+	// pictures that exist.
+	HasCover bool `json:"hasCover"`
 }
 
 type labelSearchItem struct {
@@ -170,6 +176,7 @@ func (api *API) listLabels(response http.ResponseWriter, request *http.Request) 
 			OwnedReleaseCount: row.OwnedReleaseCount,
 			TrackCount:        row.TrackCount,
 			OwnedTrackCount:   row.OwnedTrackCount,
+			CoverAlbumIDs:     row.CoverAlbumIds,
 		})
 	}
 	api.writeJSON(response, http.StatusOK, map[string]any{
@@ -217,6 +224,7 @@ func (api *API) getLabel(response http.ResponseWriter, request *http.Request) {
 			TrackCount:                release.TrackCount,
 			OwnedTrackCount:           release.OwnedTrackCount,
 			Monitored:                 release.Monitored,
+			HasCover:                  release.HasCover,
 		}
 		if release.ReleaseDate.Valid {
 			item.ReleaseDate = release.ReleaseDate.Time.Format("2006-01-02")

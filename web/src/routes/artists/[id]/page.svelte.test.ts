@@ -43,6 +43,7 @@ function detail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
     monitorLevel: 'everything',
     wantMissing: false,
     discography: { releases: 5, owned: 3, missing: 2, dismissed: 0, counted: 5, loading: 0 },
+    leadAlbumId: null,
     genres: [],
     ...overrides
   };

@@ -389,7 +389,13 @@ SELECT
     artists.name AS artist_name,
     album_tracks.track_count,
     album_tracks.owned_count AS owned_track_count,
-    measured.monitored::boolean AS monitored
+    measured.monitored::boolean AS monitored,
+    -- Whether a cover is cached, so a tile asks only for pictures that exist.
+    EXISTS (
+        SELECT 1 FROM release_cover_art
+        WHERE release_cover_art.album_id = albums.id
+          AND octet_length(release_cover_art.image) > 0
+    )::boolean AS has_cover
 FROM label_releases
 JOIN labels ON labels.id = label_releases.label_id
 JOIN albums ON albums.id = label_releases.album_id
@@ -461,6 +467,7 @@ type LabelReleasesRow struct {
 	TrackCount                int64         `json:"track_count"`
 	OwnedTrackCount           int64         `json:"owned_track_count"`
 	Monitored                 bool          `json:"monitored"`
+	HasCover                  bool          `json:"has_cover"`
 }
 
 // What one label published, newest first, with how much of each the library
@@ -487,6 +494,7 @@ func (q *Queries) LabelReleases(ctx context.Context, labelID uuid.UUID) ([]Label
 			&i.TrackCount,
 			&i.OwnedTrackCount,
 			&i.Monitored,
+			&i.HasCover,
 		); err != nil {
 			return nil, err
 		}
@@ -532,7 +540,27 @@ SELECT
     COALESCE(counted.owned_release_count, 0)::bigint AS owned_release_count,
     COALESCE(counted.track_count, 0)::bigint AS track_count,
     COALESCE(counted.owned_track_count, 0)::bigint AS owned_track_count,
-    COALESCE(latest_refresh.status, 'pending')::text AS refresh_status
+    COALESCE(latest_refresh.status, 'pending')::text AS refresh_status,
+    -- The covers a row and the page's print are drawn from: the label's two
+    -- releases with the most songs the library holds, newest first among
+    -- equals, and only covers already cached. Display only.
+    ARRAY(
+        SELECT albums.id
+        FROM label_releases
+        JOIN albums ON albums.id = label_releases.album_id
+        JOIN release_cover_art ON release_cover_art.album_id = albums.id
+        WHERE label_releases.label_id = labels.id
+          AND octet_length(release_cover_art.image) > 0
+        ORDER BY (
+            SELECT count(*)
+            FROM tracks
+            JOIN track_mappings ON track_mappings.track_id = tracks.id
+            JOIN library_files ON library_files.id = track_mappings.library_file_id
+            WHERE tracks.album_id = albums.id
+              AND library_files.missing_at IS NULL
+        ) DESC, albums.release_date DESC NULLS LAST, albums.id
+        LIMIT 2
+    )::uuid[] AS cover_album_ids
 FROM labels
 LEFT JOIN LATERAL (
     SELECT
@@ -625,6 +653,7 @@ type ListLabelsRow struct {
 	TrackCount        int64              `json:"track_count"`
 	OwnedTrackCount   int64              `json:"owned_track_count"`
 	RefreshStatus     string             `json:"refresh_status"`
+	CoverAlbumIds     []uuid.UUID        `json:"cover_album_ids"`
 }
 
 // Every label Schall holds, with how much of what it published the library has.
@@ -657,6 +686,7 @@ func (q *Queries) ListLabels(ctx context.Context) ([]ListLabelsRow, error) {
 			&i.TrackCount,
 			&i.OwnedTrackCount,
 			&i.RefreshStatus,
+			&i.CoverAlbumIds,
 		); err != nil {
 			return nil, err
 		}

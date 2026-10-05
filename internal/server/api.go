@@ -1825,6 +1825,9 @@ type artistListItemResponse struct {
 	// HasImage says whether a picture of the artist is cached, so the index
 	// asks for the pictures that exist and not for every card once an hour.
 	HasImage bool `json:"hasImage"`
+	// CoverAlbumIDs are up to two releases with a cached cover, most songs held
+	// first. A card prints them and takes its inks from the first (ADR Duoton).
+	CoverAlbumIDs []uuid.UUID `json:"coverAlbumIds"`
 }
 
 // listArtists returns the catalogue's artists. An explicit limit keeps API
@@ -1927,6 +1930,7 @@ func (api *API) listArtists(response http.ResponseWriter, request *http.Request)
 			ReviewCount:       artist.ReviewCount,
 			NeedsAttention:    artist.NeedsAttention,
 			HasImage:          artist.HasImage,
+			CoverAlbumIDs:     artist.CoverAlbumIds,
 		})
 	}
 	// Both halves are reported whatever the scope is, so the page can always
@@ -2017,6 +2021,10 @@ type artistDetailResponse struct {
 	// fields arrive together or not at all.
 	Biography          string `json:"biography,omitempty"`
 	BiographySourceURL string `json:"biographySourceUrl,omitempty"`
+	// LeadAlbumID is the release the page takes its inks and print from: the
+	// one with the most songs held, among those with a cached cover. Null when
+	// no release has a cover.
+	LeadAlbumID *uuid.UUID `json:"leadAlbumId"`
 }
 
 // artistDiscographyResponse is the completeness the artist's page states.
@@ -2080,6 +2088,7 @@ func (api *API) getArtist(response http.ResponseWriter, request *http.Request) {
 		// The link is withheld when there is nothing to attribute, so the page
 		// cannot show an attribution line under no words.
 		BiographySourceURL: biographyLink(artist.Biography, artist.BiographySourceUrl),
+		LeadAlbumID:        nullableUUID(artist.LeadAlbumID),
 		Discography: artistDiscographyResponse{
 			Releases:  discography.Releases,
 			Owned:     discography.Owned,

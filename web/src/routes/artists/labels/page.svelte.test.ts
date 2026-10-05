@@ -31,6 +31,7 @@ function label(overrides: Partial<LabelListItem> = {}): LabelListItem {
     ownedReleaseCount: 4,
     trackCount: 80,
     ownedTrackCount: 30,
+    coverAlbumIds: [],
     ...overrides
   };
 }

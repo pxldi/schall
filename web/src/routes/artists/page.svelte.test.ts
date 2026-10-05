@@ -137,7 +137,8 @@ describe('artist pictures', () => {
       inFlightCount: 0,
       reviewCount: 0,
       needsAttention: false,
-      hasImage
+      hasImage,
+      coverAlbumIds: []
     });
     vi.stubGlobal(
       'fetch',
