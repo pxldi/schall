@@ -361,6 +361,24 @@ describe('the player', () => {
   });
 });
 
+describe('the waveform', () => {
+  // The review queue is read again while downloads run, and each read hands the
+  // card a new copy object with the same id. The open copy's waveform was asked
+  // for eight times in six seconds.
+  it('is read once when the queue hands over the same copy again', async () => {
+    const props = { heading: 'Copy 1', copy: copy(), wantedMs: 281_000, selected: false, onselect: () => {} };
+    const { rerender } = render(CopyCard, { props });
+    const waveforms = () =>
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/waveform')).length;
+    await vi.waitFor(() => expect(waveforms()).toBe(1));
+
+    await rerender({ ...props, copy: copy() });
+    await rerender({ ...props, copy: copy() });
+
+    expect(waveforms()).toBe(1);
+  });
+});
+
 describe('two cards, one player', () => {
   it('stops the first once the second starts', async () => {
     const first = render(CopyCard, {

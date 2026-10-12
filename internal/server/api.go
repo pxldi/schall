@@ -260,6 +260,8 @@ type API struct {
 	matches      MatchResolver
 	identities   IdentityResolver
 	editions     EditionSearcher
+	editionList  *editionCache
+	thumbnails   *thumbnails
 	editionStore EditionStore
 	covers       CoverArtStore
 	soundcloud   SoundCloudTracks
@@ -638,6 +640,10 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 	for _, option := range options {
 		option(api)
 	}
+	if api.editions != nil {
+		api.editionList = newEditionCache(api.editions, editionListTTL)
+	}
+	api.thumbnails = newThumbnails()
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -2700,7 +2706,7 @@ func (api *API) listAlbumEditions(response http.ResponseWriter, request *http.Re
 		api.internalError(response, request, err)
 		return
 	}
-	items, err := api.editions.ListReleaseEditions(request.Context(), album.MusicbrainzReleaseGroupID.UUID)
+	items, err := api.editionList.ListReleaseEditions(request.Context(), album.MusicbrainzReleaseGroupID.UUID)
 	if err != nil {
 		api.internalError(response, request, err)
 		return
@@ -3166,8 +3172,16 @@ func (api *API) writeCover(response http.ResponseWriter, request *http.Request, 
 		return
 	}
 	sum := sha256.Sum256(image)
+	hash := hex.EncodeToString(sum[:])
+	etag := hash
+	if width := thumbnailWidth(request.URL.Query().Get("size")); width > 0 && api.thumbnails != nil {
+		if scaled, ok := api.thumbnails.scaled(hash, image, width); ok {
+			image, contentType = scaled, "image/jpeg"
+			etag = hash + "-" + strconv.Itoa(width)
+		}
+	}
 	response.Header().Set("Content-Type", contentType)
-	response.Header().Set("ETag", `"`+hex.EncodeToString(sum[:])+`"`)
+	response.Header().Set("ETag", `"`+etag+`"`)
 	response.Header().Set("Cache-Control", "private, max-age=86400")
 	http.ServeContent(response, request, "", time.Time{}, bytes.NewReader(image))
 }

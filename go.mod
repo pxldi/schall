@@ -29,6 +29,6 @@ require (
 	// v0.31.0 that goose still declares. `go mod tidy` removes this line since
 	// nothing in the build graph needs it — re-add it if that happens.
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0 // indirect
 )

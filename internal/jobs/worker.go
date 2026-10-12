@@ -387,6 +387,12 @@ const reviveBatch = 200
 // table nobody could read.
 const spentJobRetention = 14 * 24 * time.Hour
 
+// finishedJobRetention is how long a completed or cancelled job of a kind
+// nothing reads afterwards is kept. A failure is kept longer because somebody
+// may still act on it; a finished poll is only a record that it ran, and the
+// one that runs every five seconds left a million of them.
+const finishedJobRetention = 3 * 24 * time.Hour
+
 // resolutionBatch bounds how many files one completed scan asks the providers
 // about. Every resolution is at least one rate-limited request, so a first scan
 // of a large library queues work steadily rather than all at once; what is left
@@ -528,6 +534,8 @@ type Queue interface {
 	ReviveSpentJobs(context.Context, []uuid.UUID) (int64, int64, error)
 	// ForgetSpentJobs removes the failures that are old enough to be history.
 	ForgetSpentJobs(context.Context, time.Time) (int64, error)
+	// ForgetFinishedJobs removes old completed and cancelled jobs nothing reads.
+	ForgetFinishedJobs(context.Context, time.Time) (int64, error)
 	Claim(context.Context, Lane) (Job, error)
 	Heartbeat(context.Context, Job) (bool, error)
 	ArtistMusicBrainzID(context.Context, uuid.UUID) (uuid.UUID, error)
@@ -1455,6 +1463,20 @@ func (worker *Worker) forgetSpent(ctx context.Context) {
 			Int64("jobs", forgotten).
 			Dur("kept_for", spentJobRetention).
 			Msg("forgot failures older than the window they are kept for")
+	}
+
+	finished, err := worker.queue.ForgetFinishedJobs(ctx, worker.now().Add(-finishedJobRetention))
+	if err != nil {
+		if ctx.Err() == nil {
+			worker.logger.Error().Err(err).Msg("forget the finished jobs that are older than the window")
+		}
+		return
+	}
+	if finished > 0 {
+		worker.logger.Info().
+			Int64("jobs", finished).
+			Dur("kept_for", finishedJobRetention).
+			Msg("forgot finished jobs older than the window they are kept for")
 	}
 }
 

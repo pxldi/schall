@@ -786,6 +786,40 @@ func TestForgettingFailuresLeavesEverythingElseAlone(t *testing.T) {
 	}
 }
 
+// A live table had grown to 1.48 million rows because no finished job was ever
+// removed. Old finished polls go; the newest of their kind stays for the
+// schedule, and kinds read as history are not touched.
+func TestForgettingFinishedJobsKeepsWhatIsStillRead(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	oldPoll := insertJob(ctx, t, pool, "poll_downloads", "completed", 1, time.Now(), nil)
+	failedSince(ctx, t, pool, oldPoll, 30*24*time.Hour)
+	newestPoll := insertJob(ctx, t, pool, "poll_downloads", "completed", 1, time.Now(), nil)
+	failedSince(ctx, t, pool, newestPoll, 20*24*time.Hour)
+	recentImport := insertJob(ctx, t, pool, "import_download", "completed", 1, time.Now(), nil)
+	oldRefresh := insertJob(ctx, t, pool, "refresh_artist_metadata", "completed", 1, time.Now(), nil)
+	failedSince(ctx, t, pool, oldRefresh, 30*24*time.Hour)
+	queued := insertJob(ctx, t, pool, "poll_downloads", "queued", 0, time.Now(), nil)
+
+	forgotten, err := New(pool).ForgetFinishedJobs(ctx, time.Now().Add(-14*24*time.Hour))
+	if err != nil || forgotten != 1 {
+		t.Fatalf("forgotten = %d, err = %v; want the one old poll that is not the newest", forgotten, err)
+	}
+	if _, err := New(pool).Job(ctx, oldPoll); err == nil {
+		t.Fatal("the old poll was kept")
+	}
+	for name, id := range map[string]uuid.UUID{
+		"the newest finished poll": newestPoll, "a recent import": recentImport,
+		"an artist refresh": oldRefresh, "a queued poll": queued,
+	} {
+		if _, err := New(pool).Job(ctx, id); err != nil {
+			t.Errorf("%s was forgotten: %v", name, err)
+		}
+	}
+}
+
 // One press for a whole cause. Every job it names that is still failing goes
 // back with its attempts returned; anything else is left exactly where it is.
 func TestRetryingAWholeCauseMovesOnlyTheJobsStillFailing(t *testing.T) {

@@ -1414,7 +1414,10 @@ func (q *Queries) heldFiles(
 		SELECT id, acquisition_target_id, provider, source_username, remote_path,
 		       file_name, size_bytes, verdict, decided_by, summary, evidence,
 		       download_request_id, library_file_id, decided_at,
-		       audio_fingerprint, audio_fingerprint_seconds, waveform
+		       audio_fingerprint, audio_fingerprint_seconds,
+		       -- The card draws a waveform through its own request, so it is not
+		       -- read for every copy on a page.
+		       NULL::bytea
 		FROM acquisition_target_files
 		WHERE acquisition_target_id = ANY($1)
 		  AND (verdict = 'held'

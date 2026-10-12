@@ -69,9 +69,12 @@
   });
 
   // Read once per copy. A copy the waveform endpoint has not heard of yet
-  // (404) draws a flat line rather than failing the card.
+  // (404) draws a flat line rather than failing the card. The id is derived
+  // so a refetch of the queue, which hands over a new copy object with the
+  // same id, does not read the waveform again.
+  const copyID = $derived(copy.id);
   $effect(() => {
-    const id = copy.id;
+    const id = copyID;
     peaks = null;
     waveformFailed = false;
     let live = true;

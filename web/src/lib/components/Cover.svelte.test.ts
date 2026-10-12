@@ -106,3 +106,30 @@ describe('a picture that does not exist', () => {
     expect(first.container.textContent).not.toContain('NA');
   });
 });
+
+describe('the sizes a cover is offered at', () => {
+  // Lists draw covers at 40 to 100 pixels and the stored ones are 500.
+  it('offers the small sizes the API makes', () => {
+    const { image } = draw({ src: '/api/v1/albums/abc/cover?cached=1' });
+
+    expect(image()?.getAttribute('srcset')).toBe(
+      '/api/v1/albums/abc/cover?cached=1&size=128 128w, ' +
+        '/api/v1/albums/abc/cover?cached=1&size=256 256w, ' +
+        '/api/v1/albums/abc/cover?cached=1 500w'
+    );
+  });
+
+  // `sizes="auto"` only works on a lazy image, and an eager one is the big
+  // picture at the top of a page.
+  it('offers only the stored picture when it loads eagerly', () => {
+    const { image } = draw({ eager: true });
+
+    expect(image()?.hasAttribute('srcset')).toBe(false);
+  });
+
+  it('offers only the given picture when it is not one the API serves', () => {
+    const { image } = draw({ src: 'https://example.com/cover.jpg' });
+
+    expect(image()?.hasAttribute('srcset')).toBe(false);
+  });
+});
