@@ -1,10 +1,12 @@
 package downloads
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,10 +149,20 @@ func (store *fakeImportStore) UserAcceptedCopy(
 // offers are whatever a test put there; reopened records which requests the pass
 // put back into validation, in order, because that order is what stops a want
 // taking two copies.
-func (store *fakeImportStore) CopiesToJudgeAgain(
-	_ context.Context,
+func (store *fakeImportStore) CopiesToJudgeAgainAfter(
+	_ context.Context, after uuid.UUID,
 ) ([]db.JudgeAgainRow, error) {
-	return store.judgeAgain, store.judgeAgainErr
+	offered := make([]db.JudgeAgainRow, 0, len(store.judgeAgain))
+	for _, row := range store.judgeAgain {
+		if bytes.Compare(row.AcquisitionTargetID[:], after[:]) > 0 {
+			offered = append(offered, row)
+		}
+	}
+	// The query reads in want order, and a pass relies on it to carry its place.
+	slices.SortStableFunc(offered, func(a, b db.JudgeAgainRow) int {
+		return bytes.Compare(a.AcquisitionTargetID[:], b.AcquisitionTargetID[:])
+	})
+	return offered, store.judgeAgainErr
 }
 
 // The copies refused on the artist tag alone, kept apart from the offers above

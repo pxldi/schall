@@ -702,6 +702,12 @@ func (repository *Repository) QueueSpectrumSweep(ctx context.Context, runAfter t
 	return db.New(repository.pool).QueueSpectrumSweep(ctx, runAfter)
 }
 
+func (repository *Repository) QueueJudgeCopiesAgainAfter(
+	ctx context.Context, runAfter time.Time, after uuid.UUID,
+) error {
+	return db.New(repository.pool).QueueJudgeCopiesAgainAfter(ctx, runAfter, after)
+}
+
 func (repository *Repository) QueueAskAcoustIDAgain(ctx context.Context, runAfter time.Time) error {
 	return db.New(repository.pool).QueueAskAcoustIDAgain(ctx, runAfter)
 }

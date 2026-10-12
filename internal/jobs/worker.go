@@ -499,11 +499,14 @@ func Anchors() Lane     { return Lane{Only: AnchorKinds} }
 
 // The judges go before the witness decodes: a re-judge answers a want that is
 // waiting, a decode only prepares evidence for later, and a library-sized
-// backfill of decodes would otherwise hold every wake for hours.
+// backfill of decodes would otherwise hold every wake for hours. The pass over
+// every want is the exception. It is queued again after each part, and first in
+// line it would hold the decodes until the whole queue was judged, so its parts
+// take their turn with them.
 func Judging() Lane {
 	return Lane{
 		Only:  JudgingKinds,
-		First: []string{JudgeCopiesAgain, JudgeWantCopies, JudgeCreditRefusals},
+		First: []string{JudgeWantCopies, JudgeCreditRefusals},
 	}
 }
 func General() Lane {
@@ -576,6 +579,7 @@ type Queue interface {
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
 	QueueAskAcoustIDAgain(context.Context, time.Time) error
+	QueueJudgeCopiesAgainAfter(context.Context, time.Time, uuid.UUID) error
 	QueueUpgradeSweep(context.Context, time.Time, json.RawMessage) error
 	QueueNavidromePlaylistSweep(context.Context, time.Time) error
 	QueueGenreSweep(context.Context, time.Time) error
@@ -627,10 +631,11 @@ type PeerChallengeAnswerer interface {
 type DownloadImporter interface {
 	Import(context.Context, uuid.UUID) error
 	Fail(context.Context, uuid.UUID, string) error
-	// JudgeAgain puts the copies already decided about through validation a
-	// second time, where the rules that decided them have since changed. What it
-	// did is reported to the log by the pass itself.
-	JudgeAgain(context.Context) error
+	// JudgeAgain puts the copies of the next few wants after the one given
+	// through validation a second time, where the rules that decided them have
+	// since changed. It answers the last want it took and whether any are left.
+	// What it did is reported to the log by the pass itself.
+	JudgeAgain(context.Context, uuid.UUID) (uuid.UUID, bool, error)
 	// JudgeCreditRefusalsAgain does the same for the copies refused on the
 	// artist tag alone, which is a different set and a different rule change
 	// (ADR 0030).
@@ -2104,13 +2109,35 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, errors.New("download importer is not configured"), false)
 		return
 	}
-	if err := worker.importer.JudgeAgain(ctx); err != nil {
+	var position judgeAgainPosition
+	if len(job.Payload) > 0 {
+		if err := json.Unmarshal(job.Payload, &position); err != nil {
+			worker.finishFailed(ctx, job, fmt.Errorf("invalid judge again payload: %w", err), false)
+			return
+		}
+	}
+	next, more, err := worker.importer.JudgeAgain(ctx, position.After)
+	if err != nil {
 		worker.finishFailed(ctx, job, fmt.Errorf("judge copies again: %w", err), true)
 		return
 	}
 	if err := worker.queue.Complete(ctx, job); err != nil {
 		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+		return
 	}
+	if !more {
+		return
+	}
+	if err := worker.queue.QueueJudgeCopiesAgainAfter(ctx, worker.now(), next); err != nil {
+		worker.logger.Error().Err(err).Msg("queue the next part of judging copies again")
+	}
+}
+
+// judgeAgainPosition is the last want a part of a judge-again pass finished.
+// A restart runs the part that was cut short again from the same place, so
+// only that part's wants are judged twice.
+type judgeAgainPosition struct {
+	After uuid.UUID `json:"after"`
 }
 
 // processJudgeCreditRefusals puts the copies refused on the artist tag alone

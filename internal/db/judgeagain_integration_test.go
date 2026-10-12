@@ -272,6 +272,53 @@ func TestACopyBeingValidatedIsNotReopened(t *testing.T) {
 	}
 }
 
+// A part of a pass reads only the wants after the one the last part finished,
+// so a restart does not offer the same first wants again.
+func TestTheNextPartOffersOnlyWantsAfterTheLastOne(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	anchored(ctx, t, queries, targetID)
+	settledCopy(ctx, t, pool, targetID, requestID,
+		AcquiredFileDiscardedAudio, namedOtherMusic)
+
+	before, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
+	}
+	after, err := queries.CopiesToJudgeAgainAfter(ctx, targetID)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
+	}
+	if len(before) != 1 || len(after) != 0 {
+		t.Fatalf("from the start = %d, after the want = %d, want 1 and 0", len(before), len(after))
+	}
+}
+
+// The next part carries the last want the finished one took.
+func TestTheNextPartIsQueuedWithItsPlace(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	last := uuid.New()
+
+	if err := queries.QueueJudgeCopiesAgainAfter(ctx, time.Now(), last); err != nil {
+		t.Fatalf("QueueJudgeCopiesAgainAfter() error = %v", err)
+	}
+
+	var after uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT (payload->>'after')::uuid FROM jobs WHERE kind = 'judge_copies_again'
+	`).Scan(&after); err != nil {
+		t.Fatalf("read the next part: %v", err)
+	}
+	if after != last {
+		t.Errorf("next part starts after %s, want %s", after, last)
+	}
+}
+
 // Asking twice queues one pass. A person pressing a button twice must not get
 // two passes over the same copies.
 func TestAskingForTwoPassesQueuesOne(t *testing.T) {

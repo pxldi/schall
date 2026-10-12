@@ -66,6 +66,8 @@ type fakeQueue struct {
 	backfillGenresErr             error
 	copyFingerprintSweepQueuedFor time.Time
 	askAcoustIDAgainQueuedFor     time.Time
+	judgeAgainQueuedFor           time.Time
+	judgeAgainQueuedAfter         uuid.UUID
 	spectrumSweepQueuedFor        time.Time
 	upgradeSweepQueuedFor         time.Time
 	upgradeSweepPayload           json.RawMessage
@@ -459,6 +461,16 @@ func (queue *fakeQueue) QueueSpectrumSweep(_ context.Context, runAfter time.Time
 	queue.spectrumSweepQueuedFor = runAfter
 	return nil
 }
+func (queue *fakeQueue) QueueJudgeCopiesAgainAfter(
+	_ context.Context, runAfter time.Time, after uuid.UUID,
+) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.judgeAgainQueuedFor = runAfter
+	queue.judgeAgainQueuedAfter = after
+	return nil
+}
 func (queue *fakeQueue) QueueAskAcoustIDAgain(_ context.Context, runAfter time.Time) error {
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
@@ -567,6 +579,10 @@ type fakeImporter struct {
 	judgedWants   []uuid.UUID
 	judgedAgain   int
 	judgeAgainErr error
+	// judgedAgainAfter is the place a part of that pass was given, and
+	// judgeAgainNext the last want it answers taking (uuid.Nil: none left).
+	judgedAgainAfter uuid.UUID
+	judgeAgainNext   uuid.UUID
 	// The same two for the pass over the copies refused on the artist tag.
 	judgedCreditRefusals   int
 	askedAcoustIDAgain     int
@@ -584,9 +600,10 @@ func (importer *fakeImporter) Import(_ context.Context, requestID uuid.UUID) err
 	return importer.err
 }
 
-func (importer *fakeImporter) JudgeAgain(_ context.Context) error {
+func (importer *fakeImporter) JudgeAgain(_ context.Context, after uuid.UUID) (uuid.UUID, bool, error) {
 	importer.judgedAgain++
-	return importer.judgeAgainErr
+	importer.judgedAgainAfter = after
+	return importer.judgeAgainNext, importer.judgeAgainNext != uuid.Nil, importer.judgeAgainErr
 }
 
 func (importer *fakeImporter) AskAcoustIDAgain(_ context.Context) error {
@@ -4997,6 +5014,34 @@ func TestAPassOverDecidedCopiesQueuesNoReplacement(t *testing.T) {
 	}
 	if !queue.anchorSweepQueuedFor.IsZero() {
 		t.Errorf("a replacement was queued for %s, want none", queue.anchorSweepQueuedFor)
+	}
+	if !queue.judgeAgainQueuedFor.IsZero() {
+		t.Errorf("another part was queued for %s, want none", queue.judgeAgainQueuedFor)
+	}
+}
+
+// A part of the pass that leaves wants behind queues the next part from the
+// last want it took, so a restart carries on instead of starting over.
+func TestAPartOfThePassQueuesTheNextFromWhereItStopped(t *testing.T) {
+	jobID, from, last := uuid.New(), uuid.New(), uuid.New()
+	queue := &fakeQueue{}
+	importer := &fakeImporter{judgeAgainNext: last}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+	payload, _ := json.Marshal(map[string]uuid.UUID{"after": from})
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: JudgeCopiesAgain, Payload: payload, Attempts: 1, MaxAttempts: 1,
+	})
+
+	if importer.judgedAgainAfter != from {
+		t.Fatalf("part started after %s, want %s", importer.judgedAgainAfter, from)
+	}
+	if queue.completed != jobID {
+		t.Fatalf("completed = %s, want the part settled", queue.completed)
+	}
+	if queue.judgeAgainQueuedAfter != last || queue.judgeAgainQueuedFor.IsZero() {
+		t.Fatalf("next part queued after %s at %s, want after %s",
+			queue.judgeAgainQueuedAfter, queue.judgeAgainQueuedFor, last)
 	}
 }
 
