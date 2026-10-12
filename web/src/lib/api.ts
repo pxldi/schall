@@ -14,6 +14,7 @@ import type {
   CancelledKind,
   DashboardSummary,
   DismissedRelease,
+  RemovedTracks,
   DownloadFilters,
   DownloadRequest,
   DownloadRequests,
@@ -303,6 +304,12 @@ export const api = {
     request<WantedRelease>(`/api/v1/albums/${encodeURIComponent(id)}/wanted`, {
       method: 'POST'
     }),
+  /** Takes the wants of a whole release away, and schedules the files Schall
+   * downloaded for it to be deleted in 30 days. */
+  removeRelease: (id: string) =>
+    request<RemovedTracks>(`/api/v1/albums/${encodeURIComponent(id)}/wanted`, {
+      method: 'DELETE'
+    }),
   dismissReleaseRemainder: (id: string) =>
     request<DismissedRelease>(`/api/v1/albums/${encodeURIComponent(id)}/not-wanted`, {
       method: 'POST'
@@ -310,6 +317,11 @@ export const api = {
   wantTrack: (trackId: string) =>
     request<AcquisitionTarget>(`/api/v1/tracks/${encodeURIComponent(trackId)}/wanted`, {
       method: 'POST'
+    }),
+  /** The same for one track. Wanting it again inside 30 days keeps its file. */
+  removeTrack: (trackId: string) =>
+    request<RemovedTracks>(`/api/v1/tracks/${encodeURIComponent(trackId)}/wanted`, {
+      method: 'DELETE'
     }),
   dismissTrack: (trackId: string) =>
     request<AcquisitionTarget>(`/api/v1/tracks/${encodeURIComponent(trackId)}/not-wanted`, {
@@ -1082,6 +1094,13 @@ export const api = {
       `/api/v1/acquisition-targets/${encodeURIComponent(targetId)}/minimum-bitrate`,
       { method: 'PUT', body: JSON.stringify({ minimumBitrate }) }
     ),
+
+  /** Removes a want: it stops at once, and a file Schall downloaded for it is
+   * deleted in 30 days unless it is wanted again first. */
+  removeTarget: (targetId: string) =>
+    request<RemovedTracks>(`/api/v1/acquisition-targets/${encodeURIComponent(targetId)}`, {
+      method: 'DELETE'
+    }),
 
   stopPursuingTarget: (targetId: string) =>
     request<AcquisitionTarget>(

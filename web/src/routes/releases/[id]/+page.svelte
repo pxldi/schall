@@ -11,7 +11,7 @@
     type SourceCandidate,
     type Track
   } from '$lib/api';
-  import { formatBytes, wantedSummary } from '$lib/utils';
+  import { calendarDate, formatBytes, removedSummary, wantedSummary } from '$lib/utils';
   import { holding, progress, quiet } from '$lib/vocabulary';
   import { usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
@@ -129,6 +129,10 @@
         track.wantStatus !== 'acquired'
     ).length ?? 0
   );
+  // Tracks whose file is waiting to be deleted because somebody removed them,
+  // and the first day one goes.
+  const leaving = $derived($tracks.data?.items.filter((track) => track.removesAt) ?? []);
+  const firstLeaving = $derived(leaving.map((track) => track.removesAt ?? '').sort()[0]);
   // Missing tracks nobody has asked for yet. Wanting the release only adds
   // these, so the button counts them: after wanting the last missing track it
   // said "Want 1 missing" for a track that was already wanted.
@@ -162,16 +166,27 @@
       ]);
     }
   });
+  // Removing takes the wants away at once. A file Schall downloaded for the
+  // release is deleted 30 days later, and wanting it again before then keeps
+  // it. Files somebody added by hand stay.
+  const removeRelease = createMutation({
+    mutationFn: () => api.removeRelease(releaseID),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['releases'] }),
+        queryClient.invalidateQueries({ queryKey: ['artists'] }),
+        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      ]);
+    }
+  });
   // One mutation for the per-track toggles, so a row can say it is the one
-  // being decided about. Wanting a dismissed track goes through pursue-again:
-  // taking the decision back is explicit, never a side effect.
-  type TrackToggle = { kind: 'want' | 'dismiss' | 'pursue'; trackId: string; targetId?: string };
+  // being decided about. Wanting a removed track takes the removal back, and
+  // keeps its file if one was waiting to be deleted.
+  type TrackToggle = { kind: 'want' | 'remove'; trackId: string };
   const toggleTrack = createMutation({
-    mutationFn: (toggle: TrackToggle) => {
-      if (toggle.kind === 'want') return api.wantTrack(toggle.trackId);
-      if (toggle.kind === 'dismiss') return api.dismissTrack(toggle.trackId);
-      return api.pursueTargetAgain(toggle.targetId ?? '');
-    },
+    mutationFn: async (toggle: TrackToggle): Promise<unknown> =>
+      toggle.kind === 'want' ? api.wantTrack(toggle.trackId) : api.removeTrack(toggle.trackId),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
@@ -522,6 +537,11 @@
           {#if dismissedCount > 0}
             <span class="numeric whitespace-nowrap text-meta text-ink-3">· {dismissedCount} dismissed</span>
           {/if}
+          {#if leaving.length > 0}
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">
+              · {leaving.length} deleted on {calendarDate(firstLeaving)}
+            </span>
+          {/if}
         </span>
       {/if}
     {/snippet}
@@ -545,7 +565,23 @@
           <span class="invisible h-8 w-28 rounded-pill bg-surface-regular" aria-hidden="true"></span>
           <span class="invisible h-8 w-36 rounded-pill bg-surface-regular" aria-hidden="true"></span>
         </span>
-      {:else if missingCount > 0}
+      {:else}
+        {#if ownedCount - leaving.length > 0 || wantedCount > 0}
+          <Button
+            variant="outline"
+            disabled={$removeRelease.isPending}
+            onclick={() => $removeRelease.mutate()}
+          >
+            {#if $removeRelease.isPending}
+              <Icon name="busy" size="md" class="animate-spin" />
+            {:else}
+              <Icon name="delete" size="md" />
+            {/if}
+            Remove
+          </Button>
+        {/if}
+      {/if}
+      {#if !$tracks.isPending && missingCount > 0}
         <Button
           variant="outline"
           disabled={$dismissRemainder.isPending}
@@ -657,6 +693,11 @@
   {:else if $wantRelease.data}
     <p class="text-meta text-ink-3">{wantedSummary($wantRelease.data)}.</p>
   {/if}
+  {#if $removeRelease.isError}
+    <ErrorNote error={$removeRelease.error} />
+  {:else if $removeRelease.data}
+    <p class="text-meta text-ink-3">{removedSummary($removeRelease.data)}.</p>
+  {/if}
   {#if $dismissRemainder.isError}
     <ErrorNote error={$dismissRemainder.error} />
   {:else if $dismissRemainder.data}
@@ -743,22 +784,19 @@
               </p>
               <!-- The + sits just before the length, the way a player offers
                    it, and shows on the hovered or focused row only; a wanted
-                   track keeps its filled tick. Pressing it on a dismissed track
-                   takes the dismissal back, and pressing a wanted one dismisses
-                   it. -->
+                   track keeps its filled tick. Pressing it on a removed track
+                   wants it again, and pressing a wanted one removes it. A
+                   track the library holds counts as wanted until it is
+                   removed; its toggle waits for the pointer, because the
+                   tick at the end of the row already says it is here. -->
               <span class="flex w-6 shrink-0 items-center justify-center">
-                {#if !trackDone(track) && track.musicbrainzRecordingId}
+                {#if track.musicbrainzRecordingId}
                   <WantToggle
-                    reveal
-                    wanted={isWanted(track)}
+                    reveal={trackDone(track) ? 'all' : true}
+                    wanted={trackDone(track) ? !track.removesAt : isWanted(track)}
                     title={track.title}
-                    onwant={() =>
-                      $toggleTrack.mutateAsync(
-                        track.wantStatus === 'not_wanted'
-                          ? { kind: 'pursue', trackId: track.id, targetId: track.wantId }
-                          : { kind: 'want', trackId: track.id }
-                      )}
-                    onunwant={() => $toggleTrack.mutateAsync({ kind: 'dismiss', trackId: track.id })}
+                    onwant={() => $toggleTrack.mutateAsync({ kind: 'want', trackId: track.id })}
+                    onunwant={() => $toggleTrack.mutateAsync({ kind: 'remove', trackId: track.id })}
                   />
                 {/if}
               </span>
@@ -766,7 +804,17 @@
                 {duration(track.durationMs)}
               </span>
               <span class="flex w-24 shrink-0 items-center justify-end gap-1.5">
-                {#if trackDone(track)}
+                {#if track.removesAt}
+                  <!-- Removed: the file is still here and goes on this day. -->
+                  <span class="numeric whitespace-nowrap text-meta text-ink-3">
+                    {calendarDate(track.removesAt)}
+                  </span>
+                  <StateIcon
+                    icon="delete"
+                    label={`Deleted on ${calendarDate(track.removesAt)}`}
+                    note="Want it again to keep it"
+                  />
+                {:else if trackDone(track)}
                   <!-- The same tick a playlist row draws, with the word as its
                        tooltip and accessible name like every other state here. -->
                   <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />

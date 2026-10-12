@@ -331,3 +331,58 @@ describe('the want button', () => {
     expect(screen.queryByRole('button', { name: /Want \d+ missing/ })).toBeNull();
   });
 });
+
+describe('removing', () => {
+  /** The presses that changed something: method and path. */
+  function pressesSent() {
+    const answer = globalThis.fetch as ReturnType<typeof vi.fn>;
+    return answer.mock.calls
+      .map(([input, init]) => ({
+        method: (init as RequestInit | undefined)?.method ?? 'GET',
+        path: new URL(String(input), 'http://localhost').pathname
+      }))
+      .filter((call) => call.method !== 'GET');
+  }
+
+  it('removes the release with one press', async () => {
+    answering();
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+
+    expect(pressesSent()).toContainEqual({ method: 'DELETE', path: `/api/v1/albums/${releaseID}/wanted` });
+  });
+
+  it('removes one track the library holds from its toggle', async () => {
+    answering();
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want The Rainbow' }));
+
+    expect(pressesSent()).toContainEqual({
+      method: 'DELETE',
+      path: '/api/v1/tracks/d1000000-0000-4000-8000-000000000001/wanted'
+    });
+  });
+
+  it('says the day a removed track is deleted', async () => {
+    answering({ tracks: [track({ removesAt: '2026-11-11T20:00:00Z' })] });
+    opened();
+
+    expect(await screen.findByLabelText(/^Deleted on 11 November$|^Deleted on November 11$/)).toBeTruthy();
+  });
+
+  it('keeps a removed track when it is wanted again', async () => {
+    answering({ tracks: [track({ removesAt: '2026-11-11T20:00:00Z' })] });
+    opened();
+
+    const toggle = await screen.findByRole('button', { name: 'Want The Rainbow' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(toggle);
+
+    expect(pressesSent()).toContainEqual({
+      method: 'POST',
+      path: '/api/v1/tracks/d1000000-0000-4000-8000-000000000001/wanted'
+    });
+  });
+});

@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { extendTailwindMerge } from 'tailwind-merge';
 import { replaceState } from '$app/navigation';
 import { applicationHasStarted } from './navigation.svelte';
-import type { DownloadRequest, LibraryFile, WantedTracks } from './api';
+import type { DownloadRequest, LibraryFile, RemovedTracks, WantedTracks } from './api';
 
 // `cn` joins class names for a component whose caller may override them. It
 // does two things in order. `clsx` drops the ones that are switched off, and
@@ -106,6 +106,25 @@ export function wantedSummary(result: WantedTracks) {
         ? '1 track has no recording to look for'
         : `${result.unresolvable} tracks have no recording to look for`
     );
+  }
+  return parts.join(' · ');
+}
+
+// removedSummary says what a remove press came to: the files leaving and the
+// day they go, and the files that stay because somebody added them by hand.
+// The wants themselves are gone already and need no sentence.
+export function removedSummary(result: RemovedTracks) {
+  const files = result.scheduled.length;
+  if (files === 0 && result.kept === 0) return 'Removed';
+  const parts: string[] = [];
+  if (files) {
+    const first = result.scheduled.map((file) => file.removesAt).sort()[0];
+    parts.push(
+      `${files === 1 ? '1 file' : `${files} files`} deleted on ${calendarDate(first)}. Want it again to keep ${files === 1 ? 'it' : 'them'}`
+    );
+  }
+  if (result.kept) {
+    parts.push(result.kept === 1 ? '1 file you added stays' : `${result.kept} files you added stay`);
   }
   return parts.join(' · ');
 }

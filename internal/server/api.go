@@ -279,7 +279,9 @@ type API struct {
 	// remover deletes a file from the library. Optional, and held apart from
 	// everything else that touches library files, because it is the only one
 	// that destroys anything.
-	remover   LibraryFileRemover
+	remover LibraryFileRemover
+	// removals takes a want away now and its downloaded file 30 days later.
+	removals  Removals
 	downloads DownloadStore
 	// search is the one question asked of everything at once. Optional, and
 	// deliberately not the same thing as artists, which asks MusicBrainz about
@@ -725,6 +727,7 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Put("/albums/{albumID}/cover", api.setAlbumCover)
 			router.Delete("/albums/{albumID}/cover", api.removeAlbumCover)
 			router.Post("/albums/{albumID}/wanted", api.wantAlbum)
+			router.Delete("/albums/{albumID}/wanted", api.removeRelease)
 			router.Post("/albums/{albumID}/not-wanted", api.dismissAlbumRemainder)
 			// The same three decisions, about many releases at once. The
 			// Releases browser holds sixty thousand rows and per-row clicking
@@ -734,10 +737,12 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Post("/releases/rematch", api.rematchReleases)
 			router.Post("/releases/retry", api.retryReleases)
 			router.Post("/tracks/{trackID}/wanted", api.wantOneTrack)
+			router.Delete("/tracks/{trackID}/wanted", api.removeTrack)
 			router.Post("/tracks/{trackID}/not-wanted", api.dismissTrack)
 			router.Post("/acquisition-targets", api.createAcquisitionTarget)
 			router.Get("/acquisition-targets", api.listAcquisitionTargets)
 			router.Get("/acquisition-targets/{targetID}", api.acquisitionTarget)
+			router.Delete("/acquisition-targets/{targetID}", api.removeAcquisitionTarget)
 			router.Post("/acquisition-targets/{targetID}/not-wanted", api.stopPursuingAcquisitionTarget)
 			router.Delete("/acquisition-targets/{targetID}/not-wanted", api.pursueAcquisitionTargetAgain)
 			router.Post("/acquisition-targets/{targetID}/take-best-available", api.takeBestAvailableAcquisitionTarget)
@@ -2629,6 +2634,9 @@ type trackResponse struct {
 	// fits. Absent for a track nothing was ever asked for.
 	WantID     *uuid.UUID `json:"wantId,omitempty"`
 	WantStatus *string    `json:"wantStatus,omitempty"`
+	// RemovesAt is when a file of this recording is deleted, because somebody
+	// removed it. Absent when nothing is leaving.
+	RemovesAt *time.Time `json:"removesAt,omitempty"`
 }
 
 func (api *API) listAlbumTracks(response http.ResponseWriter, request *http.Request) {
@@ -2654,6 +2662,7 @@ func (api *API) listAlbumTracks(response http.ResponseWriter, request *http.Requ
 			MatchManual:     track.MatchManual, LibraryFileID: nullableUUID(track.LibraryFileID),
 			WantID:     nullableUUID(track.WantID),
 			WantStatus: textPointer(track.WantStatus),
+			RemovesAt:  nullableTime(track.RemovesAt.Valid, track.RemovesAt.Time),
 		})
 	}
 	api.writeJSON(response, http.StatusOK, map[string]any{"items": result})

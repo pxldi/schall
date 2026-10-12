@@ -529,6 +529,9 @@ export interface Track {
    * that fits. Absent when nothing was ever asked for. */
   wantId?: string;
   wantStatus?: string;
+  /** When a file of this track is deleted, because somebody removed it.
+   * Absent when nothing is leaving. Wanting the track again keeps the file. */
+  removesAt?: string;
 }
 
 // One release-wide dismissal press, accounted for the same way WantedTracks
@@ -557,6 +560,26 @@ export interface WantedTracks {
 
 export interface WantedRelease extends WantedTracks {
   albumId: string;
+  /** Tracks somebody had removed that this press wants again. */
+  wantedAgain: number;
+}
+
+/** One file waiting to be deleted after its want was removed. */
+export interface ScheduledRemoval {
+  fileId: string;
+  path: string;
+  removesAt: string;
+}
+
+/** What one remove press did. The wants go at once; a file Schall downloaded
+ * is deleted on its date unless the music is wanted again first. Files
+ * somebody added by hand are kept. */
+export interface RemovedTracks {
+  removed: number;
+  scheduled: ScheduledRemoval[];
+  kept: number;
+  unresolvable: number;
+  target?: AcquisitionTarget;
 }
 
 // A whole discography's worth, with the number of releases something was

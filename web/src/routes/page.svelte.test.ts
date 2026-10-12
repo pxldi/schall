@@ -322,7 +322,7 @@ describe('the overview', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     await fireEvent.click(toggle);
     await waitFor(() => {
-      expect(sent.some((call) => call.path === '/api/v1/tracks/t2/not-wanted' && call.method === 'POST')).toBe(true);
+      expect(sent.some((call) => call.path === '/api/v1/tracks/t2/wanted' && call.method === 'DELETE')).toBe(true);
     });
   });
 

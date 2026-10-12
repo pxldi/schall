@@ -45,6 +45,7 @@ import (
 	"github.com/pxldi/schall/internal/popular"
 	"github.com/pxldi/schall/internal/preview"
 	"github.com/pxldi/schall/internal/recommendations"
+	"github.com/pxldi/schall/internal/removals"
 	"github.com/pxldi/schall/internal/server"
 	"github.com/pxldi/schall/internal/slskd"
 	"github.com/pxldi/schall/internal/soundcloud"
@@ -803,7 +804,14 @@ func run() error {
 		}()
 	}
 
+	// Removing music: the want goes at once, a file Schall downloaded for it
+	// 30 days later. The pass that deletes due files runs hourly; a day late
+	// is harmless and an hour is the most a file outlives its date.
+	removalService := removals.NewService(pool, libraryRemover, logger).WithEvents(eventHub)
+	go removalService.Run(ctx, time.Hour)
+
 	apiOptions := []server.Option{
+		server.WithRemovals(removalService),
 		server.WithLibraryPaths(pathValidator),
 		server.WithLayoutMover(libraryMover),
 		server.WithLibraryTagger(libraryTagger),

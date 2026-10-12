@@ -35,7 +35,7 @@
     await queryClient.invalidateQueries({ queryKey: ['overview'] });
   }
   async function letGo(trackId: string) {
-    await api.dismissTrack(trackId);
+    await api.removeTrack(trackId);
     await queryClient.invalidateQueries({ queryKey: ['overview'] });
   }
 
