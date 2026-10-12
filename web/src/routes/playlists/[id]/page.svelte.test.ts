@@ -241,3 +241,26 @@ describe('a row whose copy waits for an answer', () => {
     expect(link.getAttribute('href')).toBe('/review?want=t9');
   });
 });
+
+describe('a long playlist', () => {
+  // Angelcore's 323 rows held the page for 670 ms before the title showed.
+  it('draws its first rows at once and waits for the reader to scroll for more', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    served(
+      Array.from({ length: 323 }, (_, index) =>
+        entry({ id: `e${index}`, position: index + 1, title: `Song ${index + 1}` })
+      )
+    );
+    opened();
+
+    expect(await screen.findByText('Song 50')).toBeTruthy();
+    expect(screen.queryByText('Song 51')).toBeNull();
+  });
+});

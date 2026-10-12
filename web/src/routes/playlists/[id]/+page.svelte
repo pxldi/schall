@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  import { SvelteMap } from 'svelte/reactivity';
+
+  // Outlives the page, so going back to a list finds as many rows as it left
+  // and the browser can put the reader back where they had scrolled to.
+  const grown = new SvelteMap<string, number>();
+</script>
+
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -19,6 +27,8 @@
   import { entryState, ownedOf, playlistOrigin, reviewHref, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
+  import { nearEnd } from '$lib/grow';
+  import { tick } from 'svelte';
 
   const queryClient = useQueryClient();
   const playlistId = page.params.id ?? '';
@@ -38,6 +48,28 @@
 
   const playlist = $derived($detail.data?.playlist);
   const entries = $derived($detail.data?.entries ?? []);
+  // Read once per row and shared by the strip and the table.
+  const states = $derived(new Map(entries.map((entry) => [entry.id, entryState(entry)])));
+
+  // A 323-row list held the page for 670 ms before its title showed. The
+  // first rows are drawn at once and the rest as the reader scrolls
+  // (lib/grow.ts). Rows are taller than artist cards are wide, so a step is
+  // smaller.
+  const ROW_STEP = 50;
+  const drawn = $derived(entries.slice(0, grown.get(playlistId) ?? ROW_STEP));
+  function drawMore() {
+    if (drawn.length < entries.length) grown.set(playlistId, drawn.length + ROW_STEP);
+  }
+
+  // A dot in the strip can name a row not drawn yet: draw up to it first.
+  async function reveal(id: string) {
+    const index = entries.findIndex((entry) => entry.id === id);
+    if (index >= drawn.length) {
+      grown.set(playlistId, index + 1 + ROW_STEP);
+      await tick();
+    }
+    document.getElementById(`entry-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
   const playlistEntrySkeletonCount = $derived(Math.max($detail.data?.entries.length ?? 0, 8));
 
   const reimport = createMutation({
@@ -401,7 +433,10 @@
            title in the same cell, which is where a phone reads it anyway. -->
       {#if entries.length > 1}
         <div class="px-4 pb-4">
-          <StateStrip items={entries.map((entry) => ({ ...entry, state: entryState(entry) }))} />
+          <StateStrip
+            items={entries.map((entry) => ({ ...entry, state: states.get(entry.id)! }))}
+            onopen={reveal}
+          />
         </div>
       {/if}
       <div class="overflow-x-auto">
@@ -417,8 +452,8 @@
             </tr>
           </thead>
           <tbody>
-            {#each entries as entry, index (entry.id)}
-              {@const state = entryState(entry)}
+            {#each drawn as entry, index (entry.id)}
+              {@const state = states.get(entry.id)!}
               <!-- Only a row still waiting has anything to offer: a row a file
                    answers is finished, whatever its want still reads. -->
               {@const open = !entry.ownedFileId}
@@ -522,6 +557,9 @@
           </tbody>
         </table>
       </div>
+      {#if drawn.length < entries.length}
+        <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>
+      {/if}
     </section>
     </Settle>
   {/if}
