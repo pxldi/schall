@@ -66,6 +66,7 @@ function pairing(overrides: Partial<PlayerPairing> = {}): PlayerPairing {
 function opened() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(PlaylistPage, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
+  return client;
 }
 
 beforeAll(setup);
@@ -262,5 +263,44 @@ describe('a long playlist', () => {
 
     expect(await screen.findByText('Song 50')).toBeTruthy();
     expect(screen.queryByText('Song 51')).toBeNull();
+  });
+});
+
+describe('a waiting row with something to do', () => {
+  // 237 Angelcore rows printed their reason under the row as well as in the
+  // hourglass tooltip.
+  it('keeps the reason in the tooltip only', async () => {
+    const reason = 'Only copies below your 320 kbps minimum were found. Looked at again weekly.';
+    served([entry({ targetId: 't1', targetStatus: 'unresolved', targetSummary: reason })]);
+    opened();
+
+    expect(await screen.findByRole('button', { name: 'Use address' })).toBeTruthy();
+    expect(screen.queryByText(reason)).toBeNull();
+    expect(screen.getByLabelText('waiting').parentElement?.getAttribute('title')).toBe(
+      `waiting · ${reason}`
+    );
+  });
+});
+
+describe('a refetch that fails', () => {
+  it('keeps the rows it already has', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        calls++;
+        if (calls > 1) return Promise.resolve(new Response('{}', { status: 500 }));
+        return Promise.resolve(
+          new Response(JSON.stringify({ playlist: playlist(), entries: [entry()] }), { status: 200 })
+        );
+      })
+    );
+    const client = opened();
+    await screen.findByText('Weather Report');
+
+    await client.refetchQueries();
+
+    expect(screen.getByText('Weather Report')).toBeTruthy();
+    expect(screen.queryByText(/could not finish/)).toBeNull();
   });
 });

@@ -314,6 +314,7 @@ func run() error {
 		WithStars(weekly.NewPlayerStars(navidrome.NewKeeps(store, cfg.NavidromePathMap, logger))).
 		WithRemover(libraryRemover).
 		WithPublisher(weeklyPublisher{syncer: playerSyncer}).
+		WithRecordings(musicBrainzClient).
 		WithEvents(eventHub)
 	// The listening surface of the follow feed: one playlist holding the tracks
 	// the library owns from the releases following somebody has turned up
@@ -750,6 +751,11 @@ func run() error {
 	if err := weeklyPlaylist.CloseAbandonedRuns(ctx); err != nil {
 		return fmt.Errorf("close weekly playlist runs left open: %w", err)
 	}
+
+	// Weekly rows from before lengths were asked for get theirs now rather
+	// than at the next refresh, a week away. A list without such rows asks
+	// nothing.
+	go weeklyPlaylist.FillLengths(ctx)
 
 	// And one weekly refresh, only where somebody switched the weekly playlist
 	// on. It removes music, so an installation that never opened the setting

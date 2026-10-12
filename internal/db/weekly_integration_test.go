@@ -849,3 +849,49 @@ func TestAWeeklyEntryCarriesTheCatalogueLength(t *testing.T) {
 		t.Errorf("single entry length = %+v, want 254000", one.EntryDurationMS)
 	}
 }
+
+// Only a weekly row with no length of its own and none in the catalogue is
+// one to ask MusicBrainz about, and storing an answer takes it off the list.
+func TestAWeeklyRowWithoutAnyLocalLengthIsListedUntilOneIsStored(t *testing.T) {
+	ctx := context.Background()
+	queries := New(dbtest.Setup(t))
+
+	playlist, err := queries.EnsureWeeklyPlaylist(ctx, "Schall Weekly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recording := uuid.New()
+	entry, err := queries.AppendWeeklyPlaylistEntry(ctx, AppendWeeklyPlaylistEntryParams{
+		PlaylistID: playlist.ID, MusicBrainzRecordingID: recording,
+		EntryArtist: "Rihanna", EntryTitle: "FourFiveSeconds",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := queries.WeeklyEntriesWithoutLength(ctx, playlist.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].EntryID != entry.ID || listed[0].RecordingID != recording {
+		t.Fatalf("listed = %+v, want the one row", listed)
+	}
+
+	if err := queries.SetPlaylistEntryLength(ctx, entry.ID, 188000); err != nil {
+		t.Fatal(err)
+	}
+	listed, err = queries.WeeklyEntriesWithoutLength(ctx, playlist.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 0 {
+		t.Errorf("listed = %+v, want none once a length is stored", listed)
+	}
+	stored, err := queries.PlaylistEntry(ctx, entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.EntryDurationMS.Int32 != 188000 {
+		t.Errorf("length = %+v, want 188000", stored.EntryDurationMS)
+	}
+}

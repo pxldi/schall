@@ -16,6 +16,7 @@ import (
 
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/library"
+	"github.com/pxldi/schall/internal/musicbrainz"
 	"github.com/pxldi/schall/internal/recommendations"
 )
 
@@ -87,6 +88,8 @@ type unkeptCall struct {
 }
 
 type fakeStore struct {
+	unmeasured  []db.WeeklyEntryWithoutLength
+	lengths     map[uuid.UUID]int32
 	settings    db.WeeklyPlaylistSettingsRow
 	settingsErr error
 	leases      []db.LibraryFileLeaseRow
@@ -381,6 +384,53 @@ type fakeRecommender struct {
 
 func (recommender *fakeRecommender) List(context.Context, string) ([]recommendations.Candidate, error) {
 	return recommender.candidates, recommender.err
+}
+
+func (store *fakeStore) WeeklyEntriesWithoutLength(
+	context.Context, uuid.UUID, int,
+) ([]db.WeeklyEntryWithoutLength, error) {
+	return store.unmeasured, nil
+}
+
+func (store *fakeStore) SetPlaylistEntryLength(_ context.Context, entryID uuid.UUID, durationMS int32) error {
+	if store.lengths == nil {
+		store.lengths = map[uuid.UUID]int32{}
+	}
+	store.lengths[entryID] = durationMS
+	return nil
+}
+
+// fakeRecordings answers lengths from a map; a recording not in it is one
+// MusicBrainz does not know.
+type fakeRecordings map[uuid.UUID]int
+
+func (recordings fakeRecordings) Recording(_ context.Context, id uuid.UUID) (musicbrainz.Recording, error) {
+	length, ok := recordings[id]
+	if !ok {
+		return musicbrainz.Recording{}, musicbrainz.ErrNotFound
+	}
+	return musicbrainz.Recording{ID: id, DurationMS: &length}, nil
+}
+
+// A suggestion arrives without a length and the catalogue does not hold it,
+// so 20 of 50 weekly rows showed none. MusicBrainz knows how long they run.
+func TestWeeklyRowsNothingLocalKnowsTakeTheMusicBrainzLength(t *testing.T) {
+	store := newFakeStore()
+	known, unknown := uuid.New(), uuid.New()
+	knownEntry, unknownEntry := uuid.New(), uuid.New()
+	store.unmeasured = []db.WeeklyEntryWithoutLength{
+		{EntryID: knownEntry, RecordingID: known},
+		{EntryID: unknownEntry, RecordingID: unknown},
+	}
+
+	newService(store).WithRecordings(fakeRecordings{known: 211000}).FillLengths(context.Background())
+
+	if store.lengths[knownEntry] != 211000 {
+		t.Errorf("lengths = %v, want 211000 on the known recording", store.lengths)
+	}
+	if _, set := store.lengths[unknownEntry]; set {
+		t.Errorf("lengths = %v, want none for a recording MusicBrainz does not know", store.lengths)
+	}
 }
 
 func newService(store Store) *Service {

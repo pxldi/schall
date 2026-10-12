@@ -857,6 +857,44 @@ func TestTheSweepSkipsAListItHasAlreadyJoined(t *testing.T) {
 	}
 }
 
+// "Cantus Weekly" and a second "New releases" were lists Schall had pushed,
+// adopted back as copies once their snapshots were gone. A signed list is
+// Schall's own and is never adopted.
+func TestTheSweepLeavesAListSchallMadeAlone(t *testing.T) {
+	store := &syncStore{settings: configuredPlayer()}
+	signed := Playlist{ID: "nd-10", Name: "Schall Weekly", Owner: "poldi", Comment: SchallMadeComment}
+	player := &syncPlayer{
+		lists:   []Playlist{signed},
+		details: map[string]Playlist{"nd-10": signed},
+	}
+
+	result, err := syncerFor(store, player, "", t).Sweep(context.Background())
+
+	if err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(result.Adopted) != 0 || len(store.upserted) != 0 {
+		t.Fatalf("adopted = %v, want a list Schall made left alone", store.upserted)
+	}
+}
+
+func TestAPlaylistSchallCreatesIsSigned(t *testing.T) {
+	store, playlistID, _, _ := joinedList(t)
+	store.snapshot, store.snapshotErr, store.snapshotTracks = db.NavidromePlaylistSnapshotRow{}, pgx.ErrNoRows, nil
+	player := &syncPlayer{
+		byPath:    map[string]Song{"/music/artist/one.flac": {ID: "song-1", Title: "One"}},
+		createdID: "nd-created",
+	}
+
+	if _, err := syncerFor(store, player, "", t).SyncPlaylist(context.Background(), playlistID); err != nil {
+		t.Fatalf("SyncPlaylist() error = %v", err)
+	}
+	if len(player.updates) != 1 || player.updates[0].PlaylistID != "nd-created" ||
+		player.updates[0].Comment != SchallMadeComment {
+		t.Fatalf("updates = %#v, want the new list signed", player.updates)
+	}
+}
+
 func TestTheSweepAsksForAPassOverEveryList(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	store := &syncStore{

@@ -100,6 +100,18 @@ describe('ownedOf', () => {
     expect(state.label).toBe('waiting');
   });
 
+  it('says why a want holding an unanswered copy needs review', () => {
+    const state = entryState(
+      entry({
+        targetStatus: 'unresolved',
+        copyWaiting: true,
+        targetSummary: 'No recording MusicBrainz knows of matches this entry yet. It will be asked about again.'
+      })
+    );
+
+    expect(state.note).toBe('A copy is waiting for your answer.');
+  });
+
   it('reads a want holding an unanswered copy as needing review', () => {
     const state = entryState(entry({ targetStatus: 'pending', copyWaiting: true }));
 

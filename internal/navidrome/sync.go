@@ -377,6 +377,13 @@ func (syncer *Syncer) Sweep(ctx context.Context) (SweepResult, error) {
 			result.Skipped++
 			continue
 		}
+		// A list Schall pushed is Schall's own list seen from the player.
+		// "Cantus Weekly" and a second "New releases" came back this way
+		// after their snapshots were gone.
+		if strings.TrimSpace(listed.Comment) == SchallMadeComment {
+			result.Skipped++
+			continue
+		}
 		_, err := syncer.store.SnapshotByNavidromeID(bounded, listed.ID)
 		if err == nil {
 			result.Skipped++
@@ -666,6 +673,15 @@ func (syncer *Syncer) createRemote(
 	if err != nil {
 		return result, fmt.Errorf("create navidrome playlist %q: %w", playlist.Name, err)
 	}
+	// Signed, so a later sweep that no longer has the snapshot for this list
+	// does not adopt it back as a second copy. Subsonic's create takes no
+	// comment. A list left unsigned is only a list that sweep could adopt.
+	if err := client.UpdatePlaylist(ctx, PlaylistUpdate{
+		PlaylistID: remoteID, Comment: SchallMadeComment,
+	}); err != nil {
+		syncer.logger.Warn().Err(err).Str("navidrome_playlist_id", remoteID).
+			Msg("sign a playlist schall created")
+	}
 	if err := syncer.writeSnapshot(ctx, playlist.ID, remoteID, false, paired); err != nil {
 		return result, err
 	}
@@ -911,6 +927,11 @@ func (syncer *Syncer) writeSnapshot(
 	}
 	return nil
 }
+
+// SchallMadeComment is the comment Schall writes on every playlist it creates
+// in Navidrome. It is shown in the player, and it is how a sweep tells a list
+// Schall pushed from one a person made there.
+const SchallMadeComment = "Made by Schall"
 
 // adopt takes a playlist created in Navidrome into Schall as a want list of its
 // own, with an entry for every song the library already holds.

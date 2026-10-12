@@ -33,6 +33,7 @@ import (
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/library"
+	"github.com/pxldi/schall/internal/musicbrainz"
 	"github.com/pxldi/schall/internal/recommendations"
 )
 
@@ -156,6 +157,12 @@ type Publisher interface {
 	SyncPlaylist(ctx context.Context, playlistID uuid.UUID) error
 }
 
+// Recordings answers how long a recording runs. Suggestions arrive without a
+// length, and a song the catalogue does not hold has no other source for one.
+type Recordings interface {
+	Recording(ctx context.Context, id uuid.UUID) (musicbrainz.Recording, error)
+}
+
 // Store is everything this package reads and writes.
 type Store interface {
 	WeeklyPlaylistSettings(ctx context.Context) (db.WeeklyPlaylistSettingsRow, error)
@@ -195,6 +202,8 @@ type Store interface {
 	DropWeeklyLibraryEntries(ctx context.Context, playlistID uuid.UUID) (int64, error)
 	DropSettledWeeklyPlaylistEntries(ctx context.Context, playlistID uuid.UUID) (int64, error)
 	AppendWeeklyPlaylistEntry(ctx context.Context, params db.AppendWeeklyPlaylistEntryParams) (db.PlaylistEntryRow, error)
+	WeeklyEntriesWithoutLength(ctx context.Context, playlistID uuid.UUID, limit int) ([]db.WeeklyEntryWithoutLength, error)
+	SetPlaylistEntryLength(ctx context.Context, entryID uuid.UUID, durationMS int32) error
 	MarkPlaylistEntryOwned(ctx context.Context, entryID uuid.UUID, fileID uuid.NullUUID) error
 	CreatePlaylistEntryTarget(ctx context.Context, entryID uuid.UUID, params db.CreateAcquisitionTargetParams) (uuid.UUID, error)
 
@@ -221,6 +230,9 @@ type Service struct {
 	publisher Publisher
 	// notices tells connected interfaces the playlists changed.
 	notices *events.Hub
+	// recordings fills the lengths of rows nothing local knows. Optional:
+	// without it those rows show no length.
+	recordings Recordings
 
 	now func() time.Time
 }
@@ -230,6 +242,11 @@ type Service struct {
 // there: no remover means no removal can happen at all.
 func NewService(store Store, logger zerolog.Logger) *Service {
 	return &Service{store: store, logger: logger, now: time.Now}
+}
+
+func (service *Service) WithRecordings(recordings Recordings) *Service {
+	service.recordings = recordings
+	return service
 }
 
 func (service *Service) WithStars(stars StarReader) *Service {
@@ -459,6 +476,9 @@ func (service *Service) Refresh(ctx context.Context) (RunResult, error) {
 	}
 
 	service.announce()
+	// After the run is written down: the lengths are display only and must
+	// not hold the run open while MusicBrainz is asked one row a second.
+	service.fillLengths(ctx, playlist.ID)
 	service.logger.Info().
 		Str("run_id", run.ID.String()).
 		Str("mode", settings.Mode).
@@ -1071,6 +1091,62 @@ func (service *Service) publish(ctx context.Context, playlist db.PlaylistRow) er
 		return fmt.Errorf("send the weekly playlist to the player: %w", err)
 	}
 	return nil
+}
+
+// lengthsPerPass bounds how many lengths one pass asks MusicBrainz for. A week
+// adds a few dozen songs, and the client allows one request a second.
+const lengthsPerPass = 200
+
+// FillLengths asks MusicBrainz how long each weekly row nothing local knows
+// runs, and stores the answer. It is best effort: a failure is logged and the
+// rows stay without a length until the next pass. It runs after each refresh,
+// and once at startup so rows from before this existed are filled.
+func (service *Service) FillLengths(ctx context.Context) {
+	playlist, err := service.store.WeeklyPlaylist(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return
+	}
+	if err != nil {
+		service.logger.Warn().Err(err).Msg("read the weekly playlist for lengths")
+		return
+	}
+	service.fillLengths(ctx, playlist.ID)
+}
+
+func (service *Service) fillLengths(ctx context.Context, playlistID uuid.UUID) {
+	if service.recordings == nil {
+		return
+	}
+	entries, err := service.store.WeeklyEntriesWithoutLength(ctx, playlistID, lengthsPerPass)
+	if err != nil {
+		service.logger.Warn().Err(err).Msg("list weekly rows without a length")
+		return
+	}
+	filled := 0
+	for _, entry := range entries {
+		recording, err := service.recordings.Recording(ctx, entry.RecordingID)
+		if errors.Is(err, musicbrainz.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			// MusicBrainz not answering says nothing about the rest; the next
+			// pass asks again.
+			service.logger.Warn().Err(err).Str("recording_id", entry.RecordingID.String()).
+				Msg("ask musicbrainz for a weekly row's length")
+			break
+		}
+		if recording.DurationMS == nil || *recording.DurationMS <= 0 {
+			continue
+		}
+		if err := service.store.SetPlaylistEntryLength(ctx, entry.EntryID, int32(*recording.DurationMS)); err != nil {
+			service.logger.Warn().Err(err).Msg("store a weekly row's length")
+			return
+		}
+		filled++
+	}
+	if filled > 0 {
+		service.announce()
+	}
 }
 
 // CloseAbandonedRuns closes a run left open by a restart, so that the next

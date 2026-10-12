@@ -39,7 +39,15 @@ export function entryState(entry: PlaylistEntry): EntryState {
   if (entry.ownedFileId) return { label: quiet(holding.complete), role: 'ok', icon: 'check', note };
   // A copy nobody has answered is a question in Review, whatever the want's
   // own status says while it waits for that answer.
-  if (entry.copyWaiting) return { label: quiet(progress.needsReview), role: 'fail', icon: 'listen', note };
+  // The want's own sentence can be from before the copy arrived ("No recording
+  // MusicBrainz knows…"), which contradicts the label, so this one says why.
+  if (entry.copyWaiting)
+    return {
+      label: quiet(progress.needsReview),
+      role: 'fail',
+      icon: 'listen',
+      note: 'A copy is waiting for your answer.'
+    };
   switch (entry.targetStatus) {
     case 'acquired':
       return { label: 'acquired', role: 'ok', icon: 'check', note };
