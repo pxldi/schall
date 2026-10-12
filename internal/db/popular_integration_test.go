@@ -14,7 +14,8 @@ import (
 // for each by that ID alone: the track that carries it, whether a file holds
 // it, and the want on it. An album row says its secondary types and how many of
 // its tracks are wanted, so the artist page can file a mixtape under Other and
-// draw the release's own toggle.
+// draw the release's own toggle. Both say when a removed recording's file is
+// deleted.
 func TestPopularTracksAndTheReleaseRowsBesideThem(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -23,7 +24,8 @@ func TestPopularTracksAndTheReleaseRowsBesideThem(t *testing.T) {
 	artistID, mixtapeID, singleID := uuid.New(), uuid.New(), uuid.New()
 	held, wanted, dismissed, absent := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	fileID := uuid.New()
-	heldTrack := uuid.New()
+	heldTrack, removedWant := uuid.New(), uuid.New()
+	removesAt := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 	for _, statement := range []struct {
 		sql  string
 		args []any
@@ -50,6 +52,14 @@ func TestPopularTracksAndTheReleaseRowsBesideThem(t *testing.T) {
 		{`INSERT INTO acquisition_targets (origin, entry_artist, entry_title, musicbrainz_recording_id,
 		      status, resolution_method, resolved_at, not_wanted_at)
 		  VALUES ('manual', 'Kendrick Lamar', 'Dismissed', $1, 'not_wanted', 'isrc', now(), now())`, []any{dismissed}},
+		// Somebody removed the held track: its file goes in 30 days.
+		{`INSERT INTO acquisition_targets (id, origin, entry_artist, entry_title, musicbrainz_recording_id,
+		      status, resolution_method, resolved_at, not_wanted_at)
+		  VALUES ($1, 'manual', 'Kendrick Lamar', 'Held', $2, 'not_wanted', 'isrc', now(), now())`,
+			[]any{removedWant, held}},
+		{`INSERT INTO scheduled_removals (acquisition_target_id, musicbrainz_recording_id, library_file_id,
+		      library_path, removes_at)
+		  VALUES ($1, $2, $3, '/music/held.flac', $4)`, []any{removedWant, held, fileID, removesAt}},
 	} {
 		if _, err := pool.Exec(ctx, statement.sql, statement.args...); err != nil {
 			t.Fatalf("seed %q: %v", statement.sql, err)
@@ -74,8 +84,11 @@ func TestPopularTracksAndTheReleaseRowsBesideThem(t *testing.T) {
 	if rows[1].TrackID.Valid || rows[1].Held || rows[1].WantID.Valid {
 		t.Errorf("a recording the catalogue lacks came back with %+v", rows[1])
 	}
-	if !rows[2].Held || rows[2].AlbumID.UUID != mixtapeID {
-		t.Errorf("held = %+v", rows[2])
+	if !rows[2].Held || rows[2].AlbumID.UUID != mixtapeID || !rows[2].RemovesAt.Time.Equal(removesAt) {
+		t.Errorf("held = %+v, want it leaving on %s", rows[2], removesAt)
+	}
+	if rows[0].RemovesAt.Valid {
+		t.Errorf("a recording nobody removed is leaving: %+v", rows[0])
 	}
 	if rows[3].WantStatus.String != "not_wanted" {
 		t.Errorf("dismissed = %+v", rows[3])
@@ -96,5 +109,12 @@ func TestPopularTracksAndTheReleaseRowsBesideThem(t *testing.T) {
 	// One pending want counts; the dismissal and the held track do not.
 	if mixtape.WantedTrackCount != 1 || byID[singleID].WantedTrackCount != 1 {
 		t.Errorf("wanted counts = %d, %d; want 1, 1", mixtape.WantedTrackCount, byID[singleID].WantedTrackCount)
+	}
+	// The removed track's file is leaving, so the release says when.
+	if mixtape.LeavingTrackCount != 1 || !mixtape.RemovesAt.Time.Equal(removesAt) {
+		t.Errorf("mixtape leaving = %d on %v; want 1 on %s", mixtape.LeavingTrackCount, mixtape.RemovesAt, removesAt)
+	}
+	if single := byID[singleID]; single.LeavingTrackCount != 0 || single.RemovesAt.Valid {
+		t.Errorf("single leaving = %d on %v; want none", single.LeavingTrackCount, single.RemovesAt)
 	}
 }

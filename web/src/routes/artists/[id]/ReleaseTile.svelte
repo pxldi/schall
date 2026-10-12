@@ -1,13 +1,16 @@
 <script lang="ts">
   import type { Release } from '$lib/api';
+  import { calendarDate } from '$lib/utils';
   import Cover from '$lib/components/Cover.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
 
   // One release in a row of an artist's page: a small cover with the title
   // under it. What the library holds is printed on the cover, a tick for all of
-  // it and "2/14" for some. The + sits on the cover's corner and shows on hover,
-  // as on a row of tracks; a wanted release keeps its tick.
+  // it and "2/14" for some, and a bin when somebody removed it and its files
+  // are waiting to be deleted. The + sits on the cover's corner and shows on
+  // hover, as on a row of tracks. A wanted release keeps its tick, unless the
+  // library holds some of it: the cover says that already.
 
   let {
     release,
@@ -36,13 +39,18 @@
 
   const complete = $derived(countable > 0 && owned >= countable);
   const partial = $derived(owned > 0 && owned < countable);
+  const leaving = $derived(
+    release.leavingTrackCount > 0 && release.removesAt
+      ? `Deleted on ${calendarDate(release.removesAt)}`
+      : ''
+  );
 </script>
 
 <div class="want-tile relative flex w-19 shrink-0 flex-col" data-held={owned > 0 ? 'some' : 'none'}>
   <a
     href={`/releases/${release.id}`}
     class="group flex flex-col gap-1 rounded-tight"
-    title={`${release.title} · ${state}`}
+    title={`${release.title} · ${leaving || state}`}
   >
     <span
       class="relative block size-19 overflow-hidden rounded-row bg-surface-thick transition-transform duration-200 group-hover:-translate-y-0.5"
@@ -58,7 +66,14 @@
           class="size-full object-cover"
         />
       </span>
-      {#if complete}
+      {#if leaving}
+        <span
+          class="absolute right-1 bottom-1 grid size-4.5 place-items-center rounded-pill bg-ground/80 text-ink-2"
+          aria-label={leaving}
+        >
+          <Icon name="delete" size="sm" class="size-3" />
+        </span>
+      {:else if complete}
         <span
           class="absolute right-1 bottom-1 grid size-4.5 place-items-center rounded-pill bg-ground/80 text-ok [--plate:currentColor]"
           aria-label="Complete"
@@ -79,7 +94,7 @@
   </a>
   {#if wantable}
     <WantToggle
-      reveal
+      reveal={owned > 0 ? 'all' : true}
       {wanted}
       title={release.title}
       {onwant}

@@ -56,6 +56,11 @@ type AlbumRow struct {
 	// WantedTrackCount is the release's tracks with a want still being pursued,
 	// so a list can draw the release's own want toggle without its tracklist.
 	WantedTrackCount int64
+	// LeavingTrackCount is the release's tracks whose file is waiting to be
+	// deleted because somebody removed them, and RemovesAt the first day one
+	// goes. Wanting the release again keeps them.
+	LeavingTrackCount int64
+	RemovesAt         pgtype.Timestamptz
 }
 
 type ListAlbumsParams struct {
@@ -340,7 +345,9 @@ var albumColumns = `
 			  AND release_cover_art.image IS NOT NULL
 		)::boolean AS has_cover,
 		albums.secondary_types,
-		` + albumWantedTracks + `::bigint AS wanted_track_count
+		` + albumWantedTracks + `::bigint AS wanted_track_count,
+		` + albumLeavingTracks("count(DISTINCT leaving_tracks.id)") + `::bigint AS leaving_track_count,
+		` + albumLeavingTracks("min(removals.removes_at)") + `::timestamptz AS removes_at
 `
 
 // albumWantedTracks counts a release's tracks that somebody asked for and that
@@ -355,6 +362,19 @@ const albumWantedTracks = `(
 		   AND wants.status NOT IN ('superseded', 'not_wanted', 'acquired')
 		WHERE wanted_tracks.album_id = albums.id
 	)`
+
+// albumLeavingTracks reads the release's tracks whose file is scheduled to be
+// deleted (scheduled_removals), through the given aggregate.
+func albumLeavingTracks(aggregate string) string {
+	return `(
+		SELECT ` + aggregate + `
+		FROM tracks AS leaving_tracks
+		JOIN scheduled_removals AS removals
+		    ON removals.musicbrainz_recording_id = leaving_tracks.musicbrainz_recording_id
+		   AND removals.state = 'scheduled'
+		WHERE leaving_tracks.album_id = albums.id
+	)`
+}
 
 const albumJoins = `
 	JOIN artists ON artists.id = albums.artist_id
@@ -492,7 +512,7 @@ func (q *Queries) ListAlbums(ctx context.Context, params ListAlbumsParams) (Albu
 			&row.OwnedTrackCount, &row.DismissedTrackCount, &row.Monitored,
 			&row.MonitorLevel, &row.MusicbrainzReleaseID,
 			&row.EditionSelectionReason, &row.TrackRefreshStatus, &row.HasCover,
-			&row.SecondaryTypes, &row.WantedTrackCount,
+			&row.SecondaryTypes, &row.WantedTrackCount, &row.LeavingTrackCount, &row.RemovesAt,
 		); err != nil {
 			return page, err
 		}

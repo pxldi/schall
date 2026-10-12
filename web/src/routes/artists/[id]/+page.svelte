@@ -11,8 +11,14 @@
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
   import Icon from '$lib/components/Icon.svelte';
-  import { api, type MonitorLevel, type Release, type ReleaseCompleteness } from '$lib/api';
-  import { calendarDate, keepInUrl, urlChoice, wantedSummary } from '$lib/utils';
+  import {
+    api,
+    type MonitorLevel,
+    type Release,
+    type ReleaseCompleteness,
+    type RemovedTracks
+  } from '$lib/api';
+  import { calendarDate, keepInUrl, removedSummary, urlChoice, wantedSummary } from '$lib/utils';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
@@ -411,23 +417,23 @@
     return name ? `${year} · ${name}` : year;
   }
 
-  // The tracks still to get, and whether every one of them is already wanted:
-  // that is when the release's + shows its tick.
-  function gaps(release: Release) {
-    return Math.max(0, countable(release) - release.ownedTrackCount);
-  }
+  // A release's + is filled when every countable track is held or wanted. A
+  // held track counts as wanted until somebody removes it, as on the release
+  // page, so a release the library holds shows its tick on hover.
   function releaseWanted(release: Release) {
-    return gaps(release) > 0 && (release.wantedTrackCount ?? 0) >= gaps(release);
+    const kept = Math.max(0, release.ownedTrackCount - (release.leavingTrackCount ?? 0));
+    const all = countable(release);
+    return all > 0 && kept + (release.wantedTrackCount ?? 0) >= all;
   }
 
-  // The + on a release wants every track the library does not have, as the
-  // release page's button does. Pressed again it dismisses the tracks still
-  // missing, the release page's "Dismiss the rest": the files the library holds
-  // are not touched.
-  type ReleaseToggle = { kind: 'want' | 'unwant'; id: string };
+  // The + on a release wants every track the library does not have, and takes
+  // back a removal, as the release page's button does. Pressed again it removes
+  // the release: the wants go at once, and a file Schall downloaded for it is
+  // deleted 30 days later unless the release is wanted again first.
+  type ReleaseToggle = { kind: 'want' | 'remove'; id: string };
   const toggleRelease = createMutation({
     mutationFn: async ({ kind, id }: ReleaseToggle): Promise<unknown> =>
-      kind === 'want' ? api.wantRelease(id) : api.dismissReleaseRemainder(id),
+      kind === 'want' ? api.wantRelease(id) : api.removeRelease(id),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
@@ -437,6 +443,11 @@
       ]);
     }
   });
+  const removed = $derived(
+    $toggleRelease.data && $toggleRelease.variables?.kind === 'remove'
+      ? removedSummary($toggleRelease.data as RemovedTracks)
+      : ''
+  );
 
   // The card's second line and the colour it reads in: ink-3 for a plain fact,
   // accent for a partial release, fail for one missing outright. One function
@@ -724,9 +735,9 @@
                     owned={release.ownedTrackCount}
                     countable={countable(release)}
                     wanted={releaseWanted(release)}
-                    wantable={gaps(release) > 0 && tile(release) !== 'busy'}
+                    wantable={release.trackCount > 0 && tile(release) !== 'busy'}
                     onwant={() => $toggleRelease.mutateAsync({ kind: 'want', id: release.id })}
-                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'unwant', id: release.id })}
+                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'remove', id: release.id })}
                   />
                 {/each}
               </div>
@@ -734,6 +745,8 @@
           {/each}
           {#if $toggleRelease.isError}
             <ErrorNote error={$toggleRelease.error} />
+          {:else if removed}
+            <p class="text-meta text-ink-3">{removed}.</p>
           {/if}
         </div>
 

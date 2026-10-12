@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -48,6 +49,9 @@ type popularTrackResponse struct {
 	Held       bool       `json:"held"`
 	WantID     *uuid.UUID `json:"wantId"`
 	WantStatus *string    `json:"wantStatus"`
+	// RemovesAt is when a file of the recording is deleted, because somebody
+	// removed it. Absent when nothing is leaving.
+	RemovesAt *time.Time `json:"removesAt,omitempty"`
 }
 
 type popularResponse struct {
@@ -130,6 +134,7 @@ func (api *API) artistPopular(response http.ResponseWriter, request *http.Reques
 			Held:         row.Held,
 			WantID:       nullableUUID(row.WantID),
 			WantStatus:   textPointer(row.WantStatus),
+			RemovesAt:    nullableTime(row.RemovesAt.Valid, row.RemovesAt.Time),
 		})
 	}
 	api.writeJSON(response, http.StatusOK, result)
