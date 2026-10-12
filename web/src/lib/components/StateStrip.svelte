@@ -9,11 +9,14 @@
 
   let {
     items,
-    label = 'songs'
+    label = 'songs',
+    onopen
   }: {
     items: { id: string; title: string; position: number; state: { label: string; role: EntryRole } }[];
     /** What the dots are, for the legend's sentence. */
     label?: string;
+    /** Opens a row; a list that draws its rows in steps has to draw it first. */
+    onopen?: (id: string) => void;
   } = $props();
 
   const ORDER: EntryRole[] = ['ok', 'decide', 'fail', 'busy', 'idle'];
@@ -31,6 +34,7 @@
   });
 
   function open(id: string) {
+    if (onopen) return onopen(id);
     const row = document.getElementById(`entry-${id}`);
     row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }

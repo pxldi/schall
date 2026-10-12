@@ -206,6 +206,11 @@ export const icons = {
     { d: 'M3 9h4l5-4v14l-5-4H3Z', plate: 'fill' },
     { d: 'M16 9a4 4 0 0 1 0 6M18.5 6a8 8 0 0 1 0 12', plate: 'stroke' }
   ],
+  // An hourglass: a want that is waiting on something outside Schall.
+  waiting: [
+    { d: 'M7 3h10l-5 9 5 9H7l5-9Z', plate: 'fill' },
+    { d: 'M5 3h14M5 21h14', plate: 'stroke' }
+  ],
   want: [
     { d: 'M6 3h12v18l-6-4.5L6 21Z', plate: 'fill' },
     { d: 'M12 7v6M9 10h6', plate: 'stroke' }

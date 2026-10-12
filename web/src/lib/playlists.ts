@@ -37,6 +37,9 @@ export interface EntryState {
 export function entryState(entry: PlaylistEntry): EntryState {
   const note = entry.ownedFileId ? '' : (entry.targetSummary ?? '');
   if (entry.ownedFileId) return { label: quiet(holding.complete), role: 'ok', icon: 'check', note };
+  // A copy nobody has answered is a question in Review, whatever the want's
+  // own status says while it waits for that answer.
+  if (entry.copyWaiting) return { label: quiet(progress.needsReview), role: 'fail', icon: 'listen', note };
   switch (entry.targetStatus) {
     case 'acquired':
       return { label: 'acquired', role: 'ok', icon: 'check', note };
@@ -46,14 +49,22 @@ export function entryState(entry: PlaylistEntry): EntryState {
       return { label: quiet(progress.searching), role: 'busy', icon: 'search', note };
     case 'pending':
       return { label: quiet(progress.wanted), role: 'busy', icon: 'want', note };
+    // 'unresolved' sat on lists for months reading "resolving" while its note
+    // said MusicBrainz knew no recording or no peer had a good copy. Schall
+    // has asked; it is waiting for an answer from outside.
     case 'unresolved':
-      return { label: quiet(progress.resolving), role: 'idle', icon: 'busy', note };
+      return { label: quiet(progress.waiting), role: 'idle', icon: 'waiting', note };
     case 'not_wanted':
       return { label: quiet(progress.dismissed), role: 'idle', icon: 'dismiss', note };
     case 'superseded':
       return { label: 'merged', role: 'idle', icon: 'link', note };
   }
   return { label: 'no want', role: 'idle', icon: 'plus', note };
+}
+
+/** Where a row's question is answered: the want's own place in Review. */
+export function reviewHref(entry: PlaylistEntry): string {
+  return entry.targetId ? `/review?want=${entry.targetId}` : '/review';
 }
 
 /** How much of a list the user has, counted off the rows on screen rather than
@@ -88,4 +99,18 @@ export function playlistOrigin(playlist: Playlist): string[] {
     playlist.ownerName ? `by ${playlist.ownerName}` : 'Owner not recorded',
     playlist.importedAt ? `imported ${calendarDate(playlist.importedAt)}` : 'importing…'
   ];
+}
+
+/** The lists with a cover the strip has not drawn yet, in list order. Two
+ * lists that open on the same release drew that cover twice side by side. A
+ * list without a release draws art seeded with its own id, so it always
+ * counts as new. */
+export function oncePerCover(playlists: Playlist[]): Playlist[] {
+  const seen = new Set<string>();
+  return playlists.filter((playlist) => {
+    const key = playlist.coverReleaseId ?? playlist.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

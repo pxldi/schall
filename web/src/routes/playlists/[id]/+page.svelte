@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  import { SvelteMap } from 'svelte/reactivity';
+
+  // Outlives the page, so going back to a list finds as many rows as it left
+  // and the browser can put the reader back where they had scrolled to.
+  const grown = new SvelteMap<string, number>();
+</script>
+
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -16,9 +24,11 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
-  import { entryState, ownedOf, playlistOrigin, type EntryRole } from '$lib/playlists';
+  import { entryState, ownedOf, playlistOrigin, reviewHref, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
+  import { nearEnd } from '$lib/grow';
+  import { tick } from 'svelte';
 
   const queryClient = useQueryClient();
   const playlistId = page.params.id ?? '';
@@ -38,6 +48,28 @@
 
   const playlist = $derived($detail.data?.playlist);
   const entries = $derived($detail.data?.entries ?? []);
+  // Read once per row and shared by the strip and the table.
+  const states = $derived(new Map(entries.map((entry) => [entry.id, entryState(entry)])));
+
+  // A 323-row list held the page for 670 ms before its title showed. The
+  // first rows are drawn at once and the rest as the reader scrolls
+  // (lib/grow.ts). Rows are taller than artist cards are wide, so a step is
+  // smaller.
+  const ROW_STEP = 50;
+  const drawn = $derived(entries.slice(0, grown.get(playlistId) ?? ROW_STEP));
+  function drawMore() {
+    if (drawn.length < entries.length) grown.set(playlistId, drawn.length + ROW_STEP);
+  }
+
+  // A dot in the strip can name a row not drawn yet: draw up to it first.
+  async function reveal(id: string) {
+    const index = entries.findIndex((entry) => entry.id === id);
+    if (index >= drawn.length) {
+      grown.set(playlistId, index + 1 + ROW_STEP);
+      await tick();
+    }
+    document.getElementById(`entry-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
   const playlistEntrySkeletonCount = $derived(Math.max($detail.data?.entries.length ?? 0, 8));
 
   const reimport = createMutation({
@@ -401,7 +433,10 @@
            title in the same cell, which is where a phone reads it anyway. -->
       {#if entries.length > 1}
         <div class="px-4 pb-4">
-          <StateStrip items={entries.map((entry) => ({ ...entry, state: entryState(entry) }))} />
+          <StateStrip
+            items={entries.map((entry) => ({ ...entry, state: states.get(entry.id)! }))}
+            onopen={reveal}
+          />
         </div>
       {/if}
       <div class="overflow-x-auto">
@@ -417,14 +452,22 @@
             </tr>
           </thead>
           <tbody>
-            {#each entries as entry, index (entry.id)}
-              {@const state = entryState(entry)}
+            {#each drawn as entry, index (entry.id)}
+              {@const state = states.get(entry.id)!}
+              <!-- Only a row still waiting has anything to offer: a row a file
+                   answers is finished, whatever its want still reads. -->
+              {@const open = !entry.ownedFileId}
+              {@const addressable = open && !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
+              {@const seed = open ? entry.musicbrainzSeed : undefined}
+              {@const decide = state.role === 'fail'}
+              <!-- The sentence stays in the state's tooltip; the line under the
+                   row is drawn only when it carries something to do. -->
+              {@const line = addressable || !!seed || decide}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
-              {@const addressable = !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
               <tr
                 id="entry-{entry.id}"
-                class="want-row scroll-mt-24 {state.note || addressable ? '' : 'border-b border-line-thin last:border-b-0'}"
+                class="want-row scroll-mt-24 {line ? '' : 'border-b border-line-thin last:border-b-0'}"
               >
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{index + 1}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
@@ -450,21 +493,14 @@
                     >
                       Keyed{#if entry.minimumBitrate} · {entry.minimumBitrate} kbit/s{/if}
                     </a>
-                  {:else if state.role === 'ok'}
-                    <span
-                      class="inline-flex text-ok"
-                      title={state.label}
-                      aria-label={state.label}
-                    >
-                      <Icon name="check" size="md" />
-                    </span>
-                  {:else if state.role === 'fail'}
+                  {:else if decide}
                     <a
-                      href="/review"
-                      class="inline-flex items-center gap-1 text-accent hover:text-accent-soft"
+                      href={reviewHref(entry)}
+                      class="inline-flex text-fail hover:text-ink"
+                      title={[state.label, state.note].filter(Boolean).join(' · ')}
+                      aria-label="{state.label}, open in Review"
                     >
-                      <StateTag tone="attention">{state.label}</StateTag>
-                      <Icon name="chevron-right" size="sm" class="size-3" />
+                      <Icon name={state.icon} size="md" />
                     </a>
                   {:else if state.label === 'no want'}
                     <!-- The + on the hovered or focused row only, the way a
@@ -479,14 +515,14 @@
                       onunwant={() => {}}
                     />
                   {:else}
-                    <StateIcon icon={state.icon} label={state.label} role={state.role} />
+                    <!-- The reason rides in the tooltip with the word. -->
+                    <StateIcon icon={state.icon} label={state.label} role={state.role} note={state.note} />
                   {/if}
                 </td>
               </tr>
-              {#if state.note || addressable}
+              {#if line}
                 <!-- One line under the row: what happened, then what can be
-                     done about it. "Use address" is a link in that line and
-                     opens its form below it. -->
+                     done about it. "Use address" opens its form under it. -->
                 <tr class="border-b border-line-thin last:border-b-0">
                   <td></td>
                   <td class="px-3 pb-2" colspan="5">
@@ -494,8 +530,16 @@
                       {#if state.note}
                         <span class="text-meta text-ink-3">{state.note}</span>
                       {/if}
-                      {#if entry.musicbrainzSeed}
-                        <AddToMusicBrainz seed={entry.musicbrainzSeed} />
+                      {#if decide}
+                        <a
+                          href={reviewHref(entry)}
+                          class="text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink"
+                        >
+                          Answer in Review
+                        </a>
+                      {/if}
+                      {#if seed}
+                        <AddToMusicBrainz {seed} />
                       {/if}
                       {#if addressable}
                         <UseAddress
@@ -513,6 +557,9 @@
           </tbody>
         </table>
       </div>
+      {#if drawn.length < entries.length}
+        <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>
+      {/if}
     </section>
     </Settle>
   {/if}

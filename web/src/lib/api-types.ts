@@ -1053,6 +1053,8 @@ export interface PlaylistEntry {
   // otherwise — the API draws that line, because the summary is prose and the
   // status says 'unresolved' for both.
   musicbrainzSeed?: MusicBrainzSeed;
+  /** The want holds a copy nobody has answered: a question waiting in Review. */
+  copyWaiting?: boolean;
 }
 
 export interface SourceLookup {

@@ -39,6 +39,9 @@ export const progress = {
   queuedAtPeer: 'Queued at peer',
   /** Schall is working out which recording this is. */
   resolving: 'Resolving',
+  /** Schall asked and is waiting on something outside it: MusicBrainz to
+   * know the recording, a peer to share a copy good enough to take. */
+  waiting: 'Waiting',
   /** Arrived, and being written into the library. */
   importing: 'Importing',
   /** Written into the library. */

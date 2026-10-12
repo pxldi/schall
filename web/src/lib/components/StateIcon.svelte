@@ -8,8 +8,18 @@
   // labelled. The word stays as the tooltip and as the accessible name, so
   // nothing is lost to a pointer or a screen reader.
 
-  let { icon, label, role = 'idle' }: { icon: IconName; label: string; role?: EntryRole } =
-    $props();
+  let {
+    icon,
+    label,
+    role = 'idle',
+    note = ''
+  }: {
+    icon: IconName;
+    label: string;
+    role?: EntryRole;
+    /** Why the row is in this state, added to the tooltip after the word. */
+    note?: string;
+  } = $props();
 
   // Written out per role, because Tailwind reads class names from the source.
   const tones: Record<EntryRole, string> = {
@@ -21,6 +31,6 @@
   };
 </script>
 
-<span class="inline-flex [--plate:currentColor] {tones[role]}" title={label} data-state={label}>
+<span class="inline-flex [--plate:currentColor] {tones[role]}" title={note ? `${label} · ${note}` : label} data-state={label}>
   <Icon name={icon} size="md" aria-label={label} />
 </span>

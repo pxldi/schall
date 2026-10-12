@@ -765,3 +765,87 @@ func TestAWantSomebodyWasAskedAboutKeepsItsSlot(t *testing.T) {
 		t.Fatalf("a want a person was asked about counted %d times as stale, want 0", stale)
 	}
 }
+
+// The weekly list's Length column was empty for every row: neither the
+// suggestions nor the library pool state a length, and the insert stored none.
+// A row added now carries the catalogue's length, and a row stored before
+// that reads it back from the catalogue.
+func TestAWeeklyEntryCarriesTheCatalogueLength(t *testing.T) {
+	ctx := context.Background()
+	queries := New(dbtest.Setup(t))
+
+	artistID, albumID := uuid.New(), uuid.New()
+	added, stored := uuid.New(), uuid.New()
+	if _, err := queries.db.Exec(ctx, `
+		INSERT INTO artists (id, name, sort_name) VALUES ($1, 'Portishead', 'Portishead')
+	`, artistID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queries.db.Exec(ctx, `
+		INSERT INTO albums (id, artist_id, musicbrainz_release_group_id, title)
+		VALUES ($1, $2, $3, 'Dummy')
+	`, albumID, artistID, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queries.db.Exec(ctx, `
+		INSERT INTO tracks (album_id, musicbrainz_recording_id, title, track_number, duration_ms)
+		VALUES ($1, $2, 'Roads', 1, 305000), ($1, $3, 'Sour Times', 2, 254000)
+	`, albumID, added, stored); err != nil {
+		t.Fatal(err)
+	}
+
+	playlist, err := queries.EnsureWeeklyPlaylist(ctx, "Schall Weekly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := queries.AppendWeeklyPlaylistEntry(ctx, AppendWeeklyPlaylistEntryParams{
+		PlaylistID: playlist.ID, MusicBrainzRecordingID: added,
+		EntryArtist: "Portishead", EntryTitle: "Roads",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !entry.EntryDurationMS.Valid || entry.EntryDurationMS.Int32 != 305000 {
+		t.Errorf("added entry length = %+v, want 305000", entry.EntryDurationMS)
+	}
+
+	// A row from before the insert stored a length, with its want naming the
+	// recording.
+	var old uuid.UUID
+	if err := queries.db.QueryRow(ctx, `
+		INSERT INTO playlist_entries (playlist_id, position, source_track_id, entry_artist, entry_title)
+		VALUES ($1, 2, $2, 'Portishead', 'Sour Times')
+		RETURNING id
+	`, playlist.ID, stored.String()).Scan(&old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queries.CreatePlaylistEntryTarget(ctx, old, CreateAcquisitionTargetParams{
+		Origin:                 "recommendation",
+		EntryArtist:            "Portishead",
+		EntryTitle:             "Sour Times",
+		MusicBrainzRecordingID: uuid.NullUUID{UUID: stored, Valid: true},
+		ResolutionMethod:       pgtype.Text{String: "manual", Valid: true},
+		Summary:                "wanted for the weekly playlist",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := queries.PlaylistEntries(ctx, playlist.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lengths := map[uuid.UUID]int32{}
+	for _, row := range entries {
+		lengths[row.ID] = row.EntryDurationMS.Int32
+	}
+	if lengths[entry.ID] != 305000 || lengths[old] != 254000 {
+		t.Errorf("lengths = %v, want 305000 and 254000", lengths)
+	}
+	one, err := queries.PlaylistEntry(ctx, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.EntryDurationMS.Int32 != 254000 {
+		t.Errorf("single entry length = %+v, want 254000", one.EntryDurationMS)
+	}
+}

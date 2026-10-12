@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PlaylistEntry } from '$lib/api';
-import { entryState, ownedOf } from '$lib/playlists';
+import type { Playlist, PlaylistEntry } from '$lib/api';
+import { entryState, oncePerCover, ownedOf } from '$lib/playlists';
 
 // The two things a reader asked out loud about this table: what the difference
 // between owned and acquired is, and whether an entry that has said 'resolving'
@@ -92,5 +92,34 @@ describe('ownedOf', () => {
       entries.filter((row) => entryState(row).label === 'complete').length
     );
     expect(ownedOf(entries)).toBe(2);
+  });
+
+  it('reads a want Schall has asked about and is waiting on as waiting', () => {
+    const state = entryState(entry({ targetStatus: 'unresolved' }));
+
+    expect(state.label).toBe('waiting');
+  });
+
+  it('reads a want holding an unanswered copy as needing review', () => {
+    const state = entryState(entry({ targetStatus: 'pending', copyWaiting: true }));
+
+    expect(state.label).toBe('needs review');
+  });
+});
+
+describe('oncePerCover', () => {
+  const list = (id: string, coverReleaseId: string | null) =>
+    ({ id, coverReleaseId }) as Playlist;
+
+  it('draws a release two lists open on once', () => {
+    const kept = oncePerCover([list('a', 'r1'), list('b', 'r1'), list('c', 'r2')]);
+
+    expect(kept.map((playlist) => playlist.id)).toEqual(['a', 'c']);
+  });
+
+  it('keeps every list that has no release yet', () => {
+    const kept = oncePerCover([list('a', null), list('b', null)]);
+
+    expect(kept.map((playlist) => playlist.id)).toEqual(['a', 'b']);
   });
 });

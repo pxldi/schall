@@ -172,3 +172,95 @@ describe('the playlist rows', () => {
     expect(screen.queryByRole('button', { name: 'Re-import' })).toBeNull();
   });
 });
+
+function served(entries: PlaylistEntry[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ playlist: playlist(), entries }), { status: 200 })
+      )
+    )
+  );
+}
+
+describe('a finished row', () => {
+  // Angelcore rows 4 and 5 had a tick and still offered "Add to MusicBrainz ·
+  // Use address": a list import adopted the file while the want said unresolved.
+  it('offers no address form', async () => {
+    served([
+      entry({ ownedFileId: 'f1', targetId: 't1', targetStatus: 'unresolved' })
+    ]);
+    opened();
+
+    await screen.findByLabelText('complete');
+    expect(screen.queryByRole('button', { name: 'Use address' })).toBeNull();
+  });
+});
+
+describe('a row waiting on outside answers', () => {
+  it('reads waiting, with the reason in its tooltip', async () => {
+    served([
+      entry({
+        targetId: 't1',
+        targetStatus: 'unresolved',
+        source: 'soundcloud',
+        targetSummary: 'Soulseek has stopped answering.'
+      })
+    ]);
+    opened();
+
+    const icon = await screen.findByLabelText('waiting');
+    expect(icon.parentElement?.getAttribute('title')).toBe('waiting · Soulseek has stopped answering.');
+  });
+});
+
+describe('a row whose copy waits for an answer', () => {
+  it('links its state to that want in Review', async () => {
+    served([
+      entry({
+        targetId: 't9',
+        targetStatus: 'pending',
+        copyWaiting: true,
+        targetSummary: 'A copy is waiting for your answer. Nothing more is fetched until you decide.'
+      })
+    ]);
+    opened();
+
+    const link = await screen.findByRole('link', { name: 'needs review, open in Review' });
+    expect(link.getAttribute('href')).toBe('/review?want=t9');
+  });
+
+  it('offers the answer under the row', async () => {
+    served([
+      entry({ targetId: 't9', targetStatus: 'pending', copyWaiting: true })
+    ]);
+    opened();
+
+    const link = await screen.findByRole('link', { name: 'Answer in Review' });
+    expect(link.getAttribute('href')).toBe('/review?want=t9');
+  });
+});
+
+describe('a long playlist', () => {
+  // Angelcore's 323 rows held the page for 670 ms before the title showed.
+  it('draws its first rows at once and waits for the reader to scroll for more', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    served(
+      Array.from({ length: 323 }, (_, index) =>
+        entry({ id: `e${index}`, position: index + 1, title: `Song ${index + 1}` })
+      )
+    );
+    opened();
+
+    expect(await screen.findByText('Song 50')).toBeTruthy();
+    expect(screen.queryByText('Song 51')).toBeNull();
+  });
+});

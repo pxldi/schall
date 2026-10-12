@@ -40,6 +40,26 @@ afterEach(() => {
 });
 
 describe('Use address', () => {
+  it('puts the cursor in the address field when it opens', async () => {
+    opened();
+    await fireEvent.click(screen.getByRole('button', { name: 'Use address' }));
+
+    const input = await screen.findByRole('textbox', {
+      name: 'Track link on SoundCloud, YouTube or Bandcamp'
+    });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('says which links it takes', async () => {
+    opened();
+    await fireEvent.click(screen.getByRole('button', { name: 'Use address' }));
+
+    const input = await screen.findByRole('textbox', {
+      name: 'Track link on SoundCloud, YouTube or Bandcamp'
+    });
+    expect(input.getAttribute('placeholder')).toBe('SoundCloud, YouTube or Bandcamp link');
+  });
+
   it('shows the lookup title, artist, length and a material length difference', async () => {
     vi.stubGlobal(
       'fetch',
@@ -48,7 +68,7 @@ describe('Use address', () => {
 
     opened();
     await fireEvent.click(screen.getByText('Use address'));
-    const input = await screen.findByRole('textbox', { name: 'Track address' });
+    const input = await screen.findByRole('textbox', { name: 'Track link on SoundCloud, YouTube or Bandcamp' });
     await fireEvent.input(input, {
       target: { value: address }
     });
@@ -70,7 +90,7 @@ describe('Use address', () => {
 
     opened();
     await fireEvent.click(screen.getByText('Use address'));
-    const input = await screen.findByRole('textbox', { name: 'Track address' });
+    const input = await screen.findByRole('textbox', { name: 'Track link on SoundCloud, YouTube or Bandcamp' });
     await fireEvent.input(input, {
       target: { value: address }
     });

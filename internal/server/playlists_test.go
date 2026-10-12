@@ -392,6 +392,19 @@ func TestAnEntryNothingWasFoundForIsOfferedTheReleaseEditor(t *testing.T) {
 	}
 }
 
+// A list import can adopt a file for an entry whose want still reads
+// "unresolved". The row is finished, so it offers nothing to add.
+func TestAnEntryAFileAnswersIsOfferedNoReleaseEditor(t *testing.T) {
+	entry := unfoundEntry()
+	entry.AnsweringFileID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+
+	entries := readEntries(t, entry, &fakeStore{})
+
+	if entries[0].MusicBrainzSeed != nil {
+		t.Errorf("entry = %+v, want no release editor on an owned row", entries[0])
+	}
+}
+
 // An entry that has not been asked about yet has lost nothing, and offering to
 // add a release for it would answer a question nobody has asked.
 func TestAnEntryWaitingToBeResolvedIsOfferedNoReleaseEditor(t *testing.T) {
