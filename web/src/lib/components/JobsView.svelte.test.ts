@@ -635,7 +635,7 @@ describe('JobsView', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Cancel all' }));
     const question = await screen.findByRole('dialog');
-    await fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
+    await fireEvent.click(within(question).getByRole('button', { name: 'Keep queued' }));
 
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(pressedKinds).toEqual([]);

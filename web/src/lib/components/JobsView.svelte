@@ -739,6 +739,7 @@
     ? `${backlogCount(cancelling)} are queued now. This cannot be undone.`
     : ''}
   action="Cancel jobs"
+  keep="Keep queued"
   danger
   onconfirm={() => cancelling && $cancelKind.mutate(cancelling.kind)}
 />
