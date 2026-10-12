@@ -1,10 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -108,6 +112,7 @@ type fakeStore struct {
 	removeCoverErr       error
 	cachedArtistImage    db.ArtistImageRow
 	cachedArtistImageErr error
+	savedArtistImages    []db.SaveArtistImageParams
 	// inks are the stored inks of releases, answered for whichever are asked.
 	inks []db.ReleaseInksRow
 	// tracksErr answers ListAlbumTracks alone, because a release that could be
@@ -147,6 +152,11 @@ func (store *fakeStore) ReleaseInks(
 
 func (store *fakeStore) ArtistImage(context.Context, uuid.UUID) (db.ArtistImageRow, error) {
 	return store.cachedArtistImage, store.cachedArtistImageErr
+}
+
+func (store *fakeStore) SaveArtistImage(_ context.Context, params db.SaveArtistImageParams) error {
+	store.savedArtistImages = append(store.savedArtistImages, params)
+	return nil
 }
 
 func (store *fakeStore) SaveReleaseCoverArt(
@@ -3481,6 +3491,44 @@ func TestAnArtistPictureReportsAStoreThatFailed(t *testing.T) {
 	if response.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", response.Code)
 	}
+}
+
+// A stock "no photo" avatar cached before the fetch refused them is served as
+// no picture, and the row becomes the absence it stood for.
+func TestACachedStockAvatarIsServedAsNoPicture(t *testing.T) {
+	store := &fakeStore{cachedArtistImage: db.ArtistImageRow{
+		Image: greyJPEG(t), ContentType: "image/jpeg",
+	}}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop())
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/api/v1/artists/"+uuid.NewString()+"/image", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.Code)
+	}
+	if len(store.savedArtistImages) != 1 || len(store.savedArtistImages[0].Image) != 0 {
+		t.Errorf("saved = %#v, want one recorded absence", store.savedArtistImages)
+	}
+}
+
+func greyJPEG(t *testing.T) []byte {
+	t.Helper()
+	picture := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := range 64 {
+		for x := range 64 {
+			shade := uint8(232)
+			if (x-32)*(x-32)+(y-24)*(y-24) < 100 {
+				shade = 190
+			}
+			picture.Set(x, y, color.RGBA{shade, shade, shade, 255})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, picture, nil); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	return encoded.Bytes()
 }
 
 // A cached row holding no bytes is an absence that was remembered, and it reads

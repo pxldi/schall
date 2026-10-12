@@ -324,6 +324,9 @@ func (artists *Artists) fetch(ctx context.Context, address, source string) (Artw
 	if err != nil {
 		return Artwork{}, err
 	}
+	if Placeholder(artwork.Image) {
+		return Artwork{}, ErrNoArtwork
+	}
 	artwork.Source = source
 	return artwork, nil
 }

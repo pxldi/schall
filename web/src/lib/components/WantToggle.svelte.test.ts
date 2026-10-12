@@ -61,10 +61,10 @@ describe('the tooltip', () => {
     expect(screen.getByRole('button').getAttribute('title')).toBe('Want Teardrop');
   });
 
-  it('says a press stops wanting a wanted track', () => {
+  it('says a press drops the want on a wanted track', () => {
     toggle({ wanted: true });
 
-    expect(screen.getByRole('button').getAttribute('title')).toBe('Stop wanting Teardrop');
+    expect(screen.getByRole('button').getAttribute('title')).toBe("Don't want Teardrop");
   });
 });
 
@@ -76,7 +76,7 @@ describe('pressing a wanted track', () => {
 
     const button = screen.getByRole('button', { name: 'Want Teardrop' });
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('title')).toBe('Stop wanting Teardrop');
+    expect(button.getAttribute('title')).toBe("Don't want Teardrop");
     await fireEvent.click(button);
 
     expect(onunwant).toHaveBeenCalledOnce();

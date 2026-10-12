@@ -85,7 +85,7 @@
   const name = $derived(title ? `Want ${title}` : 'Want');
   // The tooltip says what a press does, in both states. "Not wanted" on a
   // wanted track read as the track's state, which is the opposite of true.
-  const hint = $derived(shown ? (title ? `Stop wanting ${title}` : 'Stop wanting') : name);
+  const hint = $derived(shown ? (title ? `Don't want ${title}` : "Don't want") : name);
 </script>
 
 <button

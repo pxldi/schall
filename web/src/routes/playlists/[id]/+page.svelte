@@ -14,6 +14,7 @@
   import Settle from '$lib/components/Settle.svelte';
   import StateStrip from '$lib/components/StateStrip.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
+  import StateIcon from '$lib/components/StateIcon.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
   import { entryState, ownedOf, playlistOrigin, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
@@ -478,7 +479,7 @@
                       onunwant={() => {}}
                     />
                   {:else}
-                    <StateTag>{state.label}</StateTag>
+                    <StateIcon icon={state.icon} label={state.label} role={state.role} />
                   {/if}
                 </td>
               </tr>

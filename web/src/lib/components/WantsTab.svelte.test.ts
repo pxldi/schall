@@ -214,7 +214,7 @@ describe('the wants being looked for', () => {
     answering({ looking: [want()] });
 
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Stop looking' }));
+    await fireEvent.click(await screen.findByRole('button', { name: "Don't want" }));
 
     await waitFor(() => expect(stopped).toEqual(['20000000-0000-4000-8000-000000000001']));
   });

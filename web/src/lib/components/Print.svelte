@@ -1,3 +1,32 @@
+<script lang="ts" module>
+  // Paints from every print on a page share one budget per frame. A page of
+  // artists opens with a hundred card prints at once, and painting them all in
+  // the same frame blocked the main thread for 90 to 130 ms at a time.
+  const FRAME_BUDGET_MS = 8;
+  const queue: { run: () => void; cancelled: boolean }[] = [];
+  let draining = false;
+
+  function drain() {
+    const start = performance.now();
+    while (queue.length && performance.now() - start < FRAME_BUDGET_MS) {
+      const job = queue.shift()!;
+      if (!job.cancelled) job.run();
+    }
+    if (queue.length) requestAnimationFrame(drain);
+    else draining = false;
+  }
+
+  function schedulePaint(run: () => void): () => void {
+    const job = { run, cancelled: false };
+    queue.push(job);
+    if (!draining) {
+      draining = true;
+      requestAnimationFrame(drain);
+    }
+    return () => (job.cancelled = true);
+  }
+</script>
+
 <script lang="ts">
   import { untrack } from 'svelte';
   import { canPaint, loadPicture, paintPrint, type PrintSource } from '$lib/duoton/paint';
@@ -102,8 +131,8 @@
     return () => observer.disconnect();
   });
 
-  // Painting is held to one per frame, so a size, the covers and the inks
-  // changing together cost one paint.
+  // Painting waits for the next frame with room in it, so a size, the covers
+  // and the inks changing together cost one paint.
   $effect(() => {
     const { width, height } = size;
     const drawing = sources;
@@ -111,7 +140,7 @@
     const colours = untrack(() => pair);
     const layout = mode;
     if (canvases.length < 2 || !width || !height || !drawing.length || !canPaint()) return;
-    const frame = requestAnimationFrame(() => {
+    const cancel = schedulePaint(() => {
       const next = canvases[1 - front];
       const previous = canvases[front];
       next.width = width;
@@ -124,7 +153,7 @@
       const ms = motionMs('enter');
       if (ms) next.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
     });
-    return () => cancelAnimationFrame(frame);
+    return cancel;
   });
 </script>
 
