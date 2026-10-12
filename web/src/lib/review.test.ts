@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { AcquiredCopy, AcquisitionTarget, DownloadRequest, ImportEvidence, ReviewItem } from '$lib/api';
 import {
   ASKS,
+  batchChoice,
   candidateRow,
   clock,
+  groupByAlbum,
   groupCopies,
   isCreditOnlyStopped,
+  listenFrom,
   questionsFrom,
   rankCopies,
   tierOf,
@@ -501,5 +504,53 @@ describe('waitingLabel', () => {
   it('says nothing about a want whose evidence is in', () => {
     expect(waitingLabel(want())).toBe('');
     expect(waitingLabel(undefined)).toBe('');
+  });
+});
+
+describe('deciding an album at once', () => {
+  it('groups wants by artist and album in the order each album first appears', () => {
+    const questions = questionsFrom({
+      wants: [
+        want({ target: target({ id: 'a1', title: 'Myrrhman' }) }),
+        want({ target: target({ id: 'b1', album: 'Spirit of Eden', title: 'Eden' }) }),
+        want({ target: target({ id: 'a2', title: 'Taphead' }) }),
+        want({ target: target({ id: 'c1', artist: 'Mark Hollis', title: 'Lie', album: 'Laughing Stock' }) }),
+        want({ target: target({ id: 'n1', album: '' }) })
+      ],
+      imports: [download({ importEvidence: evidence })]
+    });
+
+    const { groups, loose } = groupByAlbum(questions);
+
+    expect(groups.map((group) => [group.artist, group.album, group.questions.map((q) => q.want?.target.id)])).toEqual([
+      ['Talk Talk', 'Laughing Stock', ['a1', 'a2']],
+      ['Talk Talk', 'Spirit of Eden', ['b1']],
+      ['Mark Hollis', 'Laughing Stock', ['c1']]
+    ]);
+    expect(loose.map((question) => question.id)).toEqual(['want:n1', 'import:download-1']);
+  });
+
+  it('batches only a copies want whose evidence is in, on the copy the single view preselects', () => {
+    const strong = copy({ id: 'strong', evidence: { name: 'x', agrees: ['ISRC'], differs: [], problems: [] } });
+    const weak = copy({ id: 'weak' });
+    const [copies, waiting, stopped, resolution] = questionsFrom({
+      wants: [
+        want({ copies: [weak, strong] }),
+        want({ copies: [strong], waitingFor: 'musicbrainz' }),
+        want({ kind: 'stopped', copies: [strong] }),
+        want({ kind: 'resolution' })
+      ],
+      imports: []
+    });
+
+    expect(batchChoice(copies)?.id).toBe('strong');
+    expect(batchChoice(waiting)).toBeUndefined();
+    expect(batchChoice(stopped)).toBeUndefined();
+    expect(batchChoice(resolution)).toBeUndefined();
+  });
+
+  it('starts a copy a third of the way in', () => {
+    expect(listenFrom(300)).toBe(100);
+    expect(listenFrom(Number.NaN)).toBe(0);
   });
 });

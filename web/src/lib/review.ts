@@ -134,6 +134,74 @@ export function questionsFrom(sources: {
   return questions;
 }
 
+// ---- deciding an album at once, and listening through -------------------
+
+/** The wants of one album, as the rail groups them. */
+export interface AlbumGroup {
+  key: string;
+  album: string;
+  artist: string;
+  questions: Question[];
+}
+
+/** Artist and album, from the want's own target. A folder question or a want
+ * that names no album has no key and stays loose. */
+export function albumKey(question: Question): string {
+  const target = question.want?.target;
+  if (!target?.album) return '';
+  return `${target.artist}\u0000${target.album}`;
+}
+
+/** The questions as album groups in the order each album first appears,
+ * followed by the ones no album holds. */
+export function groupByAlbum(questions: Question[]): { groups: AlbumGroup[]; loose: Question[] } {
+  const groups = new Map<string, AlbumGroup>();
+  const loose: Question[] = [];
+  for (const question of questions) {
+    const key = albumKey(question);
+    if (!key) {
+      loose.push(question);
+      continue;
+    }
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        album: question.want!.target.album,
+        artist: question.want!.target.artist,
+        questions: []
+      };
+      groups.set(key, group);
+    }
+    group.questions.push(question);
+  }
+  return { groups: [...groups.values()], loose };
+}
+
+/** Whether a question can be listened through: a want with held copies to
+ * accept or refuse. A stopped want whose file is already filed asks something
+ * else and is answered on its own card. */
+export function listenable(question: Question): boolean {
+  const want = question.want;
+  if (question.kind !== 'downloaded' || !want || want.copies.length === 0) return false;
+  return want.kind === 'copies' || isCreditOnlyStopped(want);
+}
+
+/** The copy an album batch would accept for this question: the one the single
+ * view preselects. Only a 'copies' want with its evidence in has one; stopped,
+ * waiting and resolution questions are decided one by one. */
+export function batchChoice(question: Question): AcquiredCopy | undefined {
+  const want = question.want;
+  if (question.kind !== 'downloaded' || want?.kind !== 'copies' || want.waitingFor) return undefined;
+  return groupCopies(want.copies, want.copyGroups)[0]?.best;
+}
+
+/** Where a copy starts when nobody chose a spot: a third of the way in. The
+ * opening is often a count-in or silence that sounds alike on every copy. */
+export function listenFrom(duration: number): number {
+  return Number.isFinite(duration) && duration > 0 ? duration / 3 : 0;
+}
+
 // ---- reading the evidence behind a fetched copy --------------------------
 
 /** The evidence tiers, strongest first. A tier is named rather than scored:
