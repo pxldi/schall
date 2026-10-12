@@ -39,7 +39,38 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure'
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', testIgnore: 'visual/**', use: { ...devices['Desktop Chrome'] } },
+    {
+      // The screenshot tests, run by scripts/visual.sh. The browser is the one
+      // in Playwright's image, reached over a socket, because a baseline is
+      // only comparable with a screenshot drawn by the same fonts and the same
+      // chromium. Without the socket the specs refuse to run rather than
+      // compare a laptop's rendering with the image's.
+      name: 'visual',
+      testDir: 'e2e/visual',
+      snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 1,
+        colorScheme: 'light',
+        reducedMotion: 'reduce',
+        locale: 'en-GB',
+        timezoneId: 'Europe/Berlin',
+        connectOptions: process.env.SCHALL_VISUAL_WS_ENDPOINT
+          ? { wsEndpoint: process.env.SCHALL_VISUAL_WS_ENDPOINT }
+          : undefined
+      },
+      expect: {
+        // threshold is how far one pixel's colour may move before it counts as
+        // changed; maxDiffPixelRatio is how many may change, 0.1% of the page
+        // (about 1,300 pixels at 1440x900). A moved button, a lost icon or a
+        // new line of text is far over that; anti-aliasing noise is under it.
+        toHaveScreenshot: { threshold: 0.2, maxDiffPixelRatio: 0.001, animations: 'disabled' }
+      }
+    }
+  ],
   webServer: [
     {
       command: '../scripts/e2e-api.sh',
