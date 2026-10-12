@@ -358,9 +358,12 @@ func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([
 		CROSS JOIN LATERAL (
 			SELECT part AS name, cardinality(string_to_array(artist_name, '`+creditSeparator+`')) AS names
 			FROM unnest(string_to_array(artist_name, '`+creditSeparator+`')) AS part
-			WHERE part <> ''
+			WHERE part <> '' AND lower(part) <> 'various artists'
 		) AS credited
 		WHERE `+thisMonth+`
+		  -- Various Artists is how a compilation is credited, not somebody
+		  -- anybody listens to.
+		  AND (credited.names = 1 AND artist_mbids[1] = '`+variousArtistsID+`'::uuid) IS NOT TRUE
 		GROUP BY lower(credited.name)
 		ORDER BY n DESC, min(credited.name)
 		LIMIT `+listRows, zone, now)
@@ -385,26 +388,33 @@ func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([
 		if out[i].ArtistMBID.Valid && out[i].ArtistMBID.String != "" {
 			mbid = &out[i].ArtistMBID.String
 		}
+		// The row opens the catalogue artist with the listen's MusicBrainz
+		// ID or, when no artist has it, the only artist with exactly that name
+		// whose own ID does not say it is somebody else. Two artists can share
+		// a name, so a name that names two links nothing.
 		err := q.db.QueryRow(ctx, `
-			SELECT a.id FROM artists a
-			JOIN artist_images i ON i.artist_id = a.id AND i.image IS NOT NULL
-			WHERE a.musicbrainz_id = $1::uuid OR lower(a.name) = lower($2)
-			ORDER BY (a.musicbrainz_id = $1::uuid) DESC NULLS LAST
-			LIMIT 1`, mbid, out[i].Name).Scan(&out[i].ArtistID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("look up the picture of %q: %w", out[i].Name, err)
-		}
-		// Two artists can share a name, so a name alone links only when it
-		// names one artist.
-		err = q.db.QueryRow(ctx, `
 			SELECT id FROM artists WHERE musicbrainz_id = $1::uuid
 			UNION ALL
 			SELECT min(id::text)::uuid FROM artists
-			WHERE $1::uuid IS NULL AND lower(name) = lower($2)
+			WHERE lower(name) = lower($2)
+			  AND NOT EXISTS (SELECT 1 FROM artists WHERE musicbrainz_id = $1::uuid)
 			HAVING count(*) = 1
+			   AND bool_and($1::uuid IS NULL OR musicbrainz_id IS NULL OR musicbrainz_id = $1::uuid)
 			LIMIT 1`, mbid, out[i].Name).Scan(&out[i].PageID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("look up the artist %q: %w", out[i].Name, err)
+		}
+		// The picture is that artist's. It used to be found on its own, by ID
+		// or by name, and showed one artist's face on a row that opened
+		// nothing.
+		if !out[i].PageID.Valid {
+			continue
+		}
+		err = q.db.QueryRow(ctx, `
+			SELECT artist_id FROM artist_images WHERE artist_id = $1 AND image IS NOT NULL`,
+			out[i].PageID).Scan(&out[i].ArtistID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("look up the picture of %q: %w", out[i].Name, err)
 		}
 	}
 	return out, nil
@@ -619,6 +629,9 @@ func coverKey(cover SessionCover) string {
 // Creator", so only this one is split.
 const creditSeparator = " • "
 
+// variousArtistsID is MusicBrainz's Various Artists.
+const variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
 // CreditedNames splits each credit into the names it joins, in order.
 func CreditedNames(credits []string) []string {
 	out := make([]string, 0, len(credits))
@@ -747,7 +760,18 @@ func (q *Queries) recentlyAdded(ctx context.Context) ([]OverviewAdded, error) {
 		       EXISTS (SELECT 1 FROM release_cover_art c WHERE c.album_id = al.id AND c.image IS NOT NULL),
 		       f.id
 		FROM library_files f
-		LEFT JOIN track_mappings m ON m.library_file_id = f.id
+		-- One row per file. A file maps to a track on every release it is on
+		-- (a single and its album), and joining them all listed the file once
+		-- for each. The release with a cover wins, then the oldest mapping.
+		LEFT JOIN LATERAL (
+			SELECT m.track_id FROM track_mappings m
+			JOIN tracks mt ON mt.id = m.track_id
+			WHERE m.library_file_id = f.id
+			ORDER BY EXISTS (SELECT 1 FROM release_cover_art c
+			                 WHERE c.album_id = mt.album_id AND c.image IS NOT NULL) DESC,
+			         m.created_at, m.track_id
+			LIMIT 1
+		) m ON true
 		LEFT JOIN tracks t ON t.id = m.track_id
 		LEFT JOIN albums al ON al.id = t.album_id
 		LEFT JOIN artists a ON a.id = al.artist_id
