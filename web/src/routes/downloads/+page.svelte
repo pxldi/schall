@@ -606,8 +606,11 @@
       </div>
         {/snippet}
     {#if filteredItems.length}
+      <!-- The first column is the 1rem mark plus the row's 0.75rem padding: a
+           subgrid's padding is taken out of its edge column, and at 1rem the
+           mark ran into the cover beside it. -->
       <div
-        class="flex flex-col md:grid md:grid-cols-[1rem_2.5rem_minmax(0,1fr)_max-content_max-content_max-content] md:gap-x-3"
+        class="flex flex-col md:grid md:grid-cols-[1.75rem_2.5rem_minmax(0,1fr)_max-content_max-content_max-content] md:gap-x-3"
       >
         {#each filteredItems as item (item.id)}
           {@const role = stateRole(item)}

@@ -96,7 +96,7 @@ describe('connectEvents', () => {
   // something else should still fail.
   const queue = ['jobs', 'jobs-failed', 'jobs-schedule'];
 
-  it('reaches the playlists, the review queue, the wants and the dashboard when a want settles', () => {
+  it('reaches the playlists, the review queue, the wants, the dashboard and search when a want settles', () => {
     const { invalidateQueries, stream } = connect();
 
     stream.announce('acquisitions');
@@ -106,6 +106,7 @@ describe('connectEvents', () => {
       'review-queue',
       'wants',
       'dashboard',
+      'global-search',
       ...queue
     ]);
   });

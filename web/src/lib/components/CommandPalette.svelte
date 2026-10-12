@@ -121,14 +121,9 @@
   const markTones: Record<PaletteRole, string> = {
     ok: 'bg-ok/14 text-ok',
     idle: 'bg-idle/14 text-idle',
+    busy: 'bg-busy/14 text-busy',
     decide: 'bg-decide/14 text-decide',
     fail: 'bg-fail/14 text-fail'
-  };
-
-  const markGlyphs: Record<Exclude<PaletteRole, 'ok'>, string> = {
-    idle: '–',
-    decide: '?',
-    fail: '!'
   };
 
   // The panel drops 8px into place while it fades in, and lifts away faster
@@ -186,11 +181,31 @@
   }
 
   // The pointer moves the same one selection the arrow keys do; a palette with
-  // two marks on it would be saying enter goes to one of two places.
+  // two marks on it would be saying enter goes to one of two places. Only a
+  // pointer that moved counts. Results drawn under a resting pointer, or
+  // scrolled under it by the arrow keys, make the browser report the pointer
+  // over a new row without it having moved, and Enter then opened that row
+  // instead of the top one.
   function selectRow(id: string) {
+    if (!pointerMoved) return;
     const at = entries.findIndex((entry) => entry.id === id);
     if (at >= 0) selected = at;
   }
+
+  // Where the pointer last was, and whether the move being handled changed
+  // that. Read on the window before any row sees the event. Plain, not $state.
+  let pointerAt: { x: number; y: number } | null = null;
+  let pointerMoved = false;
+
+  $effect(() => {
+    const record = (event: PointerEvent) => {
+      pointerMoved =
+        pointerAt !== null && (pointerAt.x !== event.screenX || pointerAt.y !== event.screenY);
+      pointerAt = { x: event.screenX, y: event.screenY };
+    };
+    window.addEventListener('pointermove', record, { capture: true });
+    return () => window.removeEventListener('pointermove', record, { capture: true });
+  });
 
   function move(by: number) {
     if (entries.length === 0) return;
@@ -389,8 +404,8 @@
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
                   <div class="mb-0.5 border-b border-line-thin px-[1.125rem] pb-1.5">
                     <span
-                      class="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-3"
-                      >{category.label}</span
+                      class="inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase leading-none tracking-[0.08em] text-ink-3"
+                      ><Icon name={category.icon} size={12} />{category.label}</span
                     >
                   </div>
 
@@ -406,7 +421,7 @@
                         event.preventDefault();
                         leaveFor(row.href);
                       }}
-                      onmouseenter={() => selectRow(row.id)}
+                      onpointermove={() => selectRow(row.id)}
                     >
                       <span aria-hidden="true" class="relative size-9">
                         {#if row.cover}
@@ -416,36 +431,39 @@
                             class="size-9 rounded-[6px] object-cover"
                           />
                         {/if}
-                        <!-- The thing's state, pinned to the picture's corner
-                             on a solid chip so it reads on any cover, or
-                             standing alone where there is no picture. -->
-                        <span
-                          class={cn(
-                            'absolute rounded-row',
-                            row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
-                          )}
-                        >
+                        <!-- The thing's state as an icon, pinned to the
+                             picture's corner on a solid chip so it reads on
+                             any cover, or standing alone where there is no
+                             picture. A row in no state has no mark. -->
+                        {#if row.mark}
                           <span
                             class={cn(
-                              'grid size-4 place-items-center rounded-row',
-                              markTones[row.role]
+                              'absolute rounded-row',
+                              row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-5'
                             )}
                           >
-                            {#if row.role === 'ok'}
-                              <Icon name="check" size="sm" class="size-2.5" />
-                            {:else}
-                              <span class="text-micro font-bold leading-none"
-                                >{markGlyphs[row.role]}</span
-                              >
-                            {/if}
+                            <span
+                              class={cn(
+                                'grid place-items-center rounded-row [--plate:currentColor]',
+                                row.cover ? 'size-4' : 'size-5',
+                                markTones[row.role]
+                              )}
+                            >
+                              <Icon
+                                name={row.mark.icon}
+                                size="sm"
+                                class={row.cover ? 'size-2.5' : 'size-3.5'}
+                              />
+                            </span>
                           </span>
-                        </span>
+                        {/if}
                       </span>
                       <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="truncate text-body text-ink"
                           >{#each highlight(row.title, query) as piece, part (part)}<span
                               class={cn(piece.hit && 'font-semibold text-ink')}>{piece.text}</span
-                            >{/each}</span
+                            >{/each}{#if row.mark}<span class="sr-only">, {row.mark.label}</span
+                            >{/if}</span
                         >
                         {#if row.subtitle}
                           <span class="truncate text-meta text-ink-3"
@@ -484,7 +502,7 @@
                         event.preventDefault();
                         leaveFor(href);
                       }}
-                      onmouseenter={() => selectRow(viewAllId)}
+                      onpointermove={() => selectRow(viewAllId)}
                     >
                       <span>View all results in {category.allLabel}</span>
                       <span class="font-mono text-micro text-ink-4">{category.total}</span>
@@ -549,9 +567,10 @@
       0 30px 80px rgb(0 0 0 / 0.55);
   }
 
-  /* A light dim, so the page stays visible around the glass. */
+  /* A light dim, so the page stays visible around the glass but steps back
+     behind it. At 0.28 the live audit could not tell it was there. */
   .palette-scrim {
-    background: rgb(5 6 8 / 0.28);
+    background: rgb(5 6 8 / 0.4);
   }
 
   /* The state badge sits on the picture, in a solid chip so it reads on any

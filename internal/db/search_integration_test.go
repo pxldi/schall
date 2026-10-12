@@ -340,6 +340,41 @@ func TestSearchCallsATrackNothingHoldsUnowned(t *testing.T) {
 	}
 }
 
+// A track somebody wants says so in search, the way it does on its release
+// page. Before, search carried only owned, so a wanted track looked untouched.
+func TestSearchSaysATrackIsWanted(t *testing.T) {
+	ctx, pool, queries := searchTestPool(t)
+	seedSearchable(t, ctx, pool, []string{"Money Trees"})
+	recordingID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		UPDATE tracks SET musicbrainz_recording_id = $1 WHERE title = 'Money Trees'
+	`, recordingID); err != nil {
+		t.Fatalf("seed recording: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_targets (
+			id, origin, entry_artist, entry_title, musicbrainz_recording_id,
+			status, resolution_method, resolved_at, next_attempt_at, attempts
+		)
+		VALUES ($1, 'playlist', 'Kendrick Lamar', 'Money Trees', $2,
+		        'pending', 'isrc', now(), now(), 0)
+	`, uuid.New(), recordingID); err != nil {
+		t.Fatalf("seed want: %v", err)
+	}
+
+	results, err := queries.Search(ctx, SearchParams{Query: "money trees", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search error = %v", err)
+	}
+
+	if len(results.Tracks) != 1 {
+		t.Fatalf("tracks = %v, want the seeded track", results.Tracks)
+	}
+	if got := results.Tracks[0].WantStatus.String; got != "pending" {
+		t.Errorf("track want status = %q, want pending", got)
+	}
+}
+
 // An answer with no room in it is a caller that has not decided how much it
 // wants, not a request for everything.
 func TestSearchRefusesAnUnboundedAnswer(t *testing.T) {
@@ -348,6 +383,42 @@ func TestSearchRefusesAnUnboundedAnswer(t *testing.T) {
 	if _, err := queries.Search(ctx, SearchParams{Query: "portishead", Limit: 0}); err == nil {
 		t.Fatal("Search with no limit = no error, want a refusal")
 	}
+}
+
+// A name is looked for by how it starts. "kend" typed for Kendrick Lamar used
+// to answer with "Hymn for the Weekend" first because it sorted earlier, so
+// every kind now puts the exact name, then the name's start, then the start of
+// any word in it before a match inside a word.
+func TestSearchRanksWordStartsAboveMatchesInsideAWord(t *testing.T) {
+	ctx, pool, queries := searchTestPool(t)
+	seedSearchable(t, ctx, pool, []string{
+		"A Weekend", "Bkend", "Zed (Kendall)", "Kendrick Lamar", "Kend",
+	})
+
+	results, err := queries.Search(ctx, SearchParams{Query: "kend", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search error = %v", err)
+	}
+	want := []string{"Kend", "Kendrick Lamar", "Zed (Kendall)", "A Weekend", "Bkend"}
+	for kind, got := range searchedNames(results) {
+		if kind == "files" {
+			// Files have no name of their own to rank by; the word start is
+			// what sorts them, and the rest is the library list's order.
+			if !slices.Equal(sorted(got[:3]), sorted(want[:3])) {
+				t.Errorf("files = %v, want %v first", got, want[:3])
+			}
+			continue
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s = %v, want %v", kind, got, want)
+		}
+	}
+}
+
+func sorted(values []string) []string {
+	out := slices.Clone(values)
+	slices.Sort(out)
+	return out
 }
 
 // searchedNames is what every kind answered with, by the one field all five
