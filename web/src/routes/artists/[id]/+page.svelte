@@ -34,7 +34,7 @@
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
-  import PopularTracks from './PopularTracks.svelte';
+  import PopularTracks, { popularOptions } from './PopularTracks.svelte';
   import ReleaseTile from './ReleaseTile.svelte';
 
   type Tile = 'owned' | 'partial' | 'missing' | 'dismissed' | 'unknown' | 'busy' | 'failed';
@@ -93,6 +93,10 @@
         ? 15_000
         : false
   });
+
+  // The popular list is drawn only once the artist and the releases are in,
+  // and it waits on ListenBrainz, so its read starts here beside theirs.
+  void queryClient.prefetchQuery(popularOptions(artistID));
 
   // The address bar follows the grid rather than leading it, so a reload and a
   // shared link open the releases that were being read rather than the first
