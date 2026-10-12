@@ -80,3 +80,33 @@ test('the artist a want is waiting on is badged on their card', async ({ page })
     .click();
   await expect(page.getByRole('link', { name: new RegExp(waiting.name) })).toBeVisible();
 });
+
+test('the decisions stay on screen under a long queue', async ({ page }) => {
+  // A real queue ran to 465 entries, and the rail grew the panel to 8,500 px
+  // with the footer at its foot. The seeded queue is short, so the first page
+  // is padded with copies of its own entries under new ids.
+  await page.route('**/api/v1/review-queue?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const items = Array.from({ length: 100 }, (_, index) => {
+      const item = structuredClone(body.items[index % body.items.length]);
+      if (index >= body.items.length) {
+        item.target.id = `${item.target.id.slice(0, -4)}${String(index).padStart(4, '0')}`;
+      }
+      return item;
+    });
+    await route.fulfill({ response, json: { ...body, items, total: 100 } });
+  });
+  await page.setViewportSize({ width: 1500, height: 800 });
+  await page.goto('/review');
+
+  const queue = page.getByRole('navigation', { name: 'Review queue' });
+  await expect.poll(() => queue.locator('[data-question]').count()).toBeGreaterThan(90);
+
+  const skip = page.locator('footer').getByRole('button', { name: 'Skip' });
+  await expect(skip).toBeInViewport();
+  await page.mouse.wheel(0, 600);
+  await expect(skip).toBeInViewport();
+  const rail = await queue.boundingBox();
+  expect(rail!.height).toBeLessThanOrEqual(800);
+});

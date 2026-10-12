@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
+  import type { IconName } from '$lib/icons';
   import {
     createInfiniteQuery,
     createMutation,
@@ -9,7 +10,7 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { api, type AcquisitionCandidate } from '$lib/api';
+  import { api, type AcquisitionCandidate, type AcquisitionTarget, type ReviewItem } from '$lib/api';
   import { isAuthError } from '$lib/errors';
   import {
     clock,
@@ -144,11 +145,13 @@
     if ($downloads.hasNextPage && !$downloads.isFetchingNextPage) void $downloads.fetchNextPage();
   }
 
-  const FILTERS: { key: QuestionKind | 'all'; label: string }[] = [
+  // Each kind is a Misprint icon with its name as the tooltip; "All" has no
+  // picture that says it better than the word.
+  const FILTERS: { key: QuestionKind | 'all'; label: string; icon?: IconName }[] = [
     { key: 'all', label: 'All' },
-    { key: 'downloaded', label: 'Downloaded' },
-    { key: 'version', label: 'Version' },
-    { key: 'folder', label: 'Folder' }
+    { key: 'downloaded', label: 'Downloaded', icon: 'download' },
+    { key: 'version', label: 'Version', icon: 'fingerprint' },
+    { key: 'folder', label: 'Folder', icon: 'folder-add' }
   ];
   let filter = $state<QuestionKind | 'all'>('all');
   const filtered = $derived(
@@ -473,6 +476,22 @@
     }
   }
 
+  /** The sample's state as a fragment. The server's reason is a paragraph,
+   * so it sits behind a disclosure (`whyNoSample`) rather than in the line. */
+  function sampleText(target: AcquisitionTarget) {
+    return target.anchorNextAttemptAt
+      ? `Sample retry ${relativeTime(target.anchorNextAttemptAt)}`
+      : 'No sample';
+  }
+
+  /** Keeps the open question's row inside the rail's own scroll as the reader
+   * steps with the keys; the rail scrolls apart from the page. */
+  function keepInView(rail: HTMLElement, _at: number) {
+    const reveal = () =>
+      rail.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
+    return { update: reveal };
+  }
+
   function onVolume(event: Event) {
     setVolume(Number((event.currentTarget as HTMLInputElement).value) / 100);
   }
@@ -502,50 +521,67 @@
 <svelte:head><title>Review · Schall</title></svelte:head>
 <svelte:window onkeydown={onKey} />
 
-<!-- The song being decided is the page's title once there is one; loading,
-     failed and empty name the page instead. -->
-{#if current && !loading && !loadError}
-  <Hero title={current.title} size="m">
-    {#snippet kicker()}
-      Review · <span class="numeric">{(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}</span>
-    {/snippet}
-    {#snippet sub()}
-      {#if current.detail}<span class="font-medium text-ink">{current.detail}</span>{/if}
-      {#if current.want?.target.durationMs}
-        <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
+{#snippet whyNoSample(target: AcquisitionTarget)}
+  <details class="text-meta">
+    <summary
+      class="flex cursor-pointer items-center gap-1.5 text-ink-3 transition-colors select-none hover:text-ink-2"
+    >
+      <Icon name="info" size={13} />
+      Why no sample
+    </summary>
+    <p class="mt-1 max-w-[40rem] leading-relaxed text-ink-2">{target.anchorUnavailable}</p>
+  </details>
+{/snippet}
+
+<!-- What the entry asks for, beside the copies that answer it, so the rows
+     read across: Length against Length, Album against Album. "Wrong song" is
+     about the entry, so it sits here rather than with the decisions. -->
+{#snippet wanted(want: ReviewItem)}
+  <div class="flex min-h-[14rem] w-full flex-col gap-3 rounded-card border border-dashed border-line-regular p-4">
+    <span class="flex items-center text-ink-3" title="Wanted">
+      <Icon name="want" size={16} aria-label="Wanted" />
+    </span>
+    <div class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-quiet-meta">
+      <span class="text-ink-3">Length</span>
+      <span class="numeric text-body text-ink">
+        {want.target.durationMs ? clock(want.target.durationMs / 1000) : 'unknown'}
+      </span>
+      <span class="text-ink-3">Album</span>
+      <span class="truncate text-body text-ink">{want.target.album || 'none'}</span>
+      <span class="text-ink-3">ISRC</span>
+      <span class="truncate text-body text-ink">{want.target.isrc ?? 'none'}</span>
+      {#if want.target.anchorUnavailable}
+        <span class="text-ink-3">Sample</span>
+        <span class="text-body text-ink">{sampleText(want.target)}</span>
       {/if}
-      {#if waiting}<span>{waiting}</span>{/if}
-      {#if current.want?.target.anchorUnavailable}
-        <span>
-          {#if current.want.target.anchorNextAttemptAt}
-            Sample retry {relativeTime(current.want.target.anchorNextAttemptAt)}
-          {:else}
-            No sample · {current.want.target.anchorUnavailable}
-          {/if}
-        </span>
-      {/if}
-    {/snippet}
-    {#snippet actions()}
-      {#if current.kind === 'downloaded' && current.want}
-        <Button
-          variant="ghost"
-          size="sm"
-          onclick={() => $wrongSong.mutate(current.want!.target.id)}
-          disabled={deciding}
-        >
-          Wrong song
-        </Button>
-      {/if}
-    {/snippet}
-  </Hero>
-{:else}
-  <Hero title="Review" section />
-{/if}
+    </div>
+    {#if want.target.anchorUnavailable && !want.target.anchorNextAttemptAt}
+      {@render whyNoSample(want.target)}
+    {/if}
+    <div class="mt-auto -ml-1.5">
+      <Button
+        variant="ghost"
+        size="sm"
+        icon
+        title="Wrong song"
+        aria-label="Wrong song"
+        onclick={() => $wrongSong.mutate(want.target.id)}
+        disabled={deciding}
+      >
+        <Icon name="ban" size={14} />
+      </Button>
+    </div>
+  </div>
+{/snippet}
+
+<!-- "Review" is the page's title, in the place every page keeps it; the song
+     being decided heads the panel below. -->
+<Hero title="Review" section />
 
 <!-- The queue and the question share one panel, the queue down its left. -->
 <div
   class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6 lg:flex-row {current && !loading && !loadError
-    ? 'overflow-hidden rounded-panel border border-line-thin bg-surface-thin lg:min-h-[32rem]'
+    ? 'overflow-clip rounded-panel border border-line-thin bg-surface-thin lg:min-h-[32rem]'
     : ''}"
 >
   {#if loading}
@@ -579,26 +615,35 @@
       id="queue-rail"
       data-queue-rail
       aria-label="Review queue"
-      class="flex shrink-0 flex-col border-b border-line-thin lg:w-[clamp(13rem,18vw,17rem)] lg:border-b-0 lg:border-r"
+      class="flex shrink-0 flex-col border-b border-line-thin lg:sticky lg:top-[var(--topbar-height)] lg:max-h-[calc(100dvh-var(--topbar-height))] lg:w-[clamp(13rem,18vw,17rem)] lg:self-start lg:border-b-0"
     >
-      <div class="flex flex-wrap gap-1.5 p-4">
+      <div class="flex flex-wrap gap-1 p-4">
         {#each FILTERS as option (option.key)}
           <button
             type="button"
             onclick={() => chooseFilter(option.key)}
             aria-pressed={filter === option.key}
-            class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-meta {filter ===
+            aria-label={`${option.label} ${counts[option.key]}`}
+            title={option.icon ? option.label : undefined}
+            class="flex items-center gap-1.5 rounded-full border px-2 py-1 text-meta {filter ===
             option.key
               ? 'border-line-regular bg-surface-thick text-ink'
               : 'border-line-thin text-ink-2'}"
           >
-            {option.label}
+            {#if option.icon}
+              <Icon name={option.icon} size={13} />
+            {:else}
+              {option.label}
+            {/if}
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
       </div>
 
-      <div class="hidden flex-1 flex-col overflow-y-auto border-t border-line-thin lg:flex">
+      <div
+        use:keepInView={at}
+        class="hidden min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-thin lg:flex"
+      >
         {#each filtered as question, index (question.id)}
           <button
             type="button"
@@ -635,9 +680,27 @@
       </div>
     </nav>
 
-    <section aria-label="Review" class="flex min-w-0 flex-1 flex-col">
+    <section aria-label="Review" class="flex min-w-0 flex-1 flex-col lg:border-l lg:border-line-thin">
 
       <div class="flex flex-col gap-3 px-4 sm:px-6 pb-6 pt-5 lg:px-8">
+        <header class="flex flex-col gap-1">
+          <p class="numeric text-meta text-ink-3">
+            {(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}
+          </p>
+          <h2 class="text-quiet-display font-bold text-ink">{current.title}</h2>
+          <div class="hero-sub text-quiet-meta text-ink-2">
+            {#if current.detail}<span class="font-medium text-ink">{current.detail}</span>{/if}
+            {#if current.want?.target.durationMs}
+              <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
+            {/if}
+            {#if waiting}<span>{waiting}</span>{/if}
+            <!-- A downloaded question shows the sample on the Wanted card instead. -->
+            {#if current.kind === 'version' && current.want?.target.anchorUnavailable}
+              <span>{sampleText(current.want.target)}</span>
+            {/if}
+          </div>
+        </header>
+
         {#if failure}
           <p class="text-meta text-fail" role="status">{failure.message}</p>
         {/if}
@@ -646,7 +709,8 @@
           {#if filed}
             {@const copy = filedCopy}
             {#if copy}
-              <div class="grid max-w-[64rem] grid-cols-1 justify-start gap-3 sm:grid-cols-[repeat(auto-fill,minmax(17rem,1fr))]">
+              <div class="grid max-w-[64rem] grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(17rem,1fr))]">
+                {@render wanted(current.want)}
                 <CopyCard
                   heading="In your library"
                   subheading={`as “${current.want.fileTitle ?? ''}”`}
@@ -664,28 +728,34 @@
               </div>
             {/if}
           {:else}
-            <div
-              class="grid max-w-[64rem] grid-cols-1 justify-start gap-3 sm:grid-cols-[repeat(auto-fill,minmax(17rem,1fr))]"
-              role="radiogroup"
-              aria-label="Copies"
-              tabindex="-1"
-              onkeydown={onCopyRadioKeydown}
-            >
-              {#each groups as group, index (group.best.id)}
-                <CopyCard
-                  heading={`Copy ${index + 1}`}
-                  copy={group.best}
-                  wantedMs={current.want.target.durationMs}
-                  selected={index === chosen}
-                  onselect={() => {
-                    chosen = index;
-                    saidWhich = true;
-                  }}
-                />
-              {/each}
+            <div class="grid max-w-[64rem] grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(17rem,1fr))]">
+              {@render wanted(current.want)}
+              <div
+                class="contents"
+                role="radiogroup"
+                aria-label="Copies"
+                tabindex="-1"
+                onkeydown={onCopyRadioKeydown}
+              >
+                {#each groups as group, index (group.best.id)}
+                  <CopyCard
+                    heading={`Copy ${index + 1}`}
+                    copy={group.best}
+                    wantedMs={current.want.target.durationMs}
+                    selected={index === chosen}
+                    onselect={() => {
+                      chosen = index;
+                      saidWhich = true;
+                    }}
+                  />
+                {/each}
+              </div>
             </div>
           {/if}
         {:else if current.kind === 'version' && current.want}
+          {#if current.want.target.anchorUnavailable}
+            {@render whyNoSample(current.want.target)}
+          {/if}
           <VersionCandidates
             candidates={current.want.candidates}
             chosen={shownChoice}
