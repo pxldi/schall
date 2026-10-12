@@ -93,6 +93,14 @@ const (
 	// anchor sweep when a want gains a reference its copies were judged without
 	// (ADR 0029 §5). Its payload names the want.
 	JudgeWantCopies = "judge_want_copies"
+	// SetAsideDuplicateCopies is queued once by migration 00111, when a want
+	// came to keep one held copy of each piece of audio. Each want's own hunt
+	// does the same from then on, so it is never scheduled.
+	SetAsideDuplicateCopies = "set_aside_duplicate_copies"
+	// AskAcoustIDAgain re-judges the held copies AcoustID did not know a month
+	// ago. Startup keeps one pass on the books and each pass queues the next a
+	// week on.
+	AskAcoustIDAgain = "ask_acoustid_again"
 	// RefreshWeeklyPlaylist is fixed by migration 00052, whose partial unique
 	// index is keyed on this exact string.
 	RefreshWeeklyPlaylist = "refresh_weekly_playlist"
@@ -466,7 +474,8 @@ var TransferKinds = []string{PollDownloads, ImportDownload}
 // to two minutes each, and twenty of them in a row on the general lane would
 // hold scans, sweeps and everything else behind them.
 var JudgingKinds = []string{
-	JudgeWantCopies, JudgeCopiesAgain, JudgeCreditRefusals, FingerprintLibraryWitness,
+	JudgeWantCopies, JudgeCopiesAgain, JudgeCreditRefusals, SetAsideDuplicateCopies,
+	AskAcoustIDAgain, FingerprintLibraryWitness,
 }
 
 // Acquisition is the lane for searching, Transfers follows downloads, Anchors
@@ -558,6 +567,7 @@ type Queue interface {
 	QueueWantCopyJudging(context.Context, uuid.UUID, time.Time) error
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
+	QueueAskAcoustIDAgain(context.Context, time.Time) error
 	QueueUpgradeSweep(context.Context, time.Time, json.RawMessage) error
 	QueueNavidromePlaylistSweep(context.Context, time.Time) error
 	QueueGenreSweep(context.Context, time.Time) error
@@ -617,6 +627,9 @@ type DownloadImporter interface {
 	// artist tag alone, which is a different set and a different rule change
 	// (ADR 0030).
 	JudgeCreditRefusalsAgain(context.Context) error
+	// AskAcoustIDAgain does the same for the held copies AcoustID did not know
+	// a month ago, which it may know now.
+	AskAcoustIDAgain(context.Context) error
 	// JudgeWantCopies does the same for one want that has just been anchored. The
 	// copies whose bytes are still there go back through validation; the ones
 	// whose bytes have gone are measured from the fingerprint kept on them, and
@@ -1541,6 +1554,10 @@ func (worker *Worker) process(ctx context.Context, job Job) {
 		worker.processJudgeCreditRefusals(ctx, job)
 	case JudgeWantCopies:
 		worker.processWantJudging(ctx, job)
+	case SetAsideDuplicateCopies:
+		worker.processDuplicateCopies(ctx, job)
+	case AskAcoustIDAgain:
+		worker.processAskAcoustIDAgain(ctx, job)
 	case SweepRecommendations:
 		worker.processRecommendationSweep(ctx, job)
 	case SweepOwnRecommendations:
@@ -2089,6 +2106,57 @@ func (worker *Worker) processJudgeCreditRefusals(ctx context.Context, job Job) {
 	if err := worker.queue.Complete(ctx, job); err != nil {
 		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
 	}
+}
+
+// DuplicateCopySetter keeps the best held copy of each piece of audio a want
+// holds and sets the others aside. The acquisition service is one; the worker
+// asks its want sweeper for it rather than taking another dependency.
+type DuplicateCopySetter interface {
+	SetAsideDuplicates(context.Context) (int, error)
+}
+
+// processDuplicateCopies sets aside the held copies that sound the same as a
+// better copy of the same want. It queues no replacement: each hunt does this
+// for its own want from then on.
+func (worker *Worker) processDuplicateCopies(ctx context.Context, job Job) {
+	setter, ok := worker.wants.(DuplicateCopySetter)
+	if !ok {
+		worker.finishFailed(ctx, job, errors.New("acquisition targets are not configured"), false)
+		return
+	}
+	if _, err := setter.SetAsideDuplicates(ctx); err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("set aside duplicate copies: %w", err), true)
+		return
+	}
+	if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+	}
+	worker.announce(events.TopicAcquisitions)
+}
+
+// askAcoustIDAgainEvery is how often the pass over the copies AcoustID did not
+// know runs. Each copy waits 30 days between asks whatever this is, so a week
+// only bounds how late a copy is asked after its 30 days are up.
+const askAcoustIDAgainEvery = 7 * 24 * time.Hour
+
+// processAskAcoustIDAgain re-judges the held copies AcoustID did not know a
+// month ago and queues the next pass a week on, whether or not this one
+// worked, so one failed pass does not end them.
+func (worker *Worker) processAskAcoustIDAgain(ctx context.Context, job Job) {
+	if worker.importer == nil {
+		worker.finishFailed(ctx, job, errors.New("download importer is not configured"), false)
+		return
+	}
+	err := worker.importer.AskAcoustIDAgain(ctx)
+	if err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("ask acoustid again: %w", err), false)
+	} else if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+	}
+	if err := worker.queue.QueueAskAcoustIDAgain(ctx, worker.now().Add(askAcoustIDAgainEvery)); err != nil {
+		worker.logger.Error().Err(err).Msg("queue the next pass asking acoustid again")
+	}
+	worker.announce(events.TopicDownloads)
 }
 
 // processWantJudging measures one newly anchored want's held copies against the

@@ -261,14 +261,21 @@ func (service *Service) hunt(
 		return service.waitOut(ctx, target, fetchingSummary)
 	}
 
-	// A want holding a copy nobody has answered, with no anchor to answer it
-	// with, fetches nothing more. It is asked after the copy in flight rather
-	// than before, so a transfer already under way is left to settle; the want
-	// comes straight back here when it does.
+	// A want holding a copy nobody has answered fetches nothing more when
+	// another copy could not settle it either: it has no anchor, or its anchor
+	// was found by name and enough copies already wait (db.StopWhileACopyWaits).
+	// It is asked after the copy in flight rather than before, so a transfer
+	// already under way is left to settle; the want comes straight back here
+	// when it does.
 	//
 	// Nothing is admitted or refused by this: the copies keep their verdicts and
 	// the want keeps its place in the review queue. What it loses is the next
 	// search. Answering the copies gives it back, and so does an anchor landing.
+	// One copy of each piece of audio is enough to ask about, so the others are
+	// set aside before the want's copies are counted.
+	if _, err := service.setAsideDuplicatesOf(ctx, target.ID); err != nil {
+		return err
+	}
 	waiting, err := service.store.StopWhileACopyWaits(ctx, target.ID, copyWaitingSummary)
 	if err != nil {
 		return err
@@ -276,7 +283,7 @@ func (service *Service) hunt(
 	if waiting {
 		service.logger.Info().
 			Str("acquisition_target_id", target.ID.String()).
-			Msg("stopped a want holding a copy nobody has answered, with no anchor to answer it")
+			Msg("stopped a want holding a copy nobody has answered, which another copy could not settle")
 		return nil
 	}
 

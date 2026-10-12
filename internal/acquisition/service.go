@@ -221,6 +221,10 @@ type Store interface {
 	StopLookingForAcquisitionTarget(ctx context.Context, id uuid.UUID, summary string) error
 	StopAfterCreditOnlyRefusals(ctx context.Context, id uuid.UUID, summary string) (bool, error)
 	StopWhileACopyWaits(ctx context.Context, id uuid.UUID, summary string) (bool, error)
+	WantsHoldingSeveralHeldCopies(ctx context.Context) ([]uuid.UUID, error)
+	MarkCopiesDuplicate(
+		ctx context.Context, targetID uuid.UUID, copyIDs []uuid.UUID, summary string,
+	) (int64, error)
 	SettledWitnesses(ctx context.Context, recordingID uuid.UUID, limit int32) ([]db.LibraryWitnessRow, error)
 	AcquisitionTargetHasAnchor(ctx context.Context, targetID uuid.UUID) (bool, error)
 	// What the library says about the file a want's accepted copy became, and

@@ -51,6 +51,7 @@ type ImportStore interface {
 	// meantime, and puts one request back where validation claims from.
 	CopiesToJudgeAgain(context.Context) ([]db.JudgeAgainRow, error)
 	CopiesRefusedOnCreditAlone(context.Context) ([]db.JudgeAgainRow, error)
+	CopiesAcoustIDDidNotKnow(context.Context) ([]db.JudgeAgainRow, error)
 	WantHasAcceptedCopy(context.Context, uuid.UUID) (bool, error)
 	ReopenCopyForJudging(context.Context, uuid.UUID) error
 	// The two a pass over one newly anchored want needs. See JudgeWantCopies: it

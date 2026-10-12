@@ -2069,7 +2069,7 @@ export interface AcquiredCopy {
   path: string;
   name: string;
   sizeBytes?: number;
-  verdict: 'fetching' | 'undelivered' | 'accepted' | 'discarded_audio' | 'discarded_tags' | 'held';
+  verdict: 'fetching' | 'undelivered' | 'accepted' | 'discarded_audio' | 'discarded_tags' | 'held' | 'duplicate';
   decidedBy: 'schall' | 'user';
   summary: string;
   evidence?: AcquiredCopyEvidence;
