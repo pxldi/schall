@@ -479,7 +479,7 @@ func (q *Queries) ForgetSpentJobs(ctx context.Context, failedBefore time.Time) (
 // cancelled one marks a stopped run).
 var forgettableKinds = []string{
 	"poll_downloads", "answer_peer_challenges", "sweep_acquisition_targets",
-	"sync_listens", "sweep_genres", "sweep_preview_anchors",
+	"sync_listens", "sweep_genres", "sweep_preview_anchors", "notify_player",
 	"refresh_album_metadata", "tag_file", "resolve_library_file",
 	"judge_want_copies", "fingerprint_library_witness", "import_download",
 }

@@ -387,6 +387,12 @@ const reviveBatch = 200
 // table nobody could read.
 const spentJobRetention = 14 * 24 * time.Hour
 
+// finishedJobRetention is how long a completed or cancelled job of a kind
+// nothing reads afterwards is kept. A failure is kept longer because somebody
+// may still act on it; a finished poll is only a record that it ran, and the
+// one that runs every five seconds left a million of them.
+const finishedJobRetention = 3 * 24 * time.Hour
+
 // resolutionBatch bounds how many files one completed scan asks the providers
 // about. Every resolution is at least one rate-limited request, so a first scan
 // of a large library queues work steadily rather than all at once; what is left
@@ -1459,9 +1465,7 @@ func (worker *Worker) forgetSpent(ctx context.Context) {
 			Msg("forgot failures older than the window they are kept for")
 	}
 
-	// Finished jobs are kept as long as failures, so a job somebody opens from
-	// the jobs page a few days later is still there to read.
-	finished, err := worker.queue.ForgetFinishedJobs(ctx, worker.now().Add(-spentJobRetention))
+	finished, err := worker.queue.ForgetFinishedJobs(ctx, worker.now().Add(-finishedJobRetention))
 	if err != nil {
 		if ctx.Err() == nil {
 			worker.logger.Error().Err(err).Msg("forget the finished jobs that are older than the window")
@@ -1471,7 +1475,7 @@ func (worker *Worker) forgetSpent(ctx context.Context) {
 	if finished > 0 {
 		worker.logger.Info().
 			Int64("jobs", finished).
-			Dur("kept_for", spentJobRetention).
+			Dur("kept_for", finishedJobRetention).
 			Msg("forgot finished jobs older than the window they are kept for")
 	}
 }
