@@ -47,7 +47,7 @@
   data-tone={tone}
   {title}
   class={cn(
-    'inline-flex h-5 items-center whitespace-nowrap rounded-pill px-2 text-meta bg-surface-thin border [--plate:currentColor]',
+    'inline-flex h-5 items-center whitespace-nowrap rounded-pill px-2 text-meta bg-surface-thin border',
     tones[tone],
     className
   )}

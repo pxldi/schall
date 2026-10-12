@@ -444,7 +444,7 @@
                           >
                             <span
                               class={cn(
-                                'grid place-items-center rounded-row [--plate:currentColor]',
+                                'grid place-items-center rounded-row',
                                 row.cover ? 'size-4' : 'size-5',
                                 markTones[row.role]
                               )}

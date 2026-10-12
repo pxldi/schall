@@ -3,11 +3,8 @@
   import { cn } from '$lib/utils';
 
   // Every icon in Schall is drawn here, by name, from the Misprint set in
-  // `$lib/icons` (ADR Duoton). Two layers: the key, a sharp 2px line in the
-  // text colour, and under it the plate, the same shapes shifted down-right and
-  // printed in `--plate`, which is the page's light ink. Inside a state chip
-  // or on a light-ink button the caller sets `--plate: currentColor`, so the
-  // icon keeps the state colour or stays visible on the ink.
+  // `$lib/icons` (ADR Duoton): one sharp 2px line in the text colour, so an
+  // icon always takes the colour of the words beside it.
   //
   // Text glyphs ("->", "↑↓", "×") are not icons and are not drawn anywhere a
   // control or a direction is meant.
@@ -51,25 +48,9 @@
   data-icon={name}
   class={cn('shrink-0 overflow-visible', className)}
 >
-  <g transform="translate(1.6 1.6)" opacity="0.62">
-    {#each parts as part, i (i)}
-      {#if part.plate === 'fill'}
-        <path d={part.d} fill="var(--plate, currentColor)" />
-      {:else}
-        <path
-          d={part.d}
-          fill="none"
-          stroke="var(--plate, currentColor)"
-          stroke-width="5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      {/if}
-    {/each}
-  </g>
   <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
-    {#each parts as part, i (i)}
-      <path d={part.d} />
+    {#each parts as d, i (i)}
+      <path {d} />
     {/each}
   </g>
 </svg>
