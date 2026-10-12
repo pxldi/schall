@@ -348,12 +348,19 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 
 func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([]OverviewArtist, error) {
 	// A listen credited to several artists counts once for each. The artist
-	// ID is read only from a listen credited to one artist: ListenBrainz
-	// lists its IDs in its own order, and pairing them with the player's
-	// names by position would be a guess.
+	// ID is read only from a listen credited to one artist that carries one
+	// ID: ListenBrainz lists its IDs in its own order, and pairing them with
+	// the player's names by position would be a guess. A player can name only
+	// the lead of a song MusicBrainz credits to two, and then the first ID can
+	// be the other artist's: "Pashanim" came with Selim61's ID. When the
+	// listens of one name carry different IDs, the name is two artists and the
+	// row links nothing.
 	rows, err := q.db.Query(ctx, `
 		SELECT min(credited.name), count(*) AS n,
-		       max(CASE WHEN credited.names = 1 THEN artist_mbids[1]::text END)
+		       max(CASE WHEN credited.names = 1 AND cardinality(artist_mbids) = 1
+		                THEN artist_mbids[1]::text END),
+		       count(DISTINCT CASE WHEN credited.names = 1 AND cardinality(artist_mbids) = 1
+		                           THEN artist_mbids[1] END)
 		FROM listens
 		CROSS JOIN LATERAL (
 			SELECT part AS name, cardinality(string_to_array(artist_name, '`+creditSeparator+`')) AS names
@@ -371,19 +378,28 @@ func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([
 		return nil, fmt.Errorf("read the top artists: %w", err)
 	}
 	out := make([]OverviewArtist, 0, 25)
+	var ambiguous []bool
 	for rows.Next() {
 		var row OverviewArtist
-		if err := rows.Scan(&row.Name, &row.Listens, &row.ArtistMBID); err != nil {
+		var ids int64
+		if err := rows.Scan(&row.Name, &row.Listens, &row.ArtistMBID, &ids); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("read a top artist: %w", err)
 		}
+		if ids > 1 {
+			row.ArtistMBID = pgtype.Text{}
+		}
 		out = append(out, row)
+		ambiguous = append(ambiguous, ids > 1)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for i := range out {
+		if ambiguous[i] {
+			continue
+		}
 		var mbid *string
 		if out[i].ArtistMBID.Valid && out[i].ArtistMBID.String != "" {
 			mbid = &out[i].ArtistMBID.String

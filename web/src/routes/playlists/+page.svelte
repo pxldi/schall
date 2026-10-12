@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
@@ -127,18 +128,24 @@
     return playlist.source === 'weekly' || playlist.source === 'new_releases';
   }
 
+  // The list Stop following was pressed on, while the question is open.
+  let removing = $state<Playlist | null>(null);
+  let removeOpen = $state(false);
   function confirmRemove(playlist: Playlist) {
-    if (
-      confirm(
-        `Stop following “${playlist.name}”? Schall stops tracking its songs. Anything already wanted stays wanted.`
-      )
-    ) {
-      $remove.mutate(playlist.id);
-    }
+    removing = playlist;
+    removeOpen = true;
   }
 </script>
 
 <svelte:head><title>Playlists · Schall</title></svelte:head>
+
+<ConfirmDialog
+  bind:open={removeOpen}
+  title={`Stop following “${removing?.name ?? ''}”?`}
+  description="Schall stops tracking its songs. Songs already wanted stay wanted."
+  action="Stop following"
+  onconfirm={() => removing && $remove.mutate(removing.id)}
+/>
 
 <!-- The page's name over a strip of its playlists' covers, with the ways to
      follow a new one beside it. -->

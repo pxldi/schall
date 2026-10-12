@@ -301,10 +301,21 @@ describe('the three kinds Review holds', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const card = screen.getByText('Wishlist entry').parentElement!;
+    const card = screen.getByText('Wishlist entry').parentElement!.parentElement!;
     expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
+  });
+
+  // At the foot of the card, a 753 px window opened with Wrong song under the
+  // sticky decision bar.
+  it('heads the wanted entry with Wrong song, before what the entry says', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    const wrong = screen.getByRole('button', { name: 'Wrong song' });
+    const album = screen.getByText('Nine Lanterns');
+    expect(wrong.compareDocumentPosition(album) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the reason for a missing sample behind a disclosure', async () => {

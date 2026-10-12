@@ -16,7 +16,9 @@ const queue = [['jobs'], ['jobs-failed'], ['jobs-schedule']];
 const invalidations: Record<string, string[][]> = {
   // A pass over the download inbox is announced here too: it is the same folder
   // the transfers land in, and the settings block that asks for one watches it.
-  downloads: [['downloads'], ['dashboard'], ['overview'], ['inbox-cleanups'], ...queue],
+  // The Overview is read once when it opens and never on a notice: with twenty
+  // downloads running it re-read the whole page every few seconds.
+  downloads: [['downloads'], ['dashboard'], ['inbox-cleanups'], ...queue],
   // Bytes moving on a transfer whose request kept its status. A poll sends one
   // every few seconds while anything downloads, and only the downloads list
   // draws progress, so nothing that counts requests is asked again for it.
@@ -47,27 +49,21 @@ const invalidations: Record<string, string[][]> = {
     ['dashboard'],
     ['library-layout-run'],
     ['library-tags'],
-    ['overview'],
     ...queue
   ],
   catalogue: [['artists'], ['releases'], ['dashboard'], ['global-search'], ...queue],
-  // A target settling changes what a playlist entry shows, so both topics
-  // reach the playlist views.
+  // An import, a sync with the player or a refresh of a generated list ending.
+  // These are rare, and an import is one somebody asked for.
   playlists: [['playlists'], ['spotify-settings'], ['global-search'], ...queue],
-  // A want settling changes what a playlist entry shows, what is waiting in the
-  // review queue, and the list of wants still being looked for, which is why one
-  // topic reaches all three. It is also every pass that defers a want because
+  // A want settling changes what is waiting in the review queue and the list of
+  // wants still being looked for, which is why one topic reaches both. The
+  // playlist pages are left alone: with 22 downloads running they re-read every
+  // loaded page of a list every 8 to 11 s, and an entry's new state can wait
+  // until the page is opened again. It is also every pass that defers a want because
   // the download source is not logged in (#495), which is what keeps the
   // dashboard's banner about it from waiting on the next unrelated refetch.
   // Search marks a wanted track, so it hears about wants too.
-  acquisitions: [
-    ['playlists'],
-    ['review-queue'],
-    ['wants'],
-    ['dashboard'],
-    ['global-search'],
-    ...queue
-  ]
+  acquisitions: [['review-queue'], ['wants'], ['dashboard'], ['global-search'], ...queue]
 };
 
 // connectEvents holds a server-sent event stream open and invalidates the views
