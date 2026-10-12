@@ -787,11 +787,15 @@ a {
      with the light ink and lettered in the dark one: a dark-ink pill vanished
      wherever the print under it was dark. */
   .topbar {
+    /* The wash keeps a third of the dark ink at its foot, and the pill
+       letters carry a shadow in it: on a light cover (the white outline
+       digits of "22") the letters had nothing under them to read against. */
     background: linear-gradient(
       180deg,
-      color-mix(in srgb, var(--color-duo-dark) 80%, transparent),
-      transparent
+      color-mix(in srgb, var(--color-duo-dark) 85%, transparent),
+      color-mix(in srgb, var(--color-duo-dark) 35%, transparent)
     );
+    text-shadow: 0 1px 3px color-mix(in srgb, var(--color-duo-dark) 90%, transparent);
     transition:
       background-color var(--motion-surface) var(--motion-ease),
       box-shadow var(--motion-surface) var(--motion-ease);
@@ -825,6 +829,7 @@ a {
   .topbar-item.active {
     /* An icon on the light ink prints its plate in its own colour (SPEC). */
     --plate: currentColor;
+    text-shadow: none;
     background: var(--color-duo-light);
     color: var(--color-duo-dark);
   }
@@ -835,6 +840,7 @@ a {
     gap: 0.5rem;
     padding: 0.3rem 0.4rem 0.3rem 0.75rem;
     border: 1px solid color-mix(in srgb, var(--color-duo-light) 30%, transparent);
+    background: color-mix(in srgb, var(--color-duo-dark) 40%, transparent);
     border-radius: var(--radius-pill);
     font-size: 0.6875rem;
     color: color-mix(in srgb, var(--color-duo-light) 45%, white);

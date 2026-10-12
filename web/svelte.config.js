@@ -7,7 +7,10 @@ const config = {
   kit: {
     adapter: adapter({
       fallback: 'index.html'
-    })
+    }),
+    // An open tab asks the server for the build it serves, so a tab left open
+    // across a deploy moves to the new interface on its next page change.
+    version: { pollInterval: 60_000 }
   }
 };
 

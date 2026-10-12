@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { afterNavigate } from '$app/navigation';
-  import { page } from '$app/state';
+  import { afterNavigate, beforeNavigate } from '$app/navigation';
+  import { page, updated } from '$app/state';
+  import { loadNewerBuild } from '$lib/reload';
   import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
   import type { IconName } from '$lib/icons';
@@ -65,6 +66,12 @@
     if (path.startsWith('/releases')) return root === fromSection;
     return path.startsWith(root);
   }
+
+  // SvelteKit asks every minute whether a newer build is out (svelte.config.js).
+  // Once one is, the next page change loads it in full.
+  beforeNavigate((navigation) => {
+    loadNewerBuild(navigation, updated.current, (href) => location.assign(href));
+  });
 
   // The page's two inks live on <html>, so the tokens that name them (the
   // accent, the focus ring, the primary button) resolve to the page's colours
