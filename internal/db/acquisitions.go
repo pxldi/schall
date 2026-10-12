@@ -1791,12 +1791,11 @@ func (q *Queries) WantsSharingAReleaseWith(
 		                 AND (download_requests.import_status = 'imported'
 		                      OR download_requests.import_error IS NULL)))
 		  )
-		  -- A sibling already holding a copy nobody has answered, with no anchor
-		  -- to answer it with, is left out for the same reason its own turn would
-		  -- stop it (StopWhileACopyWaits). An open folder must not reach around
-		  -- the rule; the sibling's own turn writes the sentence.
-		  AND NOT (
-		      acquisition_targets.anchor_fingerprint IS NULL
+		  -- A sibling already holding a copy nobody has answered, that another
+		  -- copy could not settle, is left out for the same reason its own turn
+		  -- would stop it (StopWhileACopyWaits). An open folder must not reach
+		  -- around the rule; the sibling's own turn writes the sentence.
+		  AND NOT (`+anotherCopyCannotSettleIt+`
 		      AND`+wantHoldsAnUnansweredCopy+`
 		  )
 		ORDER BY acquisition_targets.entry_title, acquisition_targets.id

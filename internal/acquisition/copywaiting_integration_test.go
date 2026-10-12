@@ -2,6 +2,7 @@ package acquisition
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -144,5 +145,100 @@ func TestRefusingTheCopyLetsAStoppedWantFetchAgain(t *testing.T) {
 	if len(hunter.texts) != 1 || len(fetcher.started) != 1 {
 		t.Errorf("searched %v and started %d transfers, want the next copy fetched",
 			hunter.texts, len(fetcher.started))
+	}
+}
+
+// moreHeldCopies records four further held copies of the want, each a rip of
+// its own size, so it holds five.
+func moreHeldCopies(ctx context.Context, t *testing.T, pool *pgxpool.Pool, targetID uuid.UUID) {
+	t.Helper()
+	for i := range 4 {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO acquisition_target_files (
+				acquisition_target_id, provider, source_username, remote_path,
+				file_name, size_bytes, verdict, decided_by, summary, evidence
+			)
+			VALUES ($1, 'slskd', 'peer', $2, '05 Glory Box.flac', $3, 'held', 'schall',
+			        'Nothing could identify the audio.', '{}'::jsonb)
+		`, targetID, fmt.Sprintf(`Music\Portishead\Copy %d\05 Glory Box.flac`, i),
+			26_000_000+i); err != nil {
+			t.Fatalf("hold copy %d: %v", i, err)
+		}
+	}
+}
+
+// A want whose anchor was found by name and already holds five unanswered
+// copies is not searched for again. The anchor can never prove or refuse a
+// copy, so the sixth would be one more question. Before, only a want with no
+// anchor at all stopped, and one want fetched 153 copies.
+func TestASweepDoesNotFetchForAWantAnchoredByNameHoldingFiveCopies(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter, fetcher := oneCopyOnOffer(), &fakeFetcher{}
+	service := hunting(pool, hunter, fetcher, true)
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	heldCopy(ctx, t, pool, target.ID)
+	moreHeldCopies(ctx, t, pool, target.ID)
+	if err := db.New(pool).RecordAnchor(ctx, db.AnchorParams{
+		TargetID: target.ID, Fingerprint: "AQABz0mUSEkSHV-OH0d_HG9wJXo0Hz-uI9-C_sfx4XmC",
+		Source: "youtube", Reference: "dQw4w9WgXcQ", Seconds: 30,
+	}); err != nil {
+		t.Fatalf("record the anchor: %v", err)
+	}
+	dueNow(ctx, t, pool, target.ID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if len(hunter.texts) != 0 {
+		t.Errorf("searched %v, want a want holding five questions left alone", hunter.texts)
+	}
+	if len(fetcher.started) != 0 {
+		t.Errorf("started %d transfers, want none", len(fetcher.started))
+	}
+	stopped, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.NextAttemptAt.Valid {
+		t.Errorf("next attempt = %v, want none", stopped.NextAttemptAt.Time)
+	}
+	if stopped.Summary != copyWaitingSummary {
+		t.Errorf("summary = %q, want %q", stopped.Summary, copyWaitingSummary)
+	}
+}
+
+// The same five copies under a Deezer anchor keep the want searching. That
+// anchor can admit or refuse the next copy without anybody listening.
+func TestASweepFetchesForADeezerAnchoredWantHoldingFiveCopies(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter, fetcher := oneCopyOnOffer(), &fakeFetcher{}
+	service := hunting(pool, hunter, fetcher, true)
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	heldCopy(ctx, t, pool, target.ID)
+	moreHeldCopies(ctx, t, pool, target.ID)
+	if err := db.New(pool).RecordAnchor(ctx, db.AnchorParams{
+		TargetID: target.ID, Fingerprint: "AQABz0mUSEkSHV-OH0d_HG9wJXo0Hz-uI9-C_sfx4XmC",
+		Source: "deezer", Reference: "2178654", Seconds: 30,
+	}); err != nil {
+		t.Fatalf("record the anchor: %v", err)
+	}
+	dueNow(ctx, t, pool, target.ID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if len(hunter.texts) != 1 {
+		t.Fatalf("searched %v, want a Deezer-anchored want looking for another copy", hunter.texts)
+	}
+	if len(fetcher.started) != 1 {
+		t.Errorf("started %d transfers, want the next copy fetched", len(fetcher.started))
 	}
 }

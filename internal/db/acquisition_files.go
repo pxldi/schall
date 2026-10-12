@@ -1764,9 +1764,34 @@ const wantHoldsAnUnansweredCopy = `
 	)
 `
 
+// anotherCopyCannotSettleIt is "a further copy of this want could only be one
+// more question". That is so with no anchor at all, and with an anchor that can
+// never prove or refuse a copy (one found by name, AnchorByName) once the want
+// already holds 3 separate rips or 5 copies unanswered. An
+// anchor that can rule on a copy (a Deezer preview, a Topic upload, the keyed
+// address) keeps the want fetching however many copies wait.
+//
+// Rips are counted as copygroups.go counts them: copies of one size are one
+// upload that spread, and a copy with no recorded size counts on its own. On
+// 2026-10-12, 32 wants with by-name anchors held 4,490 of 6,349 fetched copies,
+// one of them 153.
+const anotherCopyCannotSettleIt = `
+	(acquisition_targets.anchor_fingerprint IS NULL
+	 OR (COALESCE(acquisition_targets.anchor_source, '')
+	         NOT IN ('deezer', 'youtube-topic', 'source')
+	     AND (SELECT count(*) >= 5
+	                 OR count(DISTINCT held.size_bytes) FILTER (WHERE held.size_bytes > 0)
+	                    + count(*) FILTER (WHERE COALESCE(held.size_bytes, 0) = 0) >= 3
+	          FROM acquisition_target_files held
+	          WHERE held.acquisition_target_id = acquisition_targets.id
+	            AND held.verdict = 'held')))
+`
+
 // StopWhileACopyWaits takes away the next look of a pending want that is holding
-// a copy nobody has answered and has no anchor to answer it with. It reports
-// whether this call is what stopped it.
+// a copy nobody has answered when another copy could not settle it either: it
+// has no anchor, or its anchor can never rule on a copy and enough copies
+// already wait (anotherCopyCannotSettleIt). It reports whether this call is what
+// stopped it.
 //
 // Without an anchor the only thing that can admit a copy of this want is
 // AcoustID naming the recording it asks for, and a want whose first copy
@@ -1789,7 +1814,7 @@ func (q *Queries) StopWhileACopyWaits(
 		UPDATE acquisition_targets
 		SET summary = $2, next_attempt_at = NULL, updated_at = now()
 		WHERE id = $1 AND status = 'pending'
-		  AND anchor_fingerprint IS NULL
+		  AND`+anotherCopyCannotSettleIt+`
 		  AND`+wantHoldsAnUnansweredCopy+`
 		RETURNING true
 	`, id, summary).Scan(&stopped)
@@ -1807,7 +1832,9 @@ func (q *Queries) StopWhileACopyWaits(
 // measured against it. It reports whether this call woke the want, and asks for
 // a sweep in the same transaction when it did.
 //
-// The condition is the stop's with the anchor test turned round. A want whose
+// The condition is the stop's with the anchor test turned round. A by-name
+// anchor landing on a want that already holds enough copies wakes nothing, since
+// the stop would take the look away again on the want's next turn. A want whose
 // copy the anchor refused is due already, because settling a refused copy gives
 // its want a time; a want whose copy the anchor admitted is being imported. This
 // is for the want left over: its copies are still questions, so nothing settled
@@ -1823,6 +1850,7 @@ func (q *Queries) RearmWantNowAnchored(
 			WHERE id = $1 AND status = 'pending'
 			  AND next_attempt_at IS NULL
 			  AND anchor_fingerprint IS NOT NULL
+			  AND NOT`+anotherCopyCannotSettleIt+`
 			  AND`+wantHoldsAnUnansweredCopy+`
 		`, id, summary)
 		if err != nil {
