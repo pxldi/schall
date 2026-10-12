@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && vitest run",
-    "test:e2e": "svelte-kit sync && playwright test"
+    "test:e2e": "svelte-kit sync && playwright test --project=chromium",
+    "test:visual": "../scripts/visual.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

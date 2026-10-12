@@ -45,6 +45,7 @@ When you do, the PR says what the change can admit that it could not before
 | One Go test | `go test ./internal/<pkg>/ -run <TestName>` |
 | Integration tests | set `SCHALL_TEST_DATABASE_URL` to a **scratch** DB (the suite truncates every table); a throwaway `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=x postgres:17-alpine` works |
 | Browser tests | `make e2e` (seeds a scratch DB, API :8181 + Vite :5174) |
+| Screenshot tests | `make visual`; after an intended UI change `make visual-update` and commit the images in `web/e2e/visual/__screenshots__` (Docker: the browser runs in Playwright's image) |
 | Seeded collection to click through | `make seed`, then point `SCHALL_DATABASE_URL` at :5433 |
 | Env docs + format + vet + svelte-check | `make check` |
 | Regenerate sqlc | `make sqlc` |

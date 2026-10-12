@@ -612,6 +612,16 @@ INSERT INTO playlists (
     now() - interval '3 days', now() - interval '3 days'
 );
 
+-- The new-releases playlist, which the first refresh after startup would
+-- otherwise create with a random id. Its generated cover is drawn from that id,
+-- so a fixed one keeps the playlists page the same picture from run to run.
+INSERT INTO playlists (id, source, name, description, created_at, updated_at)
+VALUES (
+    '40000000-0000-4000-8000-000000000002', 'new_releases', 'New releases',
+    'New music from the artists and labels you follow, newest release first.',
+    now() - interval '2 days', now() - interval '2 days'
+);
+
 INSERT INTO playlist_entries (
     id, playlist_id, position, source_track_id, entry_artist, entry_title,
     entry_album, entry_duration_ms, entry_isrc, owned_library_file_id
@@ -820,7 +830,7 @@ INSERT INTO release_cover_art (
 SELECT
     albums.id,
     convert_to(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">'
         || '<rect width="320" height="320" fill="' || shade.background || '"/>'
         || '<circle cx="160" cy="132" r="62" fill="none" stroke="' || shade.ink
         || '" stroke-width="6" opacity="0.55"/>'
@@ -861,7 +871,7 @@ INSERT INTO artist_images (artist_id, image, content_type, source, fetched_at)
 SELECT
     artists.id,
     convert_to(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">'
         || '<rect width="320" height="320" fill="#17171a"/>'
         || '<circle cx="160" cy="160" r="104" fill="'
         || (ARRAY['#2f5c68', '#5c3a20', '#3b2f5c', '#2a4a33', '#5c2a3a'])[

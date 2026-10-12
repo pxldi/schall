@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev api web db-up db-down migrate sqlc seed test e2e check build
+.PHONY: help dev api web db-up db-down migrate sqlc seed test e2e visual visual-update check build
 
 # The database the seeded collection and the browser tests use. A second
 # PostgreSQL, on its own port, because seeding empties every table it finds.
@@ -59,6 +59,14 @@ test: ## Run backend and frontend tests
 e2e: ## Run the browser tests against a freshly seeded database
 	docker compose up -d postgres-test
 	SCHALL_E2E_DATABASE_URL="$(E2E_DATABASE_URL)" npm --prefix web run test:e2e
+
+visual: ## Compare the main pages with their screenshot baselines (needs Docker)
+	docker compose up -d postgres-test
+	SCHALL_E2E_DATABASE_URL="$(E2E_DATABASE_URL)" npm --prefix web run test:visual
+
+visual-update: ## Redraw the screenshot baselines after an intended change
+	docker compose up -d postgres-test
+	SCHALL_E2E_DATABASE_URL="$(E2E_DATABASE_URL)" npm --prefix web run test:visual -- --update-snapshots
 
 check: ## Format and statically check the project
 	./scripts/check-env-example.sh
