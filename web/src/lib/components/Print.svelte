@@ -34,6 +34,7 @@
   import type { Inks } from '$lib/duoton/inks';
   import { clampInks } from '$lib/duoton/inks';
   import { cn } from '$lib/utils';
+  import { coverAt, printPictureWidth } from '$lib/cover-size';
   import { motionMs } from '$lib/motion.svelte';
 
   // The duotone print (ADR Duoton): covers softened and mapped between two
@@ -84,8 +85,17 @@
   // arrived. Until then the previous print, or the bare ink, stays up.
   const WAIT_MS = 600;
 
+  // The pictures are asked for at the width this box draws them at, once its
+  // size is known. Every print used to load 500 pixel covers, and a page of
+  // them moved megabytes for prints a fifth of that size.
+  const pictureWidth = $derived(
+    size.width && size.height ? (printPictureWidth(mode, refs.length, size.width, size.height) ?? 500) : 0
+  );
+
   $effect(() => {
     void refsKey;
+    const width = pictureWidth;
+    if (!width) return;
     const wanted = untrack(() => refs);
     let live = true;
     const loaded: (HTMLImageElement | undefined)[] = wanted.map(() => undefined);
@@ -95,7 +105,7 @@
     };
     const pending = wanted.map((ref, i) =>
       ref.src
-        ? loadPicture(ref.src).then((image) => {
+        ? loadPicture(width === 500 ? ref.src : coverAt(ref.src, width)).then((image) => {
             loaded[i] = image;
           })
         : undefined
