@@ -665,6 +665,7 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Get("/me", api.whoAmI)
 			router.Get("/dashboard", api.dashboard)
 			router.Get("/overview", api.overview)
+			router.Get("/overview/covers/{releaseMBID}", api.listenedReleaseCover)
 			// Not "/activity". A path with that word in it is on the filter
 			// lists content blockers ship with — the ones written for the
 			// analytics and telemetry endpoints that are usually called that —

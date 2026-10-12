@@ -124,6 +124,16 @@ describe('connectEvents', () => {
     ]);
   });
 
+  // A poll every five seconds while anything downloads used to reach the
+  // Overview each time; only the list that draws the bars needs the bytes.
+  it('reaches only the downloads list when bytes move on a transfer', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('download-progress');
+
+    expect(asked(invalidateQueries)).toEqual(['downloads']);
+  });
+
   it('reaches the catalogue views when an artist or a release is refreshed', () => {
     const { invalidateQueries, stream } = connect();
 

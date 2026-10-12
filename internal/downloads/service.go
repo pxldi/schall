@@ -535,7 +535,7 @@ func (service *Service) Poll(ctx context.Context) (bool, error) {
 		byPeer[request.SourceUsername] = append(byPeer[request.SourceUsername], request)
 	}
 
-	active, held := false, false
+	active, held, settled := false, false, false
 	for username, peerRequests := range byPeer {
 		pollCtx, cancel := context.WithTimeout(ctx, pollTimeout)
 		transfers, err := downloader.Transfers(pollCtx, username)
@@ -557,6 +557,9 @@ func (service *Service) Poll(ctx context.Context) (bool, error) {
 			if err != nil {
 				return active, err
 			}
+			if updated.Status != request.Status {
+				settled = true
+			}
 			if updated.Status == "started" {
 				active = true
 			}
@@ -570,12 +573,16 @@ func (service *Service) Poll(ctx context.Context) (bool, error) {
 	if held {
 		service.readPeerMessages(ctx)
 	}
-	// One announcement for the whole pass, not one per request. Every recorded
-	// pass is announced rather than only the ones that changed status — bytes
-	// moving is what the progress bar is showing — but announcing per request
-	// meant six open downloads invalidated the same view six times every five
-	// seconds, and the view fetched once for each.
-	service.announce()
+	// One announcement for the whole pass, not one per request: announcing per
+	// request meant six open downloads invalidated the same view six times every
+	// five seconds. A pass where only bytes moved goes out as progress, which
+	// only the downloads list follows; announcing it as a status change made the
+	// Overview read itself again every five seconds while anything downloaded.
+	if settled {
+		service.announce()
+	} else {
+		service.notices.Publish(events.TopicDownloadProgress)
+	}
 	return active, nil
 }
 

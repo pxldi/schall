@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pxldi/schall/internal/coverart"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
 	"github.com/rs/zerolog"
@@ -31,6 +32,7 @@ type overviewJSON struct {
 		} `json:"listens"`
 		MostPlayed []struct {
 			Title     string  `json:"title"`
+			Artist    string  `json:"artist"`
 			Listens   int64   `json:"listens"`
 			TrackID   *string `json:"trackId"`
 			ReleaseID *string `json:"releaseId"`
@@ -428,5 +430,97 @@ func TestOverviewCarriesTheInksOfRecentlyAddedCovers(t *testing.T) {
 	}
 	if row.Inks == nil || row.Inks.Dark != "#0d1420" || row.Inks.Light != "#f2b48c" {
 		t.Fatalf("inks = %+v, want the release's stored inks", row.Inks)
+	}
+}
+
+// Navidrome sends a song with several artists as one credit joined by " • ".
+// The Overview counted "Souly • Waterboutus" as one artist, listed one album
+// twice under two credits, and showed a session as "Souly, Souly • Waterboutus".
+func TestOverviewCountsEachArtistOfACredit(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Souly", TrackName: "Intro", ReleaseName: "traence"},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "Souly • Waterboutus", TrackName: "Intro", ReleaseName: "traence",
+			ArtistMBIDs: []string{"66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"}},
+		{ListenedAt: now.Add(-3 * time.Minute), ArtistName: "Souly • Waterboutus", TrackName: "Hook", ReleaseName: "traence"},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	artists := map[string]int64{}
+	for _, artist := range got.Listening.TopArtists {
+		artists[artist.Name] = artist.Listens
+	}
+	if len(artists) != 2 || artists["Souly"] != 3 || artists["Waterboutus"] != 2 {
+		t.Errorf("top artists = %+v, want Souly 3 and Waterboutus 2", got.Listening.TopArtists)
+	}
+	if len(got.Listening.TopAlbums) != 1 || got.Listening.TopAlbums[0].Title != "traence" {
+		t.Errorf("top albums = %+v, want traence once", got.Listening.TopAlbums)
+	}
+	played := got.Listening.MostPlayed
+	if len(played) != 2 || played[0].Title != "Intro" || played[0].Listens != 2 || played[0].Artist != "Souly, Waterboutus" {
+		t.Errorf("most played = %+v, want Intro twice under the fuller credit", played)
+	}
+	sessions := got.Listening.Sessions
+	if len(sessions) != 1 || len(sessions[0].Artists) != 2 ||
+		sessions[0].Artists[0] != "Souly" || sessions[0].Artists[1] != "Waterboutus" {
+		t.Errorf("sessions = %+v, want Souly and Waterboutus", sessions)
+	}
+}
+
+// A release the library does not hold was pictured by the archive's own
+// address, which took up to seven seconds a picture on every visit. Now the
+// row names Schall's address, the archive is asked once, and the answer is
+// kept, the absence as well as the picture.
+func TestOverviewServesListenedCoversFromItsOwnCache(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	archive := &fakeArchive{artwork: coverart.Artwork{
+		Image: picture(t), ContentType: "image/png", Source: coverart.Name,
+	}}
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store), WithCoverArt(archive))
+	ctx := context.Background()
+
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: time.Now().Add(-time.Minute), ArtistName: "Souly", TrackName: "Intro", ReleaseName: "traence",
+			ReleaseMBID: "88888888-8888-8888-8888-888888888888"},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+	got := readOverview(t, handler, "UTC")
+	want := "/api/v1/overview/covers/88888888-8888-8888-8888-888888888888"
+	if len(got.Listening.MostPlayed) != 1 || got.Listening.MostPlayed[0].CoverURL == nil || *got.Listening.MostPlayed[0].CoverURL != want {
+		t.Fatalf("most played = %+v, want the cover at %s", got.Listening.MostPlayed, want)
+	}
+
+	for range 2 {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, want, nil))
+		if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("GET %s = %d %s", want, recorder.Code, recorder.Header().Get("Content-Type"))
+		}
+	}
+	if archive.asked != 1 {
+		t.Errorf("the archive was asked %d times, want once", archive.asked)
+	}
+
+	archive.artwork = coverart.Artwork{}
+	archive.err = coverart.ErrNoArtwork
+	missing := "/api/v1/overview/covers/99999999-9999-9999-9999-999999999999"
+	for range 2 {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, missing, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404", missing, recorder.Code)
+		}
+	}
+	if archive.asked != 2 {
+		t.Errorf("the archive was asked %d times in all, want the absence kept after one", archive.asked)
 	}
 }
