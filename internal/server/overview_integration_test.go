@@ -524,3 +524,113 @@ func TestOverviewServesListenedCoversFromItsOwnCache(t *testing.T) {
 		t.Errorf("the archive was asked %d times in all, want the absence kept after one", archive.asked)
 	}
 }
+
+// A file on a single and on its album maps to a track on each, and Recently
+// added listed it once per release: "Feather" three times on 2026-10-12.
+func TestOverviewListsARecentlyAddedFileOnce(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `
+		WITH artist AS (
+			INSERT INTO artists (name, sort_name) VALUES ('Nujabes', 'Nujabes') RETURNING id
+		), albums AS (
+			INSERT INTO albums (artist_id, title)
+			SELECT id, title FROM artist, (VALUES ('Feather'), ('Modal Soul'), ('Hydeout Productions')) AS v(title)
+			RETURNING id
+		), tracks AS (
+			INSERT INTO tracks (album_id, title, track_number) SELECT id, 'Feather', 1 FROM albums RETURNING id
+		), file AS (
+			INSERT INTO library_files (path, size_bytes, modified_at) VALUES ('/music/feather.flac', 1000, now())
+			RETURNING id
+		)
+		INSERT INTO track_mappings (track_id, library_file_id, method)
+		SELECT tracks.id, file.id, 'manual' FROM tracks, file`); err != nil {
+		t.Fatalf("insert a file on three releases: %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	if len(got.RecentlyAdded) != 1 || got.RecentlyAdded[0].Title != "Feather" {
+		t.Errorf("recently added = %+v, want Feather once", got.RecentlyAdded)
+	}
+}
+
+// A compilation's listens are credited to Various Artists, which showed up as
+// a top artist.
+func TestOverviewLeavesVariousArtistsOutOfTopArtists(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Various Artists", TrackName: "Intro"},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "VA", TrackName: "Outro",
+			ArtistMBIDs: []string{"89ad4ac3-39f7-470e-963a-56509c546377"}},
+		{ListenedAt: now.Add(-3 * time.Minute), ArtistName: "Souly", TrackName: "Hook"},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	if len(got.Listening.TopArtists) != 1 || got.Listening.TopArtists[0].Name != "Souly" {
+		t.Errorf("top artists = %+v, want Souly alone", got.Listening.TopArtists)
+	}
+}
+
+// Pashanim's listens carried an artist ID no catalogue artist had, so the row
+// opened nothing while its picture, found by name, was the catalogue
+// Pashanim's. The row now opens the one artist with that name, and the picture
+// is always the picture of the artist the row opens.
+func TestOverviewTopArtistOpensTheArtistItsPictureShows(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	var pashanimID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO artists (name, sort_name) VALUES ('Pashanim', 'pashanim') RETURNING id::text`).Scan(&pashanimID); err != nil {
+		t.Fatalf("insert an artist: %v", err)
+	}
+	// Two artists named Ye, one with a picture: the name links neither, so
+	// neither picture is shown.
+	if _, err := pool.Exec(ctx, `
+		WITH ye AS (
+			INSERT INTO artists (name, sort_name) VALUES ('Ye', 'ye'), ('YE', 'ye') RETURNING id
+		)
+		INSERT INTO artist_images (artist_id, image, content_type, source)
+		SELECT id, '\x89504e47'::bytea, 'image/png', 'test' FROM ye
+		UNION ALL
+		SELECT $1::uuid, '\x89504e47'::bytea, 'image/png', 'test'`, pashanimID); err != nil {
+		t.Fatalf("insert artist pictures: %v", err)
+	}
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Pashanim", TrackName: "Maske weg",
+			ArtistMBIDs: []string{"33333333-3333-3333-3333-333333333333"}},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "Ye", TrackName: "Runaway"},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	for _, artist := range got.Listening.TopArtists {
+		switch artist.Name {
+		case "Pashanim":
+			if artist.ArtistID == nil || *artist.ArtistID != pashanimID {
+				t.Errorf("Pashanim opens %v, want %s", artist.ArtistID, pashanimID)
+			}
+			if artist.PictureURL == nil || *artist.PictureURL != "/api/v1/artists/"+pashanimID+"/image" {
+				t.Errorf("Pashanim picture = %v, want the artist it opens", artist.PictureURL)
+			}
+		case "Ye":
+			if artist.ArtistID != nil || artist.PictureURL != nil {
+				t.Errorf("Ye names two artists, so no link and no picture; got %+v", artist)
+			}
+		}
+	}
+}
