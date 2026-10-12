@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { api, type PopularTrack } from '$lib/api';
+  import { api, type PopularTrack, type RemovedTracks } from '$lib/api';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
+  import { calendarDate, removedSummary } from '$lib/utils';
   import { holding, quiet } from '$lib/vocabulary';
 
   // The artist's most listened recordings across ListenBrainz, in its order.
@@ -26,17 +27,18 @@
     }))
   );
 
-  type Toggle = { kind: 'want' | 'unwant'; track: PopularTrack };
+  // Removing takes the want away at once, and a file Schall downloaded for the
+  // recording is deleted 30 days later. Wanting it again before then keeps the
+  // file, through the same calls the release page uses.
+  type Toggle = { kind: 'want' | 'remove'; track: PopularTrack };
   const toggle = createMutation({
-    mutationFn: ({ kind, track }: Toggle) => {
-      if (kind === 'unwant') {
-        if (track.trackId) return api.dismissTrack(track.trackId);
-        return api.stopPursuingTarget(track.wantId ?? '');
+    mutationFn: async ({ kind, track }: Toggle): Promise<unknown> => {
+      if (kind === 'remove') {
+        if (track.trackId) return api.removeTrack(track.trackId);
+        return api.removeTarget(track.wantId ?? '');
       }
-      // Wanting a recording somebody dismissed takes the decision back
-      // explicitly, as a release page does.
-      if (track.wantStatus === 'not_wanted' && track.wantId) return api.pursueTargetAgain(track.wantId);
       if (track.trackId) return api.wantTrack(track.trackId);
+      if (track.wantStatus === 'not_wanted' && track.wantId) return api.pursueTargetAgain(track.wantId);
       return api.wantPopularTrack(track, artistName);
     },
     onSuccess: async () => {
@@ -48,11 +50,24 @@
       ]);
     }
   });
+  const removed = $derived(
+    $toggle.data && $toggle.variables?.kind === 'remove'
+      ? removedSummary($toggle.data as RemovedTracks)
+      : ''
+  );
 
+  // A held recording counts as wanted until somebody removes it.
   function wanted(track: PopularTrack) {
-    return Boolean(
-      track.wantStatus && track.wantStatus !== 'not_wanted' && track.wantStatus !== 'acquired'
-    );
+    if (held(track)) return !track.removesAt;
+    return Boolean(track.wantStatus && track.wantStatus !== 'not_wanted');
+  }
+  function held(track: PopularTrack) {
+    return track.held || track.wantStatus === 'acquired';
+  }
+  // A held recording is removed through its track or its want. One held only
+  // through a file no release here carries, with no want, has neither.
+  function removable(track: PopularTrack) {
+    return !held(track) || Boolean(track.trackId || track.wantId);
   }
 
   function length(milliseconds: number) {
@@ -75,9 +90,9 @@
     {:else}
       <ol class="popular-list max-h-[31rem] overflow-y-auto pt-1 pr-1">
         {#each $popular.data.items as track, index (track.recordingId)}
-          {@const done = track.held || track.wantStatus === 'acquired'}
+          {@const done = held(track)}
           <li
-            class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_2.5rem] items-center gap-2.5 rounded-row px-1.5 py-1"
+            class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 rounded-row px-1.5 py-1"
           >
             <span class="numeric text-right text-meta text-ink-4">{index + 1}</span>
             <span class="size-10 overflow-hidden rounded-tight bg-surface-thick {done ? '' : 'opacity-60'}">
@@ -106,17 +121,28 @@
                 {track.albumTitle ?? track.releaseTitle}
               </span>
             </span>
+            <!-- The toggle of a held recording waits for the pointer, as on a
+                 release page, because the mark beside it says it is here. -->
             <span class="flex items-center justify-center">
-              {#if done}
-                <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
-              {:else}
+              {#if removable(track)}
                 <WantToggle
-                  reveal
+                  reveal={done ? 'all' : true}
                   wanted={wanted(track)}
                   title={track.title}
                   onwant={() => $toggle.mutateAsync({ kind: 'want', track })}
-                  onunwant={() => $toggle.mutateAsync({ kind: 'unwant', track })}
+                  onunwant={() => $toggle.mutateAsync({ kind: 'remove', track })}
                 />
+              {/if}
+            </span>
+            <span class="flex items-center justify-center">
+              {#if track.removesAt}
+                <StateIcon
+                  icon="delete"
+                  label={`Deleted on ${calendarDate(track.removesAt)}`}
+                  note="Want it again to keep it"
+                />
+              {:else if done}
+                <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
               {/if}
             </span>
             <span class="numeric text-right text-meta text-ink-3">{length(track.lengthMs)}</span>
@@ -125,6 +151,8 @@
       </ol>
       {#if $toggle.isError}
         <ErrorNote error={$toggle.error} class="mt-2" />
+      {:else if removed}
+        <p class="mt-2 text-meta text-ink-3">{removed}.</p>
       {/if}
     {/if}
   </section>

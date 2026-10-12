@@ -52,6 +52,7 @@ function releaseRow(overrides: Partial<Release> = {}): Release {
     inks: null,
     secondaryTypes: [],
     wantedTrackCount: 0,
+    leavingTrackCount: 0,
     ...overrides
   };
 }

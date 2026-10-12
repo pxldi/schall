@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup, waitFor } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { ArtistDetail, PopularTrack, Release } from '$lib/api';
+import { holding, quiet } from '$lib/vocabulary';
 
 // Named without the leading `+`, like the other colocated route tests:
 // SvelteKit reads every `+` file in a route folder as a route file.
@@ -417,7 +418,8 @@ describe('release tiles', () => {
       hasCover,
       inks: null,
       secondaryTypes: [],
-      wantedTrackCount: 0
+      wantedTrackCount: 0,
+      leavingTrackCount: 0
     });
     vi.stubGlobal(
       'fetch',
@@ -467,6 +469,7 @@ function releaseRow(id: string, title: string, overrides: Partial<Release> = {})
     inks: null,
     secondaryTypes: [],
     wantedTrackCount: 0,
+    leavingTrackCount: 0,
     ...overrides
   };
 }
@@ -484,6 +487,14 @@ function answeringReleases(items: Release[], seen: Write[] = [], popular: unknow
       const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
       if (method !== 'GET') {
         seen.push({ method, pathname: url.pathname, body: init?.body as string });
+        if (method === 'DELETE') {
+          return body({
+            removed: 1,
+            scheduled: [{ fileId: 'f1', path: '/music/x.flac', removesAt: '2026-11-11T12:00:00Z' }],
+            kept: 0,
+            unresolvable: 0
+          });
+        }
         return body({ albumId: 'r1', wanted: 12, alreadyWanted: 0, dismissed: 12 });
       }
       if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
@@ -591,7 +602,7 @@ describe('wanting a release from its tile', () => {
     );
   });
 
-  it('dismisses the rest when a wanted release is pressed again', async () => {
+  it('removes a wanted release when it is pressed again', async () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'GNX', { wantedTrackCount: 12 })], seen);
     opened();
@@ -599,17 +610,62 @@ describe('wanting a release from its tile', () => {
 
     await waitFor(() =>
       expect(seen).toContainEqual(
-        expect.objectContaining({ method: 'POST', pathname: '/api/v1/albums/r1/not-wanted' })
+        expect.objectContaining({ method: 'DELETE', pathname: '/api/v1/albums/r1/wanted' })
       )
     );
   });
 
-  it('offers no + on a release the library holds whole', async () => {
+  it('says when the files of a removed release are deleted', async () => {
+    answeringReleases([releaseRow('r1', 'GNX', { wantedTrackCount: 12 })]);
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+
+    expect(await screen.findByText(/^1 file deleted on .+\. Want it again to keep it\.$/)).toBeTruthy();
+  });
+
+  it('counts a release the library holds whole as wanted', async () => {
     answeringReleases([releaseRow('r1', 'GNX', { ownedTrackCount: 12 })]);
     opened();
-    await screen.findByText('GNX');
+    const toggle = await screen.findByRole('button', { name: 'Want GNX' });
 
-    expect(screen.queryByRole('button', { name: 'Want GNX' })).toBeNull();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('removes a release the library holds whole', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'GNX', { ownedTrackCount: 12 })], seen);
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'DELETE', pathname: '/api/v1/albums/r1/wanted' })
+      )
+    );
+  });
+
+  const leaving = { ownedTrackCount: 12, leavingTrackCount: 12, removesAt: '2026-11-11T12:00:00Z' };
+
+  it('marks a removed release whose files are waiting to be deleted', async () => {
+    answeringReleases([releaseRow('r1', 'GNX', leaving)]);
+    opened();
+
+    expect(await screen.findByLabelText(/^Deleted on /)).toBeTruthy();
+  });
+
+  it('wants a removed release again from its +', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'GNX', leaving)], seen);
+    opened();
+    const toggle = await screen.findByRole('button', { name: 'Want GNX' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'POST', pathname: '/api/v1/albums/r1/wanted' })
+      )
+    );
   });
 });
 
@@ -678,12 +734,85 @@ describe('the popular tracks', () => {
     await waitFor(() => expect(seen[0]?.pathname).toBe('/api/v1/tracks/t1/wanted'));
   });
 
-  it('draws a tick instead of a + for a recording the library holds', async () => {
+  it('draws a tick for a recording the library holds', async () => {
     answeringReleases([releaseRow('r1', 'DAMN.')], [], { items: [track({ held: true })] });
     opened();
-    await screen.findByText('HUMBLE.');
 
-    expect(screen.queryByRole('button', { name: 'Want HUMBLE.' })).toBeNull();
+    expect(await screen.findByLabelText(quiet(holding.complete))).toBeTruthy();
+  });
+
+  it('removes a held recording through its track', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'DAMN.')], seen, {
+      items: [track({ held: true, trackId: 't1', albumId: 'r1' })]
+    });
+    opened();
+    const toggle = await screen.findByRole('button', { name: 'Want HUMBLE.' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'DELETE', pathname: '/api/v1/tracks/t1/wanted' })
+      )
+    );
+  });
+
+  it('removes a wanted recording no release carries through its want', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'DAMN.')], seen, {
+      items: [track({ wantId: 'w1', wantStatus: 'pending' })]
+    });
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'DELETE', pathname: '/api/v1/acquisition-targets/w1' })
+      )
+    );
+  });
+
+  it('says when the file of a removed recording is deleted', async () => {
+    answeringReleases([releaseRow('r1', 'DAMN.')], [], {
+      items: [
+        track({
+          held: true,
+          trackId: 't1',
+          wantId: 'w1',
+          wantStatus: 'not_wanted',
+          removesAt: '2026-11-11T12:00:00Z'
+        })
+      ]
+    });
+    opened();
+
+    expect(await screen.findByLabelText(/^Deleted on /)).toBeTruthy();
+  });
+
+  it('wants a removed recording again to keep its file', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'DAMN.')], seen, {
+      items: [
+        track({
+          held: true,
+          trackId: 't1',
+          wantId: 'w1',
+          wantStatus: 'not_wanted',
+          removesAt: '2026-11-11T12:00:00Z'
+        })
+      ]
+    });
+    opened();
+    const toggle = await screen.findByRole('button', { name: 'Want HUMBLE.' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'POST', pathname: '/api/v1/tracks/t1/wanted' })
+      )
+    );
   });
 });
 

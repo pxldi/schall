@@ -22,6 +22,9 @@ type PopularTrackRow struct {
 	Held       bool
 	WantID     uuid.NullUUID
 	WantStatus pgtype.Text
+	// RemovesAt is when a file of the recording is deleted, because somebody
+	// removed it. Empty when nothing is leaving.
+	RemovesAt pgtype.Timestamptz
 }
 
 // PopularTracks looks recordings up by MusicBrainz ID, in the order given. A
@@ -49,7 +52,13 @@ func (q *Queries) PopularTracks(ctx context.Context, artistID uuid.UUID, recordi
 				  AND library_files.missing_at IS NULL
 			)::boolean,
 			want.id,
-			want.status
+			want.status,
+			(
+				SELECT min(scheduled_removals.removes_at)
+				FROM scheduled_removals
+				WHERE scheduled_removals.state = 'scheduled'
+				  AND scheduled_removals.musicbrainz_recording_id = asked.recording_id
+			)::timestamptz
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS asked (recording_id, position)
 		LEFT JOIN LATERAL (
 			SELECT
@@ -88,7 +97,7 @@ func (q *Queries) PopularTracks(ctx context.Context, artistID uuid.UUID, recordi
 		var row PopularTrackRow
 		if err := rows.Scan(
 			&row.RecordingID, &row.TrackID, &row.AlbumID, &row.AlbumTitle, &row.HasCover,
-			&row.Held, &row.WantID, &row.WantStatus,
+			&row.Held, &row.WantID, &row.WantStatus, &row.RemovesAt,
 		); err != nil {
 			return nil, err
 		}
