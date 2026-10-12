@@ -104,6 +104,35 @@ const stopSearchesOfStoppedRuns = `
 	  )
 `
 
+// queueStrandedValidations queues an import for every transfer left in
+// validation with no import job to finish it. A judging pass validates copies
+// in its own job, so a pass that is killed mid-copy leaves that copy's request
+// at 'validating' with nothing to resume it, and the copy then reads as still
+// being checked: Review hides it and the want cannot fetch another. Both claims
+// accept a request at 'validating', so the queued import validates it again
+// from the start. A request with a live import job conflicts and is skipped.
+//
+// $1 is how long the request must have gone untouched, as in
+// stopSearchesOfStoppedRuns; the pass at boot passes nothing.
+const queueStrandedValidations = `
+	INSERT INTO jobs (kind, payload, max_attempts)
+	SELECT 'import_download', jsonb_build_object('requestId', id::text), $2::int
+	FROM download_requests
+	WHERE status = 'completed' AND import_status = 'validating'
+	  -- An import that already failed for good is somebody's to retry, and
+	  -- queueing it again here would retry it every ten minutes forever.
+	  AND NOT EXISTS (
+	      SELECT 1 FROM jobs failed
+	      WHERE failed.kind = 'import_download' AND failed.status = 'failed'
+	        AND failed.payload->>'requestId' = download_requests.id::text
+	  )
+	  AND ($1::double precision IS NULL
+	       OR updated_at < now() - make_interval(secs => $1::double precision))
+	ON CONFLICT ((payload->>'requestId'))
+	    WHERE kind = 'import_download' AND status IN ('queued', 'running')
+	DO NOTHING
+`
+
 // jobColumns is one job as the queue view and the retry answer read it.
 const jobColumns = `
 	id, kind, status, attempts, max_attempts, run_after, started_at,
@@ -141,9 +170,15 @@ func (q *Queries) RequeueInterruptedJobs(ctx context.Context) error {
 		stoppedRunNote, (*float64)(nil)); err != nil {
 		return fmt.Errorf("stop the searches of stopped runs: %w", err)
 	}
-	_, err := q.db.Exec(ctx, requeueJobs+` WHERE status = 'running'`,
-		interruptedNote, (*int32)(nil))
-	return err
+	if _, err := q.db.Exec(ctx, requeueJobs+` WHERE status = 'running'`,
+		interruptedNote, (*int32)(nil)); err != nil {
+		return err
+	}
+	if _, err := q.db.Exec(ctx, queueStrandedValidations,
+		(*float64)(nil), ImportAttempts); err != nil {
+		return fmt.Errorf("queue stranded validations: %w", err)
+	}
+	return nil
 }
 
 // RequeueStalledJobs puts back every running job whose worker has stopped
@@ -174,6 +209,10 @@ func (q *Queries) RequeueStalledJobs(ctx context.Context, staleFor time.Duration
 	`, stalledNote, (*int32)(nil), staleFor.Seconds())
 	if err != nil {
 		return 0, fmt.Errorf("requeue stalled jobs: %w", err)
+	}
+	if _, err := q.db.Exec(ctx, queueStrandedValidations,
+		staleFor.Seconds(), ImportAttempts); err != nil {
+		return 0, fmt.Errorf("queue stranded validations: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }

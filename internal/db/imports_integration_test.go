@@ -834,3 +834,106 @@ func TestAnImportOfARequestThatIsGoneSaysSo(t *testing.T) {
 		t.Fatalf("DownloadRequestServesWant() error = %v, want %v", err, ErrDownloadRequestGone)
 	}
 }
+
+// validatingSince puts the request into validation with no import job, as a
+// judging pass killed mid-copy leaves it, last touched the given time ago.
+func validatingSince(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, requestID uuid.UUID, ago time.Duration,
+) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `
+		UPDATE download_requests
+		SET import_status = 'validating', updated_at = now() - make_interval(secs => $2)
+		WHERE id = $1
+	`, requestID, ago.Seconds()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func importsQueuedFor(ctx context.Context, t *testing.T, pool *pgxpool.Pool, requestID uuid.UUID) int {
+	t.Helper()
+	var queued int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM jobs
+		WHERE kind = 'import_download' AND payload->>'requestId' = $1::text
+	`, requestID).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	return queued
+}
+
+// A judging pass killed mid-copy leaves the request in validation with no job
+// to finish it. The boot pass queues an import for it.
+func TestAValidationAShutdownStrandedIsQueuedAtBoot(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, requestID := importedRelease(ctx, t, pool)
+	validatingSince(ctx, t, pool, requestID, 0)
+
+	if err := queries.RequeueInterruptedJobs(ctx); err != nil {
+		t.Fatalf("RequeueInterruptedJobs() error = %v", err)
+	}
+
+	if queued := importsQueuedFor(ctx, t, pool, requestID); queued != 1 {
+		t.Fatalf("queued imports = %d, want the stranded validation picked up", queued)
+	}
+}
+
+// The pass on a clock picks up a validation nobody has touched for longer than
+// a lease.
+func TestAValidationLeftUntouchedIsQueuedByTheReaper(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, requestID := importedRelease(ctx, t, pool)
+	validatingSince(ctx, t, pool, requestID, time.Hour)
+
+	if _, err := queries.RequeueStalledJobs(ctx, 10*time.Minute); err != nil {
+		t.Fatalf("RequeueStalledJobs() error = %v", err)
+	}
+
+	if queued := importsQueuedFor(ctx, t, pool, requestID); queued != 1 {
+		t.Fatalf("queued imports = %d, want the stranded validation picked up", queued)
+	}
+}
+
+// A validation touched a minute ago may be running in a judging pass right now.
+func TestAValidationUnderWayIsLeftToTheReaperLater(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, requestID := importedRelease(ctx, t, pool)
+	validatingSince(ctx, t, pool, requestID, time.Minute)
+
+	if _, err := queries.RequeueStalledJobs(ctx, 10*time.Minute); err != nil {
+		t.Fatalf("RequeueStalledJobs() error = %v", err)
+	}
+
+	if queued := importsQueuedFor(ctx, t, pool, requestID); queued != 0 {
+		t.Fatalf("queued imports = %d, want none while it may still be running", queued)
+	}
+}
+
+// An import that failed for good is left for a person to retry.
+func TestAValidationWhoseImportFailedForGoodIsNotQueuedAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, requestID := importedRelease(ctx, t, pool)
+	validatingSince(ctx, t, pool, requestID, time.Hour)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO jobs (kind, payload, status, attempts, max_attempts)
+		VALUES ('import_download', jsonb_build_object('requestId', $1::text), 'failed', 6, 6)
+	`, requestID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := queries.RequeueStalledJobs(ctx, 10*time.Minute); err != nil {
+		t.Fatalf("RequeueStalledJobs() error = %v", err)
+	}
+
+	if queued := importsQueuedFor(ctx, t, pool, requestID); queued != 1 {
+		t.Fatalf("import jobs = %d, want only the failed one", queued)
+	}
+}
