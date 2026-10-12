@@ -25,7 +25,9 @@ function answer(overrides: Partial<GlobalSearchResults> = {}): GlobalSearchResul
         sortName: 'Radiohead',
         followed: true,
         fileCount: 148,
-        releaseCount: 9
+        releaseCount: 9,
+        ownedReleases: 7,
+        countedReleases: 9
       }
     ],
     releases: [

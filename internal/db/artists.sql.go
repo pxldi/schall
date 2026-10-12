@@ -999,6 +999,45 @@ func (q *Queries) GetArtist(ctx context.Context, id uuid.UUID) (GetArtistRow, er
 	return i, err
 }
 
+const heldReleaseTitles = `-- name: HeldReleaseTitles :many
+SELECT albums.title, (count(*) OVER ())::bigint AS total_count
+FROM albums
+WHERE albums.artist_id = $1
+  AND albums.owned_track_count > 0
+ORDER BY albums.owned_track_count DESC, albums.release_date DESC NULLS LAST, albums.id
+LIMIT 2
+`
+
+type HeldReleaseTitlesRow struct {
+	Title      string `json:"title"`
+	TotalCount int64  `json:"total_count"`
+}
+
+// The artist's releases the library has any of, most held first, for the
+// sentence an artist nobody follows is explained by. It is read each time
+// rather than stored, because a stored sentence named the release that first
+// brought the artist in, and a file re-identified since then left it naming a
+// release the library no longer holds anything of.
+func (q *Queries) HeldReleaseTitles(ctx context.Context, artistID uuid.UUID) ([]HeldReleaseTitlesRow, error) {
+	rows, err := q.db.Query(ctx, heldReleaseTitles, artistID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HeldReleaseTitlesRow{}
+	for rows.Next() {
+		var i HeldReleaseTitlesRow
+		if err := rows.Scan(&i.Title, &i.TotalCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtists = `-- name: ListArtists :many
 WITH held_recordings AS MATERIALIZED (
     -- The library can hold a track without mapping it onto this release:
@@ -1595,6 +1634,42 @@ func (q *Queries) SetArtistWantMissing(ctx context.Context, arg SetArtistWantMis
 	var i SetArtistWantMissingRow
 	err := row.Scan(&i.ID, &i.WantMissingSince)
 	return i, err
+}
+
+const smallArtistImages = `-- name: SmallArtistImages :many
+SELECT artist_id, image
+FROM artist_images
+WHERE image IS NOT NULL
+  AND octet_length(image) < $1::int
+`
+
+type SmallArtistImagesRow struct {
+	ArtistID uuid.UUID `json:"artist_id"`
+	Image    []byte    `json:"image"`
+}
+
+// Cached artist pictures small enough to be a provider's stock "no photo"
+// avatar. The sweep decodes each and replaces the ones that are with an
+// absence; a real photograph is rarely this small, so the size keeps the pass
+// from reading every picture.
+func (q *Queries) SmallArtistImages(ctx context.Context, maxBytes int32) ([]SmallArtistImagesRow, error) {
+	rows, err := q.db.Query(ctx, smallArtistImages, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SmallArtistImagesRow{}
+	for rows.Next() {
+		var i SmallArtistImagesRow
+		if err := rows.Scan(&i.ArtistID, &i.Image); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const staleFollowedArtists = `-- name: StaleFollowedArtists :many

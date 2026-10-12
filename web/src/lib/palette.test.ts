@@ -26,7 +26,9 @@ const artist = {
   sortName: 'Radiohead',
   followed: true,
   fileCount: 148,
-  releaseCount: 9
+  releaseCount: 9,
+  ownedReleases: 7,
+  countedReleases: 9
 };
 
 const release = {
@@ -245,10 +247,11 @@ describe('paletteCategories', () => {
     expect(paletteCategories(missing, 'idioteque')[0].rows[0].role).toBe('idle');
   });
 
-  it('says how much of an artist the library holds', () => {
+  // The same fraction the artist's page states, where owned means complete.
+  it('says how much of an artist the library holds as the artist page does', () => {
     const [artists] = paletteCategories(everything, 'radiohead');
 
-    expect(artists.rows[0].subtitle).toBe('9 releases owned');
+    expect(artists.rows[0].subtitle).toBe('7 of 9 releases owned');
   });
 
   // Following is an icon on the photo, not a word in the line under the name.

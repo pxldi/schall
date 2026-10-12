@@ -40,6 +40,11 @@ type searchArtistResult struct {
 	// and not an approximation of it; see Search in internal/db/search.go.
 	FileCount    int64 `json:"fileCount"`
 	ReleaseCount int64 `json:"releaseCount"`
+	// OwnedReleases of CountedReleases is the fraction the artist's own page
+	// states, counted by the same rule (db.ArtistDiscography), so the palette
+	// and the page never give two numbers for "releases owned".
+	OwnedReleases   int64 `json:"ownedReleases"`
+	CountedReleases int64 `json:"countedReleases"`
 }
 
 type searchReleaseResult struct {
@@ -203,9 +208,11 @@ func searchResults(
 		Playlists: results.Totals.Playlists,
 	}
 	for _, row := range results.Artists {
+		discography := results.Discographies[row.ID]
 		payload.Artists = append(payload.Artists, searchArtistResult{
 			ID: row.ID, Name: row.Name, SortName: row.SortName, Followed: row.Followed,
 			FileCount: row.FileCount, ReleaseCount: row.ReleaseCount,
+			OwnedReleases: discography.Owned, CountedReleases: discography.Counted,
 		})
 	}
 	for _, row := range results.Releases {

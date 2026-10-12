@@ -113,6 +113,7 @@ type fakeStore struct {
 	cachedArtistImage    db.ArtistImageRow
 	cachedArtistImageErr error
 	savedArtistImages    []db.SaveArtistImageParams
+	heldReleases         []db.HeldReleaseTitlesRow
 	// inks are the stored inks of releases, answered for whichever are asked.
 	inks []db.ReleaseInksRow
 	// tracksErr answers ListAlbumTracks alone, because a release that could be
@@ -148,6 +149,10 @@ func (store *fakeStore) ReleaseInks(
 		}
 	}
 	return found, nil
+}
+
+func (store *fakeStore) HeldReleaseTitles(context.Context, uuid.UUID) ([]db.HeldReleaseTitlesRow, error) {
+	return store.heldReleases, nil
 }
 
 func (store *fakeStore) ArtistImage(context.Context, uuid.UUID) (db.ArtistImageRow, error) {
@@ -630,6 +635,36 @@ func TestGetArtist(t *testing.T) {
 	}
 	if body.ID != id || body.AlbumCount != 12 || body.RefreshStatus != "completed" {
 		t.Errorf("response = %#v", body)
+	}
+}
+
+// A held artist is explained by what the library holds of them now. The stored
+// sentence named the release that first brought Kendrick Lamar in, To Pimp a
+// Butterfly, after the file behind it was re-identified onto a compilation.
+func TestGetArtistExplainsAHeldArtistByWhatTheLibraryHoldsNow(t *testing.T) {
+	id := uuid.New()
+	stale := "In the catalogue because your library holds \"To Pimp a Butterfly\"."
+	store := &fakeStore{
+		artist: db.GetArtistRow{
+			ID: id, Name: "Kendrick Lamar", SortName: "Lamar, Kendrick",
+			CatalogueSummary: stale,
+		},
+		heldReleases: []db.HeldReleaseTitlesRow{
+			{Title: "good kid, m.A.A.d city", TotalCount: 3},
+			{Title: "GNX", TotalCount: 3},
+		},
+	}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop())
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/artists/"+id.String(), nil))
+
+	var body artistDetailResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := "Your library has music from good kid, m.A.A.d city, GNX and 1 more."
+	if body.CatalogueSummary == nil || *body.CatalogueSummary != want {
+		t.Errorf("summary = %v, want %q", body.CatalogueSummary, want)
 	}
 }
 
@@ -2261,6 +2296,10 @@ func TestSettingTheMonitorLevelRecordsIt(t *testing.T) {
 // cover cache and the settings by asserting the store supports them, so a store
 // that supports none of it is how the "unavailable" answers are reached.
 type catalogueOnly struct{}
+
+func (catalogueOnly) HeldReleaseTitles(context.Context, uuid.UUID) ([]db.HeldReleaseTitlesRow, error) {
+	return nil, nil
+}
 
 func (catalogueOnly) ListArtists(context.Context, db.ListArtistsParams) ([]db.ListArtistsRow, error) {
 	return nil, nil

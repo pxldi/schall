@@ -237,6 +237,28 @@ func TestSearchSaysHowManyReleasesAnArtistIsHeldOn(t *testing.T) {
 	}
 }
 
+// The palette states the artist page's own fraction, counted by the same rule,
+// so the two never disagree about how many releases are owned.
+func TestSearchStatesTheArtistPagesOwnedFraction(t *testing.T) {
+	artistID := uuid.New()
+	store := &searchingStore{fakeStore: &fakeStore{}, results: db.SearchResults{
+		Artists: []db.SearchArtistsRow{{
+			ID: artistID, Name: "Kendrick Lamar", SortName: "Lamar, Kendrick",
+			FileCount: 4, ReleaseCount: 3,
+		}},
+		Discographies: map[uuid.UUID]db.ArtistDiscography{
+			artistID: {Releases: 170, Owned: 1, Counted: 167},
+		},
+	}}
+
+	body := searchResponseFor(t, store, "/api/v1/search?q=kendrick", http.StatusOK)
+
+	if len(body.Artists) != 1 || body.Artists[0].OwnedReleases != 1 ||
+		body.Artists[0].CountedReleases != 167 {
+		t.Errorf("artists = %#v, want 1 of 167 releases owned", body.Artists)
+	}
+}
+
 func TestSearchSaysHowLongACatalogueTrackIs(t *testing.T) {
 	store := &searchingStore{fakeStore: &fakeStore{}, results: db.SearchResults{
 		Tracks: []db.SearchCatalogueTracksRow{{

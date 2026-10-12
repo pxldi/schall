@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // SearchParams is one question and how much of an answer is wanted per kind.
@@ -33,12 +35,16 @@ type SearchTotals struct {
 // showing five headings should not have to tell "nothing matched" apart from
 // "this kind was not searched".
 type SearchResults struct {
-	Artists   []SearchArtistsRow
-	Releases  []SearchReleasesRow
-	Tracks    []SearchCatalogueTracksRow
-	Files     []SearchLibraryFilesRow
-	Playlists []SearchPlaylistsRow
-	Totals    SearchTotals
+	Artists []SearchArtistsRow
+	// Discographies is each listed artist's discography, counted the way the
+	// artist's own page counts it, so the palette and the page say the same
+	// number of releases owned.
+	Discographies map[uuid.UUID]ArtistDiscography
+	Releases      []SearchReleasesRow
+	Tracks        []SearchCatalogueTracksRow
+	Files         []SearchLibraryFilesRow
+	Playlists     []SearchPlaylistsRow
+	Totals        SearchTotals
 }
 
 // searchTotal reads the total off the answer that carries it. Every row of one
@@ -97,6 +103,14 @@ func (q *Queries) Search(ctx context.Context, params SearchParams) (SearchResult
 		return results, fmt.Errorf("search artists for %q: %w", query, err)
 	}
 	results.Artists = artists
+	results.Discographies = make(map[uuid.UUID]ArtistDiscography, len(artists))
+	for _, artist := range artists {
+		discography, err := q.ArtistDiscography(ctx, artist.ID)
+		if err != nil {
+			return results, fmt.Errorf("search artists for %q: %w", query, err)
+		}
+		results.Discographies[artist.ID] = discography
+	}
 
 	releases, err := q.SearchReleases(ctx, SearchReleasesParams{Query: query, Limit: params.Limit})
 	if err != nil {

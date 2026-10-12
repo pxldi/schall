@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -42,6 +43,7 @@ type Store interface {
 	CatalogueGenres(context.Context) ([]string, error)
 	GetArtist(context.Context, uuid.UUID) (db.GetArtistRow, error)
 	ArtistDiscography(context.Context, uuid.UUID) (db.ArtistDiscography, error)
+	HeldReleaseTitles(context.Context, uuid.UUID) ([]db.HeldReleaseTitlesRow, error)
 	ArtistMusicBrainzIDsByName(context.Context, []string) (map[string]uuid.UUID, error)
 	CreateArtist(context.Context, db.CreateArtistParams) (db.CreateArtistRow, error)
 	FollowArtistByID(context.Context, uuid.UUID) (db.FollowArtistByIDRow, error)
@@ -2095,6 +2097,18 @@ func (api *API) getArtist(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	summary := presentText(artist.CatalogueSummary)
+	if !artist.FollowedAt.Valid && artist.Source == "" {
+		held, err := api.store.HeldReleaseTitles(request.Context(), artistID)
+		if err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		if sentence := heldSentence(held); sentence != "" {
+			summary = &sentence
+		}
+	}
+
 	var leadInks *inksResponse
 	if artist.LeadAlbumID.Valid {
 		leadInks = rowInks(
@@ -2111,7 +2125,7 @@ func (api *API) getArtist(response http.ResponseWriter, request *http.Request) {
 			SortName:         artist.SortName,
 			Followed:         artist.FollowedAt.Valid,
 			FollowedAt:       nullableTime(artist.FollowedAt.Valid, artist.FollowedAt.Time),
-			CatalogueSummary: presentText(artist.CatalogueSummary),
+			CatalogueSummary: summary,
 			Source:           artist.Source,
 			LastRefreshedAt:  nullableTime(artist.LastRefreshedAt.Valid, artist.LastRefreshedAt.Time),
 			RefreshStatus:    artist.RefreshStatus,
@@ -3096,6 +3110,23 @@ func (api *API) artistImage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	api.writeCover(response, request, cached.Image, cached.ContentType)
+}
+
+// heldSentence says why an artist nobody follows is listed, from what the
+// library holds of them now. Empty when it holds nothing on their own releases,
+// and the stored sentence stands.
+func heldSentence(held []db.HeldReleaseTitlesRow) string {
+	switch {
+	case len(held) == 0:
+		return ""
+	case len(held) == 1:
+		return fmt.Sprintf("Your library has music from %s.", held[0].Title)
+	case held[0].TotalCount == 2:
+		return fmt.Sprintf("Your library has music from %s and %s.", held[0].Title, held[1].Title)
+	default:
+		return fmt.Sprintf("Your library has music from %s, %s and %d more.",
+			held[0].Title, held[1].Title, held[0].TotalCount-2)
+	}
 }
 
 // writeCover answers with the picture, or says there is none. A cover changes

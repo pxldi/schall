@@ -3,6 +3,7 @@ package coverart
 import (
 	"context"
 	"errors"
+	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ type fakeCoverStore struct {
 	saved          []db.SaveReleaseCoverArtParams
 	artistsWaiting []db.ArtistsMissingImageRow
 	savedArtists   []db.SaveArtistImageParams
+	smallArtists   []db.SmallArtistImagesRow
 	// askedArtists is how the artists waiting were asked for, which is where the
 	// day the chain last changed reaches the database.
 	askedArtists []db.ArtistsMissingImageParams
@@ -48,6 +50,12 @@ func (store *fakeCoverStore) ReleasesMissingCoverArt(
 	context.Context, int32,
 ) ([]db.ReleasesMissingCoverArtRow, error) {
 	return store.waiting, store.listReleasesErr
+}
+
+func (store *fakeCoverStore) SmallArtistImages(
+	context.Context, int32,
+) ([]db.SmallArtistImagesRow, error) {
+	return store.smallArtists, nil
 }
 
 func (store *fakeCoverStore) ArtistsMissingImage(
@@ -348,6 +356,33 @@ func TestASweepPicturesTheArtistsNobodyHasLookedFor(t *testing.T) {
 		if len(saved.Image) == 0 || saved.Source != NameCommons {
 			t.Fatalf("saved = %+v, want the picture kept and labelled", saved)
 		}
+	}
+}
+
+// A stock avatar cached before the fetch refused them is replaced by an
+// absence, and a real picture beside it is left alone.
+func TestASweepDropsACachedStockAvatar(t *testing.T) {
+	stock, real := uuid.New(), uuid.New()
+	avatar := encodeJPEG(t, func(x, y int) color.RGBA {
+		if (x-48)*(x-48)+(y-36)*(y-36) < 300 {
+			return color.RGBA{186, 186, 186, 255}
+		}
+		return color.RGBA{238, 238, 238, 255}
+	})
+	store := &fakeCoverStore{smallArtists: []db.SmallArtistImagesRow{
+		{ArtistID: stock, Image: avatar},
+		{ArtistID: real, Image: aPicture(1)},
+	}}
+	sweeper := artistSweeperFor(t, store, func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusNotFound)
+	})
+
+	if _, err := sweeper.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(store.savedArtists) != 1 || store.savedArtists[0].ArtistID != stock ||
+		store.savedArtists[0].Image != nil || store.savedArtists[0].Source != NameNobody {
+		t.Fatalf("saved = %+v, want only the stock avatar replaced by an absence", store.savedArtists)
 	}
 }
 
