@@ -561,6 +561,8 @@
       <input
         bind:value={search}
         type="search"
+        spellcheck="false"
+        autocomplete="off"
         placeholder={tab === 'wanted' ? 'Filter wishlist' : 'Filter downloads'}
         aria-label={tab === 'wanted' ? 'Filter wishlist' : 'Filter downloads'}
         class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"

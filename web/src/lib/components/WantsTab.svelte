@@ -89,15 +89,22 @@
   // A figure on the pile nobody is looking at has to be right, so each is asked
   // for rather than counted out of a list that was never fetched. One row each:
   // what is read here is how many there are, not which. The looking figure is
-  // the tab badge's own key, so that request is made once for both.
-  const looking = createQuery({
-    queryKey: ['wants', 'looking', 'count'],
-    queryFn: () => api.wants({ statuses: lookingFor, limit: 1 })
-  });
-  const stopped = createQuery({
-    queryKey: ['wants', 'stopped', 'count'],
-    queryFn: () => api.wants({ statuses: statuses.stopped, limit: 1 })
-  });
+  // the tab badge's own key, so that request is made once for both. Under a
+  // filter both figures count the matches, so the pile and its figure agree.
+  const looking = createQuery(
+    toStore(() => ({
+      queryKey: asked ? ['wants', 'looking', 'count', asked] : ['wants', 'looking', 'count'],
+      queryFn: () => api.wants({ statuses: lookingFor, query: asked, limit: 1 }),
+      placeholderData: keepPreviousData
+    }))
+  );
+  const stopped = createQuery(
+    toStore(() => ({
+      queryKey: ['wants', 'stopped', 'count', asked],
+      queryFn: () => api.wants({ statuses: statuses.stopped, query: asked, limit: 1 }),
+      placeholderData: keepPreviousData
+    }))
+  );
 
   const items = $derived($wants.data?.items ?? []);
   const total = $derived($wants.data?.total ?? 0);
@@ -132,6 +139,13 @@
     if (!want.anchorUnavailable) return '';
     if (want.anchorNextAttemptAt) return `Sample retry ${relativeTime(want.anchorNextAttemptAt)}`;
     return `No sample · ${want.anchorUnavailable}`;
+  }
+
+  // Why a want is waiting, in the loop's own sentence. It sits in the mark's
+  // tooltip rather than on a line of its own: on a list of a thousand rows that
+  // line was most of the page, and it was cut off with "…" anyway.
+  function reason(want: AcquisitionTarget, sample: string) {
+    return sample || (waiting(want) ? summaryLine(want) : '');
   }
 
   const piles = $derived([
@@ -282,13 +296,13 @@
     pending={$looking.isPending || $stopped.isPending}
   />
 
-  <div class="h-14">
-    {#if notice}
-      <StatusBadge role="idle" wrap class="h-full overflow-y-auto">
-        <span class="text-meta leading-relaxed text-ink">{notice}</span>
-      </StatusBadge>
-    {/if}
-  </div>
+  <!-- Drawn only when there is something to say. A box held open for it left
+       about 120px of nothing between the piles and the first row. -->
+  {#if notice}
+    <StatusBadge role="idle" wrap>
+      <span class="text-meta leading-relaxed text-ink">{notice}</span>
+    </StatusBadge>
+  {/if}
 
   {#if $wants.isError}
     <!-- It is the list that failed, so the failure stands where the list would
@@ -309,7 +323,6 @@
         <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
           <Skeleton class="h-4 w-full" />
           <Skeleton class="mt-1.5 h-3.5 w-2/3" />
-          <Skeleton class="mt-1.5 h-3.5 w-1/2" />
         </div>
       {/each}
     </div>
@@ -319,6 +332,7 @@
       {#each items as want (want.id)}
         {@const mark = standing(want)}
         {@const sample = sampleStatus(want)}
+        {@const why = reason(want, sample)}
         <!-- A row stopped or taken back leaves this pile, and folds away rather
              than vanishing; rows leaving because the page changed go on the cut. -->
         <article
@@ -331,11 +345,11 @@
             <!-- Icons, never typed glyphs, as on the transfers beside it. The
                  mark carries the state's name on hover and for a screen
                  reader, because the chip is left off the common case. -->
-            <span class="flex shrink-0" title={mark.text}>
+            <span class="flex shrink-0" title={[mark.text, why].filter(Boolean).join(' · ')}>
               <StateMark role={mark.role}>
                 <Icon name={markIcons[mark.role]} size="sm" class="size-2.5 stroke-[3]" />
               </StateMark>
-              {#if !chipWorthShowing(mark)}<span class="sr-only">{mark.text}</span>{/if}
+              <span class="sr-only">{[chipWorthShowing(mark) ? '' : mark.text, why].filter(Boolean).join(' · ')}</span>
             </span>
 
             <!-- On a phone the name takes the whole line and everything after
@@ -352,12 +366,6 @@
                 {:else}
                   {detail(want)}
                 {/if}
-              </span>
-              <span
-                class="mt-0.5 block min-h-4 truncate text-meta text-ink-3"
-                title={sample || (waiting(want) ? summaryLine(want) || undefined : undefined)}
-              >
-                {#if sample}{sample}{:else if waiting(want)}{summaryLine(want)}{/if}
               </span>
             </span>
 
