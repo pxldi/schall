@@ -41,6 +41,7 @@ type overviewJSON struct {
 		} `json:"mostPlayed"`
 		TopArtists []struct {
 			Name       string  `json:"name"`
+			ArtistMBID *string `json:"artistMbid"`
 			ArtistID   *string `json:"artistId"`
 			Listens    int64   `json:"listens"`
 			PictureURL *string `json:"pictureUrl"`
@@ -632,5 +633,77 @@ func TestOverviewTopArtistOpensTheArtistItsPictureShows(t *testing.T) {
 				t.Errorf("Ye names two artists, so no link and no picture; got %+v", artist)
 			}
 		}
+	}
+}
+
+// The player named Pashanim alone on a song MusicBrainz credits to Selim61
+// and Pashanim, and the first ID of that listen is Selim61's. Read as the
+// row's ID it named nobody in the catalogue, so Pashanim opened nothing and
+// showed no picture.
+func TestOverviewTopArtistIgnoresTheIDOfASharedCredit(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	const pashanimMBID = "962a2590-91ed-4946-9724-f7dff6c61e03"
+	const selimMBID = "d7dcb687-8a8d-4489-8c48-62f8fde86323"
+	var pashanimID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO artists (name, sort_name, musicbrainz_id) VALUES ('Pashanim', 'pashanim', $1::uuid)
+		RETURNING id::text`, pashanimMBID).Scan(&pashanimID); err != nil {
+		t.Fatalf("insert an artist: %v", err)
+	}
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Pashanim", TrackName: "Shishas",
+			ArtistMBIDs: []string{pashanimMBID}},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "Pashanim", TrackName: "Ein Song mit Selim",
+			ArtistMBIDs: []string{selimMBID, pashanimMBID}},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	if len(got.Listening.TopArtists) != 1 {
+		t.Fatalf("top artists = %+v, want Pashanim alone", got.Listening.TopArtists)
+	}
+	pashanim := got.Listening.TopArtists[0]
+	if pashanim.ArtistID == nil || *pashanim.ArtistID != pashanimID {
+		t.Errorf("Pashanim opens %v, want %s", pashanim.ArtistID, pashanimID)
+	}
+	if pashanim.ArtistMBID == nil || *pashanim.ArtistMBID != pashanimMBID {
+		t.Errorf("Pashanim carries %v, want %s", pashanim.ArtistMBID, pashanimMBID)
+	}
+}
+
+// Two MusicBrainz artists listened to under one name are two people. The row
+// links neither, even when the catalogue holds only one of them.
+func TestOverviewTopArtistLinksNothingWhenItsListensNameTwoArtists(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (name, sort_name) VALUES ('Nova', 'nova')`); err != nil {
+		t.Fatalf("insert an artist: %v", err)
+	}
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Nova", TrackName: "One",
+			ArtistMBIDs: []string{"11111111-1111-1111-1111-111111111111"}},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "Nova", TrackName: "Two",
+			ArtistMBIDs: []string{"22222222-2222-2222-2222-222222222222"}},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	if len(got.Listening.TopArtists) != 1 {
+		t.Fatalf("top artists = %+v, want Nova alone", got.Listening.TopArtists)
+	}
+	if nova := got.Listening.TopArtists[0]; nova.ArtistID != nil || nova.ArtistMBID != nil {
+		t.Errorf("Nova names two artists, so no ID and no link; got %+v", nova)
 	}
 }

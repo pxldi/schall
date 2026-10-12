@@ -36,15 +36,10 @@
   const detail = createQuery({
     queryKey: ['playlists', playlistId],
     queryFn: () => api.playlist(playlistId),
-    // The entries settle as the sweep resolves them, minutes after the import.
-    // SSE covers that; the interval is the safety net while wants are open.
-    // Only a search in progress moves on its own between events. A list of
-    // wants that wait weeks for a peer or for MusicBrainz asked for all 323
-    // rows every 15 s and changed nothing.
-    refetchInterval: (query) =>
-      (query.state.data?.entries ?? []).some((entry) => entry.targetStatus === 'searching')
-        ? 15_000
-        : false
+    // Read when the page opens, and again when an import or a sync ends. An
+    // entry's want settling is not re-read: while downloads ran that fetched
+    // every loaded page of the list every 8 to 11 s.
+    refetchInterval: false
   });
 
   const playlist = $derived($detail.data?.playlist);
@@ -280,15 +275,18 @@
       <BackLink fallback="/playlists" label="Playlists" />
     {/snippet}
     {#snippet sub()}
-      <!-- One child, so the hero puts no dot of its own between the parts:
-           each part carries its dot at its end and never wraps inside, so a
-           narrow window breaks the line between parts and no line starts
-           with a dot. -->
-      <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <!-- One child, so the hero puts no dot of its own between the parts.
+           Each part carries its dot in front, in a box as wide as the gap.
+           The row is pulled left by that width and clipped, so the dot of a
+           part that starts a line is cut off: no line starts or ends with a
+           dot, however narrow the window. -->
+      <span class="block overflow-x-clip">
+      <span class="-ml-4 flex flex-wrap items-center gap-y-1">
         {#each factParts(playlist, entries) as part (part)}
-          <span class="numeric whitespace-nowrap">{part}<span class="ml-2 text-ink-4" aria-hidden="true">·</span></span>
+          <span class="numeric whitespace-nowrap"><span class="inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>{part}</span>
         {/each}
         <span class="flex flex-wrap items-center gap-2">
+        <span class="-mr-2 inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>
         <OwnedBar owned={ownedOf(entries)} total={entries.length} width={120} noun="songs" />
         <span class="text-meta text-ink-3">owned</span>
         {#if pairingAsked}
@@ -310,6 +308,7 @@
           {/if}
         {/if}
         </span>
+      </span>
       </span>
     {/snippet}
   </Hero>

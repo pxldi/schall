@@ -71,6 +71,16 @@ describe('connectEvents', () => {
     );
   });
 
+  // The Overview is read once when it opens. A scan or an import landing every
+  // few seconds re-read the whole page under the reader.
+  it('leaves the Overview alone when the library moves', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('library');
+
+    expect(asked(invalidateQueries)).not.toContain('overview');
+  });
+
   it('keeps the library views the same notice already carried', () => {
     const { invalidateQueries, stream } = connect();
 
@@ -96,13 +106,14 @@ describe('connectEvents', () => {
   // something else should still fail.
   const queue = ['jobs', 'jobs-failed', 'jobs-schedule'];
 
-  it('reaches the playlists, the review queue, the wants, the dashboard and search when a want settles', () => {
+  // A want settles every few seconds while downloads run. Re-reading an open
+  // playlist on each one fetched every loaded page of it again.
+  it('reaches the review queue, the wants, the dashboard and search when a want settles', () => {
     const { invalidateQueries, stream } = connect();
 
     stream.announce('acquisitions');
 
     expect(asked(invalidateQueries)).toEqual([
-      'playlists',
       'review-queue',
       'wants',
       'dashboard',
@@ -111,6 +122,7 @@ describe('connectEvents', () => {
     ]);
   });
 
+  // The Overview is read once when it opens.
   it('reaches the download views and the dashboard when a transfer moves', () => {
     const { invalidateQueries, stream } = connect();
 
@@ -119,7 +131,6 @@ describe('connectEvents', () => {
     expect(asked(invalidateQueries)).toEqual([
       'downloads',
       'dashboard',
-      'overview',
       'inbox-cleanups',
       ...queue
     ]);

@@ -21,9 +21,9 @@
   const overview = createQuery({
     queryKey: ['overview', zone],
     queryFn: () => api.overview(zone),
-    // Listens arrive without an event, so the page re-reads on its own: often
-    // while something is downloading, otherwise every five minutes.
-    refetchInterval: (query) => (query.state.data?.arrived.downloading ? 15_000 : 5 * 60_000)
+    // Read once when the page opens, newest arrival included. Re-reading every
+    // 15 s while something downloaded moved the lists under the reader.
+    refetchInterval: false
   });
 
   // A played song the library does not hold is wanted and let go with the
@@ -802,10 +802,21 @@
   }
   /* A ranked row: its place in the light ink and a wash behind it as long as
      its share of the first row. */
+  /* The row is one box: the wash and the hover fill both take its shape. The
+     hover used to light the link inside the padding while the wash began at
+     the row's edge with its own inset and radius, and the two read as boxes
+     that did not line up. */
   .ranked {
     position: relative;
     isolation: isolate;
     padding-inline: 0.625rem;
+    /* Rows sit flush so whole rows snap into the box; the clip keeps a
+       hairline of panel between two washes. */
+    clip-path: inset(2px 0 round var(--radius-row));
+  }
+  .ranked:has(a.row-link:hover),
+  .ranked:has(a.row-link:focus-visible) {
+    background: color-mix(in srgb, var(--color-duo-light) 9%, transparent);
   }
   /* The list scrolls, so it clips sideways: the row keeps its wash and hover
      inside its own box instead of reaching past the list's edge. */
@@ -813,11 +824,21 @@
     margin-inline: 0;
     padding-inline: 0;
   }
+  .ranked a.row-link:hover {
+    background: none;
+  }
+  /* The clip would cut the link's own ring, so the row draws it inside. */
+  .ranked a.row-link:focus-visible {
+    outline: none;
+  }
+  .ranked:has(a.row-link:focus-visible) {
+    outline: 2px solid var(--color-duo-light);
+    outline-offset: -4px;
+  }
   .wash {
     position: absolute;
-    inset: 4px auto 4px 0;
+    inset: 0 auto 0 0;
     z-index: -1;
-    border-radius: 9px;
     background: color-mix(in srgb, var(--color-duo-light) 13%, transparent);
   }
   .rank {

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, setup } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, setup, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Playlist } from '$lib/api';
 
@@ -163,5 +163,33 @@ describe('the playlist list', () => {
     expect(await screen.findByText('Late night')).toBeTruthy();
 
     vi.useRealTimers();
+  });
+
+  // The browser's confirm() blocked the tab and looked like nothing else in
+  // Schall. The question is now the page's own panel.
+  it('asks in its own panel before it stops following a list', async () => {
+    const sent: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          sent.push(String(input));
+          return new Response(null, { status: 204 });
+        }
+        return new Response(JSON.stringify({ items: [playlist()] }), { status: 200 });
+      })
+    );
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Stop following' }));
+    const question = await screen.findByRole('dialog');
+    expect(question.textContent).toContain('Stop following “Late night”?');
+    expect(sent).toEqual([]);
+
+    await fireEvent.click(within(question).getByRole('button', { name: 'Stop following' }));
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual(['/api/v1/playlists/a1b2c3d4-0000-4000-8000-000000000001'])
+    );
   });
 });

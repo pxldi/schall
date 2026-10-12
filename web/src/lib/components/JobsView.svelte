@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ConfirmDialog from './ConfirmDialog.svelte';
   import Icon from './Icon.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import {
@@ -435,13 +436,11 @@
   // point of the control — so it asks first, the same way unfollowing a
   // playlist does. The count in the question is the same one on the row: at
   // least, rather than a total the page cannot see.
+  let cancelling = $state<{ kind: string; count: number; atLeast: boolean } | null>(null);
+  let cancelOpen = $state(false);
   function confirmCancelKind(backlog: { kind: string; count: number; atLeast: boolean }) {
-    const question =
-      `Cancel every queued “${kindName(backlog.kind)}” job? ` +
-      `${backlogCount(backlog)} are queued now. This cannot be undone.`;
-    if (confirm(question)) {
-      $cancelKind.mutate(backlog.kind);
-    }
+    cancelling = backlog;
+    cancelOpen = true;
   }
 
   // --- Retry ---
@@ -732,6 +731,17 @@
       : cause.detail;
   }
 </script>
+
+<ConfirmDialog
+  bind:open={cancelOpen}
+  title={cancelling ? `Cancel every queued “${kindName(cancelling.kind)}” job?` : ''}
+  description={cancelling
+    ? `${backlogCount(cancelling)} are queued now. This cannot be undone.`
+    : ''}
+  action="Cancel jobs"
+  danger
+  onconfirm={() => cancelling && $cancelKind.mutate(cancelling.kind)}
+/>
 
 <div class="flex flex-col gap-11">
   <!-- ── In flight ────────────────────────────────────────────────────── -->

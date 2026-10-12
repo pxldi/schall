@@ -535,13 +535,27 @@
 
 <!-- What the entry asks for, beside the copies that answer it, so the rows
      read across: Length against Length, Album against Album. "Wrong song" is
-     about the entry, so it sits here rather than with the decisions. -->
+     about the entry, so it sits here rather than with the decisions. It heads
+     the card: at the foot of it, a 753 px window opened with it under the
+     sticky decision bar. -->
 {#snippet wanted(want: ReviewItem)}
-  <div class="flex min-h-[14rem] w-full flex-col gap-3 rounded-card border border-dashed border-line-regular p-4">
-    <span class="flex items-center gap-1.5 text-meta text-ink-3">
-      <Icon name="want" size={14} />
-      Wishlist entry
-    </span>
+  <div class="flex w-full flex-col gap-3 rounded-card border border-dashed border-line-regular p-4">
+    <div class="-my-1 -mr-1.5 flex items-center gap-1.5">
+      <span class="flex items-center gap-1.5 text-meta text-ink-3">
+        <Icon name="want" size={14} />
+        Wishlist entry
+      </span>
+      <Button
+        class="ml-auto"
+        variant="ghost"
+        size="sm"
+        onclick={() => $wrongSong.mutate(want.target.id)}
+        disabled={deciding}
+      >
+        <Icon name="ban" size={14} />
+        Wrong song
+      </Button>
+    </div>
     <div class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-quiet-meta">
       <span class="text-ink-3">Length</span>
       <span class="numeric text-body text-ink">
@@ -559,17 +573,6 @@
     {#if want.target.anchorUnavailable && !want.target.anchorNextAttemptAt}
       {@render whyNoSample(want.target)}
     {/if}
-    <div class="mt-auto -ml-1.5">
-      <Button
-        variant="ghost"
-        size="sm"
-        onclick={() => $wrongSong.mutate(want.target.id)}
-        disabled={deciding}
-      >
-        <Icon name="ban" size={14} />
-        Wrong song
-      </Button>
-    </div>
   </div>
 {/snippet}
 

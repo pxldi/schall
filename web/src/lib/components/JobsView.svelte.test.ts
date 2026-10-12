@@ -586,7 +586,6 @@ describe('JobsView', () => {
   // bulk control appears with the count and cancels every one of them with a
   // single press, after asking first.
   it('cancels every queued job of a kind with one press, once confirmed', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
     answering({
       queue: queueOf([
         job({ id: '48211000-0000-4000-8000-000000000001' }),
@@ -598,9 +597,9 @@ describe('JobsView', () => {
 
     expect(await screen.findByText('search — 2 queued')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel all' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel jobs' }));
 
     await vi.waitFor(() => expect(pressedKinds).toEqual(['search_album_sources']));
-    expect(confirm).toHaveBeenCalledTimes(1);
   });
 
   // The list this counts from is the head of the queue, truncated at 200. A
@@ -608,7 +607,6 @@ describe('JobsView', () => {
   // the question that asks before deleting every one of them — Cancel all
   // still removes the whole backlog, the server has no such limit.
   it('says "at least" rather than a total the page cannot see, once the queue is truncated', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
     const queue = queueOf([
       job({ id: '48211000-0000-4000-8000-000000000001' }),
       job({ id: '48211000-0000-4000-8000-000000000002' })
@@ -620,13 +618,13 @@ describe('JobsView', () => {
     expect(await screen.findByText('search — at least 2 queued')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel all' }));
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('at least 2 are queued now'));
+    const question = await screen.findByRole('dialog');
+    expect(question.textContent).toContain('at least 2 are queued now');
   });
 
   // Declining the confirmation sends nothing: a bulk cancel deletes rows a
   // person cannot see one by one, so it must not act on a press alone.
   it('sends nothing when the bulk cancel confirmation is declined', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => false));
     answering({
       queue: queueOf([
         job({ id: '48211000-0000-4000-8000-000000000001' }),
@@ -636,14 +634,16 @@ describe('JobsView', () => {
     opened();
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Cancel all' }));
+    const question = await screen.findByRole('dialog');
+    await fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
 
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(pressedKinds).toEqual([]);
   });
 
   // A kind that is a recurring sweep's own schedule answers zero cancelled and
   // says why, so the press does not read as though nothing had been queued.
   it('says why a scheduled sweep kind was refused rather than reporting nothing changed', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
     answering({
       queue: queueOf([
         job({ id: '48211000-0000-4000-8000-000000000001', kind: 'sweep_genres' }),
@@ -660,6 +660,7 @@ describe('JobsView', () => {
     opened();
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Cancel all' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel jobs' }));
 
     expect(await screen.findByText(/runs on its own schedule/)).toBeTruthy();
   });
