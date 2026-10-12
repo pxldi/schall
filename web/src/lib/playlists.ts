@@ -1,4 +1,5 @@
-import type { PlaylistEntry } from '$lib/api';
+import type { Playlist, PlaylistEntry } from '$lib/api';
+import { calendarDate } from '$lib/utils';
 import { holding, progress, quiet } from '$lib/vocabulary';
 
 /** The five roles every state in Schall is drawn in. Named here rather than a
@@ -61,4 +62,27 @@ export function entryState(entry: PlaylistEntry): EntryState {
  * either later. */
 export function ownedOf(entries: PlaylistEntry[]): number {
   return entries.filter((entry) => entry.ownedFileId).length;
+}
+
+/** Where a list came from, one part per fact. Only a Spotify import fills
+ * owner and import date, so the other sources say where they came from
+ * instead; asking all of them for an owner made the two lists Schall writes
+ * read "Importing playlist…" for good. */
+export function playlistOrigin(playlist: Playlist): string[] {
+  switch (playlist.source) {
+    case 'weekly':
+    case 'new_releases':
+      return ['Made by Schall'];
+    case 'navidrome':
+      return ['From Navidrome'];
+    case 'file':
+      return [playlist.sourceId ? `From ${playlist.sourceId}` : 'From a file'];
+    case 'manual':
+      return ['Made here'];
+  }
+  if (!playlist.ownerName && !playlist.importedAt) return ['Importing playlist…'];
+  return [
+    playlist.ownerName ? `by ${playlist.ownerName}` : 'Owner not recorded',
+    playlist.importedAt ? `imported ${calendarDate(playlist.importedAt)}` : 'importing…'
+  ];
 }

@@ -5,7 +5,8 @@
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
   import { coverSrc, usePagePrint } from '$lib/duoton';
-  import { calendarDate, keepInUrl, urlChoice } from '$lib/utils';
+  import { keepInUrl, urlChoice } from '$lib/utils';
+  import { playlistOrigin } from '$lib/playlists';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
@@ -116,16 +117,6 @@
     mutationFn: (id: string) => api.deletePlaylist(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['playlists'] })
   });
-
-  function importedAgo(playlist: Playlist) {
-    if (!playlist.importedAt) return 'importing…';
-    return `imported ${calendarDate(playlist.importedAt)}`;
-  }
-
-  function playlistSubline(playlist: Playlist) {
-    if (!playlist.ownerName && !playlist.importedAt) return 'Importing playlist…';
-    return `${playlist.ownerName ? `by ${playlist.ownerName}` : 'Owner not recorded'} · ${importedAgo(playlist)}`;
-  }
 
   // Schall makes these two for itself, one row each for the life of the
   // installation. Stopping to follow them is not an action the reader has —
@@ -268,7 +259,7 @@
                   class="flex min-w-0 flex-col gap-0.5"
                 >
                   <span class="truncate text-body font-medium text-ink">{playlist.name}</span>
-                  <span class="truncate text-meta text-ink-3">{playlistSubline(playlist)}</span>
+                  <span class="truncate text-meta text-ink-3">{playlistOrigin(playlist).join(' · ')}</span>
                 </a>
 
                 <span>
