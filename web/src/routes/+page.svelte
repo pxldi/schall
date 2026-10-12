@@ -1,5 +1,6 @@
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
+  import Settle from '$lib/components/Settle.svelte';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, type Overview, type OverviewDay } from '$lib/api';
   import { formatBytes, relativeTime } from '$lib/utils';
@@ -289,8 +290,10 @@
   </div>
 {/snippet}
 
-{#snippet quiet()}
-  <p class="text-quiet-meta text-ink-4">No listens yet</p>
+<!-- The line a panel shows when the read has nothing for it. A panel left
+     blank reads as one that failed to draw. -->
+{#snippet quiet(text: string = 'No listens yet')}
+  <p class="text-quiet-meta text-ink-4">{text}</p>
 {/snippet}
 
 <!-- What a panel shows while the overview is still being read: a breathing
@@ -356,374 +359,403 @@
     <!-- Listens -->
     <section data-panel class="panel relative lg:col-span-7">
       {@render head('listen', 'Listens', 'last 30 days')}
-      {#if $overview.isPending}
-        {@render loadingChart('Listens', 'min-h-[132px]')}
-      {:else if listening?.available}
-        <div class="flex items-center gap-3">
-          <span class="numeric total text-ink">{listening.listens.total.toLocaleString()}</span>
-          {#if change !== null}
-            <!-- Against the thirty days before; the earlier count itself is
-                 not shown. -->
-            <span class="delta font-mono text-meta font-semibold {change >= 0 ? 'text-ok' : 'text-fail'}"
-              title="{listening.listens.previous.toLocaleString()} in the 30 days before"
-              >{change >= 0 ? '+' : ''}{change}%</span
-            >
-          {/if}
-        </div>
-        {@const columns = bars(listening.listens.days, 130)}
-        <svg viewBox="0 0 {BAR_W} 132" preserveAspectRatio="none" class="h-0 min-h-[132px] w-full grow" aria-hidden="true">
-          {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
-            <rect
-              x={bar.x - 1.5}
-              y="0"
-              width={bar.width + 3}
-              height="132"
-              fill="transparent"
-              aria-hidden="true"
-              onmouseenter={(event) => show(event, 'listens', `${weekdayOf(bar.date)} ${dayLabel(bar.date)} · ${plural(bar.count, 'listen')}`)}
-              onmouseleave={hide}
-            />
-          {/each}
-        </svg>
-        <div class="flex justify-between font-mono text-micro text-ink-4">
-          <span>{dayLabel(listening.listens.days[0].date)}</span>
-          <span>{dayLabel(listening.listens.days[14].date)}</span>
-          <span>today</span>
-        </div>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingChart('Listens', 'min-h-[132px]')}
+        {/snippet}
+        {#if listening?.available}
+          <div class="flex items-center gap-3">
+            <span class="numeric total text-ink">{listening.listens.total.toLocaleString()}</span>
+            {#if change !== null}
+              <!-- Against the thirty days before; the earlier count itself is
+                   not shown. -->
+              <span class="delta font-mono text-meta font-semibold {change >= 0 ? 'text-ok' : 'text-fail'}"
+                title="{listening.listens.previous.toLocaleString()} in the 30 days before"
+                >{change >= 0 ? '+' : ''}{change}%</span
+              >
+            {/if}
+          </div>
+          {@const columns = bars(listening.listens.days, 130)}
+          <svg viewBox="0 0 {BAR_W} 132" preserveAspectRatio="none" class="h-0 min-h-[132px] w-full grow" aria-hidden="true">
+            {#each columns as bar (bar.date)}
+              <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
+              <rect
+                x={bar.x - 1.5}
+                y="0"
+                width={bar.width + 3}
+                height="132"
+                fill="transparent"
+                aria-hidden="true"
+                onmouseenter={(event) => show(event, 'listens', `${weekdayOf(bar.date)} ${dayLabel(bar.date)} · ${plural(bar.count, 'listen')}`)}
+                onmouseleave={hide}
+              />
+            {/each}
+          </svg>
+          <div class="flex justify-between font-mono text-micro text-ink-4">
+            <span>{dayLabel(listening.listens.days[0].date)}</span>
+            <span>{dayLabel(listening.listens.days[14].date)}</span>
+            <span>today</span>
+          </div>
+        {:else if listening}
+          {@render quiet()}
+        {/if}
+      </Settle>
       {@render tooltip('listens')}
     </section>
 
     <!-- Most played -->
     <section data-panel class="panel lg:col-span-5">
       {@render head('track', 'Most played', 'this month')}
-      {#if $overview.isPending}
-        {@render loadingRows('Most played', 'min-h-[12.5rem]')}
-      {:else if listening?.available}
-        <!-- Every list here is keyed by position. Two files added in the same
-             second with one title, or one album under two editions, made a
-             content key collide and the throw blanked every panel after it
-             (2026-09-08). The lists are replaced whole on each read, so a
-             positional key loses nothing. -->
-        <div class="panel-scroll min-h-[12.5rem]">
-        <ul class="panel-list" use:more>
-          {#each listening.mostPlayed as song, index (index)}
-            <li class="ranked want-row flex h-11 shrink-0 items-center gap-2.5">
-              <span class="wash" style="width: {share(song.listens, listening.mostPlayed[0].listens)}%" aria-hidden="true"></span>
-              <svelte:element
-                this={song.releaseId ? 'a' : 'div'}
-                href={song.releaseId ? `/releases/${song.releaseId}` : undefined}
-                class="row-link"
-              >
-                <span class="rank" aria-hidden="true">{index + 1}</span>
-                {@render row(song.coverUrl, song.title, song.artist)}
-              </svelte:element>
-              <!-- A held song is the ordinary case and carries no mark; the
-                   exception is the one that can be wanted. -->
-              <span class="flex w-6 shrink-0 items-center justify-center">
-                {#if !song.inLibrary && song.trackId}
-                  <WantToggle
-                    reveal
-                    wanted={song.wanted}
-                    title={song.title}
-                    onwant={() => wantSong(song.trackId!)}
-                    onunwant={() => letGo(song.trackId!)}
-                  />
-                {/if}
-              </span>
-              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{song.listens}</span>
-            </li>
-          {/each}
-        </ul>
-        </div>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingRows('Most played', 'min-h-[12.5rem]')}
+        {/snippet}
+        {#if listening?.available && listening.mostPlayed.length > 0}
+          <!-- Every list here is keyed by position. Two files added in the same
+               second with one title, or one album under two editions, made a
+               content key collide and the throw blanked every panel after it
+               (2026-09-08). The lists are replaced whole on each read, so a
+               positional key loses nothing. -->
+          <div class="panel-scroll min-h-[12.5rem]">
+          <ul class="panel-list" use:more>
+            {#each listening.mostPlayed as song, index (index)}
+              <li class="ranked want-row flex h-11 shrink-0 items-center gap-2.5">
+                <span class="wash" style="width: {share(song.listens, listening.mostPlayed[0].listens)}%" aria-hidden="true"></span>
+                <svelte:element
+                  this={song.releaseId ? 'a' : 'div'}
+                  href={song.releaseId ? `/releases/${song.releaseId}` : undefined}
+                  class="row-link"
+                >
+                  <span class="rank" aria-hidden="true">{index + 1}</span>
+                  {@render row(song.coverUrl, song.title, song.artist)}
+                </svelte:element>
+                <!-- A held song is the ordinary case and carries no mark; the
+                     exception is the one that can be wanted. -->
+                <span class="flex w-6 shrink-0 items-center justify-center">
+                  {#if !song.inLibrary && song.trackId}
+                    <WantToggle
+                      reveal
+                      wanted={song.wanted}
+                      title={song.title}
+                      onwant={() => wantSong(song.trackId!)}
+                      onunwant={() => letGo(song.trackId!)}
+                    />
+                  {/if}
+                </span>
+                <span class="w-7 text-right font-mono text-body font-semibold text-ink">{song.listens}</span>
+              </li>
+            {/each}
+          </ul>
+          </div>
+        {:else if listening}
+          {@render quiet(listening.available ? 'No listens this month' : undefined)}
+        {/if}
+      </Settle>
     </section>
 
     <!-- When you listen -->
     <section data-panel class="panel relative lg:col-span-7">
       {@render head('waiting', 'When you listen', '30 days')}
-      {#if $overview.isPending}
-        {@render loadingChart('When you listen', 'min-h-[7rem]')}
-      {:else if listening?.available}
-        <div class="flex items-baseline gap-5">
-          <span class="flex items-baseline gap-2"><span class="fig">{hourLabel(listening.whenYouListen.peakHour)}</span><span class="text-body text-ink-4">peak</span></span>
-          <span class="flex items-baseline gap-1.5"><span class="font-mono text-quiet-body text-ink">{listening.whenYouListen.busiestWeekday}</span><span class="text-quiet-meta text-ink-4">busiest</span></span>
-        </div>
-        <!-- One tab stop for 168 cells; arrow keys move the highlighted one,
-             like a grid, so the group itself takes the keydown. -->
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-        <div
-          class="flex flex-col gap-1"
-          role="group"
-          tabindex="0"
-          aria-label="Listens by weekday and hour, arrow keys to explore"
-          onkeydown={moveHeatFocus}
-          onfocus={() => (heatFocused = true)}
-          onblur={() => (heatFocused = false)}
-        >
-          {#each listening.whenYouListen.cells as hours, day (day)}
-            <div class="grid items-center gap-1" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
-              <span class="pr-1.5 text-right font-mono text-micro text-ink-4">{WEEKDAYS[day]}</span>
-              {#each hours as count, hour (hour)}
-                <span
-                  data-cell
-                  class="aspect-square w-full rounded-[5px]"
-                  style="background: {heatColour(count)}; {heatFocused && heatFocus.day === day && heatFocus.hour === hour
-                    ? 'box-shadow: inset 0 0 0 2px var(--color-accent);'
-                    : day * 24 + hour === heatPeak
-                      ? 'box-shadow: inset 0 0 0 2px var(--color-ink);'
-                      : ''}"
-                  aria-hidden="true"
-                  onmouseenter={(event) => show(event, 'heat', heatCellText(day, hour, count))}
-                  onmouseleave={hide}
-                  onclick={() => touchHeatCell(day, hour, count)}
-                ></span>
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingChart('When you listen', 'min-h-[7rem]')}
+        {/snippet}
+        {#if listening?.available}
+          <div class="flex items-baseline gap-5">
+            <span class="flex items-baseline gap-2"><span class="fig">{hourLabel(listening.whenYouListen.peakHour)}</span><span class="text-body text-ink-4">peak</span></span>
+            <span class="flex items-baseline gap-1.5"><span class="font-mono text-quiet-body text-ink">{listening.whenYouListen.busiestWeekday}</span><span class="text-quiet-meta text-ink-4">busiest</span></span>
+          </div>
+          <!-- One tab stop for 168 cells; arrow keys move the highlighted one,
+               like a grid, so the group itself takes the keydown. -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div
+            class="flex flex-col gap-1"
+            role="group"
+            tabindex="0"
+            aria-label="Listens by weekday and hour, arrow keys to explore"
+            onkeydown={moveHeatFocus}
+            onfocus={() => (heatFocused = true)}
+            onblur={() => (heatFocused = false)}
+          >
+            {#each listening.whenYouListen.cells as hours, day (day)}
+              <div class="grid items-center gap-1" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+                <span class="pr-1.5 text-right font-mono text-micro text-ink-4">{WEEKDAYS[day]}</span>
+                {#each hours as count, hour (hour)}
+                  <span
+                    data-cell
+                    class="aspect-square w-full rounded-[5px]"
+                    style="background: {heatColour(count)}; {heatFocused && heatFocus.day === day && heatFocus.hour === hour
+                      ? 'box-shadow: inset 0 0 0 2px var(--color-accent);'
+                      : day * 24 + hour === heatPeak
+                        ? 'box-shadow: inset 0 0 0 2px var(--color-ink);'
+                        : ''}"
+                    aria-hidden="true"
+                    onmouseenter={(event) => show(event, 'heat', heatCellText(day, hour, count))}
+                    onmouseleave={hide}
+                    onclick={() => touchHeatCell(day, hour, count)}
+                  ></span>
+                {/each}
+              </div>
+            {/each}
+            <div class="grid gap-1 pt-0.5 font-mono text-micro text-ink-4" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+              <span></span>
+              {#each Array.from({ length: 24 }, (_, hour) => hour) as hour (hour)}
+                <span class="whitespace-nowrap">{hour % 3 === 0 ? hourLabel(hour).slice(0, 2) : ''}</span>
               {/each}
             </div>
-          {/each}
-          <div class="grid gap-1 pt-0.5 font-mono text-micro text-ink-4" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
-            <span></span>
-            {#each Array.from({ length: 24 }, (_, hour) => hour) as hour (hour)}
-              <span class="whitespace-nowrap">{hour % 3 === 0 ? hourLabel(hour).slice(0, 2) : ''}</span>
-            {/each}
           </div>
-        </div>
-        <p aria-live="polite" class="sr-only">{heatAnnounce}</p>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+          <p aria-live="polite" class="sr-only">{heatAnnounce}</p>
+        {:else if listening}
+          {@render quiet()}
+        {/if}
+      </Settle>
       {@render tooltip('heat')}
     </section>
 
     <!-- Top artists -->
     <section data-panel class="panel lg:col-span-5">
       {@render head('artists', 'Top artists', 'this month')}
-      {#if $overview.isPending}
-        {@render loadingRows('Top artists', 'min-h-[12.5rem]')}
-      {:else if listening?.available}
-        <div class="panel-scroll min-h-[12.5rem]">
-        <ul class="panel-list" use:more>
-          {#each listening.topArtists as artist, index (index)}
-            <li class="ranked flex h-11 shrink-0 items-center gap-2.5">
-              <span class="wash" style="width: {share(artist.listens, listening.topArtists[0].listens)}%" aria-hidden="true"></span>
-              <svelte:element
-                this={artist.artistId ? 'a' : 'div'}
-                href={artist.artistId ? `/artists/${artist.artistId}` : undefined}
-                class="row-link"
-              >
-                <span class="rank" aria-hidden="true">{index + 1}</span>
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-thin text-body font-semibold text-ink-2" aria-hidden="true">
-                  <Cover src={artist.pictureUrl ?? undefined} alt="" class="h-8 w-8 rounded-full object-cover" fallback={artist.name.slice(0, 1)} />
-                </span>
-                <span class="min-w-0 flex-1 truncate text-body font-medium text-ink">{artist.name}</span>
-              </svelte:element>
-              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{artist.listens}</span>
-            </li>
-          {/each}
-        </ul>
-        </div>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingRows('Top artists', 'min-h-[12.5rem]')}
+        {/snippet}
+        {#if listening?.available && listening.topArtists.length > 0}
+          <div class="panel-scroll min-h-[12.5rem]">
+          <ul class="panel-list" use:more>
+            {#each listening.topArtists as artist, index (index)}
+              <li class="ranked flex h-11 shrink-0 items-center gap-2.5">
+                <span class="wash" style="width: {share(artist.listens, listening.topArtists[0].listens)}%" aria-hidden="true"></span>
+                <svelte:element
+                  this={artist.artistId ? 'a' : 'div'}
+                  href={artist.artistId ? `/artists/${artist.artistId}` : undefined}
+                  class="row-link"
+                >
+                  <span class="rank" aria-hidden="true">{index + 1}</span>
+                  <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-thin text-body font-semibold text-ink-2" aria-hidden="true">
+                    <Cover src={artist.pictureUrl ?? undefined} alt="" class="h-8 w-8 rounded-full object-cover" fallback={artist.name.slice(0, 1)} />
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-body font-medium text-ink">{artist.name}</span>
+                </svelte:element>
+                <span class="w-7 text-right font-mono text-body font-semibold text-ink">{artist.listens}</span>
+              </li>
+            {/each}
+          </ul>
+          </div>
+        {:else if listening}
+          {@render quiet(listening.available ? 'No listens this month' : undefined)}
+        {/if}
+      </Settle>
     </section>
 
     <!-- Top albums -->
     <section data-panel class="panel lg:col-span-7">
       {@render head('release', 'Top albums', 'this month')}
-      {#if $overview.isPending}
-        {@render loadingRows('Top albums', 'min-h-[12.5rem]')}
-      {:else if listening?.available}
-        <!-- The month's five most played albums as a wall of covers, the first
-             twice the size of the rest. -->
-        <ul class="wall">
-          {#each listening.topAlbums.slice(0, 5) as album, index (index)}
-            <li>
-              <svelte:element
-                this={album.releaseId ? 'a' : 'div'}
-                href={album.releaseId ? `/releases/${album.releaseId}` : undefined}
-                class="wall-tile"
-              >
-                <span role="img" aria-label="Cover for {album.title}" class="absolute inset-0 bg-surface-thin">
-                  <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-full w-full object-cover" />
-                </span>
-                <span class="wall-caption">
-                  <span class="truncate font-medium text-white">{album.title}</span>
-                  <span class="truncate text-white/70">{album.artist} · {album.listens}</span>
-                </span>
-              </svelte:element>
-            </li>
-          {/each}
-        </ul>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingRows('Top albums', 'min-h-[12.5rem]')}
+        {/snippet}
+        {#if listening?.available && listening.topAlbums.length > 0}
+          <!-- The month's five most played albums as a wall of covers, the first
+               twice the size of the rest. -->
+          <ul class="wall">
+            {#each listening.topAlbums.slice(0, 5) as album, index (index)}
+              <li>
+                <svelte:element
+                  this={album.releaseId ? 'a' : 'div'}
+                  href={album.releaseId ? `/releases/${album.releaseId}` : undefined}
+                  class="wall-tile"
+                >
+                  <span role="img" aria-label="Cover for {album.title}" class="absolute inset-0 bg-surface-thin">
+                    <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-full w-full object-cover" />
+                  </span>
+                  <span class="wall-caption">
+                    <span class="truncate font-medium text-white">{album.title}</span>
+                    <span class="truncate text-white/70">{album.artist} · {album.listens}</span>
+                  </span>
+                </svelte:element>
+              </li>
+            {/each}
+          </ul>
+        {:else if listening}
+          {@render quiet(listening.available ? 'No listens this month' : undefined)}
+        {/if}
+      </Settle>
     </section>
 
     <!-- Recently played -->
     <section data-panel class="panel lg:col-span-5">
       {@render head('play', 'Recently played', '')}
-      {#if $overview.isPending}
-        {@render loadingRows('Recently played', 'min-h-[15rem]')}
-      {:else if listening?.available}
-        <!-- One row per sitting: when it ran and how many songs, then who
-             was on. A gap over thirty minutes starts the next one. -->
-        <div class="panel-scroll min-h-[15rem]">
-        <ul class="panel-list" use:more>
-          {#each listening.sessions as session, index (index)}
-            <li class="flex h-12 shrink-0 items-center gap-2.5">
-              <!-- Up to three of the session's covers, overlapping, the first
-                   on top. The slot is always three covers wide so the text
-                   starts at the same x in every row. -->
-              <span class="flex w-[3.75rem] shrink-0" aria-hidden="true">
-                {#each session.coverUrls.slice(0, 3) as url, index (index)}
-                  <span
-                    class="relative block h-7 w-7 overflow-hidden rounded-row border border-line-thin bg-surface-thin ring-2 ring-[var(--color-inset)]"
-                    class:-ml-3={index > 0}
-                    style="z-index: {3 - index}"
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingRows('Recently played', 'min-h-[15rem]')}
+        {/snippet}
+        {#if listening?.available && listening.sessions.length > 0}
+          <!-- One row per sitting: when it ran and how many songs, then who
+               was on. A gap over thirty minutes starts the next one. -->
+          <div class="panel-scroll min-h-[15rem]">
+          <ul class="panel-list" use:more>
+            {#each listening.sessions as session, index (index)}
+              <li class="flex h-12 shrink-0 items-center gap-2.5">
+                <!-- Up to three of the session's covers, overlapping, the first
+                     on top. The slot is always three covers wide so the text
+                     starts at the same x in every row. -->
+                <span class="flex w-[3.75rem] shrink-0" aria-hidden="true">
+                  {#each session.coverUrls.slice(0, 3) as url, index (index)}
+                    <span
+                      class="relative block h-7 w-7 overflow-hidden rounded-row border border-line-thin bg-surface-thin ring-2 ring-[var(--color-inset)]"
+                      class:-ml-3={index > 0}
+                      style="z-index: {3 - index}"
+                    >
+                      <Cover src={url} alt="" class="h-7 w-7 object-cover" />
+                    </span>
+                  {/each}
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <!-- The range alone on the first line: with a day in front it
+                       fills the panel's width, so the count sits on the second. -->
+                  <span class="truncate text-meta tabular-nums text-ink">{sessionRange(session)}</span>
+                  <span class="truncate text-meta text-ink-3"
+                    ><span class="tabular-nums text-ink-4">{plural(session.songs, 'song')}</span> · {artistsLine(session.artists)}</span
                   >
-                    <Cover src={url} alt="" class="h-7 w-7 object-cover" />
-                  </span>
-                {/each}
-              </span>
-              <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <!-- The range alone on the first line: with a day in front it
-                     fills the panel's width, so the count sits on the second. -->
-                <span class="truncate text-meta tabular-nums text-ink">{sessionRange(session)}</span>
-                <span class="truncate text-meta text-ink-3"
-                  ><span class="tabular-nums text-ink-4">{plural(session.songs, 'song')}</span> · {artistsLine(session.artists)}</span
-                >
-              </span>
-            </li>
-          {/each}
-        </ul>
-        </div>
-      {:else if listening}
-        {@render quiet()}
-      {/if}
+                </span>
+              </li>
+            {/each}
+          </ul>
+          </div>
+        {:else if listening}
+          {@render quiet(listening.available ? 'No listens yet' : undefined)}
+        {/if}
+      </Settle>
     </section>
 
     <!-- Recently added -->
     <section data-panel class="panel lg:col-span-5">
       {@render head('plus', 'Recently added', '')}
-      {#if $overview.isPending}
-        {@render loadingRows('Recently added', 'min-h-[12.5rem]')}
-      {:else if data}
-        <div class="panel-scroll min-h-[12.5rem]">
-        <ul class="panel-list" use:more>
-          {#each data.recentlyAdded as file, index (index)}
-            <li class="flex h-10 shrink-0 items-center gap-2.5">
-              <svelte:element
-                this={file.releaseId ? 'a' : 'div'}
-                href={file.releaseId ? `/releases/${file.releaseId}` : undefined}
-                class="row-link"
-              >
-                {@render row(file.coverUrl, file.title, file.artist)}
-              </svelte:element>
-              <span class="font-mono text-meta text-ink-4">{relativeTime(file.addedAt).replace(' ago', '')}</span>
-            </li>
-          {/each}
-        </ul>
-        </div>
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingRows('Recently added', 'min-h-[12.5rem]')}
+        {/snippet}
+        {#if data && data.recentlyAdded.length > 0}
+          <div class="panel-scroll min-h-[12.5rem]">
+          <ul class="panel-list" use:more>
+            {#each data.recentlyAdded as file, index (index)}
+              <li class="flex h-10 shrink-0 items-center gap-2.5">
+                <svelte:element
+                  this={file.releaseId ? 'a' : 'div'}
+                  href={file.releaseId ? `/releases/${file.releaseId}` : undefined}
+                  class="row-link"
+                >
+                  {@render row(file.coverUrl, file.title, file.artist)}
+                </svelte:element>
+                <span class="font-mono text-meta text-ink-4">{relativeTime(file.addedAt).replace(' ago', '')}</span>
+              </li>
+            {/each}
+          </ul>
+          </div>
+        {:else if data}
+          {@render quiet('Nothing added yet')}
+        {/if}
+      </Settle>
     </section>
 
     <!-- Downloaded -->
     <section data-panel class="panel relative lg:col-span-4">
       {@render head('download', 'Downloaded', '14 days')}
-      {#if $overview.isPending}
-        {@render loadingChart('Downloaded', 'min-h-[7rem]')}
-      {:else if data}
-        <div class="flex items-baseline gap-3">
-          <span class="fig">{data.arrived.today.toLocaleString()}</span>
-          <span class="text-body text-ink-4">today</span>
-          <span class="font-mono text-quiet-body text-ink-2">{data.arrived.downloading.toLocaleString()}</span>
-          <span class="text-body text-ink-4">downloading</span>
-        </div>
-        {@const columns = bars(data.arrived.days, 96)}
-        <svg viewBox="0 0 {BAR_W} 98" preserveAspectRatio="none" class="h-0 min-h-[98px] w-full grow" aria-hidden="true">
-          {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
-            <rect
-              x={bar.x - 1.5}
-              y="0"
-              width={bar.width + 3}
-              height="98"
-              fill="transparent"
-              aria-hidden="true"
-              onmouseenter={(event) => show(event, 'arrived', `${dayLabel(bar.date)} · ${bar.count.toLocaleString()} downloaded`)}
-              onmouseleave={hide}
-            />
-          {/each}
-        </svg>
-        <div class="flex justify-between font-mono text-micro text-ink-4">
-          <span>{dayLabel(data.arrived.days[0].date)}</span>
-          <span>today</span>
-        </div>
-      {/if}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingChart('Downloaded', 'min-h-[7rem]')}
+        {/snippet}
+        {#if data}
+          <div class="flex items-baseline gap-3">
+            <span class="fig">{data.arrived.today.toLocaleString()}</span>
+            <span class="text-body text-ink-4">today</span>
+            <span class="font-mono text-quiet-body text-ink-2">{data.arrived.downloading.toLocaleString()}</span>
+            <span class="text-body text-ink-4">downloading</span>
+          </div>
+          {@const columns = bars(data.arrived.days, 96)}
+          <svg viewBox="0 0 {BAR_W} 98" preserveAspectRatio="none" class="h-0 min-h-[98px] w-full grow" aria-hidden="true">
+            {#each columns as bar (bar.date)}
+              <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
+              <rect
+                x={bar.x - 1.5}
+                y="0"
+                width={bar.width + 3}
+                height="98"
+                fill="transparent"
+                aria-hidden="true"
+                onmouseenter={(event) => show(event, 'arrived', `${dayLabel(bar.date)} · ${bar.count.toLocaleString()} downloaded`)}
+                onmouseleave={hide}
+              />
+            {/each}
+          </svg>
+          <div class="flex justify-between font-mono text-micro text-ink-4">
+            <span>{dayLabel(data.arrived.days[0].date)}</span>
+            <span>today</span>
+          </div>
+        {/if}
+      </Settle>
       {@render tooltip('arrived')}
     </section>
 
     <!-- Library -->
     <section data-panel class="panel relative lg:col-span-3">
       {@render head('library', 'Library', '')}
-      {#if $overview.isPending}
-        {@render loadingFigures('Library')}
-      {:else if data}
-        <div class="flex gap-3">
-          <div class="flex flex-col gap-0.5">
-            <span class="font-mono text-quiet-lead text-ink">{fileCount.toLocaleString()}</span>
-            <span class="text-quiet-meta text-ink-3">{fileCount === 1 ? 'file' : 'files'}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class="font-mono text-quiet-lead text-ink">{formatBytes(data.library.totalBytes)}</span>
-            <span class="text-quiet-meta text-ink-3">total size</span>
-          </div>
-        </div>
-        {@const growth = growthPath(data.library.growth, 240, 64)}
-        <svg viewBox="0 0 240 64" preserveAspectRatio="none" class="h-0 min-h-16 w-full grow" aria-label="Library files over the last year">
-          <path d={growth.area} class="growth-area" />
-          <path d={growth.line} class="growth-line" stroke-width="2" vector-effect="non-scaling-stroke" />
-          {#if growth.points.length > 0}
-            {@const end = growth.points[growth.points.length - 1]}
-            <circle cx={end.x} cy={end.y} r="3" class="growth-end" />
-          {/if}
-          {#each growth.points as point, index (point.month)}
-            <rect
-              x={index === 0 ? 0 : point.x - 10}
-              y="0"
-              width="20"
-              height="64"
-              fill="transparent"
-              role="img"
-              aria-label="{monthLabel(point.month)} · {plural(point.files, 'file')}"
-              onmouseenter={(event) => show(event, 'library', `${monthLabel(point.month)} · ${plural(point.files, 'file')}`)}
-              onmouseleave={hide}
-            />
-          {/each}
-        </svg>
-        {#if roomLeft}
-          <div class="mt-auto flex flex-col gap-1.5">
-            <p class="text-meta text-ink-4">Room left <span class="font-mono text-ink-2">{formatBytes(roomLeft.free)}</span></p>
-            <div
-              class="room"
-              role="img"
-              aria-label="{formatBytes(data.library.storage!.usedBytes)} used of {formatBytes(data.library.storage!.totalBytes)}"
-              onmouseenter={(event) => show(event, 'library', `${formatBytes(data.library.storage!.usedBytes)} used of ${formatBytes(data.library.storage!.totalBytes)}`)}
-              onmouseleave={hide}
-            >
-              {#each Array.from({ length: ROOM_TILES }, (_, tile) => tile) as tile (tile)}
-                <span class:used={tile < Math.round((roomLeft.usedShare / 100) * ROOM_TILES)}></span>
-              {/each}
+      <Settle pending={$overview.isPending} class="grow" layer="flex flex-col gap-[14px]">
+        {#snippet placeholder()}
+          {@render loadingFigures('Library')}
+        {/snippet}
+        {#if data}
+          <div class="flex gap-3">
+            <div class="flex flex-col gap-0.5">
+              <span class="font-mono text-quiet-lead text-ink">{fileCount.toLocaleString()}</span>
+              <span class="text-quiet-meta text-ink-3">{fileCount === 1 ? 'file' : 'files'}</span>
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <span class="font-mono text-quiet-lead text-ink">{formatBytes(data.library.totalBytes)}</span>
+              <span class="text-quiet-meta text-ink-3">total size</span>
             </div>
           </div>
+          {@const growth = growthPath(data.library.growth, 240, 64)}
+          <svg viewBox="0 0 240 64" preserveAspectRatio="none" class="h-0 min-h-16 w-full grow" aria-label="Library files over the last year">
+            <path d={growth.area} class="growth-area" />
+            <path d={growth.line} class="growth-line" stroke-width="2" vector-effect="non-scaling-stroke" />
+            {#if growth.points.length > 0}
+              {@const end = growth.points[growth.points.length - 1]}
+              <circle cx={end.x} cy={end.y} r="3" class="growth-end" />
+            {/if}
+            {#each growth.points as point, index (point.month)}
+              <rect
+                x={index === 0 ? 0 : point.x - 10}
+                y="0"
+                width="20"
+                height="64"
+                fill="transparent"
+                role="img"
+                aria-label="{monthLabel(point.month)} · {plural(point.files, 'file')}"
+                onmouseenter={(event) => show(event, 'library', `${monthLabel(point.month)} · ${plural(point.files, 'file')}`)}
+                onmouseleave={hide}
+              />
+            {/each}
+          </svg>
+          {#if roomLeft}
+            <div class="mt-auto flex flex-col gap-1.5">
+              <p class="text-meta text-ink-4">Room left <span class="font-mono text-ink-2">{formatBytes(roomLeft.free)}</span></p>
+              <div
+                class="room"
+                role="img"
+                aria-label="{formatBytes(data.library.storage!.usedBytes)} used of {formatBytes(data.library.storage!.totalBytes)}"
+                onmouseenter={(event) => show(event, 'library', `${formatBytes(data.library.storage!.usedBytes)} used of ${formatBytes(data.library.storage!.totalBytes)}`)}
+                onmouseleave={hide}
+              >
+                {#each Array.from({ length: ROOM_TILES }, (_, tile) => tile) as tile (tile)}
+                  <span class:used={tile < Math.round((roomLeft.usedShare / 100) * ROOM_TILES)}></span>
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/if}
-      {/if}
+      </Settle>
       {@render tooltip('library')}
     </section>
   </div>

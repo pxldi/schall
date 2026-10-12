@@ -29,6 +29,7 @@
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
 
   const queryClient = useQueryClient();
 
@@ -157,33 +158,23 @@
 
   <Settle pending={$weekly.isPending}>
     {#snippet placeholder()}
-      <div
-      class="flex max-h-[calc(100dvh-12rem)] flex-col gap-3 overflow-hidden rounded-panel border border-line-thin p-4"
-      aria-busy="true"
-      aria-label="Loading weekly playlist"
-    >
-      <div class="flex items-center gap-2.5">
-        <span class="label">This week</span>
-        <Skeleton class="h-4 w-48" />
-      </div>
-      <div class="flex flex-wrap gap-2" role="group" aria-label="Loading weekly settings">
-        <Skeleton class="h-8 w-36" />
-        <Skeleton class="h-8 w-36" />
-      </div>
-      <div class="-mx-4 overflow-hidden border-y border-line-thin" aria-label="Loading weekly songs">
-        <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
-        {#each Array.from({ length: 60 }) as _}
-          <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
-        {/each}
-      </div>
-      <div class="flex flex-col gap-2" aria-label="Loading weekly history">
-        <span class="label">What each refresh did</span>
-        <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
-        {#each Array.from({ length: 60 }) as _}
-          <div aria-hidden="true" class="flex h-10 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
-        {/each}
-      </div>
-      </div>
+      <!-- The shape of the week it waits for: the label row and the panel of
+           songs, about ten of a week's twenty. The history under it is left
+           out; a placeholder that runs past the fold only collapses. -->
+      <section
+        class="flex flex-col gap-2.5"
+        aria-busy="true"
+        aria-label="Loading weekly playlist"
+      >
+        <div class="flex flex-wrap items-center gap-2.5">
+          <span class="label">This week</span>
+          <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
+          <Skeleton class="h-4 w-48" />
+        </div>
+        <div class="rounded-panel border border-line-thin" aria-label="Loading weekly songs">
+          <SkeletonRows count={10} />
+        </div>
+      </section>
     {/snippet}
   {#if settings && !settings.enabled}
     <!-- Off is the whole screen. A table of songs nobody is being offered would
@@ -287,18 +278,16 @@
 
                   {#if openLease === lease.id}
                     <div class="reveal mt-1 flex flex-col gap-1.5 rounded-row bg-surface-regular px-2.5 py-2">
-                      {#if $evidence.isPending}
-                        <div aria-busy="true" aria-label="Loading weekly evidence" class="max-h-[calc(100dvh-14rem)] overflow-hidden">
-                          <span class="text-meta text-ink-3">reading what was asked…</span>
-                          {#each Array.from({ length: 40 }) as _}
-                            <Skeleton class="mt-1.5 h-5" />
-                          {/each}
-                        </div>
-                      {:else if $evidence.error}
-                        <span class="text-meta leading-4 text-ink-2">
-                          What was read could not be loaded. Close this and open it again.
-                        </span>
-                      {:else if reads.length === 0}
+                      {#if $evidence.error}
+                        <!-- Bare: the disclosure is already a surface. Only a
+                             read, so it asks again by itself. -->
+                        <ErrorNote error={$evidence.error} retry={() => $evidence.refetch()} bare />
+                      {:else}
+                      <Settle pending={$evidence.isPending} layer="flex flex-col gap-1.5">
+                        {#snippet placeholder()}
+                          <SkeletonRows count={3} label="Loading weekly evidence" />
+                        {/snippet}
+                      {#if reads.length === 0}
                         <span class="text-meta leading-4 text-ink-2">
                           Nothing was read about this song.
                         </span>
@@ -321,6 +310,8 @@
                             {/if}
                           </div>
                         {/each}
+                      {/if}
+                      </Settle>
                       {/if}
                     </div>
                   {/if}

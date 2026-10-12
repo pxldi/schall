@@ -64,7 +64,7 @@ describe('the playlist list', () => {
 
     const loading = screen.getByLabelText('Loading playlists');
     expect(loading.getAttribute('aria-busy')).toBe('true');
-    expect(loading.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4);
+    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(4);
   });
 
   it('names the room in a hidden level-1 heading', () => {

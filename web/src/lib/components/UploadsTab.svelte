@@ -272,17 +272,13 @@
   {/if}
 
   {#if unconfigured}
-    <div class="flex flex-col gap-2 rounded-panel border border-line-thin p-4">
-      <span class="text-body font-semibold text-ink">This installation cannot take uploads</span>
-      <span class="text-meta leading-relaxed text-ink-2">
+    <EmptyPanel role="decide" heading="Uploads not set up">
+      <p class="text-meta leading-relaxed text-ink-2">
         Set <span class="numeric">SCHALL_UPLOAD_STAGING_PATH</span> to a folder outside every music
         folder, and <span class="numeric">SCHALL_IMPORT_LIBRARY_PATH</span> to the managed library
         uploads are filed into.
-      </span>
-    </div>
-  {:else if $uploads.isError}
-    <!-- Only a read, so the note asks again by itself. -->
-    <ErrorNote error={$uploads.error} retry={() => $uploads.refetch()} />
+      </p>
+    </EmptyPanel>
   {/if}
 
   {#if chosen.length > 0}
@@ -394,7 +390,7 @@
     <Settle pending={$uploads.isPending}>
       {#snippet placeholder()}
         <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 18rem)">
-        {#each Array(40) as _, placeholderIndex (placeholderIndex)}
+        {#each Array(6) as _, placeholderIndex (placeholderIndex)}
           <div data-placeholder-row class="border-b border-line-thin px-3 py-2 last:border-b-0">
             <Skeleton class="h-5" />
             <Skeleton class="mt-1 h-4 w-2/3" />
@@ -404,6 +400,12 @@
         {/each}
         </div>
       {/snippet}
+      {#if $uploads.isError}
+        <!-- The list is what failed, so the note stands where it would be. A
+             failed poll keeps the rows already read under it. Only a read, so
+             the note asks again by itself. -->
+        <ErrorNote error={$uploads.error} retry={() => $uploads.refetch()} class="mb-2" />
+      {/if}
       {#if items.length}
         {#each items as upload (upload.id)}
         {@const state = label(upload)}

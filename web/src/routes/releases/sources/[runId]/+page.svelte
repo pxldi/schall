@@ -15,9 +15,8 @@
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Chip from '$lib/components/Chip.svelte';
-  import Card from '$lib/components/Card.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
-  import { describeError } from '$lib/errors';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
@@ -80,21 +79,20 @@
   // What stopped the page, once the tries above are spent. Three things can
   // stop it, and they lead to three different next steps: the server does not
   // have this search, nothing answered at all, or the server answered with a
-  // failure. Every one of the three holds a control, because a screen with
-  // nothing to press is a dead end. Asking again only fixes the middle one, so
-  // it is the only one whose control asks again; the other two lead to Library,
-  // where a search is started.
+  // failure. Asking again only fixes the middle one, so it is the only one the
+  // page asks again for, by itself; the other two lead to Library, where a
+  // search is started.
   type Trouble = {
     /** The word in the header chip, in the lower case the other chips use. */
     chip: string;
     heading: string;
-    detail: string;
+    /** The second sentence under the failure, where this page knows better
+     *  than the shared map what to do next. */
+    action?: string;
     /** What to say instead when there is still a run on screen to read. */
     stale: string;
     again: boolean;
     link?: { href: string; label: string };
-    /** The server's own words, kept whole and out of the way. */
-    said?: string;
   };
 
   const trouble = $derived.by<Trouble | null>(() => {
@@ -105,8 +103,7 @@
       return {
         chip: 'not found',
         heading: 'This search is not on the server',
-        detail:
-          'The link may be an old one, or the releases it covered have been removed. Pick the releases in Library and press Find sources to search again.',
+        action: 'Pick the releases in Library and press Find sources to search again.',
         stale: 'This search has been removed. What is below is the last answer the server gave.',
         again: false,
         link: { href: '/library?status=missing', label: 'Open Library' }
@@ -117,7 +114,6 @@
       return {
         chip: 'no answer',
         heading: 'The server did not answer',
-        detail: 'Schall could not be reached. Try again once it is running.',
         stale: 'The server stopped answering. What is below is the last answer it gave.',
         again: true
       };
@@ -130,16 +126,10 @@
     return {
       chip: 'refused',
       heading: 'The search could not be read',
-      detail:
-        'The server answered with a failure instead of the search. Pick the releases in Library and press Find sources to search again.',
+      action: 'Pick the releases in Library and press Find sources to search again.',
       stale: 'The server refused the last request. What is below is the answer before it.',
       again: false,
-      link: { href: '/library?status=missing', label: 'Open Library' },
-      // `describeError` is the one place a failure is turned into words, and
-      // `raw` is the part of it that is the server's own sentence. Read from
-      // there rather than from the error's own message, which is only the
-      // problem document's title and drops the details it came with.
-      said: describeError($run.error).raw
+      link: { href: '/library?status=missing', label: 'Open Library' }
     };
   });
 
@@ -319,54 +309,23 @@
 {/if}
 
 {#if trouble && !$run.data}
-  <div class="max-w-lg px-4 sm:px-6 py-6">
-    <Card>
-      <div class="flex items-center gap-2.5">
-        <StateMark role="fail">!</StateMark>
-        <h2 class="font-display text-lead font-bold text-ink">{trouble.heading}</h2>
-      </div>
-      <p class="text-meta leading-[1.65] text-ink-2">{trouble.detail}</p>
-
-      {#if trouble.said}
-        <!-- The server's sentence, whole and behind the press. The line above
-             says what happened; this is what a bug report has to quote. -->
-        <details class="group border-t border-line-thin pt-2">
-          <!-- `tap-tall` rather than `tap`: this press reveals the sentence the
-               reader came for, and both the words and the chevron are 12px. The
-               padding is taken inside the summary because an invisible box over
-               it is clipped by anything that hides its overflow. -->
-          <summary
-            class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
-          >
-            <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
-            What went wrong
-          </summary>
-          <div
-            class="reveal mt-1 rounded-row bg-surface-regular px-2.5 py-2 text-meta leading-[1.5] break-words whitespace-pre-wrap text-ink-3"
-          >
-            {trouble.said}
-          </div>
-        </details>
-      {/if}
-
-      <!-- One control, and never the same one twice: a server that was not
-           answering may be answering now, so that screen is the only one where
-           pressing again is the thing to do. A search the server does not have
-           is not found by asking a second time, so that screen leads to the
-           place a new one is started instead. -->
-      {#if trouble.again}
-        <Button class="w-fit" disabled={$run.isFetching} onclick={() => $run.refetch()}>
-          {#if $run.isFetching}
-            <Icon name="busy" size="sm" class="animate-spin" />
-          {:else}
-            <Icon name="refresh" size="sm" />
-          {/if}
-          Try again
-        </Button>
-      {:else if trouble.link}
+  <div class="px-4 sm:px-6 py-6">
+    <EmptyPanel role="fail" heading={trouble.heading}>
+      <!-- The note carries the server's own words behind its disclosure, for a
+           bug report. Only a server that did not answer is asked again, and the
+           note does that by itself; a search the server does not have, or
+           refused, is not found by asking a second time, so those lead to the
+           place a new search is started. -->
+      <ErrorNote
+        bare
+        error={$run.error}
+        action={trouble.action}
+        retry={trouble.again ? () => void $run.refetch() : undefined}
+      />
+      {#if trouble.link}
         <Button class="w-fit" href={trouble.link.href}>{trouble.link.label}</Button>
       {/if}
-    </Card>
+    </EmptyPanel>
   </div>
 {:else}
   <Settle pending={$run.isPending}>
@@ -543,6 +502,8 @@
           {@render Refused(result)}
         {/if}
       </section>
+    {:else}
+      <EmptyPanel role="idle" heading="No releases in this search" />
     {/each}
   </div>
   </Settle>

@@ -430,4 +430,24 @@ describe('FollowArtistModal, a second name typed while the first is still being 
 
     expect(screen.queryByRole('button', { name: /Talk Talk/ })).toBeNull();
   });
+
+  it('keeps the last answer on screen while the next name is looked up', async () => {
+    vi.spyOn(api, 'searchArtists').mockImplementation((query: string) =>
+      query === 'portishead'
+        ? Promise.resolve({ items: [artist('Portishead', 'e6bba15c-0cf8-4d24-b74f-b6b8d1a1ba4a')] })
+        : new Promise(() => {})
+    );
+
+    mount();
+    await tick();
+
+    await fireEvent.input(field(), { target: { value: 'portishead' } });
+    await screen.findByRole('button', { name: /Portishead/ }, { timeout: 2000 });
+
+    await fireEvent.input(field(), { target: { value: 'portishead live' } });
+    await waitFor(() => expect(api.searchArtists).toHaveBeenCalledWith('portishead live'), { timeout: 2000 });
+
+    expect(screen.getByRole('button', { name: /Portishead/ })).toBeTruthy();
+    expect(screen.queryByRole('status', { name: 'Searching artists' })).toBeNull();
+  });
 });

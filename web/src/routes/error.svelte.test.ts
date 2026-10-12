@@ -54,6 +54,7 @@ describe('the error page', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Error' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+    expect(screen.getByText('What the server said')).toBeTruthy();
     expect(screen.getByText('the database is gone')).toBeTruthy();
   });
 });

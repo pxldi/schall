@@ -587,22 +587,32 @@
   </ControlRail>
 
   <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
-    {#if $downloads.isError}
+    {#if $downloads.isError && !$downloads.data}
       <!-- It is the list that failed, so the failure stands where the list
            would have been rather than above it. -->
       <ErrorNote error={$downloads.error} retry={() => void $downloads.refetch()} />
     {:else}
+      {#if $downloads.isError}
+        <!-- A failed poll keeps the rows it has. Wiping a list of transfers
+             for one slow answer read as the downloads having gone. -->
+        <ErrorNote error={$downloads.error} retry={() => void $downloads.refetch()} />
+      {/if}
       <Settle pending={$downloads.isPending}>
         {#snippet placeholder()}
-      <!-- Fill the visible viewport. The progress slot below is part of every
-           transfer row, so these placeholders match the loaded shape. -->
+      <!-- The mark and, from md up, the cover column lead each placeholder the
+           way they lead a transfer row, so the text does not shift right when
+           the list lands. The progress slot is part of every row too. -->
       <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
-        {#each Array(40) as _, placeholderIndex (placeholderIndex)}
-          <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
-            <Skeleton class="h-5" />
-            <Skeleton class="mt-1 h-4 w-2/3" />
-            <Skeleton class="mt-2 h-1.5 rounded-full" />
-            <Skeleton class="mt-1 h-4 w-1/3" />
+        {#each Array(10) as _, placeholderIndex (placeholderIndex)}
+          <div class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+            <Skeleton shape="round" class="size-4 shrink-0" />
+            <Skeleton shape="cover" class="hidden size-10 shrink-0 md:block" />
+            <div class="min-w-0 flex-1">
+              <Skeleton class="h-5" />
+              <Skeleton class="mt-1 h-4 w-2/3" />
+              <Skeleton class="mt-2 h-1.5 rounded-full" />
+              <Skeleton class="mt-1 h-4 w-1/3" />
+            </div>
           </div>
         {/each}
       </div>

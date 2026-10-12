@@ -389,3 +389,24 @@ describe('a long artist list', () => {
     expect(await screen.findByText('Artist 299')).not.toBeNull();
   });
 });
+
+describe('reads that fail', () => {
+  it('says the genre list is unavailable and drops the followed count skeleton', async () => {
+    pageState.url = new URL('http://localhost/artists');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/artists/genres' || url.pathname === '/api/v1/dashboard') {
+          return new Response(JSON.stringify({ title: 'broken' }), { status: 400 });
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      })
+    );
+    opened();
+
+    expect(await screen.findByRole('option', { name: 'Genres unavailable' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Any genre' })).toBeNull();
+    expect(await screen.findByText('–')).toBeTruthy();
+  });
+});

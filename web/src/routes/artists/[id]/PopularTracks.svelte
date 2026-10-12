@@ -3,7 +3,10 @@
   import { toStore } from 'svelte/store';
   import { api, type PopularTrack, type RemovedTracks } from '$lib/api';
   import Cover from '$lib/components/Cover.svelte';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import { calendarDate, removedSummary } from '$lib/utils';
@@ -77,83 +80,101 @@
   }
 </script>
 
-{#if $popular.data && ($popular.data.items.length || $popular.data.unavailable)}
-  <section class="flex min-w-0 flex-col" aria-labelledby="popular-heading">
-    <h2
-      id="popular-heading"
-      class="border-b border-line-thin pb-1.5 text-[0.9375rem] font-semibold text-ink"
-    >
-      Popular
-    </h2>
-    {#if $popular.data.unavailable}
-      <p class="py-2 text-meta text-ink-3">{$popular.data.unavailable}</p>
-    {:else}
-      <ol class="popular-list max-h-[31rem] overflow-y-auto pt-1 pr-1">
-        {#each $popular.data.items as track, index (track.recordingId)}
-          {@const done = held(track)}
-          <li
-            class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 rounded-row px-1.5 py-1"
-          >
-            <span class="numeric text-right text-meta text-ink-4">{index + 1}</span>
-            <span class="size-10 overflow-hidden rounded-tight bg-surface-thick {done ? '' : 'opacity-60'}">
-              <Cover
-                src={track.albumId && track.hasCover
-                  ? `/api/v1/albums/${track.albumId}/cover?cached=1`
-                  : undefined}
-                seed={track.albumId ?? track.recordingId}
-                class="size-full object-cover"
-              />
-            </span>
-            <span class="min-w-0">
-              {#if track.albumId}
-                <a
-                  href={`/releases/${track.albumId}`}
-                  class="block truncate text-body font-semibold hover:underline {done ? 'text-ink' : 'text-ink-2'}"
-                  title={track.title}>{track.title}</a
-                >
-              {:else}
-                <span
-                  class="block truncate text-body font-semibold {done ? 'text-ink' : 'text-ink-2'}"
-                  title={track.title}>{track.title}</span
-                >
-              {/if}
-              <span class="block truncate text-meta text-ink-3">
-                {track.albumTitle ?? track.releaseTitle}
+<!-- The section is drawn from the first frame, heading and all, so the column
+     beside the releases holds its place while the counts are read. -->
+<section class="flex min-w-0 flex-col" aria-labelledby="popular-heading">
+  <h2
+    id="popular-heading"
+    class="border-b border-line-thin pb-1.5 text-[0.9375rem] font-semibold text-ink"
+  >
+    Popular
+  </h2>
+  {#if $popular.isError}
+    <ErrorNote error={$popular.error} retry={() => $popular.refetch()} class="mt-2" />
+  {:else}
+    <Settle pending={$popular.isPending}>
+      {#snippet placeholder()}
+        <SkeletonRows count={10} cover label="Loading popular tracks" />
+      {/snippet}
+      {#if !$popular.data?.unavailable && $popular.data?.items.length}
+        <ol class="popular-list max-h-[31rem] overflow-y-auto pt-1 pr-1">
+          {#each $popular.data.items as track, index (track.recordingId)}
+            {@const done = held(track)}
+            <li
+              class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 rounded-row px-1.5 py-1"
+            >
+              <span class="numeric text-right text-meta text-ink-4">{index + 1}</span>
+              <span class="size-10 overflow-hidden rounded-tight bg-surface-thick {done ? '' : 'opacity-60'}">
+                <Cover
+                  src={track.albumId && track.hasCover
+                    ? `/api/v1/albums/${track.albumId}/cover?cached=1`
+                    : undefined}
+                  seed={track.albumId ?? track.recordingId}
+                  class="size-full object-cover"
+                />
               </span>
-            </span>
-            <!-- The toggle of a held recording waits for the pointer, as on a
-                 release page, because the mark beside it says it is here. -->
-            <span class="flex items-center justify-center">
-              {#if removable(track)}
-                <WantToggle
-                  reveal={done ? 'all' : true}
-                  wanted={wanted(track)}
-                  title={track.title}
-                  onwant={() => $toggle.mutateAsync({ kind: 'want', track })}
-                  onunwant={() => $toggle.mutateAsync({ kind: 'remove', track })}
-                />
-              {/if}
-            </span>
-            <span class="flex items-center justify-center">
-              {#if track.removesAt}
-                <StateIcon
-                  icon="delete"
-                  label={`Deleted on ${calendarDate(track.removesAt)}`}
-                  note="Want it again to keep it"
-                />
-              {:else if done}
-                <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
-              {/if}
-            </span>
-            <span class="numeric text-right text-meta text-ink-3">{length(track.lengthMs)}</span>
-          </li>
-        {/each}
-      </ol>
-      {#if $toggle.isError}
-        <ErrorNote error={$toggle.error} class="mt-2" />
-      {:else if removed}
-        <p class="mt-2 text-meta text-ink-3">{removed}.</p>
+              <span class="min-w-0">
+                {#if track.albumId}
+                  <a
+                    href={`/releases/${track.albumId}`}
+                    class="block truncate text-body font-semibold hover:underline {done ? 'text-ink' : 'text-ink-2'}"
+                    title={track.title}>{track.title}</a
+                  >
+                {:else}
+                  <span
+                    class="block truncate text-body font-semibold {done ? 'text-ink' : 'text-ink-2'}"
+                    title={track.title}>{track.title}</span
+                  >
+                {/if}
+                <span class="block truncate text-meta text-ink-3">
+                  {track.albumTitle ?? track.releaseTitle}
+                </span>
+              </span>
+              <!-- The toggle of a held recording waits for the pointer, as on a
+                   release page, because the mark beside it says it is here. -->
+              <span class="flex items-center justify-center">
+                {#if removable(track)}
+                  <WantToggle
+                    reveal={done ? 'all' : true}
+                    wanted={wanted(track)}
+                    title={track.title}
+                    onwant={() => $toggle.mutateAsync({ kind: 'want', track })}
+                    onunwant={() => $toggle.mutateAsync({ kind: 'remove', track })}
+                  />
+                {/if}
+              </span>
+              <span class="flex items-center justify-center">
+                {#if track.removesAt}
+                  <StateIcon
+                    icon="delete"
+                    label={`Deleted on ${calendarDate(track.removesAt)}`}
+                    note="Want it again to keep it"
+                  />
+                {:else if done}
+                  <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
+                {/if}
+              </span>
+              <span class="numeric text-right text-meta text-ink-3">{length(track.lengthMs)}</span>
+            </li>
+          {/each}
+        </ol>
+        {#if $toggle.isError}
+          <ErrorNote error={$toggle.error} class="mt-2" />
+        {:else if removed}
+          <p class="mt-2 text-meta text-ink-3">{removed}.</p>
+        {/if}
+      {:else}
+        <EmptyPanel
+          role="idle"
+          level={3}
+          heading={$popular.data?.unavailable ? 'Not available' : 'No listens yet'}
+          class="mt-2"
+        >
+          <p class="text-meta leading-relaxed text-ink-2">
+            {$popular.data?.unavailable || 'ListenBrainz has no listens for this artist.'}
+          </p>
+        </EmptyPanel>
       {/if}
-    {/if}
-  </section>
-{/if}
+    </Settle>
+  {/if}
+</section>

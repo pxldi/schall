@@ -10,6 +10,7 @@
   import ControlRail from '$lib/components/ControlRail.svelte';
   import ReleasesBrowser from '$lib/components/ReleasesBrowser.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
+  import ErrorNote from '$lib/components/ErrorNote.svelte';
 
   const views = ['releases', 'files', 'duplicates'] as const;
 
@@ -83,6 +84,15 @@
       ? $librarySummary.data.fileCount + $librarySummary.data.missingCount
       : undefined
   );
+
+  // A count whose read failed is given as `null`, so its chip stops waiting
+  // for a figure, and one note under the strip says why the figure is
+  // missing. A count that silently vanished read as a view with nothing in it.
+  const countReads = $derived([$releaseTotal, $librarySummary, $heldTwiceTotal]);
+  const failedCount = $derived(countReads.find((read) => read.isError));
+  function retryCounts() {
+    for (const read of countReads) if (read.isError) void read.refetch();
+  }
 </script>
 
 <svelte:head><title>Library · Schall</title></svelte:head>
@@ -106,9 +116,9 @@
 <ControlRail label="Which part of the library to show">
   <Segmented
     options={[
-      { value: 'releases', name: 'Releases', count: $releaseTotal.data?.scopeTotal },
-      { value: 'files', name: 'Files', count: filesTotal },
-      { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.data?.total }
+      { value: 'releases', name: 'Releases', count: $releaseTotal.isError ? null : $releaseTotal.data?.scopeTotal },
+      { value: 'files', name: 'Files', count: $librarySummary.isError ? null : filesTotal },
+      { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.isError ? null : $heldTwiceTotal.data?.total }
     ]}
     value={view}
     onchange={(value) => (view = value as (typeof views)[number])}
@@ -117,6 +127,12 @@
     variant="tabs"
   />
 </ControlRail>
+
+{#if failedCount}
+  <div class="px-4 pb-2 sm:px-6">
+    <ErrorNote error={failedCount.error} fallback="The counts did not load." retry={retryCounts} />
+  </div>
+{/if}
 
 <div class:hidden={view !== 'releases'}>
   <ReleasesBrowser

@@ -33,6 +33,7 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import PopularTracks from './PopularTracks.svelte';
   import ReleaseTile from './ReleaseTile.svelte';
 
@@ -697,9 +698,15 @@
 
     {#if $releases.isError}
       <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
-    {:else if $releases.isPending}
-      {@render ReleaseSkeleton()}
-    {:else if sections.length}
+    {/if}
+    <!-- The list polls while a refresh runs, so one failed poll leaves the
+         releases already drawn under the note rather than wiping them. -->
+    {#if !$releases.isError || $releases.data}
+    <Settle pending={$releases.isPending}>
+      {#snippet placeholder()}
+        {@render ReleaseSkeleton()}
+      {/snippet}
+    {#if sections.length}
       <div class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <div class="flex min-w-0 flex-col gap-5">
           {#each sections as section (section.kind)}
@@ -780,28 +787,38 @@
         {/if}
       </EmptyPanel>
     {/if}
+    </Settle>
+    {/if}
   </div>
   {/if}
   </Settle>
 {/if}
 
 {#snippet ReleaseSkeleton()}
-  <section
-    class="max-h-[calc(100dvh-30rem)] flex flex-col gap-3 overflow-hidden"
+  <!-- The same grid the releases land in, aside and all, so the popular tracks
+       column does not push in from the side at xl when they arrive. -->
+  <div
+    class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
     role="status"
     aria-label="Loading releases"
   >
-    <Skeleton class="h-3 w-16" />
-    <div class="flex flex-wrap gap-x-3.5 gap-y-4">
-      {#each Array(32) as _, placeholderIndex (placeholderIndex)}
-        <div class="flex w-19 flex-col gap-1" aria-hidden="true">
-          <Skeleton shape="block" class="size-19" />
-          <Skeleton class="h-3 w-full" />
-          <Skeleton class="h-2.5 w-2/3" />
-        </div>
-      {/each}
-    </div>
-  </section>
+    <section class="max-h-[calc(100dvh-30rem)] flex min-w-0 flex-col gap-3 overflow-hidden">
+      <Skeleton class="h-3 w-16" />
+      <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+        {#each Array(32) as _, placeholderIndex (placeholderIndex)}
+          <div class="flex w-19 flex-col gap-1" aria-hidden="true">
+            <Skeleton shape="block" class="size-19" />
+            <Skeleton class="h-3 w-full" />
+            <Skeleton class="h-2.5 w-2/3" />
+          </div>
+        {/each}
+      </div>
+    </section>
+    <aside class="hidden min-w-0 flex-col xl:flex" aria-hidden="true">
+      <div class="border-b border-line-thin pb-1.5"><Skeleton class="h-4 w-20" /></div>
+      <SkeletonRows count={10} cover />
+    </aside>
+  </div>
 {/snippet}
 
 {#snippet ArtistSkeleton()}

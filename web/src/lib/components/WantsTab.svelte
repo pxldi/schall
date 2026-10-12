@@ -304,22 +304,22 @@
     </StatusBadge>
   {/if}
 
-  {#if $wants.isError}
+  {#if $wants.isError && !$wants.data}
     <!-- It is the list that failed, so the failure stands where the list would
-         have been rather than above it. -->
-    <!-- Bare, and with no heading of its own: the panel is the surface, and the
-         note's first sentence already says what could not be read. Only a read,
-         so it asks again by itself. -->
-    <div class="flex flex-col gap-1.5 rounded-panel border border-line-thin p-5">
-      <ErrorNote error={$wants.error} retry={() => $wants.refetch()} bare />
-    </div>
+         have been rather than above it. Only a read, so it asks again by
+         itself. -->
+    <ErrorNote error={$wants.error} retry={() => $wants.refetch()} />
   {:else}
+    {#if $wants.isError}
+      <!-- A failed poll keeps the rows it has, with the note above them. -->
+      <ErrorNote error={$wants.error} retry={() => $wants.refetch()} />
+    {/if}
     <Settle pending={$wants.isPending}>
       {#snippet placeholder()}
     <!-- Fill the visible viewport. The reserved summary line below is part of
          every want row, including these placeholders. -->
     <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
-      {#each Array(40) as _, placeholderIndex (placeholderIndex)}
+      {#each Array(10) as _, placeholderIndex (placeholderIndex)}
         <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
           <Skeleton class="h-4 w-full" />
           <Skeleton class="mt-1.5 h-3.5 w-2/3" />

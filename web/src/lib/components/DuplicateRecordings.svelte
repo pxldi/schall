@@ -22,6 +22,8 @@
   import Button from '$lib/components/Button.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import Pager from '$lib/components/Pager.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -366,6 +368,10 @@
       </div>
     {/if}
 
+    <Settle pending={shown.isPending}>
+      {#snippet placeholder()}
+        <SkeletonRows count={6} label="Loading recordings held twice" />
+      {/snippet}
     <div class="flex flex-col">
       {#each recordings as recording (recording.recordingId)}
         <!-- The hairline sits on the whole group, so the copies inside it read
@@ -485,18 +491,17 @@
         <!-- An empty list and a failed request are different claims. The
              ErrorNote above reports the failure; this renders nothing so
              "No recording is on disc twice" does not also appear. -->
+        <!-- Nothing held twice is nothing left to do; nothing kept on purpose
+             is nothing yet. -->
         {#if !shown.isError}
           <EmptyPanel
-            role={shown.isPending ? 'busy' : 'idle'}
-            heading={shown.isPending
-              ? 'Looking for recordings held twice'
-              : view === 'kept'
-                ? 'Nothing kept on purpose yet'
-                : 'No recording is on disc twice'}
+            role={view === 'kept' ? 'idle' : 'ok'}
+            heading={view === 'kept' ? 'Nothing kept on purpose yet' : 'No recording is on disc twice'}
           />
         {/if}
       {/each}
     </div>
+    </Settle>
 
     <Pager total={shown.data?.total ?? 0} {offset} {pageSize} onchange={changePage} />
   </section>

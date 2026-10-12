@@ -27,6 +27,7 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import type { IconName } from '$lib/icons';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -97,6 +98,9 @@
     queryFn: () => api.release(releaseID),
     refetchInterval: (query) => (waiting(query.state.data?.trackRefreshStatus) ? 15_000 : false)
   });
+  // The skeleton draws the release's own track count where the release has one,
+  // capped so a box set does not draw hundreds of boxes.
+  const trackSkeletonCount = $derived(Math.min($release.data?.trackCount || 12, 40));
   const tracks = createQuery({
     queryKey: ['releases', releaseID, 'tracks'],
     queryFn: () => api.releaseTracks(releaseID),
@@ -734,20 +738,27 @@
     <section>
       {#if $tracks.isError}
         <ErrorNote error={$tracks.error} retry={() => void $tracks.refetch()} />
-      {:else if $tracks.isPending}
-        <div
-          class="max-h-[calc(100dvh-27rem)] overflow-hidden rounded-panel border border-line-thin"
-          role="status"
-          aria-label="Loading tracks"
-        >
-          <!-- Fill about 2160px of rows so a 4K viewport does not outgrow the wait. -->
-          {#each Array(60) as _, placeholderIndex (placeholderIndex)}
-            <div class="h-9 border-b border-line-thin px-3 py-2 last:border-b-0" aria-hidden="true">
-              <Skeleton class="h-full" />
-            </div>
-          {/each}
-        </div>
-      {:else if $tracks.data?.items.length}
+      {/if}
+      <!-- The list polls while a refresh runs, so a failed poll keeps the rows
+           it already drew under the note. -->
+      {#if !$tracks.isError || $tracks.data}
+      <Settle pending={$tracks.isPending}>
+        {#snippet placeholder()}
+          <div
+            class="max-h-[calc(100dvh-27rem)] overflow-hidden rounded-panel border border-line-thin"
+            role="status"
+            aria-label="Loading tracks"
+          >
+            <!-- As many rows as the release has tracks, at the rows' own h-10, so
+                 the list lands in the space the wait held. -->
+            {#each Array(trackSkeletonCount) as _, placeholderIndex (placeholderIndex)}
+              <div class="h-10 border-b border-line-thin px-3 py-2 last:border-b-0" aria-hidden="true">
+                <Skeleton class="h-full" />
+              </div>
+            {/each}
+          </div>
+        {/snippet}
+      {#if $tracks.data?.items.length}
         <div>
           <div class="flex h-7 items-center gap-3.5 border-b border-line-regular px-3">
             <span class="label w-7 shrink-0 text-center">#</span>
@@ -833,21 +844,44 @@
         {#if $toggleTrack.isError}
           <ErrorNote error={$toggleTrack.error} class="mt-3" />
         {/if}
-      {:else}
+      {:else if waiting($release.data.trackRefreshStatus)}
         <div
           class="flex min-h-56 flex-col items-center justify-center rounded-panel border border-line-thin text-center"
         >
           <Icon name="busy" size="lg" class="animate-spin text-busy" />
           <p class="mt-4 text-body text-ink-2">Importing the track list…</p>
         </div>
+      {:else}
+        <!-- No refresh is waiting or running, so nothing will fill this in by
+             itself. A spinner here used to turn for as long as the tab was open. -->
+        <EmptyPanel
+          role={$release.data.trackRefreshStatus === 'failed' ? 'fail' : 'idle'}
+          heading="No track list"
+        >
+          <p class="text-body text-ink-2">
+            {$release.data.trackRefreshStatus === 'failed'
+              ? 'Reading the track list from MusicBrainz failed.'
+              : $release.data.trackRefreshStatus === 'completed'
+                ? 'MusicBrainz lists no tracks for this release.'
+                : 'This release has no MusicBrainz track list.'}
+          </p>
+        </EmptyPanel>
+      {/if}
+      </Settle>
       {/if}
     </section>
 
     <section class="mt-2">
       <!-- The heading names what is under it, so it waits until there is
            something: alone, it read as a section that failed to load. -->
-      {#if duplicateQuestion || openRequests.length || sourcesOpen}
+      {#if duplicateQuestion || openRequests.length || sourcesOpen || $downloads.isError}
         <span class="label">Sources</span>
+      {/if}
+
+      {#if $downloads.isError}
+        <!-- Without this a failed read looked like a release with no open
+             requests, and offered folders that may already be requested. -->
+        <ErrorNote error={$downloads.error} retry={() => void $downloads.refetch()} class="mt-5" />
       {/if}
 
       {#if duplicateQuestion}

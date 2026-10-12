@@ -694,7 +694,9 @@ describe('the popular tracks', () => {
       ]
     });
     opened();
-    const box = (await screen.findByRole('heading', { name: 'Popular' })).parentElement;
+    // The heading is drawn while the list is still loading, so wait for a row.
+    await screen.findByText('luther');
+    const box = screen.getByRole('heading', { name: 'Popular' }).parentElement;
     const rows = Array.from(box?.querySelectorAll('li') ?? []);
 
     expect(rows.map((row) => row.querySelector('[title]')?.getAttribute('title'))).toEqual([
@@ -709,6 +711,37 @@ describe('the popular tracks', () => {
     opened();
 
     expect(await screen.findByText(unavailable)).toBeTruthy();
+  });
+
+  it('shows the failure under Popular, not an empty list, when the read fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
+        if (url.pathname === `/api/v1/artists/${artistID}/popular`) {
+          return new Response(JSON.stringify({ title: 'listenbrainz broke' }), { status: 400 });
+        }
+        if (url.pathname === '/api/v1/albums') {
+          const items = [releaseRow('r1', 'DAMN.')];
+          return body({ items, total: 1, limit: 0, offset: 0, scopeTotal: 1 });
+        }
+        return body({ items: [], total: 0, limit: 24, offset: 0 });
+      })
+    );
+    opened();
+    await screen.findByRole('heading', { name: 'Popular' });
+
+    expect(await screen.findByText('listenbrainz broke')).toBeTruthy();
+    expect(screen.queryByText('No listens yet')).toBeNull();
+  });
+
+  it('says there are no listens yet when the list is empty', async () => {
+    answeringReleases([releaseRow('r1', 'DAMN.')], [], { items: [] });
+    opened();
+
+    expect(await screen.findByRole('heading', { name: 'No listens yet' })).toBeTruthy();
   });
 
   it('wants a recording no release carries by its MusicBrainz ID', async () => {

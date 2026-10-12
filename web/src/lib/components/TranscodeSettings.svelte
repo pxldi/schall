@@ -6,6 +6,7 @@
   import Card from '$lib/components/Card.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import * as Select from '$lib/components/ui/select';
 
   // Transcode after import: the setting that writes a lossless import,
@@ -94,7 +95,11 @@
   <Card>
     <div class="flex flex-wrap items-center gap-2.5">
       <h2 class="font-display text-lead font-bold text-ink">Transcode after import</h2>
-      {#if enabled}
+      <!-- "off" before the setting is read is a claim about it, and a wrong one
+           for somebody who turned it on. -->
+      {#if $imports.isPending}
+        <Skeleton class="h-5 w-9" />
+      {:else if enabled}
         <Chip role="ok">on</Chip>
       {:else}
         <Chip role="idle">off</Chip>
@@ -233,15 +238,27 @@
       they left off.
     </span>
 
-    <span class="text-meta text-ink-3">
-      {#if !enabled}
-        turn re-encoding on above to use this
-      {:else if eligible === 0}
-        no files in the library need to be shrunk under the current setting
-      {:else}
-        {eligible.toLocaleString()} files are eligible and would be shrunk
-      {/if}
-    </span>
+    <!-- The count waits for both reads. A pass that is still being read, or
+         could not be, is not one with nothing to shrink. -->
+    {#if $sweep.isError && !$sweep.data}
+      <ErrorNote
+        error={$sweep.error}
+        retry={() => $sweep.refetch()}
+        fallback="The library pass could not be read."
+      />
+    {:else if $imports.isPending || $sweep.isPending}
+      <Skeleton class="h-3.5 w-72 max-w-full" />
+    {:else}
+      <span class="text-meta text-ink-3">
+        {#if !enabled}
+          turn re-encoding on above to use this
+        {:else if eligible === 0}
+          no files in the library need to be shrunk under the current setting
+        {:else}
+          {eligible.toLocaleString()} files are eligible and would be shrunk
+        {/if}
+      </span>
+    {/if}
 
     {#if $sweep.data && $sweep.data.status !== 'idle'}
       <span class="numeric text-meta text-ink-3">

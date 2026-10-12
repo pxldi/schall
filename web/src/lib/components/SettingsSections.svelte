@@ -29,6 +29,8 @@
   import FormGrid from '$lib/components/FormGrid.svelte';
   import * as Select from '$lib/components/ui/select';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import SettingsSaveButton from '$lib/components/SettingsSaveButton.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TranscodeSettings from '$lib/components/TranscodeSettings.svelte';
@@ -326,8 +328,6 @@
   const rootCount = $derived($library.data?.rootCount ?? 0);
   const scanned = $derived(($library.data?.scanCompletedAt ?? null) !== null);
 
-  const placeholderRowCount = 30;
-
   // Each list only reports what Schall can actually observe. A row it cannot
   // check says so rather than showing a reassuring tick.
   //
@@ -486,15 +486,17 @@
     }
   ]);
 
-  const libraryHealthRows = $derived(
+  // While the reads are out, the rows the answer will have, named, with a
+  // placeholder where each reading goes. A disc is assumed, the common case.
+  // Thirty blank rows that collapsed to four moved the whole page up.
+  const libraryHealthRows = $derived<HealthRow[]>(
     $library.isPending || $storage.isPending
-      ? [
-          ...libraryHealth,
-          ...Array.from(
-            { length: Math.max(0, placeholderRowCount - libraryHealth.length) },
-            () => ({ name: '', role: 'idle' as Role, detail: '', placeholder: true })
-          )
-        ]
+      ? ['Library path', 'Collection size', 'Room left', 'Last scan'].map((name) => ({
+          name,
+          role: 'idle' as Role,
+          detail: '',
+          placeholder: true
+        }))
       : libraryHealth
   );
 
@@ -776,20 +778,7 @@
     ($preferences.data?.known ?? []).filter((format) => format in ($preferences.data?.lossy ?? {}))
   );
 
-  const formatRows = $derived(
-    $preferences.isPending
-      ? Array.from({ length: placeholderRowCount }, (_, index) => `loading-${index}`)
-      : floorFormats
-  );
-
-  const knownFormatRows = $derived(
-    $preferences.isPending
-      ? Array.from(
-          { length: placeholderRowCount },
-          (_, index) => `loading-${index}`
-        )
-      : ($preferences.data?.known ?? [])
-  );
+  const knownFormats = $derived($preferences.data?.known ?? []);
 
   const addableChoices = $derived([
     { value: '', label: 'Add a format…' },
@@ -1286,14 +1275,18 @@
             ? 'text-ink-2'
             : 'text-ink'}"
         >
-          {entry.placeholder ? '\u00a0' : entry.name}
+          {entry.name}
         </span>
-        <span
-          class="ml-auto min-w-0 truncate text-meta font-medium text-ink-3"
-          title={entry.title}
-        >
-          {entry.detail}
-        </span>
+        {#if entry.placeholder}
+          <Skeleton class="ml-auto h-3 w-20" />
+        {:else}
+          <span
+            class="ml-auto min-w-0 truncate text-meta font-medium text-ink-3"
+            title={entry.title}
+          >
+            {entry.detail}
+          </span>
+        {/if}
       </div>
     {/each}
   </div>
@@ -1354,12 +1347,13 @@
       <h2 class="font-display text-lead font-bold text-ink">Status</h2>
     </div>
 
-    {#if $library.isError || $storage.isError}
+    {#if $library.isError || $storage.isError || $dashboard.isError}
       <ErrorNote
-        error={$library.error ?? $storage.error}
+        error={$library.error ?? $storage.error ?? $dashboard.error}
         retry={() => {
-          $library.refetch();
-          $storage.refetch();
+          if ($library.isError) $library.refetch();
+          if ($storage.isError) $storage.refetch();
+          if ($dashboard.isError) $dashboard.refetch();
         }}
         fallback="The library could not be read."
       />
@@ -1370,19 +1364,30 @@
     <div class="flex flex-col gap-1">
       <div class="flex items-baseline justify-between">
         <span class="label">Library storage</span>
-        <span class="numeric text-meta font-medium text-ink-2">
-          {$library.isError ? 'Unavailable' : size($library.data?.totalSizeBytes ?? 0)}
-        </span>
-      </div>
-      <span class="numeric text-meta font-medium text-ink-4">
-        {#if $library.isError}
-          Unavailable
+        <!-- A placeholder while the reads are out: "0 B" and "0 files" are
+             answers, and wrong ones. -->
+        {#if $library.isPending}
+          <Skeleton class="h-3 w-14" />
         {:else}
-          {($library.data?.fileCount ?? 0).toLocaleString()} files · {(
-            $dashboard.data?.albumCount ?? 0
-          ).toLocaleString()} releases
+          <span class="numeric text-meta font-medium text-ink-2">
+            {$library.isError ? 'Unavailable' : size($library.data?.totalSizeBytes ?? 0)}
+          </span>
         {/if}
-      </span>
+      </div>
+      {#if $library.isPending || $dashboard.isPending}
+        <Skeleton class="h-3 w-36" />
+      {:else}
+        <span class="numeric text-meta font-medium text-ink-4">
+          {#if $library.isError}
+            Unavailable
+          {:else}
+            {($library.data?.fileCount ?? 0).toLocaleString()} files ·
+            {$dashboard.data
+              ? `${$dashboard.data.albumCount.toLocaleString()} releases`
+              : 'releases unavailable'}
+          {/if}
+        </span>
+      {/if}
     </div>
   </Card>
 {/snippet}
@@ -1659,7 +1664,11 @@
            left to right are the order, and the arrows move a chip along it, so
            the direction on the control is the direction on the screen. -->
       <div class="flex flex-col gap-2">
-        {#if preferred.length === 0}
+        <!-- The default sentence describes a saved setting, so it waits for the
+             read; shown early it claimed an order nobody had loaded yet. -->
+        {#if $preferences.isPending}
+          <Skeleton class="h-3.5 w-60" />
+        {:else if preferred.length === 0}
           <span class="text-meta text-ink-3">Lossless first, then lossy by bitrate.</span>
         {/if}
         {#if preferred.length > 0}
@@ -1737,22 +1746,36 @@
            distance from the left and the fourteen of them read as a paragraph
            of words rather than as a list somebody ticks down. A column of a
            fixed width puts every box under the one above it. -->
-      <div
-        class="grid max-h-[calc(100dvh-18rem)] max-w-[34rem] grid-cols-[repeat(auto-fill,minmax(5.25rem,1fr))] gap-x-3 gap-y-2 overflow-hidden"
-      >
-        {#each knownFormatRows as format (format)}
-          <label class="flex cursor-pointer items-center gap-2 text-meta font-medium text-ink-3">
-            <input
-              type="checkbox"
-              checked={$preferences.isSuccess && unacceptable.includes(format)}
-              disabled={!$preferences.isSuccess || preferred.includes(format)}
-              onchange={(event) => refuse(format, event.currentTarget.checked)}
-              class="check cursor-pointer"
-            />
-            {format.toUpperCase()}
-          </label>
-        {/each}
-      </div>
+      <Settle pending={$preferences.isPending}>
+        {#snippet placeholder()}
+          <div
+            class="grid max-w-[34rem] grid-cols-[repeat(auto-fill,minmax(5.25rem,1fr))] gap-x-3 gap-y-2"
+            role="status"
+            aria-busy="true"
+            aria-label="Loading formats"
+          >
+            {#each Array(8) as _, index (index)}
+              <span class="flex items-center gap-2"><Skeleton class="size-4" /><Skeleton class="h-3 w-10" /></span>
+            {/each}
+          </div>
+        {/snippet}
+        <div
+          class="grid max-h-[calc(100dvh-18rem)] max-w-[34rem] grid-cols-[repeat(auto-fill,minmax(5.25rem,1fr))] gap-x-3 gap-y-2 overflow-hidden"
+        >
+          {#each knownFormats as format (format)}
+            <label class="flex cursor-pointer items-center gap-2 text-meta font-medium text-ink-3">
+              <input
+                type="checkbox"
+                checked={$preferences.isSuccess && unacceptable.includes(format)}
+                disabled={!$preferences.isSuccess || preferred.includes(format)}
+                onchange={(event) => refuse(format, event.currentTarget.checked)}
+                class="check cursor-pointer"
+              />
+              {format.toUpperCase()}
+            </label>
+          {/each}
+        </div>
+      </Settle>
 
       {@render Label('Lowest bitrate', '0 is no floor — lossless is never measured by it', 'bitrate-floor')}
       <div class="flex items-center gap-2">
@@ -1775,8 +1798,16 @@
            and to nothing else. -->
       {@render Label('Per format', 'a number here replaces the one above')}
       <div class="flex flex-col gap-2">
+        <Settle pending={$preferences.isPending}>
+          {#snippet placeholder()}
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2" role="status" aria-busy="true" aria-label="Loading format floors">
+              {#each Array(4) as _, index (index)}
+                <span class="flex items-center gap-1.5"><Skeleton class="h-3 w-11" /><Skeleton class="h-8 w-20" /></span>
+              {/each}
+            </div>
+          {/snippet}
         <div class="flex max-h-[calc(100dvh-18rem)] flex-wrap items-center gap-x-4 gap-y-2 overflow-hidden">
-          {#each formatRows as format (format)}
+          {#each floorFormats as format (format)}
             <label class="flex items-center gap-1.5 text-meta text-ink-2">
               <span class="w-11">{format.toUpperCase()}</span>
               <input
@@ -1793,6 +1824,7 @@
             </label>
           {/each}
         </div>
+        </Settle>
         <details class="group">
           <summary
             class="tap-tall flex w-fit cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
@@ -2909,6 +2941,14 @@
       {/if}
     </div>
 
+    <Settle pending={$layoutRun.isPending} layer="flex flex-col gap-3.5">
+      {#snippet placeholder()}
+        <div class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading the migration">
+          <Skeleton class="h-3.5 w-56" />
+          <Skeleton class="h-3.5 w-72 max-w-full" />
+          <Skeleton class="h-3.5 w-40" />
+        </div>
+      {/snippet}
     {#if run}
       <span class="numeric text-meta text-ink-3">
         {run.planned} to move · {run.moved} moved · {run.failed} refused
@@ -2961,20 +3001,6 @@
           {/if}
         </div>
       {/if}
-    {:else if $layoutRun.isPending}
-      <div
-        class="flex max-h-[calc(100dvh-18rem)] flex-col gap-1 overflow-hidden"
-        aria-hidden="true"
-      >
-        <span class="numeric text-meta text-ink-3">&nbsp;</span>
-        <span class="numeric text-meta leading-relaxed text-ink-3">&nbsp;</span>
-        {#each Array(placeholderRowCount) as _, index (index)}
-          <div class="flex flex-wrap items-baseline gap-2 py-1">
-            <span class="h-5 w-16 rounded-row bg-surface-regular"></span>
-            <span class="h-4 min-w-0 flex-1 rounded-row bg-surface-regular"></span>
-          </div>
-        {/each}
-      </div>
     {:else if $layoutRun.isError}
       <ErrorNote
         error={$layoutRun.error}
@@ -2986,6 +3012,7 @@
            what the button will not do. -->
       <span class="text-meta text-ink-3">planning moves nothing</span>
     {/if}
+    </Settle>
 
     {#if $planLayout.isError || $applyLayout.isError || $discardLayout.isError}
       {@const said = $planLayout.error ?? $applyLayout.error ?? $discardLayout.error}
@@ -3034,6 +3061,11 @@
       Writes the artist, album and date Schall matched into the files you already had.
     </span>
 
+    <!-- Nothing is said about the count until it is read: "no files are
+         matched" is an answer, and a wrong one while the read is out. -->
+    {#if $tags.isPending}
+      <Skeleton class="h-3.5 w-64 max-w-full" />
+    {:else}
     <span class="text-meta text-ink-3">
       {#if $tags.isError}
         Unavailable
@@ -3043,6 +3075,7 @@
         {($tags.data?.eligible ?? 0).toLocaleString()} files are matched to a track and would be written
       {/if}
     </span>
+    {/if}
 
     {#if $tags.data && $tags.data.status !== 'idle'}
       <span class="numeric text-meta text-ink-3">
