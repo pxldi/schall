@@ -1,10 +1,11 @@
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, type Overview, type OverviewDay } from '$lib/api';
   import { formatBytes, relativeTime } from '$lib/utils';
   import type { OverviewSession } from '$lib/api-types';
   import Cover from '$lib/components/Cover.svelte';
+  import WantToggle from '$lib/components/WantToggle.svelte';
   import DotColumns from '$lib/components/DotColumns.svelte';
   import { measure } from '$lib/measure';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -25,10 +26,18 @@
     refetchInterval: (query) => (query.state.data?.arrived.downloading ? 15_000 : 5 * 60_000)
   });
 
-  const want = createMutation({
-    mutationFn: (trackId: string) => api.wantTrack(trackId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['overview'] })
-  });
+  // A played song the library does not hold is wanted and let go with the
+  // same + as a track row. Wanting one somebody let go of hands back the
+  // standing decision, so the press takes it back explicitly.
+  async function wantSong(trackId: string) {
+    const target = await api.wantTrack(trackId);
+    if (target.status === 'not_wanted') await api.pursueTargetAgain(target.id);
+    await queryClient.invalidateQueries({ queryKey: ['overview'] });
+  }
+  async function letGo(trackId: string) {
+    await api.dismissTrack(trackId);
+    await queryClient.invalidateQueries({ queryKey: ['overview'] });
+  }
 
   const data = $derived($overview.data);
   const listening = $derived(data?.listening);
@@ -408,7 +417,7 @@
              positional key loses nothing. -->
         <ul class="flex flex-col">
           {#each shown('most-played', listening.mostPlayed) as song, index (index)}
-            <li class="flex h-11 shrink-0 items-center gap-2.5">
+            <li class="want-row flex h-11 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={song.releaseId ? 'a' : 'div'}
                 href={song.releaseId ? `/releases/${song.releaseId}` : undefined}
@@ -419,16 +428,17 @@
               </svelte:element>
               <!-- A held song is the ordinary case and carries no mark; the
                    exception is the one that can be wanted. -->
-              {#if !song.inLibrary && song.wanted}
-                <span class="text-meta text-ink-4">Wanted</span>
-              {:else if !song.inLibrary && song.trackId}
-                <button
-                  type="button"
-                  class="text-meta text-ink-4 transition hover:text-accent"
-                  disabled={$want.isPending}
-                  onclick={() => $want.mutate(song.trackId!)}>Want</button
-                >
-              {/if}
+              <span class="flex w-6 shrink-0 items-center justify-center">
+                {#if !song.inLibrary && song.trackId}
+                  <WantToggle
+                    reveal
+                    wanted={song.wanted}
+                    title={song.title}
+                    onwant={() => wantSong(song.trackId!)}
+                    onunwant={() => letGo(song.trackId!)}
+                  />
+                {/if}
+              </span>
               <span class="w-7 text-right font-mono text-body font-semibold text-ink">{song.listens}</span>
             </li>
           {/each}
