@@ -104,3 +104,21 @@ describe('a label page', () => {
     expect(pictures).toEqual(['/api/v1/albums/r1/cover?cached=1']);
   });
 });
+
+describe('a label the server does not have', () => {
+  it('says the label was not found and leads to the labels list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ title: 'label not found', status: 404 }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+      ),
+    );
+    opened();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Label not found' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open labels' }).getAttribute('href')).toBe('/artists/labels');
+  });
+});

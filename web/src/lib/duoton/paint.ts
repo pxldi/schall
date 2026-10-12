@@ -220,11 +220,12 @@ export function paintPrint(
   sg.filter = 'blur(0.6px) contrast(1.15)';
   if (mode === 'strip') {
     const s = Math.ceil(sw / sources.length);
+    // Each cover is drawn as a square big enough to cover its tile and cropped
+    // to the tile's middle, so a short print shows the centre band of each
+    // cover and a tall one its centre column, never a stretched cover.
+    const side = Math.max(s, sh);
     sources.forEach((source, i) => {
-      // Each square is cropped to its middle band, so a short print shows the
-      // centre of each cover rather than its top.
-      const crop = Math.min(s, sh);
-      sg.drawImage(square(source, s), 0, Math.max(0, (s - sh) / 2), s, crop, i * s, 0, s, sh);
+      sg.drawImage(square(source, side), (side - s) / 2, (side - sh) / 2, s, sh, i * s, 0, s, sh);
     });
   } else {
     const s = sw;

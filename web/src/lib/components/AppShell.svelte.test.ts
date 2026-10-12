@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, setup, within } from '@testing-library/svelte';
-import { createRawSnippet } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import { shimTheMissingBrowser } from './ui/test-window';
 
 // The top bar is the chrome every screen is drawn inside (ADR Duoton): the
@@ -18,8 +18,17 @@ vi.mock('$app/state', () => ({
   }
 }));
 
+// The shell remembers the section a release was opened from, which it hears
+// as each navigation lands. A test lands one by calling what it registered.
+type Arrival = (navigation: { to: { url: URL } | null }) => void;
+let arrivals: Arrival[] = [];
+function arrive(at: string) {
+  address = at;
+  for (const arrival of arrivals) arrival({ to: { url: new URL(at) } });
+}
+
 vi.mock('$app/navigation', () => ({
-  afterNavigate: () => {},
+  afterNavigate: (arrival: Arrival) => void arrivals.push(arrival),
   goto: vi.fn(),
   replaceState: vi.fn()
 }));
@@ -40,6 +49,7 @@ beforeAll(shimTheMissingBrowser);
 
 beforeEach(() => {
   address = 'http://localhost/';
+  arrivals = [];
 });
 
 afterEach(() => {
@@ -62,6 +72,15 @@ describe('AppShell', () => {
     const top = within(screen.getByRole('navigation', { name: 'Sections' }));
     for (const label of seven) {
       expect(top.getByRole('link', { name: label })).toBeTruthy();
+    }
+  });
+
+  it('names each destination by a tooltip, for the width where only its icon shows', () => {
+    opened();
+
+    const top = within(screen.getByRole('navigation', { name: 'Sections' }));
+    for (const label of seven) {
+      expect(top.getByRole('link', { name: label }).getAttribute('title')).toBe(label);
     }
   });
 
@@ -89,12 +108,32 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Downloads' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('counts a release page as Library', () => {
+  it('counts a release opened straight from a link as Library', () => {
     address = 'http://localhost/releases/abc';
 
     opened();
 
     expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('keeps the section a release was opened from', async () => {
+    opened();
+    arrive('http://localhost/artists/a1');
+    arrive('http://localhost/releases/abc');
+    await tick();
+
+    expect(screen.getByRole('link', { name: 'Artists' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBe(null);
+  });
+
+  it('keeps that section from one release to the next', async () => {
+    opened();
+    arrive('http://localhost/playlists/p1');
+    arrive('http://localhost/releases/abc');
+    arrive('http://localhost/releases/def');
+    await tick();
+
+    expect(screen.getByRole('link', { name: 'Playlists' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('draws no count or state mark on any destination', () => {

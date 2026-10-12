@@ -539,7 +539,7 @@
     {/snippet}
   </Hero>
 {:else}
-  <Hero title="Review" size="xl" />
+  <Hero title="Review" section />
 {/if}
 
 <!-- The queue and the question share one panel, the queue down its left. -->

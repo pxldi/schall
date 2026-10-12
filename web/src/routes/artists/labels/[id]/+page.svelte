@@ -5,10 +5,12 @@
   import { page } from '$app/state';
   import { createQuery } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
-  import { api, type LabelRelease } from '$lib/api';
+  import { api, ApiError, type LabelRelease } from '$lib/api';
   import { calendarDate } from '$lib/utils';
+  import { queryRetry } from '$lib/errors';
   import { coverSrc, usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
+  import Button from '$lib/components/Button.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -21,9 +23,16 @@
     toStore(() => ({
       queryKey: ['labels', labelID],
       queryFn: () => api.label(labelID),
-      enabled: labelID.length > 0
+      enabled: labelID.length > 0,
+      // A label the server does not have will not appear by asking again.
+      retry: (spent: number, error: Error) =>
+        !(error instanceof ApiError && error.status === 404) && queryRetry(spent, error)
     }))
   );
+
+  // An old link, or a label unfollowed and since removed. Reloading cannot
+  // bring it back, so the page says so and leads to the list of labels.
+  const missing = $derived($detail.error instanceof ApiError && $detail.error.status === 404);
 
   const label = $derived($detail.data?.label);
   const releases = $derived($detail.data?.releases ?? []);
@@ -70,6 +79,15 @@
       </span>
     {/snippet}
   </Hero>
+{:else if missing}
+  <Hero title="Label not found" size="m">
+    {#snippet back()}
+      <BackLink fallback="/artists/labels" label="Labels" />
+    {/snippet}
+    {#snippet sub()}
+      <span>Schall has no label at this address. The link may be old, or the label was removed.</span>
+    {/snippet}
+  </Hero>
 {:else if $detail.isPending}
   <section
     class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
@@ -84,7 +102,9 @@
 {/if}
 
 <div class="flex flex-col gap-4 px-4 py-5 sm:px-6">
-  {#if $detail.isError}
+  {#if missing}
+    <div><Button href="/artists/labels">Open labels</Button></div>
+  {:else if $detail.isError}
     <ErrorNote error={$detail.error} retry={() => $detail.refetch()} />
   {:else}
     <Settle pending={$detail.isPending}>
