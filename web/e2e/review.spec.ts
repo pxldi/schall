@@ -18,7 +18,7 @@ test('the rail lists the open wants and the chips count each kind', async ({ pag
   await expect(page.getByRole('button', { name: 'Folder 0' })).toBeVisible();
 });
 
-test('a downloaded want draws one card per copy, with Skip, Remove from Wishlist, None of these and Accept copy', async ({
+test('a downloaded want draws one card per copy, with Skip, Don\'t want, None of these and Accept copy', async ({
   page
 }) => {
   await page.goto('/review');
@@ -37,13 +37,13 @@ test('a downloaded want draws one card per copy, with Skip, Remove from Wishlist
 
   const footer = page.locator('footer');
   await expect(footer.getByRole('button', { name: 'Skip' })).toBeVisible();
-  await expect(footer.getByRole('button', { name: 'Remove from Wishlist' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: "Don't want" })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'None of these' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Accept copy' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Wrong song' })).toBeVisible();
 });
 
-test('a version want draws one row per candidate, with Skip, Remove from Wishlist and Use recording', async ({
+test('a version want draws one row per candidate, with Skip, Don\'t want and Use recording', async ({
   page
 }) => {
   await page.goto('/review');
@@ -62,7 +62,7 @@ test('a version want draws one row per candidate, with Skip, Remove from Wishlis
 
   const footer = page.locator('footer');
   await expect(footer.getByRole('button', { name: 'Skip' })).toBeVisible();
-  await expect(footer.getByRole('button', { name: 'Remove from Wishlist' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: "Don't want" })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Use recording' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Wrong song' })).not.toBeVisible();
 });
@@ -109,4 +109,29 @@ test('the decisions stay on screen under a long queue', async ({ page }) => {
   await expect(skip).toBeInViewport();
   const rail = await queue.boundingBox();
   expect(rail!.height).toBeLessThanOrEqual(800);
+});
+
+test('the decisions never cover the last lines in a narrow window', async ({ page }) => {
+  // At 753 px the bar sat 56 px above the window's foot, over "Why no sample".
+  await page.route('**/api/v1/review-queue?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const item of body.items) {
+      item.target.anchorUnavailable = 'This entry carries no ISRC, and a preview is only ever fetched by ISRC.';
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await page.setViewportSize({ width: 753, height: 700 });
+  await page.goto('/review');
+  // The rail's list is hidden below 1024 px; the chip narrows to the one copy question.
+  await page.getByRole('button', { name: /^Downloaded/ }).click();
+
+  const why = page.getByText('Why no sample');
+  await expect(why).toBeVisible();
+  await page.mouse.wheel(0, 10_000);
+  await page.waitForTimeout(300);
+  // Scrolled to the end, the last of the question sits above the bar.
+  const cards = (await page.getByRole('radiogroup', { name: 'Copies' }).locator('..').boundingBox())!;
+  const bar = (await page.locator('footer').boundingBox())!;
+  expect(cards.y + cards.height).toBeLessThanOrEqual(bar.y);
 });

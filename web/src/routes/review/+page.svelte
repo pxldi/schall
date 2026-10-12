@@ -145,8 +145,8 @@
     if ($downloads.hasNextPage && !$downloads.isFetchingNextPage) void $downloads.fetchNextPage();
   }
 
-  // Each kind is a Misprint icon with its name as the tooltip; "All" has no
-  // picture that says it better than the word.
+  // Each kind carries a Misprint icon beside its word; "All" has no picture
+  // that says it better than the word.
   const FILTERS: { key: QuestionKind | 'all'; label: string; icon?: IconName }[] = [
     { key: 'all', label: 'All' },
     { key: 'downloaded', label: 'Downloaded', icon: 'download' },
@@ -538,8 +538,9 @@
      about the entry, so it sits here rather than with the decisions. -->
 {#snippet wanted(want: ReviewItem)}
   <div class="flex min-h-[14rem] w-full flex-col gap-3 rounded-card border border-dashed border-line-regular p-4">
-    <span class="flex items-center text-ink-3" title="Wanted">
-      <Icon name="want" size={16} aria-label="Wanted" />
+    <span class="flex items-center gap-1.5 text-meta text-ink-3">
+      <Icon name="want" size={14} />
+      Wishlist entry
     </span>
     <div class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-quiet-meta">
       <span class="text-ink-3">Length</span>
@@ -562,13 +563,11 @@
       <Button
         variant="ghost"
         size="sm"
-        icon
-        title="Wrong song"
-        aria-label="Wrong song"
         onclick={() => $wrongSong.mutate(want.target.id)}
         disabled={deciding}
       >
         <Icon name="ban" size={14} />
+        Wrong song
       </Button>
     </div>
   </div>
@@ -623,18 +622,13 @@
             type="button"
             onclick={() => chooseFilter(option.key)}
             aria-pressed={filter === option.key}
-            aria-label={`${option.label} ${counts[option.key]}`}
-            title={option.icon ? option.label : undefined}
             class="flex items-center gap-1.5 rounded-full border px-2 py-1 text-meta {filter ===
             option.key
               ? 'border-line-regular bg-surface-thick text-ink'
               : 'border-line-thin text-ink-2'}"
           >
-            {#if option.icon}
-              <Icon name={option.icon} size={13} />
-            {:else}
-              {option.label}
-            {/if}
+            {#if option.icon}<Icon name={option.icon} size={13} />{/if}
+            {option.label}
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
@@ -790,7 +784,7 @@
       </div>
 
       <footer
-        class="sticky bottom-14 mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-line-regular bg-surface-thin px-4 sm:px-6 py-3 lg:bottom-0 lg:px-8"
+        class="sticky bottom-0 mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-line-regular bg-surface-thin px-4 sm:px-6 py-3 lg:px-8"
         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
       >
         {#if current.kind === 'folder' && current.download}
@@ -809,7 +803,7 @@
               disabled={deciding}
               onclick={() => $notWanted.mutate(current.want!.target.id)}
             >
-              Remove from Wishlist
+              Don't want
             </Button>
           {/if}
           {#if current.kind === 'downloaded' && !filed && current.want}

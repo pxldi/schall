@@ -258,7 +258,7 @@ async function open(text: string) {
 }
 
 describe('the three kinds Review holds', () => {
-  it('shows a downloaded question with Skip, Remove from Wishlist, None of these and Accept, in order', async () => {
+  it('shows a downloaded question with Skip, Don\'t want, None of these and Accept, in order', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
@@ -266,10 +266,10 @@ describe('the three kinds Review holds', () => {
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove from Wishlist', 'None of these', 'Accept copy']);
+    expect(labels).toEqual(['Skip', "Don't want", 'None of these', 'Accept copy']);
   });
 
-  it('shows a version question with Skip, Remove from Wishlist and Use, in order', async () => {
+  it('shows a version question with Skip, Don\'t want and Use, in order', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
@@ -277,7 +277,7 @@ describe('the three kinds Review holds', () => {
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove from Wishlist', 'Use recording']);
+    expect(labels).toEqual(['Skip', "Don't want", 'Use recording']);
   });
 
   it('shows a folder question with Check again before Skip', async () => {
@@ -301,7 +301,7 @@ describe('the three kinds Review holds', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const card = screen.getByRole('img', { name: 'Wanted' }).closest('div')!;
+    const card = screen.getByText('Wishlist entry').parentElement!;
     expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
@@ -345,7 +345,7 @@ describe('a stopped want', () => {
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove from Wishlist', 'Accept copy']);
+    expect(labels).toEqual(['Skip', "Don't want", 'Accept copy']);
   });
 
   it('shows the file it is filed as', async () => {
