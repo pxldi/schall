@@ -146,7 +146,11 @@ type ListDownloadRequestsParams struct {
 	// every request. It is not the same thing as Status: what became of a copy
 	// after it arrived is recorded in import_status, so "imported" and
 	// "discarded" are answers from a second column.
-	View   string
+	View string
+	// Search narrows the page to requests whose release, artist, wanted
+	// recording or peer contains it, ignoring case. The counts stay those of
+	// the whole scope; Total becomes the number that match.
+	Search string
 	Limit  int32
 	Offset int32
 }
@@ -1003,6 +1007,17 @@ func (q *Queries) QueueDownloadPoll(ctx context.Context, runAfter time.Time) err
 	return err
 }
 
+// downloadSearch matches $4 against the words a Downloads row shows: the
+// release, its artist, the wanted recording and the peer. An empty $4 matches
+// every row, and % and _ in it are matched as themselves.
+const downloadSearch = `
+		  AND ($4::text = ''
+		    OR albums.title ILIKE '%' || regexp_replace($4, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\'
+		    OR artists.name ILIKE '%' || regexp_replace($4, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\'
+		    OR acquisition_targets.entry_title ILIKE '%' || regexp_replace($4, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\'
+		    OR acquisition_targets.entry_artist ILIKE '%' || regexp_replace($4, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\'
+		    OR download_requests.source_username ILIKE '%' || regexp_replace($4, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\')`
+
 func (q *Queries) ListDownloadRequests(ctx context.Context, params ListDownloadRequestsParams) (DownloadRequestPage, error) {
 	var result DownloadRequestPage
 	view, known := DownloadRequestView(params.View)
@@ -1043,12 +1058,26 @@ func (q *Queries) ListDownloadRequests(ctx context.Context, params ListDownloadR
 	if view != "" {
 		filter += "\n\t\t  AND (" + view + ")"
 	}
+	filter += downloadSearch
+	search := strings.TrimSpace(params.Search)
+	if search != "" {
+		if err := q.db.QueryRow(ctx, `
+			SELECT count(*) FROM download_requests
+			LEFT JOIN albums ON albums.id = download_requests.album_id
+			LEFT JOIN artists ON artists.id = albums.artist_id
+			LEFT JOIN acquisition_targets
+				ON acquisition_targets.id = download_requests.acquisition_target_id`+filter,
+			params.AlbumID.Valid, params.AlbumID.UUID, params.Status, search,
+		).Scan(&result.Total); err != nil {
+			return result, err
+		}
+	}
 
 	rows, err := q.db.Query(ctx, `
 		SELECT`+downloadRequestColumns+downloadRequestJoins+filter+`
 		ORDER BY download_requests.requested_at DESC, download_requests.id
-		LIMIT NULLIF($4::int, 0) OFFSET $5
-	`, params.AlbumID.Valid, params.AlbumID.UUID, params.Status, params.Limit, params.Offset)
+		LIMIT NULLIF($5::int, 0) OFFSET $6
+	`, params.AlbumID.Valid, params.AlbumID.UUID, params.Status, search, params.Limit, params.Offset)
 	if err != nil {
 		return result, err
 	}
