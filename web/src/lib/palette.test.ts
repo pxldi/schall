@@ -142,6 +142,26 @@ describe('paletteCategories', () => {
     expect(artists.rows[0].meta).toBe('148 files');
   });
 
+  it('pictures an artist by their photo, as the artists grid does', () => {
+    const [artists] = paletteCategories(everything, 'radiohead');
+
+    expect(artists.rows[0].cover?.src).toBe(`/api/v1/artists/${artist.id}/image`);
+  });
+
+  it('says Schall made the weekly list rather than calling it not imported', () => {
+    const categories = paletteCategories(
+      answer({
+        playlists: [{ ...playlist, source: 'weekly', ownerName: '', importedAt: null }],
+        totals: { ...everything.totals, playlists: 1 }
+      }),
+      'weekly'
+    );
+
+    expect(categories.find((category) => category.key === 'playlists')?.rows[0].subtitle).toBe(
+      'Made by Schall'
+    );
+  });
+
   it('counts a release in the tracks of it that are owned', () => {
     const groups = paletteCategories(everything, 'radiohead');
 
