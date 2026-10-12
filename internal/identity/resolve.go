@@ -421,6 +421,11 @@ type registrationCheck struct {
 	// linked to a deleted row is a stale link, and a row that does not exist
 	// cannot be other music, so these are set aside with the siblings.
 	gone []uuid.UUID
+	// others are the named rows that were looked up and are none of the above:
+	// other recordings the audio may be. lookedUp says every name was asked
+	// about, so others is the whole of them.
+	others   []musicbrainz.Recording
+	lookedUp bool
 }
 
 // names are the identifiers set aside: the rows established as this same
@@ -527,12 +532,81 @@ func (resolver *Resolver) secondRowOfSameRegistration(
 		case byRegistrationCode:
 			if sampled {
 				check.rows = append(check.rows, other)
+			} else {
+				check.others = append(check.others, other)
 			}
 		case byExplicitEdition:
 			check.explicit = append(check.explicit, other)
+		default:
+			check.others = append(check.others, other)
 		}
 	}
+	check.lookedUp = true
 	return check
+}
+
+// singledOutOfCluster reports the file's own identifier picking this recording
+// out of a leading cluster that also names other rows, and returns the sentence
+// a person reads about it. Empty means the identifier picks nothing.
+//
+// A cluster naming two rows is AcoustID saying the audio is one of them. It
+// cannot say which, and until now the copy waited for a person. The file's
+// MusicBrainz recording ID answers that when it names this recording, because
+// an ID this recording answers to is never one of the other rows. An ISRC
+// answers it only when none of the other rows carries the same code, since
+// MusicBrainz puts one ISRC on several recordings, and that takes the lookups
+// the registration check already made. A lookup that failed leaves the ISRC
+// unread.
+//
+// Neither half admits on its own: the identifier is the file's own word, and
+// the cluster is two answers. A cluster tied with a lower one, or a pair that
+// any evidence contradicts, is not read at all.
+func singledOutOfCluster(
+	evidence Evidence, recording musicbrainz.Recording, pair comparison, check registrationCheck,
+) string {
+	if pair.contradicted() || !leadingClusterNames(evidence.Acoustic, recording) ||
+		leadingClusterTied(evidence.Acoustic) {
+		return ""
+	}
+	if pair.recording == tagmatch.Agrees {
+		return "AcoustID named this recording and another MusicBrainz row for the same " +
+			"audio, and the file's own MusicBrainz recording ID names this one."
+	}
+	if pair.isrc != tagmatch.Agrees || check.unavailable || !check.lookedUp {
+		return ""
+	}
+	for _, other := range check.others {
+		if compareISRC(evidence.ISRC, other.ISRCs) == tagmatch.Agrees {
+			return ""
+		}
+	}
+	return "AcoustID named this recording and another MusicBrainz row for the same " +
+		"audio, and the file's own ISRC belongs to this one alone."
+}
+
+// leadingClusterNames reports the leading cluster naming this recording,
+// whatever else it names.
+func leadingClusterNames(acoustic *Acoustic, recording musicbrainz.Recording) bool {
+	best := acoustic.best()
+	if best == nil {
+		return false
+	}
+	for _, recordingID := range best.Recordings {
+		if recordingID != uuid.Nil && recording.Answers(recordingID) {
+			return true
+		}
+	}
+	return false
+}
+
+// leadingClusterTied reports a lower cluster scored level with the leading one.
+// Which of two equal clusters is the audio is not Schall's to choose, so an
+// identifier is not let pick inside either of them.
+func leadingClusterTied(acoustic *Acoustic) bool {
+	if acoustic == nil || len(acoustic.Clusters) < 2 {
+		return false
+	}
+	return acoustic.Clusters[0].Similarity-acoustic.Clusters[1].Similarity <= acousticTieEpsilon
 }
 
 // provenBySample reports the copy reproducing the excerpt this recording's own
@@ -786,10 +860,11 @@ func (resolver *Resolver) Verify(
 	registration := ""
 	unchecked := false
 	setAside := false
+	var check registrationCheck
 	if (pair.acoustic == tagmatch.Differs ||
 		(pair.acoustic == tagmatch.Unknown && pair.acousticNames > 1)) &&
 		pair.anchor != tagmatch.Differs {
-		check := resolver.secondRowOfSameRegistration(ctx, evidence, recording)
+		check = resolver.secondRowOfSameRegistration(ctx, evidence, recording)
 		switch {
 		case check.unavailable:
 			unchecked, registration = true, registrationUncheckedSentence
@@ -801,7 +876,15 @@ func (resolver *Resolver) Verify(
 			pair = compareAgainst(evidence, recording, check.names())
 		}
 	}
+	singledOut := ""
+	if pair.acoustic == tagmatch.Unknown && pair.acousticNames > 1 {
+		singledOut = singledOutOfCluster(evidence, recording, pair, check)
+		pair.acousticSingledOut = singledOut != ""
+	}
 	level := gradeOf(pair)
+	if level == byFingerprintAndIdentifier && singledOut != "" {
+		registration = strings.TrimSpace(registration + " " + singledOut)
+	}
 	agrees, differs := describeVerdicts(pair)
 	described := describe(evidence, recording)
 	verification := Verification{

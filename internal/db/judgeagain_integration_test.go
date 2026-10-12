@@ -416,3 +416,25 @@ func TestAFailedJudgementGivesTheCopyBack(t *testing.T) {
 		t.Errorf("import status = %q, want it left alone", importStatus)
 	}
 }
+
+// A held copy whose leading cluster named the want beside another row is
+// offered again without a sample: the file's own identifier may now pick the
+// want out of that cluster.
+func TestAHeldCopyNamedBesideAnotherRowIsOfferedAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, `{"acoustic": {
+		"recordingIds": ["f0a32851-2df8-4643-8649-f33f9a82c19d", "205ff413-6fbe-48d2-bd64-940cc37f5d75"],
+		"clusters": [{"recordingIds": ["f0a32851-2df8-4643-8649-f33f9a82c19d", "205ff413-6fbe-48d2-bd64-940cc37f5d75"]}]
+	}}`)
+
+	offered, err := queries.CopiesToJudgeAgain(ctx)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgain() error = %v", err)
+	}
+	if len(offered) != 1 || offered[0].RequestID != requestID {
+		t.Fatalf("offered = %+v, want the copy back", offered)
+	}
+}
