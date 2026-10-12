@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestSPAHandlerServesUnderscorePrefixedAssets(t *testing.T) {
@@ -47,6 +48,50 @@ func TestSPAHandlerAnswersOnlyReads(t *testing.T) {
 		spaHandler().ServeHTTP(response, httptest.NewRequest(method, "/artists/example", nil))
 		if response.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404", method, response.Code)
+		}
+	}
+}
+
+func testDist() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html":                         {Data: []byte("<!doctype html><title>Schall</title>")},
+		"fonts/face.woff2":                   {Data: []byte("font")},
+		"_app/immutable/entry/start.abc1.js": {Data: []byte("export const start = 1;")},
+	}
+}
+
+// A hashed chunk changes its name when it changes, so it is kept for good.
+// Before this, every load downloaded every chunk again.
+func TestSPAHandlerLetsBrowsersKeepHashedChunks(t *testing.T) {
+	response := httptest.NewRecorder()
+	spaHandlerFS(testDist()).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/_app/immutable/entry/start.abc1.js", nil))
+
+	if got := response.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Errorf("Cache-Control = %q, want immutable for a year", got)
+	}
+}
+
+// The shell names the current build's chunks, so it is confirmed on every load
+// and answered with a 304 when nothing changed.
+func TestSPAHandlerConfirmsTheShellWithAnETag(t *testing.T) {
+	handler := spaHandlerFS(testDist())
+	for _, target := range []string{"/", "/artists/example", "/fonts/face.woff2"} {
+		first := httptest.NewRecorder()
+		handler.ServeHTTP(first, httptest.NewRequest(http.MethodGet, target, nil))
+		if got := first.Header().Get("Cache-Control"); got != "no-cache" {
+			t.Errorf("%s: Cache-Control = %q, want no-cache", target, got)
+		}
+		tag := first.Header().Get("ETag")
+		if tag == "" {
+			t.Fatalf("%s: no ETag", target)
+		}
+
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request.Header.Set("If-None-Match", tag)
+		second := httptest.NewRecorder()
+		handler.ServeHTTP(second, request)
+		if second.Code != http.StatusNotModified {
+			t.Errorf("%s: revalidation status = %d, want 304", target, second.Code)
 		}
 	}
 }

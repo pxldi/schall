@@ -654,6 +654,10 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 
 		router.Group(func(router chi.Router) {
 			router.Use(middleware.Timeout(30 * time.Second))
+			// JSON shrinks to a fifth or less. The event stream and the upload
+			// above stay outside it: the stream has to flush each notice as it
+			// is written, and the compressing writer cannot pass a flush through.
+			router.Use(compress)
 
 			router.Get("/health", api.health)
 			// Who Schall took this request to be. The app calls it after a
@@ -918,9 +922,13 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 		})
 	})
 
-	router.Handle("/*", spaHandler())
+	router.Handle("/*", compress(spaHandler()))
 	return router
 }
+
+// compress gzips text the browser says it can read: JSON, scripts, styles,
+// SVG. Covers and audio are already compressed and are left alone.
+var compress = middleware.Compress(5)
 
 func (api *API) health(response http.ResponseWriter, request *http.Request) {
 	ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
