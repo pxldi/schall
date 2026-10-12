@@ -4,12 +4,14 @@
 
   // The question before a step that is hard to take back, asked in the page's
   // own panel. The browser's confirm() blocked the whole tab and looked like
-  // nothing else in Schall.
+  // nothing else in Schall. The panel is solid, in the page's dark ink over
+  // the plum: on glass the table behind it read through the question.
   let {
     open = $bindable(false),
     title,
     description,
     action,
+    keep = 'Back',
     danger = false,
     onconfirm
   }: {
@@ -18,6 +20,8 @@
     description: string;
     /** The label of the button that does it: one to three words, verb first. */
     action: string;
+    /** The label of the button that leaves things as they are. */
+    keep?: string;
     danger?: boolean;
     onconfirm: () => void;
   } = $props();
@@ -29,7 +33,10 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content>
+  <Dialog.Content
+    class="bg-[color-mix(in_srgb,var(--color-duo-dark)_22%,var(--color-surface-regular))] backdrop-blur-none"
+    showClose={false}
+  >
     <Dialog.Header>
       <Dialog.Title>{title}</Dialog.Title>
     </Dialog.Header>
@@ -39,7 +46,7 @@
     <Dialog.Footer>
       <Dialog.Close>
         {#snippet child({ props })}
-          <Button type="button" variant="ghost" size="sm" {...props}>Cancel</Button>
+          <Button type="button" variant="ghost" size="sm" {...props}>{keep}</Button>
         {/snippet}
       </Dialog.Close>
       <Button type="button" size="sm" variant={danger ? 'danger' : 'primary'} onclick={confirm}>

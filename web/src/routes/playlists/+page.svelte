@@ -144,6 +144,7 @@
   title={`Stop following “${removing?.name ?? ''}”?`}
   description="Schall stops tracking its songs. Songs already wanted stay wanted."
   action="Stop following"
+  keep="Keep following"
   onconfirm={() => removing && $remove.mutate(removing.id)}
 />
 
