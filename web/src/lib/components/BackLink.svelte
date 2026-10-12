@@ -2,7 +2,7 @@
   import Button from './Button.svelte';
   import Icon from './Icon.svelte';
   import { previousScreen } from '$lib/navigation.svelte';
-  import { screenName } from '$lib/screen-name';
+  import { screenLabel } from '$lib/screen-name';
   import { cn } from '$lib/utils';
 
   let {
@@ -27,7 +27,10 @@
 
   // The button says where it goes, so a reader can tell before pressing it
   // whether it leads to the release they came from or to the whole library.
-  const name = $derived(previousScreen.href ? screenName(previousScreen.href) : label);
+  // An artist or a release is named by its own name, not by its kind.
+  const name = $derived(
+    previousScreen.href ? screenLabel(previousScreen.href, previousScreen.title) : label
+  );
 
   // Left-click pops the history entry rather than pushing the same address on
   // top of it, so the browser's own back button and this arrow stay in step —
@@ -57,5 +60,5 @@
   class={cn('bg-ground/40 backdrop-blur-[8px]', className)}
 >
   <Icon name="arrow-left" size="sm" />
-  {name}
+  <span class="max-w-[16rem] truncate">{name}</span>
 </Button>

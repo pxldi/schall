@@ -54,6 +54,20 @@ describe('pressing + on a track nobody wants yet', () => {
   });
 });
 
+describe('the tooltip', () => {
+  it('says a press wants a track nobody wants yet', () => {
+    toggle();
+
+    expect(screen.getByRole('button').getAttribute('title')).toBe('Want Teardrop');
+  });
+
+  it('says a press stops wanting a wanted track', () => {
+    toggle({ wanted: true });
+
+    expect(screen.getByRole('button').getAttribute('title')).toBe('Stop wanting Teardrop');
+  });
+});
+
 describe('pressing a wanted track', () => {
   it('asks to stop wanting it', async () => {
     const onwant = vi.fn();
@@ -62,7 +76,7 @@ describe('pressing a wanted track', () => {
 
     const button = screen.getByRole('button', { name: 'Want Teardrop' });
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('title')).toBe('Not wanted');
+    expect(button.getAttribute('title')).toBe('Stop wanting Teardrop');
     await fireEvent.click(button);
 
     expect(onunwant).toHaveBeenCalledOnce();

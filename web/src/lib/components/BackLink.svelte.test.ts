@@ -11,10 +11,14 @@ import { tick } from 'svelte';
 // one captured callback is what makes it possible to render the arrow after a
 // navigation instead of during it, which is the case it used to get wrong.
 const listeners = new Set<(navigation: unknown) => void>();
+const leaving = new Set<(navigation: unknown) => void>();
 
 vi.mock('$app/navigation', () => ({
   afterNavigate: (callback: (navigation: unknown) => void) => {
     listeners.add(callback);
+  },
+  beforeNavigate: (callback: (navigation: unknown) => void) => {
+    leaving.add(callback);
   }
 }));
 
@@ -31,7 +35,13 @@ beforeEach(() => {
   document.addEventListener('click', swallowNavigation);
 });
 
-function navigate(from: string | null, to: string, type = 'link') {
+// `title` is the tab title of the screen being left, as that page set it.
+function navigate(from: string | null, to: string, type = 'link', title = '') {
+  document.title = title;
+  for (const listener of leaving) {
+    listener({ type, from: from === null ? null : { url: new URL(from) }, to: { url: new URL(to) } });
+  }
+  document.title = '';
   for (const listener of listeners) {
     listener({
       type,
@@ -111,7 +121,29 @@ describe('BackLink', () => {
     expect(arrow().getAttribute('href')).toBe('/artists/talk-talk');
   });
 
-  it('names the screen the reader came from once there is one', async () => {
+  it('names the artist the reader came from by the name on its tab', async () => {
+    drawArrow();
+
+    await navigate(
+      'http://localhost/artists/talk-talk',
+      'http://localhost/releases/laughing-stock',
+      'link',
+      'Talk Talk · Schall'
+    );
+
+    expect(arrow().textContent?.trim()).toBe('Talk Talk');
+    expect(arrow().getAttribute('aria-label')).toBe('Back to Talk Talk');
+  });
+
+  it('names a section by its own name whatever its tab says', async () => {
+    drawArrow();
+
+    await navigate('http://localhost/library', 'http://localhost/releases/laughing-stock', 'link', 'My files · Schall');
+
+    expect(arrow().textContent?.trim()).toBe('Library');
+  });
+
+  it('names the kind of screen when its tab had no title of its own', async () => {
     drawArrow();
 
     await navigate('http://localhost/artists/talk-talk', 'http://localhost/releases/laughing-stock');

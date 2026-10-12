@@ -83,6 +83,9 @@
     sm: { round: 'size-7', pill: 'h-7 gap-0.5 pl-2 pr-3 text-meta', glyph: 'size-5' }
   };
   const name = $derived(title ? `Want ${title}` : 'Want');
+  // The tooltip says what a press does, in both states. "Not wanted" on a
+  // wanted track read as the track's state, which is the opposite of true.
+  const hint = $derived(shown ? (title ? `Stop wanting ${title}` : 'Stop wanting') : name);
 </script>
 
 <button
@@ -100,7 +103,7 @@
   aria-pressed={shown}
   aria-label={label ? undefined : name}
   aria-busy={inFlight}
-  title={shown ? 'Not wanted' : name}
+  title={hint}
   {disabled}
   onclick={press}
   onpointerleave={() => (fresh = false)}

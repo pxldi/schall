@@ -192,7 +192,8 @@ function square(source: PrintSource, size: number): HTMLCanvasElement {
 /** Paints the print: the pictures drawn at size, softened (blur, 1.15
  *  contrast), then every pixel mapped between the two inks by its lightness,
  *  with light grain. `strip` lays the pictures side by side; `single` prints the first one
- *  large and screens a second over it when there is one. */
+ *  large and screens a second over it when there is one. A wide `single` (a
+ *  hero) prints the first one blurred across the width and whole at the right. */
 export function paintPrint(
   canvas: HTMLCanvasElement,
   sources: PrintSource[],
@@ -217,6 +218,8 @@ export function paintPrint(
   if (!sg) return;
   const sw = soft.width;
   const sh = soft.height;
+  // A single print much wider than tall is a page's hero.
+  const wide = mode === 'single' && w > h * 1.4;
   sg.filter = 'blur(0.6px) contrast(1.15)';
   if (mode === 'strip') {
     const s = Math.ceil(sw / sources.length);
@@ -226,6 +229,18 @@ export function paintPrint(
       const crop = Math.min(s, sh);
       sg.drawImage(square(source, s), 0, Math.max(0, (s - sh) / 2), s, crop, i * s, 0, s, sh);
     });
+  } else if (wide) {
+    // A cover is 500 pixels square and a hero is three times that wide, so a
+    // cover stretched across it came out soft and cropped to a band below the
+    // top, which cut off heads. Across the width it is now only a blurred
+    // ground, and the cover itself is drawn whole at the right below.
+    sg.filter = 'blur(16px) contrast(1.15)';
+    sg.drawImage(square(sources[0], sw), 0, (sw - sh) / 2, sw, sh, 0, 0, sw, sh);
+    if (sources[1]) {
+      sg.globalAlpha = 0.4;
+      sg.globalCompositeOperation = 'screen';
+      sg.drawImage(square(sources[1], sw), 0, sw * 0.4, sw, sh, sw * 0.1, 0, sw, sh);
+    }
   } else {
     const s = sw;
     sg.drawImage(square(sources[0], s), 0, s * 0.2, s, s * (sh / sw), 0, 0, sw, sh);
@@ -238,6 +253,23 @@ export function paintPrint(
   g.clearRect(0, 0, w, h);
   g.imageSmoothingQuality = 'high';
   g.drawImage(soft, 0, 0, w, h);
+  if (wide) {
+    // Full size and unblurred, straight onto the canvas that is read back: a
+    // square the height of the print never needs more than the 500 pixels a
+    // cover has. Its left edge fades into the ground so there is no seam.
+    const side = h;
+    const front = square(sources[0], side);
+    const fg = context(front);
+    if (fg) {
+      const fade = fg.createLinearGradient(0, 0, side * 0.45, 0);
+      fade.addColorStop(0, 'rgba(0,0,0,0)');
+      fade.addColorStop(1, 'rgba(0,0,0,1)');
+      fg.globalCompositeOperation = 'destination-in';
+      fg.fillStyle = fade;
+      fg.fillRect(0, 0, side, side);
+    }
+    g.drawImage(front, w - side, 0);
+  }
 
   const image = g.getImageData(0, 0, w, h);
   const px = image.data;

@@ -1,4 +1,4 @@
-import { afterNavigate } from '$app/navigation';
+import { afterNavigate, beforeNavigate } from '$app/navigation';
 
 // Where the reader was before the screen they are on, remembered for the whole
 // session rather than by whichever component happens to draw an arrow.
@@ -14,6 +14,9 @@ import { afterNavigate } from '$app/navigation';
 // application starts and is never torn down, hears every navigation; a
 // component then reads the answer whenever it appears.
 let screen = $state<string | null>(null);
+// The title of that screen as its tab showed it. A back button names an artist
+// or a release by it; the address alone only says which kind of thing it was.
+let screenTitle = $state<string | null>(null);
 let oneStepBack = $state(false);
 let started = $state(false);
 
@@ -23,6 +26,10 @@ export const previousScreen = {
   // they were sent, a reload, or a tab opened straight onto it.
   get href() {
     return screen;
+  },
+  // The document title the screen had when the reader left it, or null.
+  get title() {
+    return screenTitle;
   },
   // Whether that screen is the history entry immediately behind this one. It is
   // the licence to pop history rather than push a new entry, and it has to be
@@ -46,6 +53,14 @@ export function applicationHasStarted() {
 }
 
 export function trackNavigation() {
+  // Read on the way out, because by the time afterNavigate runs the new page
+  // has already set its own title.
+  let leaving: { href: string; title: string } | null = null;
+  beforeNavigate((navigation) => {
+    const from = navigation.from?.url;
+    leaving = from ? { href: from.pathname + from.search, title: document.title } : null;
+  });
+
   afterNavigate((navigation) => {
     const previous = navigation.from?.url;
     // The application starting is the one arrival with nothing behind it: a
@@ -54,6 +69,7 @@ export function trackNavigation() {
     // for.
     if (navigation.type === 'enter') {
       screen = null;
+      screenTitle = null;
       oneStepBack = false;
       started = true;
       return;
@@ -69,6 +85,7 @@ export function trackNavigation() {
     // the arrow returns to naming its section.
     if (navigation.type === 'popstate') {
       screen = null;
+      screenTitle = null;
       oneStepBack = false;
       return;
     }
@@ -83,6 +100,7 @@ export function trackNavigation() {
     }
 
     screen = previous.pathname + previous.search;
+    screenTitle = leaving?.href === screen ? leaving.title : null;
     oneStepBack = true;
   });
 }

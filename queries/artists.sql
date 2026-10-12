@@ -226,6 +226,23 @@ listed AS (
             sqlc.arg('genre')::text = ''
             OR sqlc.arg('genre')::text = ANY(COALESCE(artists.genres, '{}'::text[]))
         )
+      -- MusicBrainz's placeholder artists (placeholderArtistIDs in
+      -- internal/musicbrainz) are held whenever a compilation is, and none of
+      -- them is somebody to browse. They stay listed only if somebody followed
+      -- one on purpose.
+      AND (
+            artists.followed_at IS NOT NULL
+            OR artists.musicbrainz_id IS NULL
+            OR artists.musicbrainz_id NOT IN (
+                '89ad4ac3-39f7-470e-963a-56509c546377', -- Various Artists
+                '125ec42a-7229-4250-afc5-e057484327fe', -- [unknown]
+                'f731ccc4-e22a-43af-a747-64213329e088', -- [anonymous]
+                '9be7f096-97ec-4615-8957-8d40b5dcbc41', -- [traditional]
+                'eec63d3c-3b81-4ad4-b1e4-7c147d4d2b61', -- [no artist]
+                '33cf029c-63b0-41a0-9855-be2a3665fb3b', -- [data]
+                '314e1c25-dde7-4e4d-b2f4-0a7b9f7c56dc'  -- [dialogue]
+            )
+        )
 )
 SELECT
     listed.*,
@@ -316,15 +333,14 @@ WHERE sqlc.arg('completeness')::text = ''
 -- Football, COMPUTER DATA before Childish Gambino, and nthng after Yung Lean at
 -- the very end of the list. That is not an order anybody reads a list in.
 --
--- Sorting is still on sort_name, which is MusicBrainz's filing name — Porter
--- Robinson under R, Kendrick Lamar under L, the convention a record shop uses.
--- That is deliberate and it is the one thing here the reader cannot see from
--- the tile.
+-- The key is the name the tile prints, with a leading "The", "A" or "An"
+-- dropped. It used to be sort_name, MusicBrainz's filing name, which files
+-- Kendrick Lamar under L and Rosa Anschütz under A. Read against the names on
+-- the tiles that order looked shuffled. The article is the one filing rule a
+-- reader expects without being told.
 --
--- No index answers `lower(sort_name)`; artists_list_order_idx (00020) is on
--- ((followed_at IS NULL), sort_name, id) and no longer matches. At this
--- collection's size the sort is nothing, but a matching expression index is a
--- migration, and migrations are proposed rather than written.
+-- No index answers this expression. At this collection's size the sort costs
+-- nothing; a matching expression index would be a migration.
 ORDER BY
     CASE WHEN sqlc.arg('sort')::text = 'least-complete'
          THEN listed.owned_release_count::numeric / nullif(listed.release_count, 0)
@@ -338,7 +354,7 @@ ORDER BY
     CASE WHEN sqlc.arg('sort')::text = 'most-missing'
          THEN listed.track_count - listed.owned_track_count
     END DESC NULLS LAST,
-    lower(listed.sort_name), (listed.followed_at IS NULL), listed.id
+    lower(regexp_replace(listed.name, '^(the|a|an)\s+', '', 'i')), (listed.followed_at IS NULL), listed.id
 LIMIT NULLIF(sqlc.arg('limit')::int, 0) OFFSET sqlc.arg('offset');
 
 -- name: ArtistListTotals :one
@@ -509,6 +525,20 @@ counted AS (
       AND (
             sqlc.arg('genre')::text = ''
             OR sqlc.arg('genre')::text = ANY(COALESCE(artists.genres, '{}'::text[]))
+        )
+      -- Placeholder artists leave the counts as they leave the list.
+      AND (
+            artists.followed_at IS NOT NULL
+            OR artists.musicbrainz_id IS NULL
+            OR artists.musicbrainz_id NOT IN (
+                '89ad4ac3-39f7-470e-963a-56509c546377', -- Various Artists
+                '125ec42a-7229-4250-afc5-e057484327fe', -- [unknown]
+                'f731ccc4-e22a-43af-a747-64213329e088', -- [anonymous]
+                '9be7f096-97ec-4615-8957-8d40b5dcbc41', -- [traditional]
+                'eec63d3c-3b81-4ad4-b1e4-7c147d4d2b61', -- [no artist]
+                '33cf029c-63b0-41a0-9855-be2a3665fb3b', -- [data]
+                '314e1c25-dde7-4e4d-b2f4-0a7b9f7c56dc'  -- [dialogue]
+            )
         )
 ),
 scoped AS (
@@ -689,9 +719,9 @@ FROM followed_artist;
 -- Reached, the artist is demoted to held and keeps everything: every release,
 -- including the ones the library does not reach. Pruning those would discard
 -- manually selected editions, which are permanent by the same rule as manual
--- mappings, and it would buy nothing — missing counts are already scoped to
--- followed artists, so a release nobody follows reports nothing as missing.
--- Keeping them also makes re-following free of a MusicBrainz refetch.
+-- mappings, and it would buy nothing: nothing is fetched or wanted for an
+-- artist nobody follows unless somebody presses for it. Keeping them also
+-- makes re-following free of a MusicBrainz refetch.
 --
 -- Unreached, there is nothing to keep and no honest sentence to write about why
 -- the artist is still listed, so the row is deleted. That delete is safe

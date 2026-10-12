@@ -23,7 +23,8 @@ const routed = vi.hoisted(() => ({
 
 vi.mock('$app/navigation', () => ({
   replaceState: routed.replaceState,
-  afterNavigate: (callback: (navigation: unknown) => void) => routed.listeners.push(callback)
+  afterNavigate: (callback: (navigation: unknown) => void) => routed.listeners.push(callback),
+  beforeNavigate: () => {}
 }));
 
 let keepInUrl: typeof import('$lib/utils').keepInUrl;
