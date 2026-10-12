@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { canPaint, loadPicture, paintPrint, type PrintSource } from '$lib/duoton/paint';
   import { duoton, resolveCover, type CoverRef, type ResolvedCover } from '$lib/duoton/page.svelte';
   import type { Inks } from '$lib/duoton/inks';
   import { clampInks } from '$lib/duoton/inks';
   import { cn } from '$lib/utils';
+  import { motionMs } from '$lib/motion.svelte';
 
   // The duotone print (ADR Duoton): covers softened and mapped between two
   // inks. The shell draws the page's own print from `duoton`; a page can also
@@ -30,7 +32,10 @@
     class?: string;
   } = $props();
 
-  let canvas = $state<HTMLCanvasElement>();
+  // Two canvases, so a new print fades in over the one before it instead of
+  // cutting. Each paint goes to the one underneath, which is then raised.
+  let canvases = $state<HTMLCanvasElement[]>([]);
+  let front = 0;
   let size = $state({ width: 0, height: 0 });
   let sources = $state<PrintSource[]>([]);
 
@@ -41,48 +46,94 @@
     covers.length ? covers.map(resolveCover) : [0, 1, 2, 3, 4, 5].map((n) => ({ seed: `schall ${n}` }))
   );
 
+  // The page hands over a fresh array whenever its data is fetched again, so
+  // the print follows what the covers are rather than which array holds them.
+  const refsKey = $derived(JSON.stringify(refs));
+  const inksKey = $derived(`${pair.dark} ${pair.light}`);
+
+  // How long a print waits for its pictures before it is drawn with what has
+  // arrived. Until then the previous print, or the bare ink, stays up.
+  const WAIT_MS = 600;
+
   $effect(() => {
-    const wanted = refs;
+    void refsKey;
+    const wanted = untrack(() => refs);
     let live = true;
-    // Generated stand-ins draw at once; pictures replace them as they land.
-    sources = wanted.map((ref) => ({ seed: ref.seed, inks: ref.inks }));
-    wanted.forEach((ref, i) => {
-      if (!ref.src) return;
-      void loadPicture(ref.src).then((image) => {
-        if (!live || !image) return;
-        sources = sources.map((source, j) => (j === i ? { ...source, image } : source));
-      });
+    const loaded: (HTMLImageElement | undefined)[] = wanted.map(() => undefined);
+    const commit = () => {
+      if (!live) return;
+      sources = wanted.map((ref, i) => ({ seed: ref.seed, inks: ref.inks, image: loaded[i] }));
+    };
+    const pending = wanted.map((ref, i) =>
+      ref.src
+        ? loadPicture(ref.src).then((image) => {
+            loaded[i] = image;
+          })
+        : undefined
+    );
+    if (!pending.some(Boolean)) {
+      commit();
+      return () => (live = false);
+    }
+    // The pictures are drawn together, once, rather than one repaint per
+    // picture as each lands. Pictures that are slower than the wait are
+    // drawn in a second pass when the last of them arrives.
+    const timer = setTimeout(commit, WAIT_MS);
+    void Promise.all(pending).then(() => {
+      clearTimeout(timer);
+      commit();
     });
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   });
 
   $effect(() => {
-    if (!canvas || !canPaint()) return;
+    const first = canvases[0];
+    if (!first || !canPaint()) return;
     const observer = new ResizeObserver(([entry]) => {
       size = {
         width: Math.round(entry.contentRect.width),
         height: Math.round(entry.contentRect.height)
       };
     });
-    observer.observe(canvas);
+    observer.observe(first);
     return () => observer.disconnect();
   });
 
+  // Painting is held to one per frame, so a size, the covers and the inks
+  // changing together cost one paint.
   $effect(() => {
-    if (!canvas || !size.width || !size.height || !canPaint()) return;
-    canvas.width = size.width;
-    canvas.height = size.height;
-    paintPrint(canvas, sources, mode, pair);
+    const { width, height } = size;
+    const drawing = sources;
+    void inksKey;
+    const colours = untrack(() => pair);
+    const layout = mode;
+    if (canvases.length < 2 || !width || !height || !drawing.length || !canPaint()) return;
+    const frame = requestAnimationFrame(() => {
+      const next = canvases[1 - front];
+      const previous = canvases[front];
+      next.width = width;
+      next.height = height;
+      paintPrint(next, drawing, layout, colours);
+      front = 1 - front;
+      next.style.zIndex = '1';
+      previous.style.zIndex = '0';
+      next.style.opacity = '1';
+      const ms = motionMs('enter');
+      if (ms) next.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+    });
+    return () => cancelAnimationFrame(frame);
   });
 </script>
 
 <div
-  class={cn('print relative overflow-hidden bg-duo-dark', className)}
+  class={cn('print relative isolate overflow-hidden bg-duo-dark', className)}
   style:height={height === undefined ? undefined : `${height}rem`}
   data-mode={mode}
   aria-hidden="true"
 >
-  <canvas bind:this={canvas} class="absolute inset-0 block size-full"></canvas>
+  <canvas bind:this={canvases[0]} class="absolute inset-0 block size-full opacity-0"></canvas>
+  <canvas bind:this={canvases[1]} class="absolute inset-0 block size-full opacity-0"></canvas>
 </div>

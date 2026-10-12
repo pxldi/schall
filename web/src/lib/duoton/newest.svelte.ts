@@ -21,7 +21,7 @@ export function useNewestPrint(options: Omit<PagePrint, 'covers'> & { count?: nu
       ...rest,
       covers: added
         .slice(0, count)
-        .map((item) => ({ src: item.coverUrl, seed: `${item.artist} ${item.title}` }))
+        .map((item) => ({ src: item.coverUrl, seed: `${item.artist} ${item.title}`, inks: item.inks }))
     };
   });
 }
