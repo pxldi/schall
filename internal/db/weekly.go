@@ -1103,3 +1103,61 @@ func (q *Queries) QueueWeeklyPlaylistRefresh(ctx context.Context, runAfter time.
 	}
 	return nil
 }
+
+// WeeklyEntryWithoutLength is a weekly row nothing local can give a length:
+// the entry stored none and no catalogue track carries its recording.
+type WeeklyEntryWithoutLength struct {
+	EntryID     uuid.UUID
+	RecordingID uuid.UUID
+}
+
+// WeeklyEntriesWithoutLength lists the weekly rows whose length has to be
+// asked of MusicBrainz, oldest position first. A weekly row's source track is
+// always the recording ID it was picked as.
+func (q *Queries) WeeklyEntriesWithoutLength(
+	ctx context.Context, playlistID uuid.UUID, limit int,
+) ([]WeeklyEntryWithoutLength, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT playlist_entries.id, playlist_entries.source_track_id::uuid
+		FROM playlist_entries
+		JOIN playlists ON playlists.id = playlist_entries.playlist_id
+		WHERE playlist_entries.playlist_id = $1
+		  AND playlists.source = 'weekly'
+		  AND playlist_entries.entry_duration_ms IS NULL
+		  AND playlist_entries.source_track_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM tracks
+		      WHERE tracks.musicbrainz_recording_id::text = lower(playlist_entries.source_track_id)
+		        AND tracks.duration_ms IS NOT NULL
+		  )
+		ORDER BY playlist_entries.position, playlist_entries.id
+		LIMIT $2
+	`, playlistID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list weekly entries without a length: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]WeeklyEntryWithoutLength, 0)
+	for rows.Next() {
+		var entry WeeklyEntryWithoutLength
+		if err := rows.Scan(&entry.EntryID, &entry.RecordingID); err != nil {
+			return nil, err
+		}
+		result = append(result, entry)
+	}
+	return result, rows.Err()
+}
+
+// SetPlaylistEntryLength stores a length on an entry that has none. A length
+// the entry already carries is the source's own and stays.
+func (q *Queries) SetPlaylistEntryLength(ctx context.Context, entryID uuid.UUID, durationMS int32) error {
+	if _, err := q.db.Exec(ctx, `
+		UPDATE playlist_entries
+		SET entry_duration_ms = $2, updated_at = now()
+		WHERE id = $1 AND entry_duration_ms IS NULL
+	`, entryID, durationMS); err != nil {
+		return fmt.Errorf("set length of playlist entry %s: %w", entryID, err)
+	}
+	return nil
+}

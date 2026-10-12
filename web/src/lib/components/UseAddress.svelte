@@ -19,6 +19,13 @@
 
   const queryClient = useQueryClient();
   let open = $state(false);
+  let field = $state<HTMLInputElement | undefined>();
+
+  // The click leaves focus on the button, and autofocus on an element drawn
+  // after the page loaded did not move it in Chrome.
+  $effect(() => {
+    if (open && field) field.focus();
+  });
   let address = $state('');
   let lookup = $state<SourceTrack | undefined>();
   let lookupError = $state<Error | undefined>();
@@ -85,12 +92,11 @@
   >
     <div class="flex flex-wrap items-center gap-2">
       <label class="sr-only" for="source-address-{targetId}">Track link on SoundCloud, YouTube or Bandcamp</label>
-      <!-- svelte-ignore a11y_autofocus -->
       <input
         id="source-address-{targetId}"
         bind:value={address}
         type="url"
-        autofocus
+        bind:this={field}
         placeholder="SoundCloud, YouTube or Bandcamp link"
         class="min-w-0 flex-1 rounded-control border border-line-regular bg-inset px-2.5 py-1.5 font-mono text-meta text-ink outline-none focus:border-line-thick"
         onkeydown={(event) => {

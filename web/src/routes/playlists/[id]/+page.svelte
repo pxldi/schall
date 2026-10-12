@@ -38,10 +38,11 @@
     queryFn: () => api.playlist(playlistId),
     // The entries settle as the sweep resolves them, minutes after the import.
     // SSE covers that; the interval is the safety net while wants are open.
+    // Only a search in progress moves on its own between events. A list of
+    // wants that wait weeks for a peer or for MusicBrainz asked for all 323
+    // rows every 15 s and changed nothing.
     refetchInterval: (query) =>
-      (query.state.data?.entries ?? []).some(
-        (entry) => entry.targetStatus === 'unresolved' || entry.targetStatus === 'pending'
-      )
+      (query.state.data?.entries ?? []).some((entry) => entry.targetStatus === 'searching')
         ? 15_000
         : false
   });
@@ -279,10 +280,15 @@
       <BackLink fallback="/playlists" label="Playlists" />
     {/snippet}
     {#snippet sub()}
-      {#each factParts(playlist, entries) as part (part)}
-        <span class="numeric">{part}</span>
-      {/each}
-      <span class="flex flex-wrap items-center gap-2">
+      <!-- One child, so the hero puts no dot of its own between the parts:
+           each part carries its dot at its end and never wraps inside, so a
+           narrow window breaks the line between parts and no line starts
+           with a dot. -->
+      <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {#each factParts(playlist, entries) as part (part)}
+          <span class="numeric whitespace-nowrap">{part}<span class="ml-2 text-ink-4" aria-hidden="true">·</span></span>
+        {/each}
+        <span class="flex flex-wrap items-center gap-2">
         <OwnedBar owned={ownedOf(entries)} total={entries.length} width={120} noun="songs" />
         <span class="text-meta text-ink-3">owned</span>
         {#if pairingAsked}
@@ -303,6 +309,7 @@
             </button>
           {/if}
         {/if}
+        </span>
       </span>
     {/snippet}
   </Hero>
@@ -327,7 +334,10 @@
 {/if}
 
 <div class="flex flex-col gap-3.5 px-4 sm:px-6 pb-5">
-  {#if $detail.isError}
+  <!-- A failed refetch keeps the rows it has: the next one usually answers,
+       and a table that vanished for 20 s after one slow answer read as data
+       loss. Only a list never read shows the error. -->
+  {#if $detail.isError && !$detail.data}
     <!-- The playlist is read, not written, so the note asks again by itself.
          It draws its own tinted band, which is the one this section used to
          draw by hand. -->
@@ -460,7 +470,7 @@
               {@const addressable = open && !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
               {@const seed = open ? entry.musicbrainzSeed : undefined}
               {@const decide = state.role === 'fail'}
-              <!-- The sentence stays in the state's tooltip; the line under the
+              <!-- The reason is in the state's tooltip only; the line under the
                    row is drawn only when it carries something to do. -->
               {@const line = addressable || !!seed || decide}
               <!-- A note and the entry it belongs to are one row, so the border
@@ -527,9 +537,6 @@
                   <td></td>
                   <td class="px-3 pb-2" colspan="5">
                     <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      {#if state.note}
-                        <span class="text-meta text-ink-3">{state.note}</span>
-                      {/if}
                       {#if decide}
                         <a
                           href={reviewHref(entry)}
