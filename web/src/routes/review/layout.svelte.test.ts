@@ -301,7 +301,7 @@ describe('the three kinds Review holds', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const card = screen.getByText('Wanted').parentElement!;
+    const card = screen.getByRole('img', { name: 'Wanted' }).closest('div')!;
     expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
@@ -326,11 +326,12 @@ describe('the three kinds Review holds', () => {
     expect(screen.queryByRole('button', { name: 'Wrong song' })).toBeNull();
   });
 
-  it('names the current track in the page heading', async () => {
+  it('keeps Review as the page title and heads the panel with the current track', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Evensong' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Review' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Evensong' })).toBeTruthy();
   });
 });
 

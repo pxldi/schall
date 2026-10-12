@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
+  import type { IconName } from '$lib/icons';
   import {
     createInfiniteQuery,
     createMutation,
@@ -144,11 +145,13 @@
     if ($downloads.hasNextPage && !$downloads.isFetchingNextPage) void $downloads.fetchNextPage();
   }
 
-  const FILTERS: { key: QuestionKind | 'all'; label: string }[] = [
+  // Each kind is a Misprint icon with its name as the tooltip; "All" has no
+  // picture that says it better than the word.
+  const FILTERS: { key: QuestionKind | 'all'; label: string; icon?: IconName }[] = [
     { key: 'all', label: 'All' },
-    { key: 'downloaded', label: 'Downloaded' },
-    { key: 'version', label: 'Version' },
-    { key: 'folder', label: 'Folder' }
+    { key: 'downloaded', label: 'Downloaded', icon: 'download' },
+    { key: 'version', label: 'Version', icon: 'fingerprint' },
+    { key: 'folder', label: 'Folder', icon: 'folder-add' }
   ];
   let filter = $state<QuestionKind | 'all'>('all');
   const filtered = $derived(
@@ -520,7 +523,10 @@
 
 {#snippet whyNoSample(target: AcquisitionTarget)}
   <details class="text-meta">
-    <summary class="cursor-pointer text-ink-3 transition-colors select-none hover:text-ink-2">
+    <summary
+      class="flex cursor-pointer items-center gap-1.5 text-ink-3 transition-colors select-none hover:text-ink-2"
+    >
+      <Icon name="info" size={13} />
       Why no sample
     </summary>
     <p class="mt-1 max-w-[40rem] leading-relaxed text-ink-2">{target.anchorUnavailable}</p>
@@ -532,7 +538,9 @@
      about the entry, so it sits here rather than with the decisions. -->
 {#snippet wanted(want: ReviewItem)}
   <div class="flex min-h-[14rem] w-full flex-col gap-3 rounded-card border border-dashed border-line-regular p-4">
-    <span class="text-meta text-ink-3">Wanted</span>
+    <span class="flex items-center text-ink-3" title="Wanted">
+      <Icon name="want" size={16} aria-label="Wanted" />
+    </span>
     <div class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-quiet-meta">
       <span class="text-ink-3">Length</span>
       <span class="numeric text-body text-ink">
@@ -550,41 +558,25 @@
     {#if want.target.anchorUnavailable && !want.target.anchorNextAttemptAt}
       {@render whyNoSample(want.target)}
     {/if}
-    <div class="mt-auto">
+    <div class="mt-auto -ml-1.5">
       <Button
         variant="ghost"
         size="sm"
+        icon
+        title="Wrong song"
+        aria-label="Wrong song"
         onclick={() => $wrongSong.mutate(want.target.id)}
         disabled={deciding}
       >
-        Wrong song
+        <Icon name="ban" size={14} />
       </Button>
     </div>
   </div>
 {/snippet}
 
-<!-- The song being decided is the page's title once there is one; loading,
-     failed and empty name the page instead. -->
-{#if current && !loading && !loadError}
-  <Hero title={current.title} size="m">
-    {#snippet kicker()}
-      Review · <span class="numeric">{(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}</span>
-    {/snippet}
-    {#snippet sub()}
-      {#if current.detail}<span class="font-medium text-ink">{current.detail}</span>{/if}
-      {#if current.want?.target.durationMs}
-        <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
-      {/if}
-      {#if waiting}<span>{waiting}</span>{/if}
-      <!-- A downloaded question shows the sample on the Wanted card instead. -->
-      {#if current.kind === 'version' && current.want?.target.anchorUnavailable}
-        <span>{sampleText(current.want.target)}</span>
-      {/if}
-    {/snippet}
-  </Hero>
-{:else}
-  <Hero title="Review" size="xl" />
-{/if}
+<!-- "Review" is the page's title, in the place every page keeps it; the song
+     being decided heads the panel below. -->
+<Hero title="Review" size="xl" />
 
 <!-- The queue and the question share one panel, the queue down its left. -->
 <div
@@ -625,18 +617,24 @@
       aria-label="Review queue"
       class="flex shrink-0 flex-col border-b border-line-thin lg:sticky lg:top-[var(--topbar-height)] lg:max-h-[calc(100dvh-var(--topbar-height))] lg:w-[clamp(13rem,18vw,17rem)] lg:self-start lg:border-b-0"
     >
-      <div class="flex flex-wrap gap-1.5 p-4">
+      <div class="flex flex-wrap gap-1 p-4">
         {#each FILTERS as option (option.key)}
           <button
             type="button"
             onclick={() => chooseFilter(option.key)}
             aria-pressed={filter === option.key}
-            class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-meta {filter ===
+            aria-label={`${option.label} ${counts[option.key]}`}
+            title={option.icon ? option.label : undefined}
+            class="flex items-center gap-1.5 rounded-full border px-2 py-1 text-meta {filter ===
             option.key
               ? 'border-line-regular bg-surface-thick text-ink'
               : 'border-line-thin text-ink-2'}"
           >
-            {option.label}
+            {#if option.icon}
+              <Icon name={option.icon} size={13} />
+            {:else}
+              {option.label}
+            {/if}
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
@@ -685,6 +683,24 @@
     <section aria-label="Review" class="flex min-w-0 flex-1 flex-col lg:border-l lg:border-line-thin">
 
       <div class="flex flex-col gap-3 px-4 sm:px-6 pb-6 pt-5 lg:px-8">
+        <header class="flex flex-col gap-1">
+          <p class="numeric text-meta text-ink-3">
+            {(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}
+          </p>
+          <h2 class="text-quiet-display font-bold text-ink">{current.title}</h2>
+          <div class="hero-sub text-quiet-meta text-ink-2">
+            {#if current.detail}<span class="font-medium text-ink">{current.detail}</span>{/if}
+            {#if current.want?.target.durationMs}
+              <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
+            {/if}
+            {#if waiting}<span>{waiting}</span>{/if}
+            <!-- A downloaded question shows the sample on the Wanted card instead. -->
+            {#if current.kind === 'version' && current.want?.target.anchorUnavailable}
+              <span>{sampleText(current.want.target)}</span>
+            {/if}
+          </div>
+        </header>
+
         {#if failure}
           <p class="text-meta text-fail" role="status">{failure.message}</p>
         {/if}
