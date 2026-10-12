@@ -1,9 +1,11 @@
 package server
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -3819,5 +3821,41 @@ func TestCreatingAnArtistRefusesANameItCannotHold(t *testing.T) {
 		if response.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: status = %d, want 422; body = %s", name, response.Code, response.Body)
 		}
+	}
+}
+
+// A large list is mostly repeated keys, so it travels compressed when the
+// browser can read it. Before this every response went out as plain text.
+func TestAPIResponsesAreCompressedForBrowsersThatAcceptIt(t *testing.T) {
+	handler := NewAPI(&fakeStore{}, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop())
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	request.Header.Set("Accept-Encoding", "gzip")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if got := response.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", got)
+	}
+	reader, err := gzip.NewReader(response.Body)
+	if err != nil {
+		t.Fatalf("body is not gzip: %v", err)
+	}
+	if _, err := io.ReadAll(reader); err != nil {
+		t.Fatalf("reading gzip body: %v", err)
+	}
+}
+
+// The interface itself goes through the same compression as the API.
+func TestTheInterfaceIsCompressedForBrowsersThatAcceptIt(t *testing.T) {
+	handler := NewAPI(&fakeStore{}, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop())
+
+	request := httptest.NewRequest(http.MethodGet, "/artists", nil)
+	request.Header.Set("Accept-Encoding", "gzip")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if got := response.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", got)
 	}
 }
