@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  import { SvelteMap } from 'svelte/reactivity';
+
+  // Outlives the page, so going back to the list finds as many cards as it left
+  // and the browser can put the reader back where they had scrolled to.
+  const grown = new SvelteMap<string, number>();
+</script>
+
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
   import {
@@ -27,6 +35,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import SetupStep from '$lib/components/SetupStep.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import { GROW_STEP, nearEnd } from '$lib/grow';
 
   type Tab = '' | 'incomplete' | 'complete' | 'attention';
   type Sort = 'name' | 'least-complete' | 'most-missing';
@@ -194,6 +203,14 @@
   });
 
   const shown = $derived($artists.data?.items ?? []);
+
+  // The first cards at once and the rest as the reader scrolls (lib/grow.ts).
+  const listKey = $derived(JSON.stringify(artistOptions.queryKey));
+  const drawn = $derived(shown.slice(0, grown.get(listKey) ?? GROW_STEP));
+  function drawMore() {
+    if (drawn.length < shown.length) grown.set(listKey, drawn.length + GROW_STEP);
+  }
+
   // An empty list under a search or a narrowed view is empty for a reason the
   // setup guide does not answer, so that panel still has its say.
   const narrowed = $derived(Boolean(search || tab || scope));
@@ -441,8 +458,11 @@
           <div
             class="rise grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]"
           >
-            {#each shown as artist (artist.id)}{@render Card(artist)}{/each}
+            {#each drawn as artist (artist.id)}{@render Card(artist)}{/each}
           </div>
+          {#if drawn.length < shown.length}
+            <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>
+          {/if}
         {/key}
       {:else if !guiding}
         <!-- The heading is the whole message: it names what is absent, and the

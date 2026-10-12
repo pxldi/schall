@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@internationalized/date": "^3.12.3",
+    "@tanstack/query-persist-client-core": "^5.90.2",
     "@tanstack/svelte-query": "^5.66.11",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
