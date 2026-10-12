@@ -378,7 +378,7 @@ describe('what a review answer sends', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    expect(await press('Remove from Wishlist')).toEqual({
+    expect(await press("Don't want")).toEqual({
       method: 'POST',
       url: `/api/v1/acquisition-targets/${TARGET}/not-wanted`,
       body: null
