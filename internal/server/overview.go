@@ -2,19 +2,26 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pxldi/schall/internal/coverart"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/library"
 )
 
-// OverviewReader reads the figures the Overview page draws.
+// OverviewReader reads the figures the Overview page draws, and holds the
+// pictures of listened releases the library does not have.
 type OverviewReader interface {
 	ValidTimeZone(context.Context, string) bool
 	Overview(context.Context, string, time.Time) (db.Overview, error)
+	ListenedReleaseCover(context.Context, uuid.UUID) (db.ListenedReleaseCover, error)
+	SaveListenedReleaseCover(ctx context.Context, releaseID uuid.UUID, image []byte, contentType, source string) error
 }
 
 // WithOverview registers the store the Overview page reads.
@@ -154,8 +161,10 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 	out.Listening.MostPlayed = make([]overviewPlayed, 0, len(data.MostPlayed))
 	for _, row := range data.MostPlayed {
 		out.Listening.MostPlayed = append(out.Listening.MostPlayed, overviewPlayed{
-			Title:         row.Title,
-			Artist:        row.Artist,
+			Title: row.Title,
+			// The names of a credit, joined the way the rest of the page
+			// lists people.
+			Artist:        strings.Join(db.CreditedNames([]string{row.Artist}), ", "),
 			Listens:       row.Listens,
 			RecordingMBID: text(row.RecordingMBID),
 			CoverURL:      listenCoverURL(row.AlbumID, row.HasCover, row.FileID, row.CAAReleaseMBID, row.ReleaseMBID),
@@ -352,9 +361,10 @@ func listenCoverURL(albumID pgtype.UUID, hasCover bool, fileID pgtype.UUID, caa,
 	return nil
 }
 
-// coverArchiveURL is the Cover Art Archive's front image for a release the
-// library does not hold, sized for a list row. The archive redirects to the
-// image; a release with no art answers 404 and the page shows nothing.
+// coverArchiveURL is the picture of a release the library does not hold,
+// served by Schall from what it fetched from the Cover Art Archive. The
+// browser used to load the archive's own address, and each picture took from
+// 0.75 to 7 seconds on every visit.
 func coverArchiveURL(caa, release pgtype.Text) *string {
 	id := caa
 	if !id.Valid || id.String == "" {
@@ -363,6 +373,48 @@ func coverArchiveURL(caa, release pgtype.Text) *string {
 	if !id.Valid || id.String == "" {
 		return nil
 	}
-	s := "https://coverartarchive.org/release/" + id.String + "/front-250"
+	s := "/api/v1/overview/covers/" + id.String
 	return &s
+}
+
+// listenedReleaseCover answers GET /overview/covers/{releaseMBID}: the held
+// picture, or the archive asked once and the answer kept. Only the archive is
+// asked, by the release ID the listen carried; there is no album to read a
+// file's picture from and no name worth searching by.
+func (api *API) listenedReleaseCover(response http.ResponseWriter, request *http.Request) {
+	releaseID, err := uuid.Parse(chi.URLParam(request, "releaseMBID"))
+	if err != nil || api.overviews == nil {
+		api.problem(response, http.StatusNotFound, "no cover art", nil)
+		return
+	}
+	ctx := request.Context()
+	held, err := api.overviews.ListenedReleaseCover(ctx, releaseID)
+	if err != nil {
+		api.internalError(response, request, err)
+		return
+	}
+	if held.Found {
+		api.writeCover(response, request, held.Image, held.ContentType)
+		return
+	}
+	if api.artwork == nil {
+		api.problem(response, http.StatusNotFound, "no cover art", nil)
+		return
+	}
+	artwork, err := api.artwork.Front(ctx, coverart.Release{
+		MusicBrainzReleaseID: uuid.NullUUID{UUID: releaseID, Valid: true},
+	})
+	if err != nil && !errors.Is(err, coverart.ErrNoArtwork) {
+		// An outage is not the answer "there is none", so nothing is kept.
+		api.logger.Warn().Err(err).Str("release_mbid", releaseID.String()).Msg("fetch listened cover")
+		api.problem(response, http.StatusNotFound, "no cover art", nil)
+		return
+	}
+	stored := coverart.Saved(artwork)
+	if saveErr := api.overviews.SaveListenedReleaseCover(
+		ctx, releaseID, stored.Image, stored.ContentType, stored.Source,
+	); saveErr != nil {
+		api.logger.Warn().Err(saveErr).Str("release_mbid", releaseID.String()).Msg("cache listened cover")
+	}
+	api.writeCover(response, request, stored.Image, stored.ContentType)
 }

@@ -22,6 +22,12 @@ type Topic string
 // TopicDownloads covers a request, its transfers, and its import.
 const TopicDownloads Topic = "downloads"
 
+// TopicDownloadProgress covers bytes moving on a transfer whose request did not
+// change status. A poll runs every few seconds while anything downloads, and
+// only the downloads list draws its progress, so the views that count requests
+// (the Overview, the dashboard) stay off this topic.
+const TopicDownloadProgress Topic = "download-progress"
+
 // TopicSourceSearches covers a bulk source search: one release of a run having
 // been searched for. A run is a queue of provider searches that take as long as
 // the provider's timeout allows, so a review screen that only asked on a timer

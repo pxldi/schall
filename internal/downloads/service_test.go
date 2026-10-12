@@ -1445,3 +1445,60 @@ func TestAPeerBeingBusyIsRecordedBeforeTheRequestSettles(t *testing.T) {
 		t.Fatal("the peer's reason was lost with the write that could not settle the request")
 	}
 }
+
+// A poll where only bytes moved is progress, which only the downloads list
+// follows. Announcing it as a status change made the Overview read itself again
+// every five seconds while anything downloaded.
+func TestAPollWhereOnlyBytesMovedIsAnnouncedAsProgress(t *testing.T) {
+	store := &fakeStore{request: requestRow(), settings: enabledSettings()}
+	store.request.Status = "started"
+	downloader := &fakeDownloader{transfers: []sources.Transfer{
+		{ID: "t1", Path: `@@peer\Music\01.flac`, State: sources.TransferDownloading, SizeBytes: 100, TransferredBytes: 40},
+	}}
+	hub := events.NewHub()
+	notices, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	service := NewService(store, downloader, zerolog.Nop()).WithEvents(hub)
+
+	if _, err := service.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case topic := <-notices:
+		if topic != events.TopicDownloadProgress {
+			t.Fatalf("notice = %q, want the progress topic", topic)
+		}
+	default:
+		t.Fatal("a poll that recorded progress published nothing")
+	}
+	select {
+	case topic := <-notices:
+		t.Fatalf("a second notice %q for one pass", topic)
+	default:
+	}
+}
+
+// A request settling changes what every view counts, so that pass is announced
+// on the downloads topic.
+func TestAPollThatSettlesARequestIsAnnouncedAsAChange(t *testing.T) {
+	store := &fakeStore{request: requestRow(), settings: enabledSettings(), statusAfterAll: "completed"}
+	store.request.Status = "started"
+	hub := events.NewHub()
+	notices, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	service := NewService(store, &fakeDownloader{}, zerolog.Nop()).WithEvents(hub)
+
+	if _, err := service.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case topic := <-notices:
+		if topic != events.TopicDownloads {
+			t.Fatalf("notice = %q, want the downloads topic", topic)
+		}
+	default:
+		t.Fatal("a poll that settled a request published nothing")
+	}
+}

@@ -17,6 +17,10 @@ const invalidations: Record<string, string[][]> = {
   // A pass over the download inbox is announced here too: it is the same folder
   // the transfers land in, and the settings block that asks for one watches it.
   downloads: [['downloads'], ['dashboard'], ['overview'], ['inbox-cleanups'], ...queue],
+  // Bytes moving on a transfer whose request kept its status. A poll sends one
+  // every few seconds while anything downloads, and only the downloads list
+  // draws progress, so nothing that counts requests is asked again for it.
+  'download-progress': [['downloads']],
   'source-searches': [['source-search'], ...queue],
   // An upload is announced on the library topic: what it changes is what the
   // library holds, and the page that shows uploads is watching the same work.

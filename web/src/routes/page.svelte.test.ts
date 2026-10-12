@@ -278,15 +278,57 @@ describe('the overview', () => {
     await screen.findByText('812');
     // One song is held and one has no catalogue track: neither carries a mark.
     // The third can be wanted.
-    expect(screen.getAllByRole('button', { name: 'Want' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Want / })).toHaveLength(1);
     expect(screen.queryByLabelText('in your library')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Want' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Want All white' }));
     await waitFor(() => {
       expect(sent.some((call) => call.path === '/api/v1/tracks/t2/wanted' && call.method === 'POST')).toBe(true);
     });
   });
 
-  it('shows every row the read returned, scrolling inside the panel', async () => {
+  // Wanting a track somebody let go of answers with the standing decision, so
+  // the press takes it back rather than leaving the + empty.
+  it('takes back letting go of a song when it is wanted again', async () => {
+    answering(overview());
+    const answer = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const passOn = answer.getMockImplementation()!;
+    answer.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/tracks/t2/wanted')) {
+        sent.push({ path: '/api/v1/tracks/t2/wanted', method: 'POST' });
+        return new Response(JSON.stringify({ id: 'w9', status: 'not_wanted' }), { status: 200 });
+      }
+      return passOn(input, init);
+    });
+    show();
+    await screen.findByText('812');
+    await fireEvent.click(screen.getByRole('button', { name: 'Want All white' }));
+    await waitFor(() => {
+      expect(sent.some((call) => call.path === '/api/v1/acquisition-targets/w9/not-wanted' && call.method === 'DELETE')).toBe(
+        true
+      );
+    });
+  });
+
+  // The word "Wanted" beside a row was text where every other track list
+  // shows the filled + it can be pressed again on.
+  it('lets go of a wanted song with the same toggle', async () => {
+    const data = overview();
+    data.listening.mostPlayed[1].wanted = true;
+    answering(data);
+    show();
+    await screen.findByText('812');
+    expect(screen.queryByText('Wanted')).toBeNull();
+    const toggle = screen.getByRole('button', { name: /All white/ });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(sent.some((call) => call.path === '/api/v1/tracks/t2/not-wanted' && call.method === 'POST')).toBe(true);
+    });
+  });
+
+  // The lists used to scroll inside their panels, which caught the mouse
+  // wheel on its way down the page.
+  it('shows the first five rows of a list and opens it in place to the rest', async () => {
     const data = overview();
     data.listening.topArtists = Array.from({ length: 8 }, (_, index) => ({
       name: `Artist ${index}`,
@@ -298,7 +340,34 @@ describe('the overview', () => {
     answering(data);
     show();
     await screen.findByText('812');
+    expect(screen.getAllByText(/^Artist \d$/)).toHaveLength(5);
+
+    const open = screen.getByRole('button', { name: 'Show all 8 in Top artists' });
+    expect(open.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(open);
+
     expect(screen.getAllByText(/^Artist \d$/)).toHaveLength(8);
+    expect(screen.getByRole('button', { name: 'Show fewer in Top artists' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('offers no way to open a list that already shows every row', async () => {
+    answering(overview());
+    show();
+    await screen.findByText('812');
+    expect(screen.queryByRole('button', { name: /^Show all/ })).toBeNull();
+  });
+
+  it('gives a sitting of one song its time alone, not a range', async () => {
+    const data = overview();
+    const at = yesterdayAt(17, 40).toISOString();
+    data.listening.sessions = [{ startedAt: at, endedAt: at, ongoing: false, songs: 1, artists: ['Souly'], coverUrls: [] }];
+    answering(data);
+    show();
+    await screen.findByText('812');
+    const section = screen.getByRole('heading', { name: 'Recently played', level: 2 }).closest('section')!;
+    const row = section.querySelector('li')!;
+    expect(row.textContent).toContain('Yesterday 17:40');
+    expect(row.textContent).not.toContain('17:40–');
   });
 
   it('shows recently played as sittings: when, how many songs, who was on', async () => {

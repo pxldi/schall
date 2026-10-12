@@ -28,8 +28,10 @@ type OverviewDay struct {
 }
 
 type OverviewPlayed struct {
-	Title          string
-	Artist         string
+	Title  string
+	Artist string
+	// LeadArtist is the first name of the credit, which the row is grouped by.
+	LeadArtist     string
 	Listens        int64
 	RecordingMBID  pgtype.Text
 	ReleaseMBID    pgtype.Text
@@ -251,7 +253,7 @@ func (q *Queries) dayCounts(
 }
 
 // listRows is how many rows each list on the Overview carries. The page shows
-// a few and scrolls the rest inside the panel.
+// five and opens to the rest in place.
 const listRows = "25"
 
 // thisMonth is the local calendar month of $2, written as a range on
@@ -260,12 +262,17 @@ const thisMonth = `listened_at >= (date_trunc('month', $2::timestamptz AT TIME Z
 	AND listened_at < ((date_trunc('month', $2::timestamptz AT TIME ZONE $1) + interval '1 month') AT TIME ZONE $1)`
 
 func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([]OverviewPlayed, error) {
+	// A song is its lead artist and title: one player sends "Souly", another
+	// "Souly • Waterboutus" for the same song, and the row shows the fuller.
 	rows, err := q.db.Query(ctx, `
-		SELECT min(track_name), min(artist_name), count(*) AS n,
+		SELECT min(track_name),
+		       (array_agg(artist_name ORDER BY length(artist_name) DESC, artist_name))[1],
+		       min(split_part(artist_name, '`+creditSeparator+`', 1)),
+		       count(*) AS n,
 		       max(recording_mbid::text), max(release_mbid::text), max(caa_release_mbid::text)
 		FROM listens
 		WHERE `+thisMonth+`
-		GROUP BY lower(artist_name), lower(track_name)
+		GROUP BY lower(split_part(artist_name, '`+creditSeparator+`', 1)), lower(track_name)
 		ORDER BY n DESC, min(track_name)
 		LIMIT `+listRows, zone, now)
 	if err != nil {
@@ -274,7 +281,7 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 	played := make([]OverviewPlayed, 0, 25)
 	for rows.Next() {
 		var row OverviewPlayed
-		if err := rows.Scan(&row.Title, &row.Artist, &row.Listens,
+		if err := rows.Scan(&row.Title, &row.Artist, &row.LeadArtist, &row.Listens,
 			&row.RecordingMBID, &row.ReleaseMBID, &row.CAAReleaseMBID); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("read a most played row: %w", err)
@@ -325,6 +332,12 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 		if err != nil {
 			return nil, err
 		}
+		// A file tagged with the lead artist alone is still the song.
+		if !held.FileID.Valid && played[i].LeadArtist != played[i].Artist {
+			if held, err = q.heldCopy(ctx, played[i].RecordingMBID, played[i].Title, played[i].LeadArtist); err != nil {
+				return nil, err
+			}
+		}
 		if held.AlbumID.Valid {
 			played[i].AlbumID, played[i].HasCover = held.AlbumID, held.HasCover
 		}
@@ -334,12 +347,22 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 }
 
 func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([]OverviewArtist, error) {
+	// A listen credited to several artists counts once for each. The artist
+	// ID is read only from a listen credited to one artist: ListenBrainz
+	// lists its IDs in its own order, and pairing them with the player's
+	// names by position would be a guess.
 	rows, err := q.db.Query(ctx, `
-		SELECT min(artist_name), count(*) AS n, max(artist_mbids[1]::text)
+		SELECT min(credited.name), count(*) AS n,
+		       max(CASE WHEN credited.names = 1 THEN artist_mbids[1]::text END)
 		FROM listens
+		CROSS JOIN LATERAL (
+			SELECT part AS name, cardinality(string_to_array(artist_name, '`+creditSeparator+`')) AS names
+			FROM unnest(string_to_array(artist_name, '`+creditSeparator+`')) AS part
+			WHERE part <> ''
+		) AS credited
 		WHERE `+thisMonth+`
-		GROUP BY lower(artist_name)
-		ORDER BY n DESC, min(artist_name)
+		GROUP BY lower(credited.name)
+		ORDER BY n DESC, min(credited.name)
 		LIMIT `+listRows, zone, now)
 	if err != nil {
 		return nil, fmt.Errorf("read the top artists: %w", err)
@@ -416,11 +439,11 @@ func (q *Queries) listenHeat(ctx context.Context, zone string, now time.Time) ([
 
 func (q *Queries) topAlbums(ctx context.Context, zone string, now time.Time) ([]OverviewAlbum, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT min(release_name), min(artist_name), count(*) AS n,
+		SELECT min(release_name), min(split_part(artist_name, '`+creditSeparator+`', 1)), count(*) AS n,
 		       max(release_mbid::text), max(caa_release_mbid::text)
 		FROM listens
 		WHERE release_name IS NOT NULL AND `+thisMonth+`
-		GROUP BY lower(artist_name), lower(release_name)
+		GROUP BY lower(split_part(artist_name, '`+creditSeparator+`', 1)), lower(release_name)
 		ORDER BY n DESC, min(release_name)
 		LIMIT `+listRows, zone, now)
 	if err != nil {
@@ -498,7 +521,7 @@ func (q *Queries) sessions(ctx context.Context, now time.Time) ([]OverviewSessio
 		if err := rows.Scan(&row.StartedAt, &row.EndedAt, &row.Songs, &artists); err != nil {
 			return nil, fmt.Errorf("read a listening session: %w", err)
 		}
-		row.Artists = distinctNames(artists)
+		row.Artists = distinctNames(CreditedNames(artists))
 		row.Ongoing = now.Sub(row.EndedAt) < sessionGapDuration
 		out = append(out, row)
 	}
@@ -587,6 +610,26 @@ func coverKey(cover SessionCover) string {
 		return "file:" + uuid.UUID(cover.FileID.Bytes).String()
 	}
 	return ""
+}
+
+// creditSeparator joins the names of a credit with several artists in what
+// the player sends. Navidrome sends "Souly • Waterboutus" for a song tagged
+// with both, and the Overview showed that as one artist. Other joins (",",
+// "&", "feat.") also appear inside single names, such as "Tyler, The
+// Creator", so only this one is split.
+const creditSeparator = " • "
+
+// CreditedNames splits each credit into the names it joins, in order.
+func CreditedNames(credits []string) []string {
+	out := make([]string, 0, len(credits))
+	for _, credit := range credits {
+		for _, name := range strings.Split(credit, creditSeparator) {
+			if name != "" {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // distinctNames keeps the first spelling of each name, in order.
