@@ -2,14 +2,12 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -295,53 +293,82 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 
 	// Whether the recording is a catalogue track, held, or wanted. Identity is
 	// the MusicBrainz recording ID and nothing else; a listen without one is
-	// simply not looked up.
+	// simply not looked up. All rows are looked up in one query, row by row.
+	recordings := make([]pgtype.Text, len(played))
 	for i := range played {
-		if !played[i].RecordingMBID.Valid {
-			continue
-		}
-		err := q.db.QueryRow(ctx, `
+		recordings[i] = played[i].RecordingMBID
+	}
+	rows, err = q.db.Query(ctx, `
+		SELECT k.n, t.id, t.album_id, t.in_library, t.has_cover, t.wanted
+		FROM unnest($1::text[]) WITH ORDINALITY AS k(recording, n)
+		CROSS JOIN LATERAL (
 			SELECT t.id, t.album_id,
 			       EXISTS (SELECT 1 FROM track_mappings m
 			               JOIN library_files f ON f.id = m.library_file_id
 			               WHERE m.track_id = t.id AND f.missing_at IS NULL) AS in_library,
 			       EXISTS (SELECT 1 FROM release_cover_art c
-			               WHERE c.album_id = t.album_id AND c.image IS NOT NULL),
+			               WHERE c.album_id = t.album_id AND c.image IS NOT NULL) AS has_cover,
 			       EXISTS (SELECT 1 FROM acquisition_targets w
 			               WHERE w.musicbrainz_recording_id = t.musicbrainz_recording_id
-			                 AND w.status IN ('unresolved', 'pending', 'searching'))
+			                 AND w.status IN ('unresolved', 'pending', 'searching')) AS wanted
 			FROM tracks t
-			WHERE t.musicbrainz_recording_id = $1::uuid
+			WHERE t.musicbrainz_recording_id = k.recording::uuid
 			ORDER BY in_library DESC
-			LIMIT 1`, played[i].RecordingMBID.String).Scan(
-			&played[i].TrackID, &played[i].AlbumID, &played[i].InLibrary,
-			&played[i].HasCover, &played[i].Wanted)
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("look up a played recording: %w", err)
-		}
-		played[i].ReleaseID = played[i].AlbumID
+			LIMIT 1
+		) AS t`, recordings)
+	if err != nil {
+		return nil, fmt.Errorf("look up the played recordings: %w", err)
 	}
+	for rows.Next() {
+		var n int64
+		var track OverviewPlayed
+		if err := rows.Scan(&n, &track.TrackID, &track.AlbumID, &track.InLibrary, &track.HasCover, &track.Wanted); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("read a played recording: %w", err)
+		}
+		row := &played[n-1]
+		row.TrackID, row.AlbumID, row.ReleaseID = track.TrackID, track.AlbumID, track.AlbumID
+		row.InLibrary, row.HasCover, row.Wanted = track.InLibrary, track.HasCover, track.Wanted
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var uncovered []int
+	var keys []heldKey
 	for i := range played {
 		if played[i].HasCover {
 			continue
 		}
-		held, err := q.heldCopy(ctx, played[i].RecordingMBID, played[i].Title, played[i].Artist)
-		if err != nil {
-			return nil, err
+		uncovered = append(uncovered, i)
+		keys = append(keys, heldKey{played[i].RecordingMBID, played[i].Title, played[i].Artist})
+	}
+	held, err := q.heldCopies(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+	// A file tagged with the lead artist alone is still the song.
+	var retried []int
+	keys = keys[:0]
+	for j, i := range uncovered {
+		if !held[j].FileID.Valid && played[i].LeadArtist != played[i].Artist {
+			retried = append(retried, j)
+			keys = append(keys, heldKey{played[i].RecordingMBID, played[i].Title, played[i].LeadArtist})
 		}
-		// A file tagged with the lead artist alone is still the song.
-		if !held.FileID.Valid && played[i].LeadArtist != played[i].Artist {
-			if held, err = q.heldCopy(ctx, played[i].RecordingMBID, played[i].Title, played[i].LeadArtist); err != nil {
-				return nil, err
-			}
+	}
+	byLead, err := q.heldCopies(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+	for k, j := range retried {
+		held[j] = byLead[k]
+	}
+	for j, i := range uncovered {
+		if held[j].AlbumID.Valid {
+			played[i].AlbumID, played[i].HasCover = held[j].AlbumID, held[j].HasCover
 		}
-		if held.AlbumID.Valid {
-			played[i].AlbumID, played[i].HasCover = held.AlbumID, held.HasCover
-		}
-		played[i].FileID = held.FileID
+		played[i].FileID = held[j].FileID
 	}
 	return played, nil
 }
@@ -396,42 +423,58 @@ func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// The row opens the catalogue artist with the listen's MusicBrainz ID or,
+	// when no artist has it, the only artist with exactly that name whose own
+	// ID does not say it is somebody else. Two artists can share a name, so a
+	// name that names two links nothing. The picture is that artist's. It
+	// used to be found on its own, by ID or by name, and showed one artist's
+	// face on a row that opened nothing.
+	names := make([]string, 0, len(out))
+	mbids := make([]pgtype.Text, 0, len(out))
+	index := make([]int, 0, len(out))
 	for i := range out {
 		if ambiguous[i] {
 			continue
 		}
-		var mbid *string
-		if out[i].ArtistMBID.Valid && out[i].ArtistMBID.String != "" {
-			mbid = &out[i].ArtistMBID.String
+		mbid := out[i].ArtistMBID
+		if mbid.String == "" {
+			mbid = pgtype.Text{}
 		}
-		// The row opens the catalogue artist with the listen's MusicBrainz
-		// ID or, when no artist has it, the only artist with exactly that name
-		// whose own ID does not say it is somebody else. Two artists can share
-		// a name, so a name that names two links nothing.
-		err := q.db.QueryRow(ctx, `
-			SELECT id FROM artists WHERE musicbrainz_id = $1::uuid
+		names = append(names, out[i].Name)
+		mbids = append(mbids, mbid)
+		index = append(index, i)
+	}
+	rows, err = q.db.Query(ctx, `
+		SELECT k.n, page.id, picture.artist_id
+		FROM unnest($1::text[], $2::text[]) WITH ORDINALITY AS k(mbid, name, n)
+		CROSS JOIN LATERAL (
+			SELECT id FROM artists WHERE musicbrainz_id = k.mbid::uuid
 			UNION ALL
 			SELECT min(id::text)::uuid FROM artists
-			WHERE lower(name) = lower($2)
-			  AND NOT EXISTS (SELECT 1 FROM artists WHERE musicbrainz_id = $1::uuid)
+			WHERE lower(name) = lower(k.name)
+			  AND NOT EXISTS (SELECT 1 FROM artists WHERE musicbrainz_id = k.mbid::uuid)
 			HAVING count(*) = 1
-			   AND bool_and($1::uuid IS NULL OR musicbrainz_id IS NULL OR musicbrainz_id = $1::uuid)
-			LIMIT 1`, mbid, out[i].Name).Scan(&out[i].PageID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("look up the artist %q: %w", out[i].Name, err)
+			   AND bool_and(k.mbid::uuid IS NULL OR musicbrainz_id IS NULL OR musicbrainz_id = k.mbid::uuid)
+			LIMIT 1
+		) AS page
+		LEFT JOIN LATERAL (
+			SELECT artist_id FROM artist_images WHERE artist_id = page.id AND image IS NOT NULL LIMIT 1
+		) AS picture ON true`, mbids, names)
+	if err != nil {
+		return nil, fmt.Errorf("look up the top artists: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int64
+		var page, picture pgtype.UUID
+		if err := rows.Scan(&n, &page, &picture); err != nil {
+			return nil, fmt.Errorf("read a top artist's page: %w", err)
 		}
-		// The picture is that artist's. It used to be found on its own, by ID
-		// or by name, and showed one artist's face on a row that opened
-		// nothing.
-		if !out[i].PageID.Valid {
-			continue
-		}
-		err = q.db.QueryRow(ctx, `
-			SELECT artist_id FROM artist_images WHERE artist_id = $1 AND image IS NOT NULL`,
-			out[i].PageID).Scan(&out[i].ArtistID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("look up the picture of %q: %w", out[i].Name, err)
-		}
+		row := &out[index[n-1]]
+		row.PageID, row.ArtistID = page, picture
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -488,16 +531,30 @@ func (q *Queries) topAlbums(ctx context.Context, zone string, now time.Time) ([]
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	releases := make([]pgtype.Text, len(out))
 	for i := range out {
-		if !out[i].ReleaseMBID.Valid {
-			continue
+		releases[i] = out[i].ReleaseMBID
+	}
+	rows, err = q.db.Query(ctx, `
+		SELECT k.n, e.album_id
+		FROM unnest($1::text[]) WITH ORDINALITY AS k(release, n)
+		CROSS JOIN LATERAL (
+			SELECT album_id FROM release_editions WHERE musicbrainz_release_id = k.release::uuid LIMIT 1
+		) AS e`, releases)
+	if err != nil {
+		return nil, fmt.Errorf("look up the top albums' releases: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int64
+		var album pgtype.UUID
+		if err := rows.Scan(&n, &album); err != nil {
+			return nil, fmt.Errorf("read a top album's release: %w", err)
 		}
-		err := q.db.QueryRow(ctx, `
-			SELECT album_id FROM release_editions WHERE musicbrainz_release_id = $1::uuid`,
-			out[i].ReleaseMBID.String).Scan(&out[i].AlbumID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("look up the release of %q: %w", out[i].Title, err)
-		}
+		out[n-1].AlbumID = album
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -555,68 +612,86 @@ func (q *Queries) sessions(ctx context.Context, now time.Time) ([]OverviewSessio
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for i := range out {
-		covers, err := q.sessionCovers(ctx, out[i].StartedAt, out[i].EndedAt)
-		if err != nil {
-			return nil, err
-		}
-		out[i].Covers = covers
+	if err := q.sessionCovers(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
 
-// sessionCovers walks a session's first listens and keeps the first three
-// that can be pictured, each picture once.
-func (q *Queries) sessionCovers(ctx context.Context, from, to time.Time) ([]SessionCover, error) {
+// sessionCovers walks each session's first listens and keeps the first three
+// that can be pictured, each picture once. Every session's listens are read
+// in one query and looked up in another.
+func (q *Queries) sessionCovers(ctx context.Context, sessions []OverviewSession) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+	starts := make([]time.Time, len(sessions))
+	ends := make([]time.Time, len(sessions))
+	for i := range sessions {
+		starts[i], ends[i] = sessions[i].StartedAt, sessions[i].EndedAt
+	}
 	rows, err := q.db.Query(ctx, `
-		SELECT track_name, artist_name,
-		       recording_mbid::text, release_mbid::text, caa_release_mbid::text
-		FROM listens
-		WHERE listened_at BETWEEN $1 AND $2
-		ORDER BY listened_at
-		LIMIT `+strconv.Itoa(sessionCoverListens), from, to)
+		SELECT k.n, l.track_name, l.artist_name,
+		       l.recording_mbid::text, l.release_mbid::text, l.caa_release_mbid::text
+		FROM unnest($1::timestamptz[], $2::timestamptz[]) WITH ORDINALITY AS k(started, ended, n)
+		CROSS JOIN LATERAL (
+			SELECT listened_at, track_name, artist_name, recording_mbid, release_mbid, caa_release_mbid
+			FROM listens
+			WHERE listened_at BETWEEN k.started AND k.ended
+			ORDER BY listened_at
+			LIMIT `+strconv.Itoa(sessionCoverListens)+`
+		) AS l
+		ORDER BY k.n, l.listened_at`, starts, ends)
 	if err != nil {
-		return nil, fmt.Errorf("read a session's listens: %w", err)
+		return fmt.Errorf("read the sessions' listens: %w", err)
 	}
 	type listen struct {
-		title, artist                  string
-		recording, release, caaRelease pgtype.Text
+		session             int
+		release, caaRelease pgtype.Text
 	}
 	var listens []listen
+	var keys []heldKey
 	for rows.Next() {
+		var n int64
 		var l listen
-		if err := rows.Scan(&l.title, &l.artist, &l.recording, &l.release, &l.caaRelease); err != nil {
+		var key heldKey
+		if err := rows.Scan(&n, &key.title, &key.artist, &key.recording, &l.release, &l.caaRelease); err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("read a session listen: %w", err)
+			return fmt.Errorf("read a session listen: %w", err)
 		}
+		l.session = int(n - 1)
 		listens = append(listens, l)
+		keys = append(keys, key)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return err
 	}
-	covers := make([]SessionCover, 0, 3)
-	seen := make(map[string]bool, 3)
-	for _, l := range listens {
-		held, err := q.heldCopy(ctx, l.recording, l.title, l.artist)
-		if err != nil {
-			return nil, err
+	held, err := q.heldCopies(ctx, keys)
+	if err != nil {
+		return err
+	}
+	seen := make([]map[string]bool, len(sessions))
+	for i, l := range listens {
+		session := &sessions[l.session]
+		if len(session.Covers) == 3 {
+			continue
 		}
 		cover := SessionCover{
-			AlbumID: held.AlbumID, HasCover: held.HasCover, FileID: held.FileID,
+			AlbumID: held[i].AlbumID, HasCover: held[i].HasCover, FileID: held[i].FileID,
 			ReleaseMBID: l.release, CAAReleaseMBID: l.caaRelease,
 		}
 		key := coverKey(cover)
-		if key == "" || seen[key] {
+		if seen[l.session] == nil {
+			seen[l.session] = make(map[string]bool, 3)
+		}
+		if key == "" || seen[l.session][key] {
 			continue
 		}
-		seen[key] = true
-		covers = append(covers, cover)
-		if len(covers) == 3 {
-			break
-		}
+		seen[l.session][key] = true
+		session.Covers = append(session.Covers, cover)
 	}
-	return covers, nil
+	return nil
 }
 
 // coverKey names the picture a cover resolves to, in the handler's order of
@@ -692,46 +767,71 @@ type heldCopyRow struct {
 	FileID   pgtype.UUID
 }
 
-func (q *Queries) heldCopy(ctx context.Context, recordingMBID pgtype.Text, title, artist string) (heldCopyRow, error) {
-	var mbid *string
-	if recordingMBID.Valid && recordingMBID.String != "" {
-		mbid = &recordingMBID.String
+// heldKey is one listen to find the held copy of.
+type heldKey struct {
+	recording     pgtype.Text
+	title, artist string
+}
+
+// heldCopies finds the held copy of each listen, in the order given, in one
+// query. A listen nothing holds gets the zero row.
+func (q *Queries) heldCopies(ctx context.Context, keys []heldKey) ([]heldCopyRow, error) {
+	out := make([]heldCopyRow, len(keys))
+	if len(keys) == 0 {
+		return out, nil
 	}
-	var row heldCopyRow
+	recordings := make([]pgtype.Text, len(keys))
+	titles := make([]string, len(keys))
+	artists := make([]string, len(keys))
+	for i, key := range keys {
+		if key.recording.Valid && key.recording.String != "" {
+			recordings[i] = key.recording
+		}
+		titles[i], artists[i] = key.title, key.artist
+	}
 	// The two ways in are read separately and joined, so each can use its
 	// index: one OR across both read every present file. The order is the
 	// one the single query had.
-	err := q.db.QueryRow(ctx, `
-		WITH found AS (
-			SELECT t.album_id, f.id AS file_id, f.path,
-			       t.id IS NOT NULL AS mapped, t.musicbrainz_recording_id AS recording
-			FROM tracks t
-			JOIN track_mappings m ON m.track_id = t.id
-			JOIN library_files f ON f.id = m.library_file_id
-			WHERE t.musicbrainz_recording_id = $1::uuid AND f.missing_at IS NULL
-			UNION ALL
-			SELECT t.album_id, f.id, f.path,
-			       t.id IS NOT NULL, t.musicbrainz_recording_id
-			FROM library_files f
-			LEFT JOIN track_mappings m ON m.library_file_id = f.id
-			LEFT JOIN tracks t ON t.id = m.track_id
-			WHERE f.missing_at IS NULL
-			  AND lower(f.title_tag) = lower($2) AND lower(f.artist_tag) = lower($3)
-		)
-		SELECT album_id, file_id,
-		       coalesce((SELECT c.image IS NOT NULL FROM release_cover_art c
-		                 WHERE c.album_id = found.album_id), false) AS has_cover
-		FROM found
-		ORDER BY (recording = $1::uuid) DESC NULLS LAST,
-		         has_cover DESC, mapped DESC, path
-		LIMIT 1`, mbid, title, artist).Scan(&row.AlbumID, &row.FileID, &row.HasCover)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return heldCopyRow{}, nil
-	}
+	rows, err := q.db.Query(ctx, `
+		SELECT k.n, held.album_id, held.file_id, held.has_cover
+		FROM unnest($1::text[], $2::text[], $3::text[]) WITH ORDINALITY AS k(recording, title, artist, n)
+		CROSS JOIN LATERAL (
+			SELECT album_id, file_id,
+			       coalesce((SELECT c.image IS NOT NULL FROM release_cover_art c
+			                 WHERE c.album_id = found.album_id), false) AS has_cover
+			FROM (
+				SELECT t.album_id, f.id AS file_id, f.path,
+				       t.id IS NOT NULL AS mapped, t.musicbrainz_recording_id AS recording
+				FROM tracks t
+				JOIN track_mappings m ON m.track_id = t.id
+				JOIN library_files f ON f.id = m.library_file_id
+				WHERE t.musicbrainz_recording_id = k.recording::uuid AND f.missing_at IS NULL
+				UNION ALL
+				SELECT t.album_id, f.id, f.path,
+				       t.id IS NOT NULL, t.musicbrainz_recording_id
+				FROM library_files f
+				LEFT JOIN track_mappings m ON m.library_file_id = f.id
+				LEFT JOIN tracks t ON t.id = m.track_id
+				WHERE f.missing_at IS NULL
+				  AND lower(f.title_tag) = lower(k.title) AND lower(f.artist_tag) = lower(k.artist)
+			) AS found
+			ORDER BY (found.recording = k.recording::uuid) DESC NULLS LAST,
+			         has_cover DESC, mapped DESC, path
+			LIMIT 1
+		) AS held`, recordings, titles, artists)
 	if err != nil {
-		return heldCopyRow{}, fmt.Errorf("look up the held copy of %q: %w", title, err)
+		return nil, fmt.Errorf("look up the held copies: %w", err)
 	}
-	return row, nil
+	defer rows.Close()
+	for rows.Next() {
+		var n int64
+		var row heldCopyRow
+		if err := rows.Scan(&n, &row.AlbumID, &row.FileID, &row.HasCover); err != nil {
+			return nil, fmt.Errorf("read a held copy: %w", err)
+		}
+		out[n-1] = row
+	}
+	return out, rows.Err()
 }
 
 // libraryGrowth is how many files the library held at the end of each of the
