@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -527,7 +528,7 @@ func (resolver *Resolver) secondRowOfSameRegistration(
 			return registrationCheck{unavailable: true}
 		}
 		switch oneRegistration(recording, other, evidence.DurationMS) {
-		case byNameAndLength:
+		case byNameAndLength, byLeadAndLength:
 			check.rows = append(check.rows, other)
 		case byRegistrationCode:
 			if sampled {
@@ -572,16 +573,59 @@ func singledOutOfCluster(
 		return "AcoustID named this recording and another MusicBrainz row for the same " +
 			"audio, and the file's own MusicBrainz recording ID names this one."
 	}
-	if pair.isrc != tagmatch.Agrees || check.unavailable || !check.lookedUp {
+	if pair.isrc == tagmatch.Agrees && !check.unavailable && check.lookedUp &&
+		!slices.ContainsFunc(check.others, func(other musicbrainz.Recording) bool {
+			return compareISRC(evidence.ISRC, other.ISRCs) == tagmatch.Agrees
+		}) {
+		return "AcoustID named this recording and another MusicBrainz row for the same " +
+			"audio, and the file's own ISRC belongs to this one alone."
+	}
+	// The upload found under this recording's name reproduces the copy, and the
+	// file's title, artist and length are this recording's and not the other
+	// rows'. An upload found by name never proves a copy alone, because it can be
+	// a sibling version; here the cluster has already narrowed the audio to two
+	// rows, and the tags tell those two apart.
+	if pair.anchorReproduced && tagsAgree(pair) && !check.unavailable && check.lookedUp &&
+		!slices.ContainsFunc(check.others, func(other musicbrainz.Recording) bool {
+			return tagsFit(evidence, other)
+		}) {
+		return "AcoustID named this recording and another MusicBrainz row for the same " +
+			"audio. The upload found under this recording's name sounds the same, and the " +
+			"file's title, artist and length fit this row and not the other."
+	}
+	return ""
+}
+
+// vouchedForBesideTheOtherRow reports a copy whose leading cluster named only
+// another row of this same registered track, where the upload found under this
+// recording's name reproduces the copy and the file's tags agree. Setting the
+// other row aside leaves the audio silent (ADR 0025), and an upload found by
+// name never proves a copy alone (ADR 0029); the two together with the tags do.
+func vouchedForBesideTheOtherRow(pair comparison) string {
+	if pair.contradicted() || !pair.anchorReproduced || !tagsAgree(pair) {
 		return ""
 	}
-	for _, other := range check.others {
-		if compareISRC(evidence.ISRC, other.ISRCs) == tagmatch.Agrees {
-			return ""
-		}
+	return "The upload found under this recording's name sounds the same, and the " +
+		"file's title, artist and length agree."
+}
+
+// tagsAgree reports the file's title, artist and length all agreeing with the
+// recording. An absent tag is silence, so each of the three has to be there.
+func tagsAgree(pair comparison) bool {
+	return pair.title == tagmatch.Agrees && pair.artist == tagmatch.Agrees &&
+		pair.duration == tagmatch.Agrees
+}
+
+// tagsFit reports the file's title and length fitting another row too, which is
+// when the tags cannot tell the two rows apart.
+func tagsFit(evidence Evidence, other musicbrainz.Recording) bool {
+	if tagmatch.Title(evidence.Title, other.Title) != tagmatch.Agrees {
+		return false
 	}
-	return "AcoustID named this recording and another MusicBrainz row for the same " +
-		"audio, and the file's own ISRC belongs to this one alone."
+	if evidence.DurationMS <= 0 || other.DurationMS == nil || *other.DurationMS <= 0 {
+		return true
+	}
+	return abs(evidence.DurationMS-*other.DurationMS) <= DurationToleranceMS
 }
 
 // leadingClusterNames reports the leading cluster naming this recording,
@@ -793,7 +837,7 @@ func (resolver *Resolver) OneRegistration(
 	switch oneRegistration(wantedRecording, filedRecording, evidence.CopyDurationMS) {
 	case byExplicitEdition:
 		return FilingExplicitEdition, nil
-	case byNameAndLength:
+	case byNameAndLength, byLeadAndLength:
 		if evidence.proven() {
 			return FilingOneRegistration, nil
 		}
@@ -877,10 +921,13 @@ func (resolver *Resolver) Verify(
 		}
 	}
 	singledOut := ""
-	if pair.acoustic == tagmatch.Unknown && pair.acousticNames > 1 {
+	switch {
+	case pair.acoustic == tagmatch.Unknown && pair.acousticNames > 1:
 		singledOut = singledOutOfCluster(evidence, recording, pair, check)
-		pair.acousticSingledOut = singledOut != ""
+	case pair.acoustic == tagmatch.Unknown && setAside && pair.acousticNames == 0:
+		singledOut = vouchedForBesideTheOtherRow(pair)
 	}
+	pair.acousticSingledOut = singledOut != ""
 	level := gradeOf(pair)
 	if level == byFingerprintAndIdentifier && singledOut != "" {
 		registration = strings.TrimSpace(registration + " " + singledOut)

@@ -739,12 +739,6 @@ func gradeOf(pair comparison) grade {
 		return byFingerprintAndIdentifier
 	case pair.identifiedAcoustically():
 		return byFingerprint
-	// The leading cluster named this recording and another row, so the audio
-	// alone cannot say which, and the file's own identifier names this one and
-	// not the other. Each witness answers the half the other cannot: the audio
-	// says the file is one of these rows, the identifier says which.
-	case pair.acousticSingledOut && pair.acousticSimilarity >= acousticFloor:
-		return byFingerprintAndIdentifier
 	// The audio again, from the anchor. A matching distributor preview or Topic
 	// upload is audio evidence for this recording, so it can prove a copy that
 	// tags, MusicBrainz and AcoustID do not identify.
@@ -761,6 +755,13 @@ func gradeOf(pair comparison) grade {
 	// about keeps the name it would have carried without this one.
 	case pair.witness == tagmatch.Agrees:
 		return byLibraryWitness
+	// The leading cluster named this recording and another row, so the audio
+	// alone cannot say which, and the file's own identifier, or the upload found
+	// by this recording's name with the tags, names this one and not the other.
+	// Read after the sample and the library, so a copy they prove keeps their
+	// name.
+	case pair.acousticSingledOut && pair.acousticSimilarity >= acousticFloor:
+		return byFingerprintAndIdentifier
 	case pair.recording == tagmatch.Agrees:
 		return byRecordingID
 	case pair.isrc == tagmatch.Agrees:
@@ -1179,6 +1180,11 @@ const (
 	// that direction alone: a want for the explicit edition is never answered by
 	// the clean one.
 	byExplicitEdition
+	// byLeadAndLength is the two rows naming the same lead artists, holding the
+	// same title and running the same length, where one credit adds a guest the
+	// other leaves out. MusicBrainz enters an album track twice that way, once
+	// with the feature printed and once without, and the audio is the same.
+	byLeadAndLength
 )
 
 // rowLengthToleranceMS is how far two MusicBrainz rows may sit apart in length
@@ -1221,8 +1227,49 @@ func oneRegistration(
 		return byNameAndLength
 	case sharesISRC(wanted.ISRCs, other.ISRCs):
 		return byRegistrationCode
+	case sameLeadWithAGuest(wanted, other) && sameTitle(wanted, other) &&
+		sameLength(wanted, other, copyDurationMS):
+		return byLeadAndLength
 	}
 	return notOneRegistration
+}
+
+// sameLeadWithAGuest reports two credits that open with the same artist, where
+// every artist of the shorter credit is in the longer one. It is read by
+// MusicBrainz artist identifiers, and only where both rows carry them, because
+// a guest is told from a different artist by who MusicBrainz says they are.
+//
+// A cover is another lead artist, and a remix is another title or another
+// length, so the title and length tests beside it keep both out.
+func sameLeadWithAGuest(wanted, other musicbrainz.Recording) bool {
+	one, two := creditedArtists(wanted), creditedArtists(other)
+	if len(one) == 0 || len(two) == 0 || len(one) == len(two) {
+		return false
+	}
+	lead := func(credited []tagmatch.CreditedArtist) string {
+		return strings.ToLower(strings.TrimSpace(credited[0].ID))
+	}
+	if lead(one) == "" || lead(one) != lead(two) {
+		return false
+	}
+	short, long := one, two
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	ids := make(map[string]bool, len(long))
+	for _, artist := range long {
+		id := strings.ToLower(strings.TrimSpace(artist.ID))
+		if id == "" {
+			return false
+		}
+		ids[id] = true
+	}
+	for _, artist := range short {
+		if !ids[strings.ToLower(strings.TrimSpace(artist.ID))] {
+			return false
+		}
+	}
+	return true
 }
 
 // SameRegistrationByNameAndLength reports two MusicBrainz rows that ADR 0031

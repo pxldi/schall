@@ -296,3 +296,39 @@ func TestAClusterNamingADeletedRowIsNotOtherMusic(t *testing.T) {
 		t.Fatalf("nothing proven: %q", verification.Summary)
 	}
 }
+
+// The audio named only the other row of this same registered track, and the
+// upload found under the want's name reproduces the copy with the tags in
+// agreement. Neither admits alone; together they do.
+func TestAnUploadAndTheTagsAdmitACopyNamedAsTheOtherRow(t *testing.T) {
+	copied := copyOfOneTrack()
+	copied.Anchor = &AnchorComparison{
+		RecordingID: uuid.MustParse(firstID), Rate: 0.05, Source: AnchorByName,
+	}
+
+	verification, err := NewResolver(twoRowProvider()).Verify(
+		context.Background(), copied, uuid.MustParse(firstID))
+	if err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	if !verification.Audio {
+		t.Fatalf("not admitted by audio: %q", verification.Summary)
+	}
+}
+
+func TestTheOtherRowAndAnUploadAdmitNothingWhenATagIsMissing(t *testing.T) {
+	copied := copyOfOneTrack()
+	copied.Anchor = &AnchorComparison{
+		RecordingID: uuid.MustParse(firstID), Rate: 0.05, Source: AnchorByName,
+	}
+	copied.Title = ""
+
+	verification, err := NewResolver(twoRowProvider()).Verify(
+		context.Background(), copied, uuid.MustParse(firstID))
+	if err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
