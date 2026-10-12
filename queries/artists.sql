@@ -11,73 +11,23 @@
 --
 -- Completeness is aggregated over the whole catalogue rather than over the page,
 -- because the page can be ordered and narrowed by it, and a number computed
--- after the page was chosen could do neither. One grouped pass over every
--- artist's tracks is what that costs, which is affordable at the size a
--- self-hosted library reaches. If it ever stops being, the answer is a
--- maintained column, not a cheaper approximation of how much is owned.
-WITH held_recordings AS MATERIALIZED (
-    -- The library can hold a track without mapping it onto this release:
-    -- the same recording proven on a file whose identity names it, or on a
-    -- file mapped onto another release's track that carries it. Counting
-    -- only the mapping would leave a recording that sits on a single, an EP
-    -- and a compilation owned on one of the three and missing on the other
-    -- two forever, and the acquisition loop already settles those wants
-    -- against either proof (OwnedFileForRecording).
-    --
-    -- Collected once as a set and joined, rather than asked per track: the
-    -- per-track subqueries made this the slowest part of the artists page on
-    -- a library of tens of thousands of tracks.
-    SELECT library_file_identities.musicbrainz_recording_id AS recording_id
-    FROM library_file_identities
-    JOIN library_files ON library_files.id = library_file_identities.library_file_id
-    WHERE library_files.missing_at IS NULL
-      AND library_file_identities.musicbrainz_recording_id IS NOT NULL
-    UNION
-    SELECT carrying.musicbrainz_recording_id
-    FROM tracks AS carrying
-    JOIN track_mappings AS elsewhere ON elsewhere.track_id = carrying.id
-    JOIN library_files ON library_files.id = elsewhere.library_file_id
-    WHERE library_files.missing_at IS NULL
-      AND carrying.musicbrainz_recording_id IS NOT NULL
-),
-album_tracks AS MATERIALIZED (
-    -- Owned means the library still has a file that is this track, whether
-    -- it is mapped onto it or proven to be its recording elsewhere. Still
-    -- has, always: a file that went missing leaves its mapping behind, and
-    -- counting it would call a release complete when nothing can play it —
-    -- the same rule the releases browser counts by (albumJoins in
-    -- internal/db/catalogue.go). Every album has a row, with zeros when it
-    -- has no tracks.
+-- after the page was chosen could do neither. The per-release counts are the
+-- maintained columns on albums, so that is one pass over albums.
+WITH album_tracks AS (
+    -- How much of each release the library holds, read from the counts the
+    -- release carries (00040_album_counts). They follow the same rule this
+    -- query used to derive per request: a track is owned while a file still on
+    -- disk proves it, mapped to it or identified as its recording, and a
+    -- dismissed track is one not owned whose recording carries a not_wanted
+    -- want. Deriving it here read every track, mapping and identity on each
+    -- call, about 2.5s on a catalogue of 400k tracks; the columns make it one
+    -- pass over albums.
     SELECT
         albums.id AS album_id,
-        count(holding.track_id)::bigint AS track_count,
-        count(*) FILTER (WHERE holding.held)::bigint AS owned_count,
-        count(*) FILTER (WHERE NOT holding.held AND holding.dismissed)::bigint AS dismissed_count
+        albums.track_count::bigint AS track_count,
+        albums.owned_track_count::bigint AS owned_count,
+        albums.dismissed_track_count::bigint AS dismissed_count
     FROM albums
-    LEFT JOIN (
-        SELECT
-            tracks.id AS track_id,
-            tracks.album_id,
-            (present_mapping.track_id IS NOT NULL OR held_recordings.recording_id IS NOT NULL) AS held,
-            dismissals.id IS NOT NULL AS dismissed
-        FROM tracks
-        -- track_mappings holds one row per track, so neither join fans out.
-        LEFT JOIN (
-            SELECT track_mappings.track_id
-            FROM track_mappings
-            JOIN library_files ON library_files.id = track_mappings.library_file_id
-            WHERE library_files.missing_at IS NULL
-        ) AS present_mapping ON present_mapping.track_id = tracks.id
-        LEFT JOIN held_recordings
-            ON held_recordings.recording_id = tracks.musicbrainz_recording_id
-        -- At most one target exists per recording outside 'superseded'
-        -- (acquisition_targets_recording_idx), so this join cannot fan out.
-        LEFT JOIN acquisition_targets AS dismissals
-            ON tracks.musicbrainz_recording_id IS NOT NULL
-           AND dismissals.musicbrainz_recording_id = tracks.musicbrainz_recording_id
-           AND dismissals.status = 'not_wanted'
-    ) AS holding ON holding.album_id = albums.id
-    GROUP BY albums.id
 ),
 completeness AS (
     -- Two decisions shape these numbers, and both narrow the denominator
@@ -282,14 +232,7 @@ SELECT
         JOIN release_cover_art ON release_cover_art.album_id = albums.id
         WHERE albums.artist_id = listed.id
           AND octet_length(release_cover_art.image) > 0
-        ORDER BY (
-            SELECT count(*)
-            FROM tracks
-            JOIN track_mappings ON track_mappings.track_id = tracks.id
-            JOIN library_files ON library_files.id = track_mappings.library_file_id
-            WHERE tracks.album_id = albums.id
-              AND library_files.missing_at IS NULL
-        ) DESC, albums.release_date DESC NULLS LAST, albums.id
+        ORDER BY albums.owned_track_count DESC, albums.release_date DESC NULLS LAST, albums.id
         LIMIT 2
     )::uuid[] AS cover_album_ids
 FROM listed
@@ -380,49 +323,14 @@ LIMIT NULLIF(sqlc.arg('limit')::int, 0) OFFSET sqlc.arg('offset');
 -- The completeness and attention CTEs are the ones in ListArtists, repeated
 -- rather than shared: a count that disagreed with the list it labels would be
 -- worse than the duplication. Change one and change the other.
-WITH held_recordings AS MATERIALIZED (
-    -- The same two sets as in ListArtists above; see the comments there.
-    SELECT library_file_identities.musicbrainz_recording_id AS recording_id
-    FROM library_file_identities
-    JOIN library_files ON library_files.id = library_file_identities.library_file_id
-    WHERE library_files.missing_at IS NULL
-      AND library_file_identities.musicbrainz_recording_id IS NOT NULL
-    UNION
-    SELECT carrying.musicbrainz_recording_id
-    FROM tracks AS carrying
-    JOIN track_mappings AS elsewhere ON elsewhere.track_id = carrying.id
-    JOIN library_files ON library_files.id = elsewhere.library_file_id
-    WHERE library_files.missing_at IS NULL
-      AND carrying.musicbrainz_recording_id IS NOT NULL
-),
-album_tracks AS MATERIALIZED (
+WITH album_tracks AS (
+    -- The same maintained counts as in ListArtists above; see the comment there.
     SELECT
         albums.id AS album_id,
-        count(holding.track_id)::bigint AS track_count,
-        count(*) FILTER (WHERE holding.held)::bigint AS owned_count,
-        count(*) FILTER (WHERE NOT holding.held AND holding.dismissed)::bigint AS dismissed_count
+        albums.track_count::bigint AS track_count,
+        albums.owned_track_count::bigint AS owned_count,
+        albums.dismissed_track_count::bigint AS dismissed_count
     FROM albums
-    LEFT JOIN (
-        SELECT
-            tracks.id AS track_id,
-            tracks.album_id,
-            (present_mapping.track_id IS NOT NULL OR held_recordings.recording_id IS NOT NULL) AS held,
-            dismissals.id IS NOT NULL AS dismissed
-        FROM tracks
-        LEFT JOIN (
-            SELECT track_mappings.track_id
-            FROM track_mappings
-            JOIN library_files ON library_files.id = track_mappings.library_file_id
-            WHERE library_files.missing_at IS NULL
-        ) AS present_mapping ON present_mapping.track_id = tracks.id
-        LEFT JOIN held_recordings
-            ON held_recordings.recording_id = tracks.musicbrainz_recording_id
-        LEFT JOIN acquisition_targets AS dismissals
-            ON tracks.musicbrainz_recording_id IS NOT NULL
-           AND dismissals.musicbrainz_recording_id = tracks.musicbrainz_recording_id
-           AND dismissals.status = 'not_wanted'
-    ) AS holding ON holding.album_id = albums.id
-    GROUP BY albums.id
 ),
 completeness AS (
     -- Dismissed tracks, fully dismissed releases and unmonitored releases
@@ -658,14 +566,7 @@ LEFT JOIN LATERAL (
     JOIN release_cover_art ON release_cover_art.album_id = lead.id
     WHERE lead.artist_id = artists.id
       AND octet_length(release_cover_art.image) > 0
-    ORDER BY (
-        SELECT count(*)
-        FROM tracks
-        JOIN track_mappings ON track_mappings.track_id = tracks.id
-        JOIN library_files ON library_files.id = track_mappings.library_file_id
-        WHERE tracks.album_id = lead.id
-          AND library_files.missing_at IS NULL
-    ) DESC, lead.release_date DESC NULLS LAST, lead.id
+    ORDER BY lead.owned_track_count DESC, lead.release_date DESC NULLS LAST, lead.id
     LIMIT 1
 ) AS lead_album ON true
 WHERE artists.id = sqlc.arg('id')

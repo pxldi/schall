@@ -22,7 +22,9 @@ const invalidations: Record<string, string[][]> = {
   // Bytes moving on a transfer whose request kept its status. A poll sends one
   // every few seconds while anything downloads, and only the downloads list
   // draws progress, so nothing that counts requests is asked again for it.
-  'download-progress': [['downloads']],
+  // The review page keeps its download questions under ['downloads'] too, as
+  // pages of 100, and every notice re-read each loaded page in turn.
+  'download-progress': [['downloads', 'list']],
   'source-searches': [['source-search'], ...queue],
   // An upload is announced on the library topic: what it changes is what the
   // library holds, and the page that shows uploads is watching the same work.
@@ -66,6 +68,9 @@ const invalidations: Record<string, string[][]> = {
   acquisitions: [['review-queue'], ['wants'], ['dashboard'], ['global-search'], ...queue]
 };
 
+/** The shortest time between two rounds of invalidation. */
+export const NOTICE_GAP_MS = 1000;
+
 // connectEvents holds a server-sent event stream open and invalidates the views
 // a notice concerns. It returns the function that closes it.
 //
@@ -83,11 +88,35 @@ export function connectEvents(queryClient: QueryClient): () => void {
     return () => {};
   }
 
+  // Notices are gathered and sent on at most once a second. A refresh of a few
+  // hundred releases announces each one twice, and every notice re-read the
+  // whole artist list and cancelled the read already under way, so in a burst
+  // the list could be asked for many times and never arrive. The first notice
+  // after a quiet second goes through at once; the rest of a burst is one more
+  // round at its end.
+  const pending = new Map<string, string[]>();
+  let last = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const flush = () => {
+    timer = undefined;
+    last = Date.now();
+    const queryKeys = [...pending.values()];
+    pending.clear();
+    for (const queryKey of queryKeys) {
+      // A read already under way is answering the same question; starting it
+      // again only throws away what it has done.
+      void queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+    }
+  };
+
   for (const [topic, keys] of Object.entries(invalidations)) {
     source.addEventListener(topic, () => {
-      for (const queryKey of keys) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
+      for (const queryKey of keys) pending.set(JSON.stringify(queryKey), queryKey);
+      if (timer !== undefined) return;
+      const wait = last + NOTICE_GAP_MS - Date.now();
+      if (wait <= 0) flush();
+      else timer = setTimeout(flush, wait);
     });
   }
 
@@ -96,5 +125,8 @@ export function connectEvents(queryClient: QueryClient): () => void {
   // what the intervals are still there for.
   source.addEventListener('error', () => {});
 
-  return () => source.close();
+  return () => {
+    clearTimeout(timer);
+    source.close();
+  };
 }

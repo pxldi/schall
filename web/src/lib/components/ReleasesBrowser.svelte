@@ -2,7 +2,7 @@
   import Icon from './Icon.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { toStore } from 'svelte/store';
-  import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type Release, type ReleaseStatus } from '$lib/api';
@@ -154,7 +154,11 @@
           direction: descending ? 'desc' : 'asc',
           limit: pageSize,
           offset
-        })
+        }),
+      // Each page, filter and order is its own cache entry, so without this
+      // every press emptied the table into its skeleton and took the pager
+      // away under the reader's pointer.
+      placeholderData: keepPreviousData
     }))
   );
 
@@ -737,12 +741,18 @@
   {/if}
 </ControlRail>
 
-{#if $releases.isError}
+{#if $releases.isError && !$releases.data}
   <div class="px-6 py-6">
     <!-- Only a read, so the note asks again by itself. -->
     <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
   </div>
 {:else}
+  {#if $releases.isError}
+    <!-- A failed refetch keeps the rows it already had; the note sits above them. -->
+    <div class="px-4 pt-2 sm:px-6">
+      <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
+    </div>
+  {/if}
   <Settle pending={$releases.isPending}>
     {#snippet placeholder()}
       <div
@@ -750,10 +760,11 @@
     role="status"
     aria-label="Loading releases"
   >
-    <div class="max-h-[calc(100dvh-10rem)] overflow-hidden rounded-panel border border-line-thin">
+    <!-- The table's own box height, 70dvh, so the rows land in the space the
+         wait held. 28 rows fill that box on a 4K viewport. -->
+    <div class="max-h-[70dvh] overflow-hidden rounded-panel border border-line-thin">
       <div class="h-9 border-b border-line-thin" aria-hidden="true"></div>
-      <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
-      {#each Array(60) as _, placeholderIndex (placeholderIndex)}
+      {#each Array(28) as _, placeholderIndex (placeholderIndex)}
         <div
           class="h-[3.46875rem] border-b border-line-thin px-3 py-2 last:border-b-0"
           aria-hidden="true"

@@ -293,6 +293,46 @@ describe('the track list fails to load', () => {
   });
 });
 
+describe('an empty track list', () => {
+  it('says there is no track list, not "Importing", when no refresh is running', async () => {
+    answering({ release: detail({ trackRefreshStatus: 'pending', trackCount: 0 }), tracks: [] });
+    opened();
+
+    expect(await screen.findByRole('heading', { name: 'No track list' })).toBeTruthy();
+    expect(screen.queryByText('Importing the track list…')).toBeNull();
+  });
+
+  it('says it is importing while the refresh runs', async () => {
+    answering({ release: detail({ trackRefreshStatus: 'running', trackCount: 0 }), tracks: [] });
+    opened();
+
+    expect(await screen.findByText('Importing the track list…')).toBeTruthy();
+  });
+});
+
+describe('the downloads fail to load', () => {
+  it('says so in the Sources section instead of showing no open requests', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname.endsWith('/downloads')) {
+          return new Response(JSON.stringify({ title: 'downloads broke' }), { status: 400 });
+        }
+        if (url.pathname.endsWith('/tracks')) return body({ items: [track()] });
+        if (url.pathname.endsWith('/editions')) return body({ items: [edition()] });
+        if (url.pathname === `/api/v1/albums/${releaseID}`) return body(detail());
+        return body({ items: [] });
+      })
+    );
+    opened();
+
+    expect(await screen.findByText('downloads broke')).toBeTruthy();
+    expect(screen.getByText('Sources')).toBeTruthy();
+  });
+});
+
 describe('the want button', () => {
   it('counts only the missing tracks nobody has wanted yet', async () => {
     answering({

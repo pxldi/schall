@@ -107,6 +107,44 @@ describe('the playlist detail', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Late night' })).toBeTruthy();
   });
 
+  it('stops the loading title once the first read fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ detail: 'no such playlist' }), { status: 404 })))
+    );
+    opened();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Playlist' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Loading playlist' })).toBeNull();
+  });
+
+  it('says an import is running, not that the list is empty, before the first import lands', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ playlist: playlist({ importedAt: null }), entries: [] }), { status: 200 })
+        )
+      )
+    );
+    opened();
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Importing playlist' })).toBeTruthy();
+    expect(screen.queryByText('No songs in this playlist')).toBeNull();
+  });
+
+  it('says an imported list with no entries holds no songs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ playlist: playlist(), entries: [] }), { status: 200 }))
+      )
+    );
+    opened();
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'No songs in this playlist' })).toBeTruthy();
+  });
+
   it('reserves the pairing area until the player check answers', async () => {
     vi.stubGlobal(
       'fetch',

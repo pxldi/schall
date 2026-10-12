@@ -2382,6 +2382,10 @@ type albumResponse struct {
 	SecondaryTypes []string `json:"secondaryTypes"`
 	// WantedTrackCount is the tracks with a want still being pursued.
 	WantedTrackCount int64 `json:"wantedTrackCount"`
+	// LeavingTrackCount is the tracks whose file is deleted on RemovesAt or
+	// later, because somebody removed them.
+	LeavingTrackCount int64      `json:"leavingTrackCount"`
+	RemovesAt         *time.Time `json:"removesAt,omitempty"`
 }
 
 // The shapes a release can be in, as the browser names them, and the orders it
@@ -2509,6 +2513,8 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 			Inks:                      rowInks(inks, album.ID),
 			SecondaryTypes:            nonNil(album.SecondaryTypes),
 			WantedTrackCount:          album.WantedTrackCount,
+			LeavingTrackCount:         album.LeavingTrackCount,
+			RemovesAt:                 nullableTime(album.RemovesAt.Valid, album.RemovesAt.Time),
 		})
 	}
 	body := map[string]any{

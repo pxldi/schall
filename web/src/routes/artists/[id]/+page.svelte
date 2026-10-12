@@ -11,8 +11,14 @@
   } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
   import Icon from '$lib/components/Icon.svelte';
-  import { api, type MonitorLevel, type Release, type ReleaseCompleteness } from '$lib/api';
-  import { calendarDate, keepInUrl, urlChoice, wantedSummary } from '$lib/utils';
+  import {
+    api,
+    type MonitorLevel,
+    type Release,
+    type ReleaseCompleteness,
+    type RemovedTracks
+  } from '$lib/api';
+  import { calendarDate, keepInUrl, removedSummary, urlChoice, wantedSummary } from '$lib/utils';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
@@ -27,7 +33,8 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
-  import PopularTracks from './PopularTracks.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
+  import PopularTracks, { popularOptions } from './PopularTracks.svelte';
   import ReleaseTile from './ReleaseTile.svelte';
 
   type Tile = 'owned' | 'partial' | 'missing' | 'dismissed' | 'unknown' | 'busy' | 'failed';
@@ -86,6 +93,10 @@
         ? 15_000
         : false
   });
+
+  // The popular list is drawn only once the artist and the releases are in,
+  // and it waits on ListenBrainz, so its read starts here beside theirs.
+  void queryClient.prefetchQuery(popularOptions(artistID));
 
   // The address bar follows the grid rather than leading it, so a reload and a
   // shared link open the releases that were being read rather than the first
@@ -397,7 +408,11 @@
     interview: 'Interview',
     spokenword: 'Spoken word',
     audiobook: 'Audiobook',
-    broadcast: 'Broadcast'
+    broadcast: 'Broadcast',
+    // MusicBrainz's own primary type "Other". It holds music videos and the
+    // like, and Kendrick Lamar's "luther" sits there although it reads like a
+    // single. Naming it says the type came from MusicBrainz; it is not guessed.
+    other: 'Other'
   };
   function otherName(release: Release) {
     const qualifier = release.secondaryTypes?.find((type) => otherNames[type]);
@@ -411,23 +426,23 @@
     return name ? `${year} · ${name}` : year;
   }
 
-  // The tracks still to get, and whether every one of them is already wanted:
-  // that is when the release's + shows its tick.
-  function gaps(release: Release) {
-    return Math.max(0, countable(release) - release.ownedTrackCount);
-  }
+  // A release's + is filled when every countable track is held or wanted. A
+  // held track counts as wanted until somebody removes it, as on the release
+  // page, so a release the library holds shows its tick on hover.
   function releaseWanted(release: Release) {
-    return gaps(release) > 0 && (release.wantedTrackCount ?? 0) >= gaps(release);
+    const kept = Math.max(0, release.ownedTrackCount - (release.leavingTrackCount ?? 0));
+    const all = countable(release);
+    return all > 0 && kept + (release.wantedTrackCount ?? 0) >= all;
   }
 
-  // The + on a release wants every track the library does not have, as the
-  // release page's button does. Pressed again it dismisses the tracks still
-  // missing, the release page's "Dismiss the rest": the files the library holds
-  // are not touched.
-  type ReleaseToggle = { kind: 'want' | 'unwant'; id: string };
+  // The + on a release wants every track the library does not have, and takes
+  // back a removal, as the release page's button does. Pressed again it removes
+  // the release: the wants go at once, and a file Schall downloaded for it is
+  // deleted 30 days later unless the release is wanted again first.
+  type ReleaseToggle = { kind: 'want' | 'remove'; id: string };
   const toggleRelease = createMutation({
     mutationFn: async ({ kind, id }: ReleaseToggle): Promise<unknown> =>
-      kind === 'want' ? api.wantRelease(id) : api.dismissReleaseRemainder(id),
+      kind === 'want' ? api.wantRelease(id) : api.removeRelease(id),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
@@ -437,6 +452,11 @@
       ]);
     }
   });
+  const removed = $derived(
+    $toggleRelease.data && $toggleRelease.variables?.kind === 'remove'
+      ? removedSummary($toggleRelease.data as RemovedTracks)
+      : ''
+  );
 
   // The card's second line and the colour it reads in: ink-3 for a plain fact,
   // accent for a partial release, fail for one missing outright. One function
@@ -686,9 +706,15 @@
 
     {#if $releases.isError}
       <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
-    {:else if $releases.isPending}
-      {@render ReleaseSkeleton()}
-    {:else if sections.length}
+    {/if}
+    <!-- The list polls while a refresh runs, so one failed poll leaves the
+         releases already drawn under the note rather than wiping them. -->
+    {#if !$releases.isError || $releases.data}
+    <Settle pending={$releases.isPending}>
+      {#snippet placeholder()}
+        {@render ReleaseSkeleton()}
+      {/snippet}
+    {#if sections.length}
       <div class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <div class="flex min-w-0 flex-col gap-5">
           {#each sections as section (section.kind)}
@@ -720,13 +746,15 @@
                   <ReleaseTile
                     {release}
                     meta={meta(release, section.kind)}
-                    state={describe(release).text}
+                    state={release.albumType === 'other'
+                      ? `${describe(release).text} · MusicBrainz types it as Other`
+                      : describe(release).text}
                     owned={release.ownedTrackCount}
                     countable={countable(release)}
                     wanted={releaseWanted(release)}
-                    wantable={gaps(release) > 0 && tile(release) !== 'busy'}
+                    wantable={release.trackCount > 0 && tile(release) !== 'busy'}
                     onwant={() => $toggleRelease.mutateAsync({ kind: 'want', id: release.id })}
-                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'unwant', id: release.id })}
+                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'remove', id: release.id })}
                   />
                 {/each}
               </div>
@@ -734,6 +762,8 @@
           {/each}
           {#if $toggleRelease.isError}
             <ErrorNote error={$toggleRelease.error} />
+          {:else if removed}
+            <p class="text-meta text-ink-3">{removed}.</p>
           {/if}
         </div>
 
@@ -767,28 +797,38 @@
         {/if}
       </EmptyPanel>
     {/if}
+    </Settle>
+    {/if}
   </div>
   {/if}
   </Settle>
 {/if}
 
 {#snippet ReleaseSkeleton()}
-  <section
-    class="max-h-[calc(100dvh-30rem)] flex flex-col gap-3 overflow-hidden"
+  <!-- The same grid the releases land in, aside and all, so the popular tracks
+       column does not push in from the side at xl when they arrive. -->
+  <div
+    class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
     role="status"
     aria-label="Loading releases"
   >
-    <Skeleton class="h-3 w-16" />
-    <div class="flex flex-wrap gap-x-3.5 gap-y-4">
-      {#each Array(32) as _, placeholderIndex (placeholderIndex)}
-        <div class="flex w-19 flex-col gap-1" aria-hidden="true">
-          <Skeleton shape="block" class="size-19" />
-          <Skeleton class="h-3 w-full" />
-          <Skeleton class="h-2.5 w-2/3" />
-        </div>
-      {/each}
-    </div>
-  </section>
+    <section class="max-h-[calc(100dvh-30rem)] flex min-w-0 flex-col gap-3 overflow-hidden">
+      <Skeleton class="h-3 w-16" />
+      <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+        {#each Array(32) as _, placeholderIndex (placeholderIndex)}
+          <div class="flex w-19 flex-col gap-1" aria-hidden="true">
+            <Skeleton shape="block" class="size-19" />
+            <Skeleton class="h-3 w-full" />
+            <Skeleton class="h-2.5 w-2/3" />
+          </div>
+        {/each}
+      </div>
+    </section>
+    <aside class="hidden min-w-0 flex-col xl:flex" aria-hidden="true">
+      <div class="border-b border-line-thin pb-1.5"><Skeleton class="h-4 w-20" /></div>
+      <SkeletonRows count={10} cover />
+    </aside>
+  </div>
 {/snippet}
 
 {#snippet ArtistSkeleton()}

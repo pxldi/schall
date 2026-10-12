@@ -101,6 +101,17 @@
   // nothing true to say.
   const hasBody = $derived(waiting || failed || nothing || rows.length > 0);
 
+  // The panel keeps the height of the last list it drew while the next answer
+  // is on its way. The rows themselves go, because a stale list under a newer
+  // query must never show, but the panel no longer drops to one line and grows
+  // back on every word typed.
+  let body = $state<HTMLElement | null>(null);
+  let heldHeight = $state(0);
+  $effect(() => {
+    if (!typed.trim()) heldHeight = 0;
+    else if (!waiting && rows.length > 0 && body) heldHeight = body.offsetHeight;
+  });
+
   // A new answer is read from the top: it is a different list, so where the last
   // one was being looked at means nothing.
   $effect(() => {
@@ -366,7 +377,11 @@
       </div>
 
       {#if hasBody}
-        <div class="min-h-0 flex-1 overflow-y-auto py-2">
+        <div
+          class="min-h-0 flex-1 overflow-y-auto py-2"
+          bind:this={body}
+          style:min-height={waiting && heldHeight ? `${heldHeight}px` : undefined}
+        >
           {#if waiting}
             <p class="flex items-center gap-2 px-3 py-3.5 text-meta leading-[1.6] text-ink-4">
               <Icon name="busy" size="sm" class="animate-spin" />

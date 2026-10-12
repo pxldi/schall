@@ -142,14 +142,14 @@ afterEach(() => {
 });
 
 describe('WeeklyPlaylist', () => {
-  it('fills the viewport with weekly skeleton rows while loading', () => {
+  it('draws a week of skeleton rows while loading', () => {
     answering(overview());
     opened();
 
     const loading = screen.getByLabelText('Loading weekly playlist');
     expect(loading.getAttribute('aria-busy')).toBe('true');
-    expect(screen.getByLabelText('Loading weekly songs').querySelectorAll('[aria-hidden="true"]'))
-      .toHaveLength(60);
+    expect(screen.getByLabelText('Loading weekly songs').querySelectorAll('[data-placeholder-row]'))
+      .toHaveLength(10);
   });
 
   it('says the feature is off and offers no list when nobody has switched it on', async () => {
@@ -310,8 +310,7 @@ describe('WeeklyPlaylist', () => {
     await fireEvent.click(screen.getByText("Why it's leaving"));
 
     const loading = await screen.findByLabelText('Loading weekly evidence');
-    expect(loading.querySelectorAll('span:empty')).toHaveLength(40);
-    expect(screen.getByText('reading what was asked…')).toBeTruthy();
+    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(3);
   });
 
   it('says what a refresh chose, kept and removed', async () => {

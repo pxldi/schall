@@ -141,14 +141,28 @@
     <BackLink fallback="/artists" label="Artists" />
   {/snippet}
   {#snippet sub()}
+    <!-- The counts hold their place while the list is read, as /artists does,
+         so the line does not grow when they land. A failed read shows a dash. -->
     {#if labelsTotal !== undefined}
       <span>
         <b class="numeric font-semibold text-ink">{labelsTotal.toLocaleString()}</b>
         {labelsTotal === 1 ? 'label' : 'labels'}
       </span>
+    {:else if $labels.isError}
+      <span><b class="numeric font-semibold text-ink">–</b> labels</span>
+    {:else}
+      <span>
+        <Skeleton class="numeric inline-block h-2.5 w-[2ch]" />
+        labels
+      </span>
     {/if}
     {#if followedTotal !== undefined}
       <span><span class="numeric">{followedTotal.toLocaleString()}</span> followed</span>
+    {:else if $labels.isPending}
+      <span>
+        <Skeleton class="numeric inline-block h-2.5 w-[2ch]" />
+        followed
+      </span>
     {/if}
     <a href="/artists" class="transition hover:text-ink">
       <span class="underline underline-offset-3">
@@ -206,7 +220,6 @@
         <EmptyPanel
           heading="No labels followed"
           role="idle"
-          class="w-full max-w-none items-center text-center"
         >
           <p class="text-body text-ink-3">Follow a label to track everything it publishes.</p>
         </EmptyPanel>
@@ -214,7 +227,6 @@
         <EmptyPanel
           heading="No labels match that search"
           role="idle"
-          class="w-full max-w-none items-center text-center"
         />
       {:else}
         {#each [$unfollow.error, $refresh.error, $setMonitor.error] as error, errorIndex (errorIndex)}

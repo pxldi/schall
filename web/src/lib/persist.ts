@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/svelte-query';
 import {
   persistQueryClientRestore,
-  persistQueryClientSubscribe,
+  persistQueryClientSave,
   type PersistedClient,
   type Persister
 } from '@tanstack/query-persist-client-core';
@@ -43,22 +43,13 @@ function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBReq
   );
 }
 
-/** A persister that keeps the whole cache under one IndexedDB key. Writes are
- *  held for a second, so a page reading ten queries writes once. */
+/** A persister that keeps the whole cache under one IndexedDB key. */
 export function indexedDBPersister(): Persister {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let latest: PersistedClient | undefined;
   return {
     persistClient(client) {
-      latest = client;
-      timer ??= setTimeout(() => {
-        timer = undefined;
-        const value = latest;
-        latest = undefined;
-        // A full disc or a private window refuses the write; the app runs as
-        // it did before, without the kept copy.
-        void run('readwrite', (store) => store.put(value, KEY)).catch(() => undefined);
-      }, 1000);
+      // A full disc or a private window refuses the write; the app runs as it
+      // did before, without the kept copy.
+      void run('readwrite', (store) => store.put(client, KEY)).catch(() => undefined);
     },
     restoreClient() {
       return run<PersistedClient | undefined>('readonly', (store) => store.get(KEY)).catch(() => undefined);
@@ -84,5 +75,31 @@ export async function persistQueries(queryClient: QueryClient, buster: string): 
   } catch {
     // An unreadable copy is dropped by the restore itself; start empty.
   }
-  persistQueryClientSubscribe(options);
+  saveAfterAnswers(queryClient, () => void persistQueryClientSave(options));
+}
+
+/** How long after an answer arrives the cache is written. Answers that land
+ *  together, a page reading ten queries or a burst of notices, write once. */
+export const PERSIST_DELAY_MS = 2000;
+
+/** Calls save a while after a query receives an answer or leaves the cache.
+ *
+ *  The library's own subscription writes on every cache event, and most events
+ *  are a query starting or stopping a fetch: nothing a reload would draw
+ *  differently. Each write copies the whole cache, a megabyte or more on a
+ *  large library, on the main thread. */
+export function saveAfterAnswers(queryClient: QueryClient, save: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+    const answered = event.type === 'updated' && event.action.type === 'success';
+    if (!answered && event.type !== 'removed') return;
+    timer ??= setTimeout(() => {
+      timer = undefined;
+      save();
+    }, PERSIST_DELAY_MS);
+  });
+  return () => {
+    clearTimeout(timer);
+    unsubscribe();
+  };
 }

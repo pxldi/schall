@@ -458,6 +458,20 @@ describe('the overview', () => {
     expect(screen.getByText('Nachtfalter')).toBeTruthy();
   });
 
+  it('says a listening panel has nothing this month, not a blank box', async () => {
+    const data = overview({ recentlyAdded: [] });
+    data.listening.mostPlayed = [];
+    data.listening.topArtists = [];
+    data.listening.topAlbums = [];
+    data.listening.sessions = [];
+    answering(data);
+    show();
+    await screen.findByText('files');
+    expect(screen.getAllByText('No listens this month')).toHaveLength(3);
+    expect(screen.getByText('No listens yet')).toBeTruthy();
+    expect(screen.getByText('Nothing added yet')).toBeTruthy();
+  });
+
   it('states the arrivals and the room left', async () => {
     answering(overview());
     show();

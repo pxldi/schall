@@ -478,3 +478,41 @@ describe('the play control', () => {
     expect(await screen.findByRole('button', { name: 'Stop Myrrhman' })).toBeTruthy();
   });
 });
+
+describe('the music folders disclosure', () => {
+  function foldersAnswer(roots: () => Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/library/roots') return roots();
+        if (url.pathname === '/api/v1/library/files') {
+          return new Response(JSON.stringify({ items: [], total: 0, limit: 25, offset: 0 }), { status: 200 });
+        }
+        if (url.pathname === '/api/v1/library/duplicates') {
+          return new Response(JSON.stringify({ recordings: [], total: 0 }), { status: 200 });
+        }
+        return new Response(JSON.stringify(summary()), { status: 200 });
+      })
+    );
+  }
+
+  it('shows the folders loading, not an empty list, while they are read', async () => {
+    foldersAnswer(() => new Promise<Response>(() => {}));
+    opened();
+
+    await fireEvent.click(screen.getByRole('button', { name: '0 folders' }));
+
+    expect(screen.getByRole('status', { name: 'Loading music folders' })).toBeTruthy();
+    expect(screen.queryByText('No music folders')).toBeNull();
+  });
+
+  it('says there are no folders only once the read says so', async () => {
+    foldersAnswer(async () => new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    opened();
+
+    await fireEvent.click(screen.getByRole('button', { name: '0 folders' }));
+
+    expect(await screen.findByRole('heading', { name: 'No music folders' })).toBeTruthy();
+  });
+});

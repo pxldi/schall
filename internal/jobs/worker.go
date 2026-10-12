@@ -93,7 +93,7 @@ const (
 	// anchor sweep when a want gains a reference its copies were judged without
 	// (ADR 0029 §5). Its payload names the want.
 	JudgeWantCopies = "judge_want_copies"
-	// SetAsideDuplicateCopies is queued once by migration 00111, when a want
+	// SetAsideDuplicateCopies is queued once by migration 00112, when a want
 	// came to keep one held copy of each piece of audio. Each want's own hunt
 	// does the same from then on, so it is never scheduled.
 	SetAsideDuplicateCopies = "set_aside_duplicate_copies"

@@ -64,7 +64,7 @@ describe('the playlist list', () => {
 
     const loading = screen.getByLabelText('Loading playlists');
     expect(loading.getAttribute('aria-busy')).toBe('true');
-    expect(loading.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4);
+    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(4);
   });
 
   it('names the room in a hidden level-1 heading', () => {
@@ -184,6 +184,8 @@ describe('the playlist list', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Stop following' }));
     const question = await screen.findByRole('dialog');
     expect(question.textContent).toContain('Stop following “Late night”?');
+    // "Cancel" beside "Stop following" did not say which of the two it undid.
+    expect(within(question).getByRole('button', { name: 'Keep following' })).toBeTruthy();
     expect(sent).toEqual([]);
 
     await fireEvent.click(within(question).getByRole('button', { name: 'Stop following' }));

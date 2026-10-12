@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import Icon from '$lib/components/Icon.svelte';
+  import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import Button from '$lib/components/Button.svelte';
   import { useNewestPrint } from '$lib/duoton';
@@ -59,16 +59,14 @@
   </div>
 
   {#if !missing && page.error?.message}
-    <!-- The exact words the failure left behind, behind a disclosure so they
-         stay in the product without being the first thing read. -->
-    <details class="group max-w-[40rem]">
-      <summary
-        class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
-      >
-        <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
-        What went wrong
-      </summary>
-      <p class="reveal mt-1 text-meta leading-[1.65] text-ink-2">{page.error.message}</p>
-    </details>
+    <!-- Given the message, not the object: SvelteKit's error is a plain object
+         the note would print as [object Object]. No action line, because the
+         line under the title already names Reload. -->
+    <ErrorNote
+      error={page.error.message}
+      fallback="Loading this page threw an error."
+      action=""
+      class="max-w-[40rem]"
+    />
   {/if}
 </div>

@@ -379,6 +379,10 @@ export interface Release {
   secondaryTypes: string[];
   /** Tracks with a want still being pursued. */
   wantedTrackCount: number;
+  /** Tracks whose file is deleted because somebody removed them, and the first
+   * day one goes. Wanting the release again keeps them. */
+  leavingTrackCount: number;
+  removesAt?: string;
 }
 
 /** One of an artist's most listened recordings, from ListenBrainz, with what
@@ -397,6 +401,8 @@ export interface PopularTrack {
   held: boolean;
   wantId: string | null;
   wantStatus: string | null;
+  /** When a file of the recording is deleted, because somebody removed it. */
+  removesAt?: string;
 }
 
 export interface ArtistPopular {

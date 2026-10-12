@@ -1029,3 +1029,56 @@ func TestASweepIsQueuedWithNoPlaylist(t *testing.T) {
 		t.Fatalf("payload = %s, want a sweep naming no playlist", payload)
 	}
 }
+
+// A list Schall pushed, and an adopted list whose playlist was removed, stay
+// out of every later sweep. Before 00113 both came back as new lists once
+// their snapshot was gone.
+func TestPushedAndUnfollowedNavidromeListsStayKeptOut(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, pushedID := pushedList(ctx, t, pool, "spot-kept", "nd-pushed")
+	if err := queries.ReplaceNavidromePlaylistSnapshot(ctx,
+		NavidromePlaylistSnapshotParams{PlaylistID: pushedID, NavidromePlaylistID: "nd-pushed"}, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	adopted, err := queries.UpsertNavidromePlaylist(ctx, "nd-adopted", "Cantus Weekly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queries.ReplaceNavidromePlaylistSnapshot(ctx,
+		NavidromePlaylistSnapshotParams{
+			PlaylistID: adopted.ID, NavidromePlaylistID: "nd-adopted", Adopted: true,
+		}, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	keptOut := func(id string) bool {
+		t.Helper()
+		kept, err := queries.NavidromePlaylistKeptOut(ctx, id)
+		if err != nil {
+			t.Fatalf("NavidromePlaylistKeptOut(%q) error = %v", id, err)
+		}
+		return kept
+	}
+	if !keptOut("nd-pushed") {
+		t.Fatal("a pushed list is not kept out")
+	}
+	if keptOut("nd-adopted") {
+		t.Fatal("a followed adopted list is kept out")
+	}
+
+	for _, id := range []uuid.UUID{pushedID, adopted.ID} {
+		if err := queries.DeletePlaylist(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !keptOut("nd-pushed") || !keptOut("nd-adopted") {
+		t.Fatal("a removed list's navidrome id is not kept out")
+	}
+	if keptOut("nd-unknown") {
+		t.Fatal("an unknown list is kept out")
+	}
+}

@@ -11,7 +11,6 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type AcquisitionCandidate, type AcquisitionTarget, type ReviewItem } from '$lib/api';
-  import { isAuthError } from '$lib/errors';
   import {
     albumKey,
     clock,
@@ -31,6 +30,9 @@
   import CopyCard from '$lib/components/CopyCard.svelte';
   import ListenPlayer from '$lib/components/ListenPlayer.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import ImportEvidence from '$lib/components/ImportEvidence.svelte';
   import VersionCandidates from '$lib/components/VersionCandidates.svelte';
@@ -129,6 +131,12 @@
       imports: paused
     }).filter((question) => !seen.has(question.id) && Boolean(seen.add(question.id)));
   });
+
+  // The page-wide error band stands in for the queue only when no question
+  // has arrived. A later read that fails (the next page, or a refetch) leaves
+  // the loaded questions where they are and says so in the rail.
+  const hasQueue = $derived(questions.length > 0);
+  const pageError = $derived(hasQueue ? undefined : loadError);
 
   const wantTotal = $derived($wants.data?.pages[0]?.total ?? 0);
   const resolutions = $derived($wants.data?.pages[0]?.resolutions ?? 0);
@@ -691,34 +699,47 @@
 </Hero>
 
 <!-- The queue and the question share one panel, the queue down its left. -->
-<div
-  class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6 lg:flex-row {current && !loading && !loadError
-    ? 'overflow-clip rounded-panel border border-line-thin bg-surface-thin lg:min-h-[32rem]'
-    : ''}"
->
-  {#if loading}
+<div class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6">
+  {#if pageError}
+    <div class="py-10">
+      <ErrorNote error={pageError} fallback="The review queue could not be read." retry={retryQueue} />
+    </div>
+  {:else}
+  <Settle
+    pending={loading}
+    class="flex-1 {loading || hasQueue
+      ? 'overflow-clip rounded-panel border border-line-thin bg-surface-thin lg:min-h-[32rem]'
+      : ''}"
+    layer="flex flex-col lg:flex-row"
+  >
+    {#snippet placeholder()}
+      <!-- The panel's own shape: the rail with its chips and rows, and the
+           question beside it, so nothing moves when the queue arrives. -->
+      <div
+        class="flex shrink-0 flex-col border-b border-line-thin lg:w-[clamp(13rem,18vw,17rem)] lg:border-b-0"
+        role="status"
+        aria-busy="true"
+        aria-label="Loading the review queue"
+      >
+        <div class="flex flex-wrap gap-1 p-4">
+          {#each ['w-10', 'w-24', 'w-20', 'w-[4.5rem]'] as width (width)}
+            <Skeleton class="h-6 rounded-full {width}" />
+          {/each}
+        </div>
+        <SkeletonRows count={6} class="hidden border-t border-line-thin lg:flex" />
+      </div>
+      <div class="flex min-w-0 flex-1 flex-col gap-3 px-4 pb-6 pt-5 sm:px-6 lg:border-l lg:border-line-thin lg:px-8">
+        <Skeleton class="h-3 w-16" />
+        <Skeleton class="h-7 w-2/5" />
+        <Skeleton class="h-3.5 w-1/4" />
+        <Skeleton shape="block" class="mt-2 h-56 w-full max-w-[64rem]" />
+      </div>
+    {/snippet}
+  {#if !hasQueue && moreToRead}
     <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
       <p class="text-body text-ink-3">Loading…</p>
     </div>
-  {:else if loadError}
-    <div class="flex flex-col items-start gap-3 py-10">
-      <ErrorNote
-        error={loadError}
-        fallback="The review queue could not be read."
-        action={isAuthError(loadError) ? undefined : 'Press Retry to ask again.'}
-      />
-      {#if !isAuthError(loadError)}
-        <Button onclick={retryQueue}>
-          <Icon name="refresh" size={13} />
-          Retry
-        </Button>
-      {/if}
-    </div>
-  {:else if !current && moreToRead}
-    <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
-      <p class="text-body text-ink-3">Loading…</p>
-    </div>
-  {:else if !current}
+  {:else if !hasQueue}
     <div class="py-5">
       <EmptyPanel role="ok" heading={listen ? 'Nothing to listen to' : 'Nothing to decide'} />
     </div>
@@ -759,6 +780,14 @@
           <Icon name="release" size={13} />
         </button>
       </div>
+
+      {#if loadError}
+        <!-- A read that failed after questions arrived keeps them on screen:
+             the note sits where the next page would have been announced. -->
+        <div class="border-t border-line-thin px-4 py-2.5">
+          <ErrorNote bare error={loadError} fallback="The rest of the queue did not load." retry={retryQueue} />
+        </div>
+      {/if}
 
       <div
         use:keepInView={at}
@@ -815,7 +844,7 @@
             {@render row(question, index)}
           {/each}
         {/if}
-        {#if moreToRead}
+        {#if moreToRead && !loadError}
           <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
         {/if}
       </div>
@@ -835,6 +864,19 @@
     </nav>
     {/if}
 
+    {#if !current && !batch}
+      <!-- The filter chosen holds nothing. The rail stays, so the reader can
+           choose another kind. -->
+      <section aria-label="Review" class="flex min-w-0 flex-1 flex-col px-4 pb-6 pt-5 sm:px-6 lg:border-l lg:border-line-thin lg:px-8">
+        {#if moreToRead && !loadError}
+          <SkeletonRows count={4} label="Reading more of the queue" />
+        {:else}
+          <EmptyPanel role="idle" heading="Nothing of this kind">
+            <p class="text-body text-ink-2">Choose All to see the rest.</p>
+          </EmptyPanel>
+        {/if}
+      </section>
+    {:else}
     <section
       aria-label="Review"
       class="flex min-w-0 flex-1 flex-col {listen ? '' : 'lg:border-l lg:border-line-thin'}"
@@ -850,7 +892,7 @@
             />
           {/key}
         </div>
-      {:else}
+      {:else if current}
 
       <div class="flex flex-col gap-3 px-4 sm:px-6 pb-6 pt-5 lg:px-8">
         <header class="flex flex-col gap-1">
@@ -1023,6 +1065,9 @@
       </footer>
       {/if}
     </section>
+    {/if}
+  {/if}
+  </Settle>
   {/if}
 </div>
 

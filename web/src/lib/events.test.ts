@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/svelte-query';
-import { connectEvents } from '$lib/events';
+import { NOTICE_GAP_MS, connectEvents } from '$lib/events';
 
 /** A notice carries no state, so what there is to check is which views a topic
  * reaches. That is a table nobody reads while adding a page, which is how the
@@ -143,7 +143,51 @@ describe('connectEvents', () => {
 
     stream.announce('download-progress');
 
-    expect(asked(invalidateQueries)).toEqual(['downloads']);
+    expect(asked(invalidateQueries)).toEqual(['downloads/list']);
+  });
+
+  // The review page's download questions sit under ['downloads'] as pages of
+  // 100, and each progress notice read every loaded page again.
+  it('leaves the review questions alone when bytes move on a transfer', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('download-progress');
+
+    expect(asked(invalidateQueries)).not.toContain('downloads');
+  });
+
+  it('asks again only once at the end of a burst of notices', () => {
+    vi.useFakeTimers();
+    try {
+      const { invalidateQueries, stream } = connect();
+
+      stream.announce('catalogue');
+      invalidateQueries.mockClear();
+      for (let i = 0; i < 20; i++) stream.announce('catalogue');
+      expect(invalidateQueries).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(NOTICE_GAP_MS);
+
+      expect(asked(invalidateQueries)).toEqual([
+        'artists',
+        'releases',
+        'dashboard',
+        'global-search',
+        ...queue
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A refresh announces each release twice. Cancelling the read under way on
+  // each one meant the artist list could be asked for and never arrive.
+  it('lets a read already under way finish', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('catalogue');
+
+    expect(invalidateQueries.mock.calls[0][1]).toEqual({ cancelRefetch: false });
   });
 
   it('reaches the catalogue views when an artist or a release is refreshed', () => {

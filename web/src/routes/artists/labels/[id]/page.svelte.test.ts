@@ -64,6 +64,25 @@ afterEach(() => {
 });
 
 describe('a label page', () => {
+  it('says the label has not been fetched yet when it holds no releases', async () => {
+    answering({
+      label: {
+        id: 'l1',
+        musicbrainzId: '46f0f4cd-8aab-4b33-b698-f459faf64190',
+        name: 'Warp Records',
+        monitorLevel: 'main',
+        followed: true,
+        followedAt: '2026-01-01T00:00:00Z',
+        lastRefreshedAt: null,
+        refreshStatus: 'pending',
+      },
+      releases: [],
+    });
+    opened();
+
+    expect(await screen.findByRole('heading', { name: 'Not fetched yet' })).toBeTruthy();
+  });
+
   it('names the label in its level-1 heading', async () => {
     answering({
       label: {

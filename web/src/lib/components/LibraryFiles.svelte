@@ -34,6 +34,7 @@
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import SoundCloudTrackModal from '$lib/components/SoundCloudTrackModal.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
@@ -544,8 +545,8 @@
 </ControlRail>
 
 <div class="flex flex-col gap-4 px-6 py-4">
-  <!-- Three reads of the library: the figures, the folders and the files. Each
-       one is only a read, so where asking again is the whole answer the note
+  <!-- Reads of the library: the figures and the folders here, the files where
+       the table stands. Each one is only a read, so where asking again is the whole answer the note
        asks by itself rather than handing the reader a button that repeats what
        just failed. -->
   {#if $summary.error}
@@ -553,9 +554,6 @@
   {/if}
   {#if $roots.error}
     <ErrorNote error={$roots.error} retry={() => $roots.refetch()} />
-  {/if}
-  {#if $files.error}
-    <ErrorNote error={$files.error} retry={() => $files.refetch()} />
   {/if}
   {#if $summary.data?.scanStatus === 'failed'}
     {@render Problem($summary.data.scanError ?? 'The last library scan failed.')}
@@ -584,24 +582,30 @@
       </span>
       {#if $addRoot.isError}<ErrorNote error={$addRoot.error} />{/if}
 
-      <div class="flex flex-col">
-        {#each $roots.data?.items ?? [] as root (root.id)}
-          <div class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
-            <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={root.path}>
-              {root.path}
-            </span>
-            <span class="text-meta text-ink-4">
-              {root.lastScannedAt
-                ? `scanned ${calendarDate(root.lastScannedAt)}`
-                : 'not scanned yet'}
-            </span>
-          </div>
-        {:else}
-          <div class="px-3 py-2">
-            <span class="text-meta text-ink-3">add your first music folder</span>
-          </div>
-        {/each}
-      </div>
+      {#if $roots.isPending}
+        <SkeletonRows count={2} label="Loading music folders" />
+      {:else if $roots.data?.items.length}
+        <div class="flex flex-col">
+          {#each $roots.data.items as root (root.id)}
+            <div class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+              <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={root.path}>
+                {root.path}
+              </span>
+              <span class="text-meta text-ink-4">
+                {root.lastScannedAt
+                  ? `scanned ${calendarDate(root.lastScannedAt)}`
+                  : 'not scanned yet'}
+              </span>
+            </div>
+          {/each}
+        </div>
+      {:else if !$roots.isError}
+        <!-- A failed read is reported by the note at the top of the page; saying
+             there are no folders under it would be a wrong answer. -->
+        <EmptyPanel role="idle" heading="No music folders">
+          <p class="text-meta leading-relaxed text-ink-3">Add the first one above.</p>
+        </EmptyPanel>
+      {/if}
     </section>
   {/if}
 
@@ -691,6 +695,11 @@
         {/each}
       </div>
       {/snippet}
+    {#if $files.error}
+      <!-- Where the table would be, so the failure is not read as an empty
+           space under the filters. -->
+      <ErrorNote error={$files.error} retry={() => $files.refetch()} class="mb-2.5" />
+    {/if}
     {#if ($files.data?.items ?? []).length}
       <!-- The scroll happens in the table's own box rather than on the page,
            because that is what the column names are held against: a header

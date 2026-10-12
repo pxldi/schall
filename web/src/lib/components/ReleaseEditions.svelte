@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import type { ReleaseEdition } from '$lib/api';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -104,15 +105,18 @@
     {/if}
   </div>
 
-  <div class="mt-3 max-h-[calc(100dvh-27rem)] overflow-hidden rounded-panel border border-line-thin">
-    <Settle pending={loading}>
-      {#snippet placeholder()}
-        <div
-        class="flex flex-col"
+  <!-- The border belongs to the list of blocks, so an empty answer stands as
+       its own panel instead of a panel drawn inside a box. -->
+  <Settle pending={loading} class="mt-3">
+    {#snippet placeholder()}
+      <!-- Three blocks: most releases have one to six pressings, and forty
+           boxes collapsing into two read as the page breaking. -->
+      <div
+        class="flex flex-col rounded-panel border border-line-thin"
         role="status"
         aria-label="Loading editions"
       >
-        {#each Array(40) as _, placeholderIndex (placeholderIndex)}
+        {#each Array(3) as _, placeholderIndex (placeholderIndex)}
           <div
             class="h-28 border-b border-line-thin px-4 py-3 last:border-b-0"
             aria-hidden="true"
@@ -120,100 +124,101 @@
             <Skeleton class="h-full" />
           </div>
         {/each}
-        </div>
-      {/snippet}
+      </div>
+    {/snippet}
     {#if !linked}
-      <p class="px-4 py-5 text-body text-ink-2">
-        This release is not linked to MusicBrainz, so there are no other pressings to compare.
-      </p>
+      <EmptyPanel role="idle" level={3} heading="Not on MusicBrainz">
+        <p class="text-body text-ink-2">
+          This release is not linked to MusicBrainz, so there are no other pressings to compare.
+        </p>
+      </EmptyPanel>
+    {:else if !blocks.length && error}
+      <!-- The list is what failed, so the note names the list. Without a
+           subject the catch-all can only say that something did not finish,
+           which on a page of six panels does not say which one. -->
+      <ErrorNote
+        {error}
+        fallback="The other pressings of this release could not be read."
+        retry={retryEditions}
+      />
     {:else if !blocks.length}
-      {#if error}
-        <!-- The list is what failed, so the note names the list. Without a
-             subject the catch-all can only say that something did not finish,
-             which on a page of six panels does not say which one. -->
-        <div class="px-4 py-5">
-          <ErrorNote
-            {error}
-            fallback="The other pressings of this release could not be read."
-            retry={retryEditions}
-          />
-        </div>
-      {:else}
-        <p class="px-4 py-5 text-body text-ink-2">MusicBrainz lists no pressings of this release.</p>
-      {/if}
+      <EmptyPanel role="idle" level={3} heading="No pressings">
+        <p class="text-body text-ink-2">MusicBrainz lists no pressings of this release.</p>
+      </EmptyPanel>
     {:else}
-      {#each blocks as edition, index (edition.musicbrainzReleaseId)}
-        {@const selected = edition.musicbrainzReleaseId === selectedId}
-        <!-- The selected block keeps the surface every other block sits on. A
-             raised fill would put its quiet lines on `thick`, where ink-4 falls
-             under the contrast floor, and the tick and the word beside the
-             title already say which one is chosen. -->
-        <div
-          class="min-h-28 px-4 py-3 {index ? 'border-t border-line-thin' : ''}"
-          aria-current={selected ? 'true' : undefined}
-          data-edition="true"
-        >
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <!-- The title is what identifies a pressing, so it wraps. -->
-            <p class="min-w-0 flex-1 text-body font-medium break-words text-ink">
-              {edition.title}
-            </p>
-            {#if selected}
-              <span class="flex shrink-0 items-center gap-1.5 text-meta text-ok">
-                <Icon name="check" size={13} /> Selected
-              </span>
-            {:else}
-              <button
-                class="tap shrink-0 rounded-control border border-line-thin px-2.5 py-1 text-meta text-ink-2 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
-                disabled={pending}
-                onclick={() => onselect(edition.musicbrainzReleaseId)}
-              >
-                Use this
-              </button>
+      <div class="rounded-panel border border-line-thin">
+        {#each blocks as edition, index (edition.musicbrainzReleaseId)}
+          {@const selected = edition.musicbrainzReleaseId === selectedId}
+          <!-- The selected block keeps the surface every other block sits on. A
+               raised fill would put its quiet lines on `thick`, where ink-4 falls
+               under the contrast floor, and the tick and the word beside the
+               title already say which one is chosen. -->
+          <div
+            class="min-h-28 px-4 py-3 {index ? 'border-t border-line-thin' : ''}"
+            aria-current={selected ? 'true' : undefined}
+            data-edition="true"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <!-- The title is what identifies a pressing, so it wraps. -->
+              <p class="min-w-0 flex-1 text-body font-medium break-words text-ink">
+                {edition.title}
+              </p>
+              {#if selected}
+                <span class="flex shrink-0 items-center gap-1.5 text-meta text-ok">
+                  <Icon name="check" size={13} /> Selected
+                </span>
+              {:else}
+                <button
+                  class="tap shrink-0 rounded-control border border-line-thin px-2.5 py-1 text-meta text-ink-2 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
+                  disabled={pending}
+                  onclick={() => onselect(edition.musicbrainzReleaseId)}
+                >
+                  Use this
+                </button>
+              {/if}
+            </div>
+
+            <dl class="mt-2 flex flex-wrap gap-x-8 gap-y-2">
+              {#each facts(edition) as fact (fact.name)}
+                <div class="flex min-w-20 flex-col gap-0.5">
+                  <dt class="label">{fact.name}</dt>
+                  {#if fact.value}
+                    <dd class="numeric text-meta text-ink-2">{fact.value}</dd>
+                  {:else}
+                    <!-- ink-3 rather than ink-4: this line has to stay legible
+                         when the block is hovered onto the thick surface. -->
+                    <dd class="text-meta text-ink-3">Not recorded</dd>
+                  {/if}
+                </div>
+              {/each}
+              {#if selected && barcode}
+                <div class="flex min-w-20 flex-col gap-0.5">
+                  <dt class="label">Barcode</dt>
+                  <dd class="numeric text-meta text-ink-2">{barcode}</dd>
+                </div>
+              {/if}
+            </dl>
+
+            {#if selected && selectionReason}
+              <p class="mt-2 text-meta text-ink-3">Picked automatically: {selectionReason}.</p>
             {/if}
           </div>
-
-          <dl class="mt-2 flex flex-wrap gap-x-8 gap-y-2">
-            {#each facts(edition) as fact (fact.name)}
-              <div class="flex min-w-20 flex-col gap-0.5">
-                <dt class="label">{fact.name}</dt>
-                {#if fact.value}
-                  <dd class="numeric text-meta text-ink-2">{fact.value}</dd>
-                {:else}
-                  <!-- ink-3 rather than ink-4: this line has to stay legible
-                       when the block is hovered onto the thick surface. -->
-                  <dd class="text-meta text-ink-3">Not recorded</dd>
-                {/if}
-              </div>
-            {/each}
-            {#if selected && barcode}
-              <div class="flex min-w-20 flex-col gap-0.5">
-                <dt class="label">Barcode</dt>
-                <dd class="numeric text-meta text-ink-2">{barcode}</dd>
-              </div>
-            {/if}
-          </dl>
-
-          {#if selected && selectionReason}
-            <p class="mt-2 text-meta text-ink-3">Picked automatically: {selectionReason}.</p>
-          {/if}
-        </div>
-      {/each}
-      <!-- The pressing in use is on screen and the rest are not. Said once, at
-           the foot of the list, rather than in place of it. -->
-      {#if error}
-        <div class="border-t border-line-thin px-4 py-3">
-          <ErrorNote
-            {error}
-            bare
-            fallback="The other pressings of this release could not be read."
-            retry={retryEditions}
-          />
-        </div>
-      {/if}
+        {/each}
+        <!-- The pressing in use is on screen and the rest are not. Said once, at
+             the foot of the list, rather than in place of it. -->
+        {#if error}
+          <div class="border-t border-line-thin px-4 py-3">
+            <ErrorNote
+              {error}
+              bare
+              fallback="The other pressings of this release could not be read."
+              retry={retryEditions}
+            />
+          </div>
+        {/if}
+      </div>
     {/if}
-    </Settle>
-  </div>
+  </Settle>
 
   <!-- The answer under the control that asked for it. -->
   {#if selectError}

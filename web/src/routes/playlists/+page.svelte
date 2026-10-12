@@ -1,6 +1,6 @@
 <script lang="ts">
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import Skeleton from '$lib/components/Skeleton.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
@@ -144,6 +144,7 @@
   title={`Stop following “${removing?.name ?? ''}”?`}
   description="Schall stops tracking its songs. Songs already wanted stay wanted."
   action="Stop following"
+  keep="Keep following"
   onconfirm={() => removing && $remove.mutate(removing.id)}
 />
 
@@ -219,18 +220,12 @@
   {:else}
     <Settle pending={$playlists.isPending}>
       {#snippet placeholder()}
-        <ul
-          class="max-h-[calc(100dvh-11rem)] flex flex-col divide-y divide-line-thin overflow-hidden"
-          aria-busy="true"
-          aria-label="Loading playlists"
-        >
-          {#each Array.from({ length: playlistSkeletonCount }) as _, placeholderIndex (placeholderIndex)}
-            <li class="flex items-center gap-3 px-1 py-4" aria-hidden="true">
-              <Skeleton class="h-4 w-48" />
-              <Skeleton class="ml-auto h-4 w-36" />
-            </li>
-          {/each}
-        </ul>
+        <!-- The header strip and a covered row of the same height as the
+             list's own, so the rows do not move down or grow when it lands. -->
+        <div class="max-h-[calc(100dvh-11rem)] overflow-hidden">
+          <div class="h-7 border-b border-line-thin"></div>
+          <SkeletonRows count={playlistSkeletonCount} cover label="Loading playlists" />
+        </div>
       {/snippet}
       {#if items.length === 0}
         <EmptyPanel
