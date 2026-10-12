@@ -71,6 +71,22 @@ const invalidations: Record<string, string[][]> = {
 /** The shortest time between two rounds of invalidation. */
 export const NOTICE_GAP_MS = 1000;
 
+/** The shortest time between two reads of a count. */
+export const COUNT_GAP_MS = 10_000;
+
+// Counts: the navigation's badges and the Wishlist tab's figure. Four topics
+// reach them, and with downloads running the Artists page read the dashboard
+// four times in ten seconds for figures nobody watches change.
+const counts = [['dashboard'], ['wants', 'looking', 'count']];
+
+function startsWith(key: readonly unknown[], prefix: readonly unknown[]) {
+  return prefix.every((part, index) => key[index] === part);
+}
+
+function isCount(key: readonly unknown[]) {
+  return counts.some((count) => startsWith(key, count));
+}
+
 // connectEvents holds a server-sent event stream open and invalidates the views
 // a notice concerns. It returns the function that closes it.
 //
@@ -97,6 +113,27 @@ export function connectEvents(queryClient: QueryClient): () => void {
   const pending = new Map<string, string[]>();
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // The counts a round touched wait on a gap of their own.
+  const countsPending = new Map<string, string[]>();
+  let countsLast = 0;
+  let countsTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const flushCounts = () => {
+    countsTimer = undefined;
+    countsLast = Date.now();
+    const queryKeys = [...countsPending.values()];
+    countsPending.clear();
+    for (const queryKey of queryKeys) {
+      void queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+    }
+  };
+
+  const scheduleCounts = () => {
+    if (countsTimer !== undefined) return;
+    const wait = countsLast + COUNT_GAP_MS - Date.now();
+    if (wait <= 0) flushCounts();
+    else countsTimer = setTimeout(flushCounts, wait);
+  };
 
   const flush = () => {
     timer = undefined;
@@ -104,10 +141,18 @@ export function connectEvents(queryClient: QueryClient): () => void {
     const queryKeys = [...pending.values()];
     pending.clear();
     for (const queryKey of queryKeys) {
+      for (const count of counts) {
+        if (startsWith(count, queryKey)) countsPending.set(JSON.stringify(count), count);
+      }
+      if (isCount(queryKey)) continue;
       // A read already under way is answering the same question; starting it
       // again only throws away what it has done.
-      void queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+      void queryClient.invalidateQueries(
+        { queryKey, predicate: (query) => !isCount(query.queryKey) },
+        { cancelRefetch: false }
+      );
     }
+    if (countsPending.size) scheduleCounts();
   };
 
   for (const [topic, keys] of Object.entries(invalidations)) {
@@ -127,6 +172,7 @@ export function connectEvents(queryClient: QueryClient): () => void {
 
   return () => {
     clearTimeout(timer);
+    clearTimeout(countsTimer);
     source.close();
   };
 }

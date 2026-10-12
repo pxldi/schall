@@ -119,6 +119,19 @@ describe('the sizes a cover is offered at', () => {
     );
   });
 
+  // A browser starts fetching an image's src the moment it is set. Set before
+  // loading, sizes and srcset, it fetched the 500 pixel picture every time and
+  // the small sizes were never used.
+  it('is told it is lazy and offered its sizes before it is given a src', () => {
+    const { image } = draw({ src: '/api/v1/albums/abc/cover?cached=1' });
+
+    const names = [...(image()?.attributes ?? [])].map((attribute) => attribute.name);
+    const src = names.indexOf('src');
+    expect(src).toBeGreaterThan(names.indexOf('loading'));
+    expect(src).toBeGreaterThan(names.indexOf('sizes'));
+    expect(src).toBeGreaterThan(names.indexOf('srcset'));
+  });
+
   // `sizes="auto"` only works on a lazy image, and an eager one is the big
   // picture at the top of a page.
   it('offers only the stored picture when it loads eagerly', () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/svelte-query';
-import { NOTICE_GAP_MS, connectEvents } from '$lib/events';
+import { COUNT_GAP_MS, NOTICE_GAP_MS, connectEvents } from '$lib/events';
 
 /** A notice carries no state, so what there is to check is which views a topic
  * reaches. That is a table nobody reads while adding a page, which is how the
@@ -113,12 +113,14 @@ describe('connectEvents', () => {
 
     stream.announce('acquisitions');
 
+    // The counts are read after the views, on a gap of their own.
     expect(asked(invalidateQueries)).toEqual([
       'review-queue',
       'wants',
-      'dashboard',
       'global-search',
-      ...queue
+      ...queue,
+      'wants/looking/count',
+      'dashboard'
     ]);
   });
 
@@ -128,12 +130,7 @@ describe('connectEvents', () => {
 
     stream.announce('downloads');
 
-    expect(asked(invalidateQueries)).toEqual([
-      'downloads',
-      'dashboard',
-      'inbox-cleanups',
-      ...queue
-    ]);
+    expect(asked(invalidateQueries)).toEqual(['downloads', 'inbox-cleanups', ...queue, 'dashboard']);
   });
 
   // A poll every five seconds while anything downloads used to reach the
@@ -168,13 +165,30 @@ describe('connectEvents', () => {
 
       vi.advanceTimersByTime(NOTICE_GAP_MS);
 
-      expect(asked(invalidateQueries)).toEqual([
-        'artists',
-        'releases',
-        'dashboard',
-        'global-search',
-        ...queue
-      ]);
+      expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'global-search', ...queue]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // With downloads running, four topics reached the dashboard and the Artists
+  // page read it four times in ten seconds.
+  it('reads a count at most once in its own gap', () => {
+    vi.useFakeTimers();
+    try {
+      const { invalidateQueries, stream } = connect();
+
+      stream.announce('downloads');
+      invalidateQueries.mockClear();
+      for (let i = 0; i < 5; i++) {
+        stream.announce('downloads');
+        vi.advanceTimersByTime(NOTICE_GAP_MS);
+      }
+      expect(asked(invalidateQueries)).not.toContain('dashboard');
+
+      vi.advanceTimersByTime(COUNT_GAP_MS);
+
+      expect(asked(invalidateQueries).filter((key) => key === 'dashboard')).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -195,13 +209,7 @@ describe('connectEvents', () => {
 
     stream.announce('catalogue');
 
-    expect(asked(invalidateQueries)).toEqual([
-      'artists',
-      'releases',
-      'dashboard',
-      'global-search',
-      ...queue
-    ]);
+    expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'global-search', ...queue, 'dashboard']);
   });
 
   // The palette asks one question of everything at once, so anything that

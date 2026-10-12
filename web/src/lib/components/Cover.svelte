@@ -98,13 +98,16 @@
 </script>
 
 {#if !missing}
+  <!-- loading, sizes and srcset come before src. Svelte sets them in this
+       order, and an image whose src is set first starts fetching that src at
+       once, so the lazy 128 and 256 pixel covers were never chosen. -->
   <img
-    {src}
-    {srcset}
-    sizes={srcset ? 'auto, 500px' : undefined}
-    {alt}
     loading={eager ? 'eager' : 'lazy'}
     decoding="async"
+    sizes={srcset ? 'auto, 500px' : undefined}
+    {srcset}
+    {src}
+    {alt}
     data-state={stage}
     use:held
     onload={() => {

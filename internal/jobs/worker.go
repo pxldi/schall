@@ -361,6 +361,12 @@ const reapInterval = 10 * time.Minute
 // count of them in the navigation never went back to nothing on its own.
 const tidyInterval = 15 * time.Minute
 
+// tidyFirstAfter is when the first pass runs after start. Waiting the full
+// interval first meant a server restarted more often than every 15 minutes
+// never pruned anything; on 2026-10-12 it was restarted every half hour or so
+// and the jobs table kept growing.
+const tidyFirstAfter = time.Minute
+
 // reviveSpentAfter is how long a job that spent its attempts on something
 // unreachable waits before Schall tries it once more by itself.
 //
@@ -958,6 +964,7 @@ type Worker struct {
 	heartbeatEvery    time.Duration
 	reapEvery         time.Duration
 	tidyEvery         time.Duration
+	tidyFirst         time.Duration
 	// One reaper serves every lane. It runs independently of processing so two
 	// busy lanes cannot postpone recovery until one of their jobs finishes.
 	reaper sync.Once
@@ -977,6 +984,7 @@ func NewWorker(queue Queue, provider CatalogueProvider, logger zerolog.Logger, s
 		heartbeatEvery:    heartbeatInterval,
 		reapEvery:         reapInterval,
 		tidyEvery:         tidyInterval,
+		tidyFirst:         tidyFirstAfter,
 		now:               time.Now,
 	}
 	if len(scanners) > 0 {
@@ -1372,7 +1380,7 @@ func (worker *Worker) reapStalled(ctx context.Context) {
 // runTidy looks after the other end of the queue: the jobs that will not be
 // tried again unless somebody asks.
 func (worker *Worker) runTidy(ctx context.Context) {
-	for wait(ctx, worker.tidyEvery) {
+	for delay := worker.tidyFirst; wait(ctx, delay); delay = worker.tidyEvery {
 		worker.reviveSpent(ctx)
 		worker.forgetSpent(ctx)
 	}
