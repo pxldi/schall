@@ -22,11 +22,10 @@ describe('pressing + on a track nobody wants yet', () => {
     toggle({ onwant });
 
     const button = screen.getByRole('button', { name: 'Want Teardrop' });
-    expect(button.getAttribute('aria-pressed')).toBe('false');
     await fireEvent.click(button);
 
     expect(onwant).toHaveBeenCalledOnce();
-    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Remove Teardrop');
     answer();
   });
 
@@ -50,7 +49,7 @@ describe('pressing + on a track nobody wants yet', () => {
     const button = screen.getByRole('button', { name: 'Want Teardrop' });
     await fireEvent.click(button);
 
-    await waitFor(() => expect(button.getAttribute('aria-pressed')).toBe('false'));
+    await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Want Teardrop'));
   });
 });
 
@@ -74,14 +73,29 @@ describe('pressing a wanted track', () => {
     const onunwant = vi.fn();
     toggle({ wanted: true, onwant, onunwant });
 
-    const button = screen.getByRole('button', { name: 'Want Teardrop' });
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('title')).toBe('Remove Teardrop');
+    const button = screen.getByRole('button', { name: 'Remove Teardrop' });
     await fireEvent.click(button);
 
     expect(onunwant).toHaveBeenCalledOnce();
     expect(onwant).not.toHaveBeenCalled();
-    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Want Teardrop');
+  });
+});
+
+// The audit read "Remove Teardrop" as the tooltip over an accessible name of
+// "Want Teardrop": a screen reader said the opposite of what a press did.
+describe('the accessible name', () => {
+  it('names the press that removes a wanted track', () => {
+    toggle({ wanted: true });
+
+    expect(screen.getByRole('button', { name: 'Remove Teardrop' })).toBeTruthy();
+  });
+
+  it('agrees with the tooltip in both states', () => {
+    toggle({ wanted: true });
+    const button = screen.getByRole('button');
+
+    expect(button.getAttribute('aria-label')).toBe(button.getAttribute('title'));
   });
 });
 

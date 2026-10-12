@@ -615,7 +615,7 @@ describe('wanting a release from its tile', () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'GNX', { wantedTrackCount: 12 })], seen);
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove GNX' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual(
@@ -627,7 +627,7 @@ describe('wanting a release from its tile', () => {
   it('says when the files of a removed release are deleted', async () => {
     answeringReleases([releaseRow('r1', 'GNX', { wantedTrackCount: 12 })]);
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove GNX' }));
 
     expect(await screen.findByText(/^1 file deleted on .+\. Want it again to keep it\.$/)).toBeTruthy();
   });
@@ -635,16 +635,14 @@ describe('wanting a release from its tile', () => {
   it('counts a release the library holds whole as wanted', async () => {
     answeringReleases([releaseRow('r1', 'GNX', { ownedTrackCount: 12 })]);
     opened();
-    const toggle = await screen.findByRole('button', { name: 'Want GNX' });
-
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(await screen.findByRole('button', { name: 'Remove GNX' })).toBeTruthy();
   });
 
   it('removes a release the library holds whole', async () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'GNX', { ownedTrackCount: 12 })], seen);
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove GNX' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual(
@@ -667,7 +665,6 @@ describe('wanting a release from its tile', () => {
     answeringReleases([releaseRow('r1', 'GNX', leaving)], seen);
     opened();
     const toggle = await screen.findByRole('button', { name: 'Want GNX' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
     await fireEvent.click(toggle);
 
     await waitFor(() =>
@@ -789,8 +786,7 @@ describe('the popular tracks', () => {
       items: [track({ held: true, trackId: 't1', albumId: 'r1' })]
     });
     opened();
-    const toggle = await screen.findByRole('button', { name: 'Want HUMBLE.' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    const toggle = await screen.findByRole('button', { name: 'Remove HUMBLE.' });
     await fireEvent.click(toggle);
 
     await waitFor(() =>
@@ -806,7 +802,7 @@ describe('the popular tracks', () => {
       items: [track({ wantId: 'w1', wantStatus: 'pending' })]
     });
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove HUMBLE.' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual(
@@ -847,7 +843,6 @@ describe('the popular tracks', () => {
     });
     opened();
     const toggle = await screen.findByRole('button', { name: 'Want HUMBLE.' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
     await fireEvent.click(toggle);
 
     await waitFor(() =>
