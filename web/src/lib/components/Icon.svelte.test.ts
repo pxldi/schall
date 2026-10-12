@@ -10,11 +10,12 @@ describe('Icon', () => {
     expect(container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('draws the key line and the offset plate from the same shapes', () => {
+  it('draws one line in the text colour and no offset copy under it', () => {
     const { container } = render(Icon, { name: 'search' });
-    const [plate, key] = container.querySelectorAll('svg > g');
-    expect(plate.getAttribute('transform')).toBe('translate(1.6 1.6)');
-    expect(plate.querySelectorAll('path')).toHaveLength(key.querySelectorAll('path').length);
+    const layers = container.querySelectorAll('svg > g');
+    expect(layers).toHaveLength(1);
+    expect(layers[0].getAttribute('stroke')).toBe('currentColor');
+    expect(container.querySelector('[transform]')).toBeNull();
   });
 
   it('draws at the size it is asked for, in rem', () => {

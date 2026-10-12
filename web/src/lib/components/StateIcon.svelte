@@ -31,6 +31,6 @@
   };
 </script>
 
-<span class="inline-flex [--plate:currentColor] {tones[role]}" title={note ? `${label} · ${note}` : label} data-state={label}>
+<span class="inline-flex {tones[role]}" title={note ? `${label} · ${note}` : label} data-state={label}>
   <Icon name={icon} size="md" aria-label={label} />
 </span>
