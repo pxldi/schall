@@ -129,6 +129,14 @@ jobs:
         working-directory: web
         env:
           SCHALL_E2E_DATABASE_URL: postgres://schall:schall@127.0.0.1:5433/schall_e2e?sslmode=disable
+      # The screenshot tests, with the browser in Playwright's own image so
+      # the pixels match the baselines drawn by scripts/visual.sh anywhere else.
+      # On a failure the uploaded test-results hold each page's expected,
+      # actual and diff images.
+      - run: npm run test:visual
+        working-directory: web
+        env:
+          SCHALL_E2E_DATABASE_URL: postgres://schall:schall@127.0.0.1:5433/schall_e2e?sslmode=disable
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

@@ -397,7 +397,7 @@ describe('removing', () => {
     answering();
     opened();
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want The Rainbow' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove The Rainbow' }));
 
     expect(pressesSent()).toContainEqual({
       method: 'DELETE',
@@ -417,7 +417,6 @@ describe('removing', () => {
     opened();
 
     const toggle = await screen.findByRole('button', { name: 'Want The Rainbow' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
     await fireEvent.click(toggle);
 
     expect(pressesSent()).toContainEqual({

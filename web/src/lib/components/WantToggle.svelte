@@ -84,11 +84,15 @@
     xs: { round: 'size-6', pill: 'h-6 gap-0.5 pl-1.5 pr-2.5 text-meta', glyph: 'size-4' },
     sm: { round: 'size-7', pill: 'h-7 gap-0.5 pl-2 pr-3 text-meta', glyph: 'size-5' }
   };
-  const name = $derived(title ? `Want ${title}` : 'Want');
-  // The tooltip says what a press does, in both states. "Not wanted" on a
-  // wanted track read as the track's state, which is the opposite of true.
-  // Removing takes the want away, and a downloaded file goes 30 days later.
-  const hint = $derived(shown ? (title ? `Remove ${title}` : 'Remove') : name);
+  // The tooltip and the accessible name both say what a press does, in both
+  // states. "Not wanted" on a wanted track read as the track's state, which is
+  // the opposite of true. Removing takes the want away, and a downloaded file
+  // goes 30 days later. A name that changes with the state carries the state,
+  // so the button is not also marked pressed: a reader heard "Want Teardrop,
+  // pressed" over a tooltip saying "Remove Teardrop".
+  const hint = $derived(
+    shown ? (title ? `Remove ${title}` : 'Remove') : title ? `Want ${title}` : 'Want'
+  );
 </script>
 
 <button
@@ -103,8 +107,8 @@
   data-wanted={shown ? 'true' : 'false'}
   data-fresh={fresh ? 'true' : 'false'}
   data-reveal={reveal === 'all' ? 'all' : reveal ? 'true' : 'false'}
-  aria-pressed={shown}
-  aria-label={label ? undefined : name}
+  aria-pressed={label ? shown : undefined}
+  aria-label={label ? undefined : hint}
   aria-busy={inFlight}
   title={hint}
   {disabled}

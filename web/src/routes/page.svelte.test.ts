@@ -318,8 +318,7 @@ describe('the overview', () => {
     show();
     await screen.findByText('812');
     expect(screen.queryByText('Wanted')).toBeNull();
-    const toggle = screen.getByRole('button', { name: /All white/ });
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    const toggle = screen.getByRole('button', { name: 'Remove All white' });
     await fireEvent.click(toggle);
     await waitFor(() => {
       expect(sent.some((call) => call.path === '/api/v1/tracks/t2/wanted' && call.method === 'DELETE')).toBe(true);
