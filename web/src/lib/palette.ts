@@ -141,7 +141,9 @@ export function paletteCategories(
         meta: counted(artist.fileCount, 'file'),
         role: artist.followed ? 'ok' : 'idle',
         href: `/artists/${artist.id}`,
-        cover: { seed: artist.name }
+        // The photo the artists grid shows. An artist without one answers 404
+        // and the cover falls back to the drawn stand-in, as before.
+        cover: { src: `/api/v1/artists/${artist.id}/image`, seed: artist.name }
       }))
     },
     {
@@ -206,10 +208,17 @@ export function paletteCategories(
       rows: results.playlists.map((playlist) => ({
         id: `palette-playlists-${playlist.id}`,
         title: playlist.name,
-        subtitle: joined(
-          playlist.ownerName,
-          playlist.importedAt ? `Updated ${dayAndMonth(playlist.importedAt)}` : 'Not imported yet'
-        ),
+        // Schall writes the weekly and new-release lists itself; they are never
+        // imported, so "Not imported yet" was never true of them.
+        subtitle:
+          playlist.source === 'weekly' || playlist.source === 'new_releases'
+            ? 'Made by Schall'
+            : joined(
+                playlist.ownerName,
+                playlist.importedAt
+                  ? `Updated ${dayAndMonth(playlist.importedAt)}`
+                  : 'Not imported yet'
+              ),
         meta: counted(playlist.trackCount, 'track'),
         // A playlist is not in a state. Nothing is waiting on it and nothing is
         // wrong with it, so it takes the mark for having none.
