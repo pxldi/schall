@@ -128,6 +128,10 @@
         track.wantStatus !== 'acquired'
     ).length ?? 0
   );
+  // Missing tracks nobody has asked for yet. Wanting the release only adds
+  // these, so the button counts them: after wanting the last missing track it
+  // said "Want 1 missing" for a track that was already wanted.
+  const unwantedCount = $derived(missingCount - wantedCount);
   // Wanting a release creates one want per track the library does not have and
   // nothing else: no transfer starts here, and every copy the loop later fetches
   // is still proven by its audio before it enters the library. Pressing twice is
@@ -546,14 +550,16 @@
           {/if}
           Dismiss {missingCount === 1 ? 'it' : 'the rest'}
         </Button>
-        <Button disabled={$wantRelease.isPending} onclick={() => $wantRelease.mutate()}>
-          {#if $wantRelease.isPending}
-            <Icon name="busy" size="md" class="animate-spin" />
-          {:else}
-            <Icon name="want" size="md" />
-          {/if}
-          Want {missingCount} missing
-        </Button>
+        {#if unwantedCount > 0}
+          <Button disabled={$wantRelease.isPending} onclick={() => $wantRelease.mutate()}>
+            {#if $wantRelease.isPending}
+              <Icon name="busy" size="md" class="animate-spin" />
+            {:else}
+              <Icon name="want" size="md" />
+            {/if}
+            Want {unwantedCount} missing
+          </Button>
+        {/if}
       {/if}
     {/snippet}
   </Hero>

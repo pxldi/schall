@@ -280,3 +280,42 @@ describe('the track list fails to load', () => {
     expect(screen.queryByText('Importing the track list…')).toBeNull();
   });
 });
+
+describe('the want button', () => {
+  it('counts only the missing tracks nobody has wanted yet', async () => {
+    answering({
+      tracks: [
+        track({ id: 'd1000000-0000-4000-8000-000000000002', title: 'Eden', owned: false }),
+        track({
+          id: 'd1000000-0000-4000-8000-000000000003',
+          title: 'Desire',
+          owned: false,
+          wantStatus: 'searching',
+          wantId: 'aa000000-0000-4000-8000-000000000002'
+        })
+      ]
+    });
+    opened();
+
+    expect(await screen.findByRole('button', { name: /Want 1 missing/ })).toBeTruthy();
+  });
+
+  it('is left out once every missing track is wanted', async () => {
+    answering({
+      tracks: [
+        track(),
+        track({
+          id: 'd1000000-0000-4000-8000-000000000002',
+          title: 'Eden',
+          owned: false,
+          wantStatus: 'searching',
+          wantId: 'aa000000-0000-4000-8000-000000000002'
+        })
+      ]
+    });
+    opened();
+
+    await screen.findByText('Eden');
+    expect(screen.queryByRole('button', { name: /Want \d+ missing/ })).toBeNull();
+  });
+});
