@@ -87,13 +87,13 @@ typography:
     letterSpacing: "-0.025em"
   poster-m:
     fontFamily: "Bricolage Grotesque, 'Avenir Next', 'Segoe UI', sans-serif"
-    fontSize: "4rem"
+    fontSize: "clamp(2.75rem, 7vw, 4rem)"
     fontWeight: 800
     lineHeight: 0.86
     letterSpacing: "-0.05em"
   poster-l:
     fontFamily: "Bricolage Grotesque, 'Avenir Next', 'Segoe UI', sans-serif"
-    fontSize: "5.25rem"
+    fontSize: "clamp(3.25rem, 9vw, 5.25rem)"
     fontWeight: 800
     lineHeight: 0.84
     letterSpacing: "-0.055em"

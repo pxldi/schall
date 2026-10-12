@@ -576,7 +576,7 @@
 
 <!-- "Review" is the page's title, in the place every page keeps it; the song
      being decided heads the panel below. -->
-<Hero title="Review" size="xl" />
+<Hero title="Review" section />
 
 <!-- The queue and the question share one panel, the queue down its left. -->
 <div

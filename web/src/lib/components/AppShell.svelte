@@ -1,16 +1,17 @@
 <script lang="ts">
+  import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
+  import type { IconName } from '$lib/icons';
   import Icon from './Icon.svelte';
   import Print from './Print.svelte';
 
   let { children } = $props();
 
   // The chrome is a top bar sitting on the page's print (ADR Duoton): the
-  // wordmark, the seven destinations as pills, and search pushed right. Every
-  // destination prints its own name, so there are no tooltips, and there are
-  // no counts or state marks on it: what is waiting is read on the Overview and
+  // wordmark, the seven destinations as pills, and search pushed right. There
+  // are no counts or state marks on it: what is waiting is read on the Overview and
   // on the pages themselves. There is no phone form; the phone is served by the
   // native app, decided 2026-09-20.
   //
@@ -18,31 +19,50 @@
   // its own <h1>, visible or not. `<main>` is the landing spot for the skip
   // link, the first focusable element in the document.
 
-  const destinations = [
-    { href: '/', label: 'Overview' },
-    { href: '/artists', label: 'Artists' },
-    { href: '/playlists', label: 'Playlists' },
-    { href: '/downloads?view=open', label: 'Downloads' },
-    { href: '/review', label: 'Review' },
-    { href: '/library', label: 'Library' },
-    { href: '/settings/jobs', label: 'Settings' }
+  // Each destination has a Misprint icon. Below 1280px the bar shows the
+  // icons alone, named by a tooltip and by the link itself, so the seven still
+  // fit on one line.
+  const destinations: { href: string; label: string; icon: IconName }[] = [
+    { href: '/', label: 'Overview', icon: 'listen' },
+    { href: '/artists', label: 'Artists', icon: 'artists' },
+    { href: '/playlists', label: 'Playlists', icon: 'playlist' },
+    { href: '/downloads?view=open', label: 'Downloads', icon: 'download' },
+    { href: '/review', label: 'Review', icon: 'checklist' },
+    { href: '/library', label: 'Library', icon: 'library' },
+    { href: '/settings/jobs', label: 'Settings', icon: 'settings' }
   ];
 
-  // A release and a source run are reached from the library and belong to it,
-  // so the nav says so. They keep their own paths because they are things with
-  // addresses, not a view of a list.
+  // A destination is its first segment and nothing more. Two of the seven
+  // point deeper than that (Downloads names a filter, Settings names a
+  // category) because neither stops being that destination once the reader
+  // moves within it.
+  const rootOf = (href: string) => `/${href.split('?')[0].split('/')[1]}`;
+  const roots = destinations.map((destination) => rootOf(destination.href));
+
+  // A release and a source run have their own addresses and are reached from
+  // Artists, Playlists, Review and Library alike. The bar keeps the section the
+  // reader opened it from rather than jumping to Library; a release opened
+  // straight from a link belongs to Library.
+  let section = $state<string | null>(null);
+  afterNavigate(({ to }) => {
+    if (!to) return;
+    const root = rootOf(to.url.pathname);
+    if (root !== '/releases') section = roots.includes(root) ? root : null;
+  });
+
+  // The section a release belongs to, read before the address so the bar
+  // follows the remembered section whichever of the two changes.
+  const releaseRoot = $derived(section ?? '/library');
+
   function isActive(href: string) {
+    const fromSection = releaseRoot;
     const path = page.url.pathname;
     // The overview is the one destination whose address is a single slash, and
     // every other address starts with one. It is the open page only when it is
     // the whole address.
     if (href === '/') return path === '/';
-    // A destination is its first segment and nothing more. Two of the seven
-    // point deeper than that — Downloads names a filter, Settings names a
-    // category — because neither stops being that destination once the
-    // reader moves within it.
-    const root = `/${href.split('?')[0].split('/')[1]}`;
-    if (root === '/library' && path.startsWith('/releases')) return true;
+    const root = rootOf(href);
+    if (path.startsWith('/releases')) return root === fromSection;
     return path.startsWith(root);
   }
 
@@ -84,10 +104,10 @@
   </div>
 
   <header
-    class="topbar sticky top-0 z-30 flex h-[var(--topbar-height)] items-center gap-0.5 px-4 sm:px-6"
+    class="topbar sticky top-0 z-30 flex h-[var(--topbar-height)] items-center gap-0.5 px-4 lg:px-6"
     class:solid
   >
-    <a href="/" class="wordmark mr-4 text-[1.0625rem] text-ink" title="Build {__SCHALL_VERSION__}">schall</a>
+    <a href="/" class="wordmark mr-2 shrink-0 lg:mr-4 whitespace-nowrap text-[1.0625rem] text-ink" title="Build {__SCHALL_VERSION__}">schall</a>
     <nav class="flex min-w-0 items-center gap-0.5" aria-label="Sections">
       {#each destinations as destination (destination.href)}
         {@const active = isActive(destination.href)}
@@ -96,15 +116,19 @@
           class:active
           aria-current={active ? 'page' : undefined}
           class="topbar-item whitespace-nowrap"
+          title={destination.label}
         >
-          {destination.label}
+          <Icon name={destination.icon} size="sm" />
+          <span class="max-xl:sr-only">{destination.label}</span>
         </a>
       {/each}
     </nav>
 
-    <button class="topbar-search ml-auto" onclick={openSearch}>
+    <!-- Below 1024px the field folds to its icon, so the seven destinations
+         still fit on one line in half a screen. -->
+    <button class="topbar-search ml-auto shrink-0" onclick={openSearch} aria-label="Search">
       <Icon name="search" size="sm" />
-      <span>Search</span>
+      <span class="max-lg:hidden">Search</span>
     </button>
   </header>
 
