@@ -403,7 +403,11 @@
     interview: 'Interview',
     spokenword: 'Spoken word',
     audiobook: 'Audiobook',
-    broadcast: 'Broadcast'
+    broadcast: 'Broadcast',
+    // MusicBrainz's own primary type "Other". It holds music videos and the
+    // like, and Kendrick Lamar's "luther" sits there although it reads like a
+    // single. Naming it says the type came from MusicBrainz; it is not guessed.
+    other: 'Other'
   };
   function otherName(release: Release) {
     const qualifier = release.secondaryTypes?.find((type) => otherNames[type]);
@@ -731,7 +735,9 @@
                   <ReleaseTile
                     {release}
                     meta={meta(release, section.kind)}
-                    state={describe(release).text}
+                    state={release.albumType === 'other'
+                      ? `${describe(release).text} · MusicBrainz types it as Other`
+                      : describe(release).text}
                     owned={release.ownedTrackCount}
                     countable={countable(release)}
                     wanted={releaseWanted(release)}
