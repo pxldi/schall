@@ -412,6 +412,36 @@ describe('a filter that matches nothing', () => {
 });
 
 describe('a queue longer than one page', () => {
+  it('shows an empty kind at once when the count says there is none', async () => {
+    const first = want('copies');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/waveform')) return new Response(null, { status: 404 });
+        let body: unknown = {};
+        if (url.startsWith('/api/v1/review-queue')) {
+          const offset = Number(new URL(url, 'http://x').searchParams.get('offset'));
+          // Later pages never answer, as on a slow server.
+          if (offset) return new Promise<Response>(() => {});
+          body = { items: [first], total: 300, resolutions: 0, limit: 100, offset };
+        } else if (url.startsWith('/api/v1/downloads?')) {
+          body = { items: [], total: 0, limit: 100, offset: 0, counts: { open: 0, review: 0, questions: 0, imported: 0, discarded: 0, failed: 0, all: 0 } };
+        }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Version 0' }));
+    expect(await screen.findByText('Nothing of this kind')).toBeTruthy();
+    expect(screen.queryByLabelText('Reading more of the queue')).toBeNull();
+    expect(screen.queryByText('Loading more…')).toBeNull();
+  });
+
   it('keeps the loaded questions when the next page fails', async () => {
     const first = want('copies');
     vi.stubGlobal(
