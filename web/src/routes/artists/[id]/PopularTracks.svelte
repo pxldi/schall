@@ -1,3 +1,18 @@
+<script lang="ts" module>
+  import { api as popularAPI } from '$lib/api';
+
+  // Listen counts move over weeks and the server keeps them for a day, so an
+  // hour on this side saves the request on every visit back. Shared with the
+  // page, which starts the read beside the artist's own instead of after it.
+  export function popularOptions(artistID: string) {
+    return {
+      queryKey: ['artists', artistID, 'popular'],
+      queryFn: () => popularAPI.artistPopular(artistID),
+      staleTime: 60 * 60 * 1000
+    };
+  }
+</script>
+
 <script lang="ts">
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
@@ -20,15 +35,7 @@
   let { artistID, artistName }: { artistID: string; artistName: string } = $props();
 
   const queryClient = useQueryClient();
-  // Listen counts move over weeks and the server keeps them for a day, so an
-  // hour on this side saves the request on every visit back.
-  const popular = createQuery(
-    toStore(() => ({
-      queryKey: ['artists', artistID, 'popular'],
-      queryFn: () => api.artistPopular(artistID),
-      staleTime: 60 * 60 * 1000
-    }))
-  );
+  const popular = createQuery(toStore(() => popularOptions(artistID)));
 
   // Removing takes the want away at once, and a file Schall downloaded for the
   // recording is deleted 30 days later. Wanting it again before then keeps the
