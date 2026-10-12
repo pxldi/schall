@@ -888,6 +888,7 @@ func (api *API) listAcquisitionTargets(response http.ResponseWriter, request *ht
 			params.Statuses = append(params.Statuses, name)
 		}
 	}
+	params.Query = strings.TrimSpace(request.URL.Query().Get("q"))
 	if raw := strings.TrimSpace(request.URL.Query().Get("limit")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 || value > 200 {

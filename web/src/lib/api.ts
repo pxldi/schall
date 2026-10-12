@@ -1037,9 +1037,12 @@ export const api = {
   // The wants themselves, in the states asked for. The screen that shows the
   // ones being looked for asks for three states in one request, so that the
   // figure beside the list and the list under it are one answer.
-  wants: (filters: { statuses?: readonly string[]; limit?: number; offset?: number } = {}) => {
+  wants: (
+    filters: { statuses?: readonly string[]; query?: string; limit?: number; offset?: number } = {}
+  ) => {
     const parameters = new URLSearchParams();
     if (filters.statuses?.length) parameters.set('status', filters.statuses.join(','));
+    if (filters.query?.trim()) parameters.set('q', filters.query.trim());
     if (filters.limit) parameters.set('limit', String(filters.limit));
     if (filters.offset) parameters.set('offset', String(filters.offset));
     const query = parameters.toString();

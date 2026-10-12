@@ -81,11 +81,11 @@ function answering(
   );
 }
 
-function opened() {
+function opened(props: { query?: string } = {}) {
   // The client is per test: a cache shared between them would answer the second
   // one out of the first one's list.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(WantsTab, undefined, {
+  return render(WantsTab, props, {
     wrapper: QueryClientProvider,
     wrapperProps: { client }
   });
@@ -154,6 +154,47 @@ describe('the wants being looked for', () => {
     opened();
 
     expect(await screen.findByText('Sample retry in 2d')).toBeTruthy();
+  });
+
+  // 1,187 rows are 48 pages, so the filter asks the server rather than
+  // narrowing the 25 on screen.
+  it('asks the server for what was typed in the filter', async () => {
+    answering({ looking: [want()] });
+
+    opened({ query: ' money trees ' });
+
+    await screen.findByText('Talk Talk — Ascension Day');
+    expect(asked.some((path) => path.includes('q=money+trees'))).toBe(true);
+  });
+
+  it('says a search found nothing rather than that nothing is wanted', async () => {
+    answering({ looking: [] });
+
+    opened({ query: 'nothing like it' });
+
+    expect(await screen.findByText('Nothing matches that search')).toBeTruthy();
+  });
+
+  // Every row on the wishlist is not in the library yet.
+  it('drops the sentence every row on the wishlist would repeat', async () => {
+    answering({
+      looking: [want({ summary: 'Not in your library yet. The next copy will be tried.' })]
+    });
+
+    opened();
+
+    expect(await screen.findByText('The next copy will be tried.')).toBeTruthy();
+    expect(screen.queryByText(/Not in your library yet/)).toBeNull();
+  });
+
+  // The server's clock ran a moment ahead of the browser's and the row read
+  // "tried in 0s".
+  it('reads a look recorded a moment ahead of the browser clock as just now', async () => {
+    answering({ looking: [want({ lastAttemptAt: new Date(Date.now() + 800).toISOString() })] });
+
+    opened();
+
+    expect(await screen.findByText('tried just now')).toBeTruthy();
   });
 
   it('marks a want whose copy the library calls something else as needing a person', async () => {
@@ -349,7 +390,7 @@ describe('the wants being looked for', () => {
 // searching.
 describe('the poll for the wants list', () => {
   function refetchIntervalOf(client: QueryClient) {
-    const query = client.getQueryCache().find({ queryKey: ['wants', 'list', 'looking', 0] });
+    const query = client.getQueryCache().find({ queryKey: ['wants', 'list', 'looking', '', 0] });
     if (!query) throw new Error('the wants list query was never created');
     const options = query.options as { refetchInterval?: (q: Query<AcquisitionTargets>) => number | false };
     if (!options.refetchInterval) throw new Error('refetchInterval was not set');

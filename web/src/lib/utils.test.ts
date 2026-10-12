@@ -9,7 +9,8 @@ import {
   fileStanding,
   formatDuration,
   matchMethodName,
-  relativeTime
+  relativeTime,
+  sinceTime
 } from '$lib/utils';
 
 // Writing the address bar is SvelteKit's to do, and the router is the boundary
@@ -225,6 +226,20 @@ describe('relativeTime', () => {
   it('says nothing at all about a time that is not there', () => {
     expect(relativeTime(null, at)).toBe('');
     expect(relativeTime('not a time', at)).toBe('');
+  });
+});
+
+// A look already taken, recorded by a server clock a moment ahead of the
+// browser's, read as `tried in 0s` on the wishlist.
+describe('sinceTime', () => {
+  const at = new Date('2026-08-07T14:22:18Z').getTime();
+
+  it('reads a time a moment ahead of the clock as just now', () => {
+    expect(sinceTime(new Date(at + 400).toISOString(), at)).toBe('just now');
+  });
+
+  it('counts back like relativeTime', () => {
+    expect(sinceTime(new Date(at - 3 * 60_000).toISOString(), at)).toBe('3m ago');
   });
 });
 
