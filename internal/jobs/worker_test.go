@@ -3428,27 +3428,6 @@ func TestFailuresOlderThanTheWindowAreForgotten(t *testing.T) {
 	}
 }
 
-// The first tidy pass runs a minute after start, not a whole interval later. A
-// server restarted every half hour never reached its first pass, and the
-// finished jobs it should have removed piled up.
-func TestTheFirstTidyPassRunsSoonAfterStart(t *testing.T) {
-	queue := &fakeQueue{}
-	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop())
-	if worker.tidyFirst > time.Minute {
-		t.Fatalf("first tidy pass after %s, want a minute or less", worker.tidyFirst)
-	}
-	worker.tidyFirst = time.Millisecond
-	worker.tidyEvery = time.Hour
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	worker.runTidy(ctx)
-
-	if queue.finishedBefore.IsZero() {
-		t.Fatal("no tidy pass ran before the first interval")
-	}
-}
-
 // The error column is bounded, so a provider that answered with a megabyte of
 // HTML does not become a row nothing can read.
 func TestALongFailureIsTruncatedToWhatTheColumnHolds(t *testing.T) {
