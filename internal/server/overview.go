@@ -36,6 +36,7 @@ type overviewPlayed struct {
 	RecordingMBID *string `json:"recordingMbid"`
 	CoverURL      *string `json:"coverUrl"`
 	TrackID       *string `json:"trackId"`
+	ReleaseID     *string `json:"releaseId"`
 	InLibrary     bool    `json:"inLibrary"`
 	Wanted        bool    `json:"wanted"`
 }
@@ -43,6 +44,7 @@ type overviewPlayed struct {
 type overviewArtist struct {
 	Name       string  `json:"name"`
 	ArtistMBID *string `json:"artistMbid"`
+	ArtistID   *string `json:"artistId"`
 	Listens    int64   `json:"listens"`
 	PictureURL *string `json:"pictureUrl"`
 }
@@ -52,6 +54,7 @@ type overviewAlbum struct {
 	Artist      string  `json:"artist"`
 	Listens     int64   `json:"listens"`
 	ReleaseMBID *string `json:"releaseMbid"`
+	ReleaseID   *string `json:"releaseId"`
 	CoverURL    *string `json:"coverUrl"`
 }
 
@@ -95,11 +98,12 @@ type overviewMonth struct {
 }
 
 type overviewAdded struct {
-	Title    string    `json:"title"`
-	Artist   string    `json:"artist"`
-	AddedAt  time.Time `json:"addedAt"`
-	TrackID  *string   `json:"trackId"`
-	CoverURL *string   `json:"coverUrl"`
+	Title     string    `json:"title"`
+	Artist    string    `json:"artist"`
+	AddedAt   time.Time `json:"addedAt"`
+	TrackID   *string   `json:"trackId"`
+	ReleaseID *string   `json:"releaseId"`
+	CoverURL  *string   `json:"coverUrl"`
 	// Inks are the stored inks of the release whose cover CoverURL names, so
 	// the page is printed in them as soon as it arrives rather than after
 	// the browser has read the picture. Null otherwise.
@@ -156,6 +160,7 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 			RecordingMBID: text(row.RecordingMBID),
 			CoverURL:      listenCoverURL(row.AlbumID, row.HasCover, row.FileID, row.CAAReleaseMBID, row.ReleaseMBID),
 			TrackID:       uuidString(row.TrackID),
+			ReleaseID:     uuidString(row.ReleaseID),
 			InLibrary:     row.InLibrary,
 			Wanted:        row.Wanted,
 		})
@@ -168,7 +173,8 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 			picture = &s
 		}
 		out.Listening.TopArtists = append(out.Listening.TopArtists, overviewArtist{
-			Name: row.Name, ArtistMBID: text(row.ArtistMBID), Listens: row.Listens, PictureURL: picture,
+			Name: row.Name, ArtistMBID: text(row.ArtistMBID), ArtistID: uuidString(row.PageID),
+			Listens: row.Listens, PictureURL: picture,
 		})
 	}
 	out.Listening.WhenYouListen = heat(data.Heat)
@@ -177,6 +183,7 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 		out.Listening.TopAlbums = append(out.Listening.TopAlbums, overviewAlbum{
 			Title: row.Title, Artist: row.Artist, Listens: row.Listens,
 			ReleaseMBID: text(row.ReleaseMBID),
+			ReleaseID:   uuidString(row.AlbumID),
 			CoverURL:    coverArchiveURL(row.CAAReleaseMBID, row.ReleaseMBID),
 		})
 	}
@@ -219,8 +226,9 @@ func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 	for _, row := range data.RecentlyAdded {
 		added := overviewAdded{
 			Title: row.Title, Artist: row.Artist, AddedAt: row.AddedAt,
-			TrackID:  uuidString(row.TrackID),
-			CoverURL: listenCoverURL(row.AlbumID, row.HasCover, row.FileID, pgtype.Text{}, pgtype.Text{}),
+			TrackID:   uuidString(row.TrackID),
+			ReleaseID: uuidString(row.AlbumID),
+			CoverURL:  listenCoverURL(row.AlbumID, row.HasCover, row.FileID, pgtype.Text{}, pgtype.Text{}),
 		}
 		if row.HasCover && row.AlbumID.Valid {
 			added.Inks = rowInks(inks, uuidFromPg(row.AlbumID))

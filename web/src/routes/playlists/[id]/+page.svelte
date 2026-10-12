@@ -12,6 +12,7 @@
   import WantToggle from '$lib/components/WantToggle.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import StateStrip from '$lib/components/StateStrip.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
   import { entryState, ownedOf, type EntryRole } from '$lib/playlists';
@@ -389,6 +390,11 @@
            page is opened for — whether each song is held, wanted or still being
            resolved — sat off the right edge unseen. The artist moves under the
            title in the same cell, which is where a phone reads it anyway. -->
+      {#if entries.length > 1}
+        <div class="px-4 pb-4">
+          <StateStrip items={entries.map((entry) => ({ ...entry, state: entryState(entry) }))} />
+        </div>
+      {/if}
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-left md:min-w-[640px]">
           <thead>
@@ -406,7 +412,11 @@
               {@const state = entryState(entry)}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
-              <tr class="want-row {state.note ? '' : 'border-b border-line-thin last:border-b-0'}">
+              {@const addressable = !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
+              <tr
+                id="entry-{entry.id}"
+                class="want-row scroll-mt-24 {state.note || addressable ? '' : 'border-b border-line-thin last:border-b-0'}"
+              >
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{entry.position}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
                   <span class="block truncate">{entry.title}</span>
@@ -464,32 +474,29 @@
                   {/if}
                 </td>
               </tr>
-              {#if state.note}
+              {#if state.note || addressable}
+                <!-- One line under the row: what happened, then what can be
+                     done about it. "Use address" is a link in that line and
+                     opens its form below it. -->
                 <tr class="border-b border-line-thin last:border-b-0">
                   <td></td>
-                  <!-- The note says what happened; the form beside it is the only
-                       row on this page whose dead end somebody can do something
-                       about, and it is offered nowhere else. -->
                   <td class="px-3 pb-2" colspan="5">
-                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span class="text-meta text-ink-3">{state.note}</span>
+                    <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      {#if state.note}
+                        <span class="text-meta text-ink-3">{state.note}</span>
+                      {/if}
                       {#if entry.musicbrainzSeed}
                         <AddToMusicBrainz seed={entry.musicbrainzSeed} />
                       {/if}
+                      {#if addressable}
+                        <UseAddress
+                          targetId={entry.targetId!}
+                          entryTitle={entry.title}
+                          entryArtist={entry.artist}
+                          entryDurationMs={entry.durationMs}
+                        />
+                      {/if}
                     </span>
-                  </td>
-                </tr>
-              {/if}
-              {#if entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
-                <tr class="border-b border-line-thin last:border-b-0">
-                  <td></td>
-                  <td class="px-3 pb-2" colspan="5">
-                    <UseAddress
-                      targetId={entry.targetId}
-                      entryTitle={entry.title}
-                      entryArtist={entry.artist}
-                      entryDurationMs={entry.durationMs}
-                    />
                   </td>
                 </tr>
               {/if}
