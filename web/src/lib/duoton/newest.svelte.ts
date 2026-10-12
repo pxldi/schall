@@ -16,7 +16,15 @@ export function useNewestPrint(options: Omit<PagePrint, 'covers'> & { count?: nu
   );
   const { count = 6, ...rest } = options;
   usePagePrint(() => {
-    const added = overview.current.data?.recentlyAdded ?? [];
+    // Recently added lists tracks, and several tracks of one album arrive
+    // together, so the same cover was printed twice side by side.
+    const seen = new Set<string>();
+    const added = (overview.current.data?.recentlyAdded ?? []).filter((item) => {
+      const key = item.coverUrl ?? item.releaseId ?? `${item.artist} ${item.title}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     return {
       ...rest,
       covers: added
