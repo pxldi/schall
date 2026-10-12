@@ -531,3 +531,30 @@ describe('a peer that asked something', () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe('a failed poll', () => {
+  it('keeps the rows it already has', async () => {
+    let failing = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/downloads') {
+          if (failing) return new Response(JSON.stringify({ detail: 'refused' }), { status: 400 });
+          return new Response(JSON.stringify(listing()), { status: 200 });
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      })
+    );
+    const client = opened();
+    await screen.findByRole('article');
+
+    failing = true;
+    await client.refetchQueries({ queryKey: ['downloads', 'list'] });
+
+    await vi.waitFor(() =>
+      expect(client.getQueryCache().findAll({ queryKey: ['downloads', 'list'] })[0]?.state.status).toBe('error')
+    );
+    expect(screen.getByRole('article')).toBeTruthy();
+  });
+});

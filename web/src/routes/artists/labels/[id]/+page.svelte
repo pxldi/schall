@@ -13,6 +13,7 @@
   import Button from '$lib/components/Button.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Cover from '$lib/components/Cover.svelte';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -62,44 +63,49 @@
 
 <svelte:head><title>{label ? `${label.name} · Schall` : 'Label · Schall'}</title></svelte:head>
 
-{#if label}
-  <Hero title={label.name} size={heroSize}>
-    {#snippet back()}
-      <BackLink fallback="/artists/labels" label="Labels" />
-    {/snippet}
-    {#snippet sub()}
-      <span>
-        <b class="numeric font-semibold text-ink">{releases.length}</b>
-        {releases.length === 1 ? 'release' : 'releases'}
-      </span>
-      {#if label.type}<span>{label.type}</span>{/if}
-      {#if label.country}<span>{label.country}</span>{/if}
-      <span>
-        {label.lastRefreshedAt ? `updated ${calendarDate(label.lastRefreshedAt)}` : 'not refreshed yet'}
-      </span>
-    {/snippet}
-  </Hero>
-{:else if missing}
-  <Hero title="Label not found" size="m">
-    {#snippet back()}
-      <BackLink fallback="/artists/labels" label="Labels" />
-    {/snippet}
-    {#snippet sub()}
-      <span>Schall has no label at this address. The link may be old, or the label was removed.</span>
-    {/snippet}
-  </Hero>
-{:else if $detail.isPending}
-  <section
-    class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
-    style="min-height: calc(var(--print-height) - var(--topbar-height));"
-    aria-hidden="true"
-  >
-    <Skeleton class="h-16 w-96 max-w-full" />
-    <Skeleton class="h-4 w-56" />
-  </section>
-{:else}
-  <h1 class="sr-only">Label</h1>
-{/if}
+<!-- The hero settles out of its skeleton like the releases under it, so the
+     title does not cut in over the boxes. -->
+<Settle pending={$detail.isPending}>
+  {#snippet placeholder()}
+    <section
+      class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
+      style="min-height: calc(var(--print-height) - var(--topbar-height));"
+      aria-hidden="true"
+    >
+      <Skeleton class="h-16 w-96 max-w-full" />
+      <Skeleton class="h-4 w-56" />
+    </section>
+  {/snippet}
+  {#if label}
+    <Hero title={label.name} size={heroSize}>
+      {#snippet back()}
+        <BackLink fallback="/artists/labels" label="Labels" />
+      {/snippet}
+      {#snippet sub()}
+        <span>
+          <b class="numeric font-semibold text-ink">{releases.length}</b>
+          {releases.length === 1 ? 'release' : 'releases'}
+        </span>
+        {#if label.type}<span>{label.type}</span>{/if}
+        {#if label.country}<span>{label.country}</span>{/if}
+        <span>
+          {label.lastRefreshedAt ? `updated ${calendarDate(label.lastRefreshedAt)}` : 'not refreshed yet'}
+        </span>
+      {/snippet}
+    </Hero>
+  {:else if missing}
+    <Hero title="Label not found" size="m">
+      {#snippet back()}
+        <BackLink fallback="/artists/labels" label="Labels" />
+      {/snippet}
+      {#snippet sub()}
+        <span>Schall has no label at this address. The link may be old, or the label was removed.</span>
+      {/snippet}
+    </Hero>
+  {:else}
+    <h1 class="sr-only">Label</h1>
+  {/if}
+</Settle>
 
 <div class="flex flex-col gap-4 px-4 py-5 sm:px-6">
   {#if missing}
@@ -124,7 +130,13 @@
         </div>
       {/snippet}
       {#if releases.length === 0}
-        <p class="text-body text-ink-3">Nothing published yet, or not fetched yet.</p>
+        <EmptyPanel role="idle" heading={label?.lastRefreshedAt ? 'No releases' : 'Not fetched yet'}>
+          <p class="text-body text-ink-2">
+            {label?.lastRefreshedAt
+              ? 'MusicBrainz lists nothing published by this label.'
+              : 'Schall has not read this label from MusicBrainz yet.'}
+          </p>
+        </EmptyPanel>
       {:else}
         <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
           {#each releases as release (release.id)}

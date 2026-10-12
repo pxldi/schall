@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
@@ -9,6 +9,7 @@
   import Button from './Button.svelte';
   import CyclingPlaceholder from './CyclingPlaceholder.svelte';
   import ErrorNote from './ErrorNote.svelte';
+  import SkeletonRows from './SkeletonRows.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -34,7 +35,10 @@
       queryKey: ['label-search', debouncedLabelName],
       queryFn: () => api.searchLabels(debouncedLabelName),
       enabled: debouncedLabelName.length >= 2,
-      staleTime: 5 * 60 * 1000
+      staleTime: 5 * 60 * 1000,
+      // The last answer stays while the next term is asked, so the list does
+      // not drop to one line and grow back on every word typed.
+      placeholderData: keepPreviousData
     }))
   );
 
@@ -241,8 +245,10 @@
                     bare
                   />
                 </div>
-              {:else if $labelSearch.isPending}
-                <p class="px-3 py-4 text-center text-body text-ink-3">Searching…</p>
+              {:else if $labelSearch.isPending || ($labelSearch.isPlaceholderData && !candidates.length)}
+                <!-- Only the first search, or one after an empty answer, has no
+                     rows to keep. -->
+                <SkeletonRows count={4} label="Searching labels" />
               {:else if candidates.length}
                 {#each candidates as result (result.musicbrainzId)}
                   <button

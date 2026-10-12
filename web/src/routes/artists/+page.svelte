@@ -100,10 +100,20 @@
     }))
   );
 
-  const genreChoices = $derived([
-    { value: '', label: 'Any genre' },
-    ...($genres.data?.items ?? []).map((name) => ({ value: name, label: name }))
-  ]);
+  // A failed read leaves the picker with one choice. Its label says the list
+  // is missing, so the reader does not take "Any genre" alone for a catalogue
+  // with no genres. A genre already chosen from the address stays shown.
+  const genreChoices = $derived(
+    $genres.isError && !$genres.data
+      ? [
+          { value: '', label: 'Genres unavailable' },
+          ...(genre ? [{ value: genre, label: genre }] : [])
+        ]
+      : [
+          { value: '', label: 'Any genre' },
+          ...($genres.data?.items ?? []).map((name) => ({ value: name, label: name }))
+        ]
+  );
 
   // The Labels chip's own count. Labels are not paged, so the same list the
   // labels page reads is small enough to fetch here too, and the two pages
@@ -326,6 +336,9 @@
     <span>
       {#if $dashboard.data}
         <b class="numeric font-semibold text-ink">{followedCount.toLocaleString()}</b> followed
+      {:else if $dashboard.isError}
+        <!-- A failed read has no count to wait for; the skeleton would pulse forever. -->
+        <b class="numeric font-semibold text-ink">–</b> followed
       {:else}
         <Skeleton class="numeric inline-block h-2.5 w-[2ch]" />
         followed

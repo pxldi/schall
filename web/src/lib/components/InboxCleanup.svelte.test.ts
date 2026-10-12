@@ -111,5 +111,7 @@ describe('InboxCleanup', () => {
 
     await screen.findByText(/could not be removed/);
     expect(screen.getByText(/12,997 files .* deleted/)).toBeTruthy();
+    // The recorded sentence sits behind the note's disclosure, not in front.
+    expect(screen.getByText('What the server said')).toBeTruthy();
   });
 });

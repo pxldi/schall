@@ -103,7 +103,17 @@ describe('the setting', () => {
     opened();
 
     expect(await screen.findByText('Transcode after import')).toBeTruthy();
-    expect(screen.getByText('off')).toBeTruthy();
+    expect(await screen.findByText('off')).toBeTruthy();
+  });
+
+  it('says neither off nor nothing to shrink before the reads answer', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    opened();
+
+    expect(await screen.findByText('Transcode after import')).toBeTruthy();
+    expect(screen.queryByText('off')).toBeNull();
+    expect(screen.queryByText(/no files in the library need to be shrunk/)).toBeNull();
+    expect(screen.queryByText('turn re-encoding on above to use this')).toBeNull();
   });
 
   it('says when it runs and when the original is deleted', async () => {
@@ -263,6 +273,24 @@ describe('transcoding the existing library', () => {
     })) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(await screen.findByText('turn re-encoding on above to use this')).toBeTruthy();
+  });
+
+  it('says the pass could not be read rather than that nothing needs shrinking', async () => {
+    storedSettings = settings({ transcodeEnabled: true });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/settings/imports') {
+          return new Response(JSON.stringify(storedSettings), { status: 200 });
+        }
+        return new Response(JSON.stringify({ title: 'boom' }), { status: 500 });
+      })
+    );
+    opened();
+
+    expect(await screen.findByText('The library pass could not be read.')).toBeTruthy();
+    expect(screen.queryByText(/no files in the library need to be shrunk/)).toBeNull();
   });
 
   it('shows progress while a pass is running', async () => {

@@ -14,7 +14,8 @@
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { clockTime, elapsedInWords, relativeTime } from '$lib/utils';
 
   // Everything Schall does runs through one PostgreSQL job queue, and this is
@@ -351,7 +352,9 @@
   const runningTotal = $derived(lanes.reduce((sum, lane) => sum + lane.runningCount, 0));
   const queuedTotal = $derived(lanes.reduce((sum, lane) => sum + lane.queuedCount, 0));
 
-  const placeholderRowCount = 30;
+  // A few rows in the shape of the real ones, not a screenful: thirty that
+  // collapsed to the five a queue usually holds moved everything below them.
+  const placeholderRowCount = 4;
 
   // --- Cancel ---
 
@@ -754,7 +757,7 @@
              as a read nothing has answered yet. -->
         {#if $queue.isPending}
           loading…
-        {:else if $queue.isError}
+        {:else if $queue.isError && !$queue.data}
           Unavailable
         {:else}
           {lanes.length} {lanes.length === 1 ? 'lane' : 'lanes'} ·
@@ -763,34 +766,29 @@
       </span>
     </div>
 
-    {#if $queue.isPending}
-      <div
-        class="flex flex-col gap-[26px]"
-        style="max-height: calc(100dvh - 16rem); overflow: hidden;"
-        aria-hidden="true"
-      >
-        <div>
-          <span class="label mb-1 block border-b border-line-thin pb-2">
-            Search lane
-            <span class="numeric ml-2 tracking-normal text-ink-4">0 running · 0 queued</span>
-          </span>
-          <div class="flex flex-col">
-            {#each Array(placeholderRowCount) as _, index (index)}
-              <div class="border-b border-line-thin last:border-b-0">
-                <div class="flex items-center gap-3 rounded-row px-3 py-2">
-                  <span class="h-5 min-w-0 flex-1 rounded-row bg-surface-regular"></span>
-                  <span class="h-5 w-16 rounded-row bg-surface-regular"></span>
-                  <span class="h-4 w-12 rounded-row bg-surface-regular"></span>
-                  <span class="h-4 min-w-0 flex-1 rounded-row bg-surface-regular"></span>
-                  <span class="h-7 w-16 rounded-row bg-surface-regular"></span>
-                </div>
+    <Settle pending={$queue.isPending}>
+      {#snippet placeholder()}
+        <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading the queue">
+          <span class="mb-1 block border-b border-line-thin pb-2"><Skeleton class="h-3.5 w-40" /></span>
+          {#each Array(placeholderRowCount) as _, index (index)}
+            <div class="border-b border-line-thin last:border-b-0">
+              <div class="flex items-center gap-3 rounded-row px-3 py-2">
+                <Skeleton class="h-5 min-w-0 flex-1" />
+                <Skeleton class="h-5 w-16" />
+                <Skeleton class="h-4 w-12" />
+                <Skeleton class="h-4 min-w-0 flex-1" />
+                <Skeleton class="h-7 w-16" />
               </div>
-            {/each}
-          </div>
+            </div>
+          {/each}
         </div>
-      </div>
-    {:else if $queue.error}
-      {@render Refused(($queue.error as Error).message)}
+      {/snippet}
+    {#if $queue.isError && $queue.data}
+      <!-- A poll that failed keeps the rows it last read on screen. -->
+      <div class="mb-3">{@render Refused($queue.error, () => $queue.refetch())}</div>
+    {/if}
+    {#if $queue.isError && !$queue.data}
+      {@render Refused($queue.error, () => $queue.refetch())}
     {:else if quiet}
       <!-- An empty queue is the healthy state, so it takes the ok role and says
            so plainly. It carries no action: the operator did not come here to
@@ -949,6 +947,7 @@
         </p>
       {/if}
     {/if}
+    </Settle>
   </section>
 
   <!-- ── Failed for good ──────────────────────────────────────────────── -->
@@ -961,25 +960,26 @@
       <span class="text-meta text-ink-4">forgotten after 14 days</span>
     </div>
 
-    {#if $failed.isPending}
-      <div
-        class="flex flex-col"
-        style="max-height: calc(100dvh - 16rem); overflow: hidden;"
-        aria-hidden="true"
-      >
-        {#each Array(placeholderRowCount) as _, index (index)}
-          <div class="border-b border-line-thin py-2.5 last:border-b-0">
-            <div class="flex items-start gap-3">
-              <span class="h-5 min-w-0 flex-1 rounded-row bg-surface-regular"></span>
-              <span class="h-7 w-16 rounded-row bg-surface-regular"></span>
+    <Settle pending={$failed.isPending}>
+      {#snippet placeholder()}
+        <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading failed jobs">
+          {#each Array(placeholderRowCount) as _, index (index)}
+            <div class="border-b border-line-thin py-2.5 last:border-b-0">
+              <div class="flex items-start gap-3">
+                <Skeleton class="h-5 min-w-0 flex-1" />
+                <Skeleton class="h-7 w-16" />
+              </div>
             </div>
-          </div>
-        {/each}
-      </div>
-    {:else if $failed.error}
-      {@render Refused(($failed.error as Error).message)}
+          {/each}
+        </div>
+      {/snippet}
+    {#if $failed.isError && $failed.data}
+      <div class="mb-3">{@render Refused($failed.error, () => $failed.refetch())}</div>
+    {/if}
+    {#if $failed.isError && !$failed.data}
+      {@render Refused($failed.error, () => $failed.refetch())}
     {:else if causes.length === 0}
-      <p class="text-meta leading-[1.65] text-ink-2">Nothing has spent its attempts.</p>
+      <EmptyPanel role="ok" level={3} heading="Nothing has spent its attempts" />
     {:else}
       <!-- One row per cause, not per job. Seventy-one jobs stopped by one
            outage are one fact, and seventy-one rows saying it seventy-one times
@@ -1130,6 +1130,7 @@
         </p>
       {/if}
     {/if}
+    </Settle>
   </section>
 
   <!-- ── The sweep pulse ──────────────────────────────────────────────── -->
@@ -1140,31 +1141,34 @@
          sweeps, so it is called that. -->
     <h2 class="font-display text-lead font-bold text-ink mb-[18px] block border-b border-line-thin pb-2">Sweeps</h2>
 
-    {#if $schedule.isPending}
-      <div
-        class="flex flex-col"
-        style="max-height: calc(100dvh - 16rem); overflow: hidden;"
-        aria-hidden="true"
-      >
-        <div
-          class="hidden border-b border-line-thin px-3 pb-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:items-center md:gap-x-3"
-        >
-          <span class="label">Sweep</span>
-          <span class="label text-right">Last run</span>
-          <span class="label text-right">Next</span>
-        </div>
-        {#each Array(placeholderRowCount) as _, index (index)}
+    <Settle pending={$schedule.isPending}>
+      {#snippet placeholder()}
+        <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading the sweeps">
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:gap-y-0"
+            class="hidden border-b border-line-thin px-3 pb-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:items-center md:gap-x-3"
           >
-            <span class="h-9 min-w-0 flex-1 rounded-row bg-surface-regular"></span>
-            <span class="h-7 w-24 rounded-row bg-surface-regular"></span>
-            <span class="h-7 w-40 rounded-row bg-surface-regular"></span>
+            <span class="label">Sweep</span>
+            <span class="label text-right">Last run</span>
+            <span class="label text-right">Next</span>
           </div>
-        {/each}
-      </div>
-    {:else if $schedule.error}
-      {@render Refused(($schedule.error as Error).message)}
+          {#each Array(placeholderRowCount) as _, index (index)}
+            <div
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:gap-y-0"
+            >
+              <Skeleton class="h-9 min-w-0 flex-1" />
+              <Skeleton class="h-7 w-24 justify-self-end" />
+              <Skeleton class="h-7 w-40 justify-self-end" />
+            </div>
+          {/each}
+        </div>
+      {/snippet}
+    {#if $schedule.isError && $schedule.data}
+      <div class="mb-3">{@render Refused($schedule.error, () => $schedule.refetch())}</div>
+    {/if}
+    {#if $schedule.isError && !$schedule.data}
+      {@render Refused($schedule.error, () => $schedule.refetch())}
+    {:else if ($schedule.data?.items ?? []).length === 0}
+      <EmptyPanel role="idle" level={3} heading="No sweeps are scheduled" />
     {:else}
       <div class="flex flex-col">
         <div
@@ -1232,23 +1236,23 @@
         {/each}
       </div>
     {/if}
+    </Settle>
   </section>
 </div>
 
 <!-- All three sections read the same job queue, so all three fail the same way
-     and say so in the same words. The server's sentence follows the one naming
-     what could not be read: a Go error alone says what broke and never what it
-     was doing. -->
-{#snippet Refused(message: string)}
-  <!-- Somewhere to go, and not a second attempt at the same request. Every
-       section here reads the one job queue, so a queue that cannot be read is
-       either the server or the database behind it — and the status card on
-       Sources is the closest reading of whether the server is up. TanStack
-       has already asked again three times by the time this is drawn. -->
-  <StatusBadge wrap>
-    <span class="text-meta text-ink">The job queue could not be read. {message}</span>
-    <Button href="/settings/sources" variant="outline" size="sm" class="ml-auto shrink-0">
+     and say so in the same words. The server's own words sit behind the
+     note's disclosure: a Go error alone says what broke and never what it was
+     doing. -->
+{#snippet Refused(error: unknown, retry: () => void)}
+  <!-- Somewhere to go beside the note. Every section here reads the one job
+       queue, so a queue that cannot be read is either the server or the
+       database behind it, and the status card on Sources is the closest
+       reading of whether the server is up. -->
+  <div class="flex flex-wrap items-start gap-3">
+    <ErrorNote {error} {retry} fallback="The job queue could not be read." class="min-w-0 flex-1" />
+    <Button href="/settings/sources" variant="outline" size="sm" class="shrink-0">
       Check sources status
     </Button>
-  </StatusBadge>
+  </div>
 {/snippet}

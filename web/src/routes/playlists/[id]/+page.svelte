@@ -16,6 +16,7 @@
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
@@ -319,16 +320,22 @@
     style="min-height: calc(var(--print-height) - var(--topbar-height));"
   >
     <div class="mb-auto pt-4 pb-1"><BackLink fallback="/playlists" label="Playlists" /></div>
-    <h1
-      aria-label="Loading playlist"
-      class="skeleton inline-block w-fit min-w-48 text-poster-m font-extrabold text-transparent"
-    >
-      Loading playlist
-    </h1>
-    <div class="flex items-end justify-between gap-6">
-      <span class="numeric min-w-48 text-body text-ink-3" aria-busy="true">Loading playlist details…</span>
-      <div class="flex shrink-0 items-center gap-2">{@render playlistActions()}</div>
-    </div>
+    {#if $detail.isError}
+      <!-- A read that failed is not still loading: the title stops pulsing and
+           the note under it says what happened. -->
+      <h1 class="text-poster-m font-extrabold text-ink">Playlist</h1>
+    {:else}
+      <h1
+        aria-label="Loading playlist"
+        class="skeleton inline-block w-fit min-w-48 text-poster-m font-extrabold text-transparent"
+      >
+        Loading playlist
+      </h1>
+      <div class="flex items-end justify-between gap-6">
+        <Skeleton class="w-48" />
+        <div class="flex shrink-0 items-center gap-2">{@render playlistActions()}</div>
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -429,6 +436,18 @@
         {/if}
       </section>
     {/if}
+    {#if entries.length === 0}
+      <!-- A Spotify list or a file is read by a job after it is followed; until
+           that lands an empty list means the import has not finished, not that
+           the list holds nothing. -->
+      {#if playlist && !playlist.importedAt && (playlist.source === 'spotify' || playlist.source === 'file')}
+        <EmptyPanel role="busy" heading="Importing playlist" level={3}>
+          <p class="text-body text-ink-3">The songs appear here when the import finishes.</p>
+        </EmptyPanel>
+      {:else}
+        <EmptyPanel role="idle" heading="No songs in this playlist" level={3} />
+      {/if}
+    {:else}
     <!-- Rows under a hairline rather than inside a panel, the way the release
          page sets its track list. -->
     <section>
@@ -567,6 +586,7 @@
         <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>
       {/if}
     </section>
+    {/if}
     </Settle>
   {/if}
   {#if $reimport.isError}

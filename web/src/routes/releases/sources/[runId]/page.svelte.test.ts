@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, setup } from '@testing-library/svelte';
+import { cleanup, render, screen, setup } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { SourceSearchResult, SourceSearchRun } from '$lib/api';
 
@@ -169,16 +169,23 @@ describe('a server that cannot be reached', () => {
     expect(asked).toBe(3);
   });
 
-  it('offers Try again beside the reason, and asks again when it is pressed', async () => {
-    answering(unreachable);
-    opened();
+  it('asks again by itself and shows the run once the server answers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      answering(unreachable);
+      opened();
 
-    await screen.findByText('The server did not answer');
-    expect(screen.getByText('Schall could not be reached. Try again once it is running.')).toBeTruthy();
+      await screen.findByText('The server did not answer');
+      // Nothing to press: the note asks again on its own schedule.
+      expect(screen.getByText('Trying again.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
 
-    answering(ok);
-    await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Laughing Stock')).toBeTruthy();
+      answering(ok);
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(await screen.findByText('Laughing Stock')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -199,6 +206,17 @@ describe('a server that answers with a failure', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     const library = screen.getByRole('link', { name: 'Open Library' });
     expect(library.getAttribute('href')).toBe('/library?status=missing');
+  });
+});
+
+describe('a run with no releases', () => {
+  it('says the search holds no releases instead of drawing nothing', async () => {
+    answering(async () =>
+      new Response(JSON.stringify({ ...runBody(), total: 0, noneCount: 0, items: [] }), { status: 200 })
+    );
+    opened();
+
+    expect(await screen.findByRole('heading', { name: 'No releases in this search' })).toBeTruthy();
   });
 });
 

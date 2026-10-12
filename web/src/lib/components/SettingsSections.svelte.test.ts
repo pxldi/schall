@@ -267,6 +267,23 @@ describe('settings loading', () => {
   });
 });
 
+describe('the library screen while its reads are out', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('claims no saved order, format, size or tag count before they are read', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    openedLibrary();
+
+    expect(await screen.findByLabelText('Loading formats')).toBeTruthy();
+    expect(screen.queryByText('Lossless first, then lossy by bitrate.')).toBeNull();
+    expect(screen.queryByText(/LOADING-/)).toBeNull();
+    expect(screen.queryByText(/no files are matched to a track yet/)).toBeNull();
+  });
+});
+
 describe('the Weekly playlist card', () => {
   let weeklySaved: unknown = null;
   let weeklyStored: WeeklySettings = {

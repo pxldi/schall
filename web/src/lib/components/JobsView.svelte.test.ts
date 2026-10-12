@@ -506,6 +506,15 @@ describe('JobsView', () => {
     expect(screen.queryByText('Search lane')).toBeNull();
   });
 
+  it('says so when nothing has failed and no sweep is scheduled, rather than drawing empty lists', async () => {
+    answering({ queue: queueOf([]), failed: [], schedule: [] });
+    opened();
+
+    expect(await screen.findByText('Nothing has spent its attempts')).toBeTruthy();
+    expect(await screen.findByText('No sweeps are scheduled')).toBeTruthy();
+    expect(screen.queryByText('Last run')).toBeNull();
+  });
+
   // A queue that cannot be read is either the server or the database behind it,
   // and neither is settled by asking a fourth time — the query has already asked
   // three. What the message carries instead is the one screen that says which,

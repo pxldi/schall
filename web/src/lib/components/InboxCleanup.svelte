@@ -5,6 +5,8 @@
   import Button from '$lib/components/Button.svelte';
   import Card from '$lib/components/Card.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import { formatBytes, relativeTime } from '$lib/utils';
 
   // Clean the inbox: the pass that deletes the downloaded files nothing needs
@@ -109,11 +111,18 @@
     <ErrorNote error={$clean.error} />
   {/if}
 
-  <!-- The server's own sentence. It covers both a pass that stopped and one
-       that finished with files it could not remove, and it already names what
-       happened, so nothing is added in front of it. -->
+  <Settle pending={$cleanups.isPending} layer="flex flex-col gap-3.5">
+    {#snippet placeholder()}
+      <div class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading the last pass">
+        <Skeleton class="h-3.5 w-3/5" />
+        <Skeleton class="h-3.5 w-2/5" />
+      </div>
+    {/snippet}
+  <!-- The error a pass recorded covers both a pass that stopped and one that
+       finished with files it could not remove. It is a server sentence, so it
+       goes through the note, which keeps the raw words behind a disclosure. -->
   {#if latest?.error}
-    <span class="text-meta text-fail">{latest.error}</span>
+    <ErrorNote bare error={latest.error} fallback="The last pass did not finish cleanly." />
   {/if}
 
   {#if running}
@@ -194,4 +203,5 @@
       )}) deleted {relativeTime(latest.finishedAt) || 'just now'}
     </span>
   {/if}
+  </Settle>
 </Card>

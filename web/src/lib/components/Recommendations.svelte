@@ -44,6 +44,7 @@
   } from '$lib/api';
   import { relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import { leave, motionMs } from '$lib/motion.svelte';
@@ -429,6 +430,19 @@
   // database — has nothing to report and says nothing.
   const stalled = $derived(!!refresh?.attempted && !refresh.succeeded);
   const nextRead = $derived(refresh?.nextAttemptAt ? relativeTime(refresh.nextAttemptAt) : '');
+
+  // The empty panel's heading, one per reason the list can be empty.
+  const emptyHeading = $derived(
+    !snapshot?.fetched && stalled
+      ? 'The first read did not finish'
+      : !snapshot?.fetched && own
+        ? 'No sweep has run yet'
+        : !snapshot?.fetched
+          ? 'No listening history read yet'
+          : hidden && hidden.total > 0
+            ? 'Every suggestion is held back'
+            : 'Nothing suggested yet'
+  );
 </script>
 
 <div class="flex flex-col gap-4 px-6 py-4">
@@ -457,7 +471,8 @@
         {#if readAt}
           {own ? 'built from your listens' : 'read from ListenBrainz'} {readAt}
         {:else}
-          <span aria-hidden="true">{own ? 'built from your listens' : 'read from ListenBrainz'} …</span>
+          <span aria-hidden="true">{own ? 'built from your listens' : 'read from ListenBrainz'}</span>
+          <Skeleton class="inline-block h-2.5 w-[9ch] align-middle" />
         {/if}
       </span>
     </div>
@@ -572,88 +587,95 @@
       <p class="max-w-[64ch] text-meta leading-4 text-ink-2">{feedbackMessage}</p>
     {/if}
 
-    {#if items.length > 0}
-      <section class="rounded-panel border border-line-thin">
-        {#each items as recommendation (recommendation.recordingId)}
-          <div
-            use:onscreen={recommendation.recordingId}
-            out:leave={{ active: leaving.has(recommendation.recordingId), after: motionMs('enter') }}
-            class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-thin px-3 py-2 last:border-b-0"
-          >
-            <span class="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-auto">
-              <span class="truncate text-body font-medium text-ink">{name(recommendation)}</span>
-              <span class="truncate text-meta text-ink-3">
-                {details(recommendation)}
-              </span>
-            </span>
-            <div class="order-3 flex basis-full flex-wrap gap-2 sm:order-none sm:basis-auto">
-              <Button
-                variant="outline"
-                size="xs"
-                tall
-                aria-label="More like this"
-                disabled={$feedback.isPending}
-                onclick={() =>
-                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'more_like_this', source })}
-              >
-                More like this
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                tall
-                aria-label="Less like this"
-                disabled={$feedback.isPending}
-                onclick={() =>
-                  $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'less_like_this', source })}
-              >
-                Less like this
-              </Button>
-            </div>
-            <WantToggle
-              size="sm"
-              class="shrink-0"
-              label={['Want it', 'Wanted']}
-              wanted={leaving.has(recommendation.recordingId)}
-              disabled={$feedback.isPending || leaving.has(recommendation.recordingId)}
-              onwant={() => wantOne(recommendation)}
-              onunwant={() => {}}
-            />
-            <!--
-              One decision at three widths. Three buttons on a row would read as
-              three separate actions and crowd a row meant to stay readable, so
-              the scopes go behind the one trigger that carries the decision.
-            -->
-            <Menu
-              class="shrink-0"
-              trigger="labelled"
-              label="Not interested"
-              heading="Never suggest again"
-              items={scopes(recommendation)}
-            />
-            {#if why(recommendation)}
-              <span class="order-4 basis-full break-words text-meta leading-4 text-ink-3">
-                {why(recommendation)}
-              </span>
-            {/if}
-          </div>
-        {/each}
-        <Pager {total} {offset} {pageSize} onchange={step} />
-      </section>
-    {:else}
-      <Settle pending={$recommendations.isPending}>
-        {#snippet placeholder()}
-          <div
+    <!-- A failed read with nothing kept has its note above; claiming no
+         listening history under it would be a second, false answer. -->
+    {#if !($recommendations.isError && !$recommendations.data)}
+    <Settle pending={$recommendations.isPending}>
+      {#snippet placeholder()}
+        <div
           class="flex max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden rounded-panel border border-line-thin p-5"
           aria-busy="true"
           aria-label="Loading recommendations"
         >
           <span class="text-meta text-ink-3">reading your suggestions…</span>
-          <SkeletonRows count={40} class="-mx-5 -mb-5 border-t border-line-thin" />
-          </div>
-        {/snippet}
-        <EmptyPanel class="items-start gap-2">
-          <Icon name="playlist" size={18} class="text-ink-4" />
+          <SkeletonRows count={12} class="-mx-5 -mb-5 border-t border-line-thin" />
+        </div>
+      {/snippet}
+      {#if items.length > 0}
+        <section class="rounded-panel border border-line-thin">
+          {#each items as recommendation (recommendation.recordingId)}
+            <div
+              use:onscreen={recommendation.recordingId}
+              out:leave={{ active: leaving.has(recommendation.recordingId), after: motionMs('enter') }}
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-thin px-3 py-2 last:border-b-0"
+            >
+              <span class="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-auto">
+                <span class="truncate text-body font-medium text-ink">{name(recommendation)}</span>
+                <span class="truncate text-meta text-ink-3">
+                  {details(recommendation)}
+                </span>
+              </span>
+              <div class="order-3 flex basis-full flex-wrap gap-2 sm:order-none sm:basis-auto">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  tall
+                  aria-label="More like this"
+                  disabled={$feedback.isPending}
+                  onclick={() =>
+                    $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'more_like_this', source })}
+                >
+                  More like this
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  tall
+                  aria-label="Less like this"
+                  disabled={$feedback.isPending}
+                  onclick={() =>
+                    $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'less_like_this', source })}
+                >
+                  Less like this
+                </Button>
+              </div>
+              <WantToggle
+                size="sm"
+                class="shrink-0"
+                label={['Want it', 'Wanted']}
+                wanted={leaving.has(recommendation.recordingId)}
+                disabled={$feedback.isPending || leaving.has(recommendation.recordingId)}
+                onwant={() => wantOne(recommendation)}
+                onunwant={() => {}}
+              />
+              <!--
+                One decision at three widths. Three buttons on a row would read as
+                three separate actions and crowd a row meant to stay readable, so
+                the scopes go behind the one trigger that carries the decision.
+              -->
+              <Menu
+                class="shrink-0"
+                trigger="labelled"
+                label="Not interested"
+                heading="Never suggest again"
+                items={scopes(recommendation)}
+              />
+              {#if why(recommendation)}
+                <span class="order-4 basis-full break-words text-meta leading-4 text-ink-3">
+                  {why(recommendation)}
+                </span>
+              {/if}
+            </div>
+          {/each}
+          <Pager {total} {offset} {pageSize} onchange={step} />
+        </section>
+      {:else}
+        <!-- The first read failing is a fault, so it carries the failure mark;
+             every other reason is a list with nothing in it yet. -->
+        <EmptyPanel
+          role={!snapshot?.fetched && stalled ? 'fail' : 'idle'}
+          heading={emptyHeading}
+        >
           {#if !snapshot?.fetched && stalled}
           <!--
             A list is stored only when a sweep walks the whole answer. A sweep
@@ -661,7 +683,6 @@
             leaves no list at all. Saying "nothing to suggest" here would be
             wrong, and so would asking for an account that is already set up.
           -->
-          <span class="text-body font-semibold text-ink">The first read did not finish</span>
           <span class="text-meta leading-5 text-ink-2">
             There is no list yet.
             {#if nextRead}
@@ -671,35 +692,31 @@
             {/if}
           </span>
           {#if !own}
-            <Button href="/settings" variant="outline" size="sm">Open settings</Button>
+            <Button href="/settings" variant="outline" size="sm" class="w-fit">Open settings</Button>
           {/if}
           {:else if !snapshot?.fetched && own}
           <!-- The own engine runs once a copied listen names a recording. It
                needs no account of its own, but the listens come from a
                ListenBrainz sync, so Settings is where they start. -->
-          <span class="text-body font-semibold text-ink">No sweep has run yet</span>
           <span class="text-meta leading-5 text-ink-2">
             Schall builds this list from the listens it copies from ListenBrainz.
           </span>
-          <Button href="/settings" variant="outline" size="sm">Open settings</Button>
+          <Button href="/settings" variant="outline" size="sm" class="w-fit">Open settings</Button>
           {:else if !snapshot?.fetched}
-          <span class="text-body font-semibold text-ink">No listening history read yet</span>
           <!-- Where suggestions come from is how the feature works. The reader
                needs the one thing they can do, and Open settings is under it. -->
           <span class="text-meta leading-5 text-ink-2">
             Add a ListenBrainz account under Settings. The first list arrives within a few
             minutes.
           </span>
-          <Button href="/settings" variant="outline" size="sm">Open settings</Button>
+          <Button href="/settings" variant="outline" size="sm" class="w-fit">Open settings</Button>
           {:else if hidden && hidden.total > 0}
-          <span class="text-body font-semibold text-ink">Every suggestion is held back</span>
           <span class="text-meta leading-5 text-ink-2">
             {sourceName} had {hidden.total}
             {hidden.total === 1 ? 'suggestion' : 'suggestions'}, all held back for now. The next
             sweep {own ? 'builds the list again' : 'asks again'}.
           </span>
           {:else}
-          <span class="text-body font-semibold text-ink">Nothing suggested yet</span>
           <span class="text-meta leading-5 text-ink-2">
             {#if own}
               Schall found nothing to suggest from your listens yet.
@@ -709,7 +726,8 @@
           </span>
           {/if}
         </EmptyPanel>
-      </Settle>
+      {/if}
+    </Settle>
     {/if}
   </section>
 </div>

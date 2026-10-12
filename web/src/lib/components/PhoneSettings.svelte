@@ -7,6 +7,8 @@
   import Card from '$lib/components/Card.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import FormGrid from '$lib/components/FormGrid.svelte';
+  import Settle from '$lib/components/Settle.svelte';
+  import SkeletonRows from '$lib/components/SkeletonRows.svelte';
 
   // Where a phone gets its credential. The browser is signed in through
   // Authentik and mints a token here; the phone sends that token instead.
@@ -130,12 +132,15 @@
       <ErrorNote error={$remove.error} action="Press Remove again." />
     {/if}
 
+    <Settle pending={$phones.isPending}>
+      {#snippet placeholder()}
+        <SkeletonRows count={2} label="Loading phones" />
+      {/snippet}
     {#if $phones.isError}
       <ErrorNote error={$phones.error} retry={() => $phones.refetch()} />
     {:else if ($phones.data?.items ?? []).length === 0}
-      {#if !$phones.isPending}
-        <span class="text-meta text-ink-3">No phone has a token yet.</span>
-      {/if}
+      <!-- One line, the way the other settings cards say a list is empty. -->
+      <span class="text-meta text-ink-3">No phone has a token yet.</span>
     {:else}
       <!-- Hairlines and space, the shape the other settings lists use. -->
       <div class="flex flex-col">
@@ -166,5 +171,6 @@
         {/each}
       </div>
     {/if}
+    </Settle>
   </Card>
 </div>

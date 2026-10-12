@@ -398,7 +398,48 @@ describe('the rail', () => {
   });
 });
 
+describe('a filter that matches nothing', () => {
+  it('keeps the rail so another kind can be chosen', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Folder 0' }));
+    expect(await screen.findByText('Nothing of this kind')).toBeTruthy();
+    expect(screen.queryByText('Nothing to decide')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'All 1' }));
+    await waitFor(() => expect(screen.queryByText('Nothing of this kind')).toBeNull());
+  });
+});
+
 describe('a queue longer than one page', () => {
+  it('keeps the loaded questions when the next page fails', async () => {
+    const first = want('copies');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/waveform')) return new Response(null, { status: 404 });
+        let body: unknown = {};
+        if (url.startsWith('/api/v1/review-queue')) {
+          const offset = Number(new URL(url, 'http://x').searchParams.get('offset'));
+          if (offset) return new Response(JSON.stringify({ title: 'library is unavailable' }), { status: 503 });
+          body = { items: [first], total: 2, resolutions: 0, limit: 100, offset };
+        } else if (url.startsWith('/api/v1/downloads?')) {
+          body = { items: [], total: 0, limit: 100, offset: 0, counts: { open: 0, review: 0, questions: 0, imported: 0, discarded: 0, failed: 0, all: 0 } };
+        }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    await open('Evensong');
+
+    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(screen.getAllByText('Evensong').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Accept copy' })).toBeTruthy();
+  });
+
   it('counts from the server and reads the next page near the end', async () => {
     const first = want('copies');
     const second = want('copies', 'ffffffff-0000-4000-8000-000000000042');
@@ -441,7 +482,7 @@ describe('a queue longer than one page', () => {
 });
 
 describe('the queue reads failing', () => {
-  it('names what failed and offers Retry', async () => {
+  it('names what failed and asks again by itself, with no Retry button', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({ title: 'library is unavailable' }), { status: 503 }))
@@ -450,7 +491,8 @@ describe('the queue reads failing', () => {
     render(Review, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
     expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByText('Trying again.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('says where to sign in on a 401, with no Retry to repeat it', async () => {

@@ -220,16 +220,28 @@ describe('Recommendations', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     opened();
 
-    expect(screen.getByText('read from ListenBrainz …')).toBeTruthy();
+    expect(screen.getByText('read from ListenBrainz')).toBeTruthy();
   });
 
-  it('fills the viewport with recommendation skeleton rows while loading', () => {
+  it('shows the failure, not "No listening history read yet", when the read fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ title: 'recommendations broke' }), { status: 400 }))
+    );
+    opened();
+
+    expect(await screen.findByText('recommendations broke')).toBeTruthy();
+    expect(screen.queryByText('No listening history read yet')).toBeNull();
+    expect(screen.queryByText('Open settings')).toBeNull();
+  });
+
+  it('draws a page of recommendation skeleton rows while loading', () => {
     answering(answer());
     opened();
 
     const loading = screen.getByLabelText('Loading recommendations');
     expect(loading.getAttribute('aria-busy')).toBe('true');
-    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(40);
+    expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(12);
     expect(screen.getByText('reading your suggestions…')).toBeTruthy();
   });
 
