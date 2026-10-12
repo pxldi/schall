@@ -394,6 +394,11 @@ type comparison struct {
 	// here it can never void one, because a copy that is a different master of
 	// this recording is still this recording.
 	witness tagmatch.Verdict
+	// acousticSingledOut says the leading cluster named this recording beside
+	// other rows, and the file's own identifier picked this one out of them. It
+	// is set only by Verify, which can look the other rows up; see
+	// singledOutOfCluster.
+	acousticSingledOut bool
 
 	durationDeltaMS int
 }
@@ -734,6 +739,12 @@ func gradeOf(pair comparison) grade {
 		return byFingerprintAndIdentifier
 	case pair.identifiedAcoustically():
 		return byFingerprint
+	// The leading cluster named this recording and another row, so the audio
+	// alone cannot say which, and the file's own identifier names this one and
+	// not the other. Each witness answers the half the other cannot: the audio
+	// says the file is one of these rows, the identifier says which.
+	case pair.acousticSingledOut && pair.acousticSimilarity >= acousticFloor:
+		return byFingerprintAndIdentifier
 	// The audio again, from the anchor. A matching distributor preview or Topic
 	// upload is audio evidence for this recording, so it can prove a copy that
 	// tags, MusicBrainz and AcoustID do not identify.

@@ -2466,9 +2466,11 @@ type sourceCopy struct {
 // (ADR 0037 §4, §5).
 //
 // A file the resolver has already answered with "no provider knows this" gives
-// way: that answer is silence, and the anchor proved the audio. Any other
-// identity already on the file stays, and the want stops for a person, as it
-// does on the recording path.
+// way: that answer is silence, and the anchor proved the audio. A file the
+// resolver identified as a MusicBrainz recording keeps that identity, and the
+// want still settles, because a want with no recording has nothing for it to
+// contradict. A person's identity, or another source identity, stops the want
+// for a person.
 func completeSourceCopy(
 	ctx context.Context, tx pgx.Tx, accepted sourceCopy, outcome *AcquiredFileOutcome,
 ) error {
@@ -2545,12 +2547,33 @@ func completeSourceCopy(
 		}
 	}
 
+	// Only another source identity disagrees. A want with no recording names
+	// nothing but its anchor's track, so a scan that identified the file as a
+	// MusicBrainz recording first says what the audio is, and it cannot
+	// contradict a want that names no recording. The want settles on the anchor
+	// that proved the copy, and the file keeps its identity as it is.
 	var stored string
+	otherSource := false
 	if err := tx.QueryRow(ctx, `
 		SELECT coalesce(external_id, '') FROM library_file_identities
 		WHERE library_file_id = $1 AND kind = 'source'
-	`, accepted.fileID).Scan(&stored); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	`, accepted.fileID).Scan(&stored); errors.Is(err, pgx.ErrNoRows) {
+		stored = ""
+	} else if err != nil {
 		return err
+	} else {
+		otherSource = stored != key.ExternalID
+	}
+	recordedElsewhere := false
+	if stored == "" {
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM library_file_identities
+				WHERE library_file_id = $1 AND kind <> 'source' AND kind <> 'local_only'
+			)
+		`, accepted.fileID).Scan(&recordedElsewhere); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE acquisition_target_files
@@ -2561,7 +2584,7 @@ func completeSourceCopy(
 	}
 	outcome.LibraryFileID = uuid.NullUUID{UUID: accepted.fileID, Valid: true}
 
-	if !provesTheKey || stored != key.ExternalID {
+	if !provesTheKey || otherSource || (stored == "" && !recordedElsewhere) {
 		outcome.Disagreed = true
 		_, err := tx.Exec(ctx, `
 			UPDATE acquisition_targets
@@ -2572,13 +2595,14 @@ func completeSourceCopy(
 	}
 
 	// The scan queue asks only about 'pending' and 'failed' files, so this is
-	// what keeps the resolver from replacing the proof with the peer's tags.
+	// what keeps the resolver from replacing the proof with the peer's tags. A
+	// file the scan already answered keeps that answer.
 	if _, err := tx.Exec(ctx, `
 		UPDATE library_files
 		SET resolution_status = 'source', resolution_summary = $2,
 		    resolution_error = NULL, resolution_attempted_at = now(), updated_at = now()
-		WHERE id = $1
-	`, accepted.fileID, accepted.proven); err != nil {
+		WHERE id = $1 AND $3
+	`, accepted.fileID, accepted.proven, stored == key.ExternalID); err != nil {
 		return fmt.Errorf("record that %s is answered: %w", accepted.fileID, err)
 	}
 	tag, err := tx.Exec(ctx, `
@@ -3182,6 +3206,11 @@ func (q *Queries) copiesToJudgeAgain(
 		  AND `+searchedWant("targets.")+`
 		  AND (targets.anchor_fingerprint IS NOT NULL
 		       OR copies.summary LIKE '`+unaskedRegistrationSummary+`%'
+		       -- The leading cluster named several rows, which the file's own
+		       -- identifier can now pick from.
+		       OR (copies.verdict = 'held' AND jsonb_array_length(coalesce(
+		              copies.evidence->'acoustic'->'clusters'->0->'recordingIds',
+		              '[]'::jsonb)) > 1)
 		       OR ($1::uuid IS NOT NULL AND`+libraryCanSpeakForTheWant+`))
 		  AND requests.status = 'completed'
 		  AND requests.import_status <> 'validating'

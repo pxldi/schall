@@ -450,3 +450,102 @@ func TestTheSchemaRefusesASearchScheduleOffAnUnresolvedWant(t *testing.T) {
 		t.Errorf("acquired with no recording on a Deezer preview was refused: %v", err)
 	}
 }
+
+// The scan identified the file as a MusicBrainz recording a few seconds before
+// the copy was completed. A want with no recording names nothing that answer
+// could contradict, so it settles on the anchor that proved the copy, and the
+// file keeps what the scan said it is.
+func TestAWantWithNoRecordingSettlesOnAFileTheScanAlreadyIdentified(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := anchoredWithoutARecording(ctx, t, pool, "deezer", "3459592211")
+	if _, err := queries.ClaimTargetImport(ctx, requestID); err != nil {
+		t.Fatal(err)
+	}
+	preview, _ := SourceOfAnchor("deezer", "3459592211")
+	fileID := importedOnTheAnchor(ctx, t, pool, queries, targetID, requestID,
+		&AcquiredFileEvidence{
+			Name: "worry.flac", Method: "published-sample", Confidence: 1,
+			Agrees: []string{"audio"}, Differs: []string{}, Problems: []string{},
+			Source: &preview,
+		})
+	scanned := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO library_file_identities (
+			library_file_id, kind, provider, musicbrainz_recording_id, method, confidence, summary
+		)
+		VALUES ($1, 'external', 'musicbrainz', $2, 'title-artist-duration', 0.9, 'the tags said so')
+	`, fileID, scanned); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_files SET resolution_status = 'resolved' WHERE id = $1
+	`, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	outcome, err := queries.CompleteAcquiredFile(ctx, targetID, "Stopped.", "Proven.")
+	if err != nil {
+		t.Fatalf("CompleteAcquiredFile() error = %v", err)
+	}
+	if !outcome.Settled || outcome.Disagreed {
+		t.Fatalf("outcome = %+v, want the want settled on its anchor", outcome)
+	}
+	var (
+		status     string
+		recording  *uuid.UUID
+		kind       string
+		filedAs    uuid.UUID
+		resolution string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT targets.status, targets.musicbrainz_recording_id,
+		       identities.kind, identities.musicbrainz_recording_id, files.resolution_status
+		FROM acquisition_targets targets
+		JOIN library_file_identities identities ON identities.library_file_id = $2
+		JOIN library_files files ON files.id = $2
+		WHERE targets.id = $1
+	`, targetID, fileID).Scan(&status, &recording, &kind, &filedAs, &resolution); err != nil {
+		t.Fatal(err)
+	}
+	if status != "acquired" || recording != nil {
+		t.Errorf("want = %s recording %v, want acquired with no recording", status, recording)
+	}
+	if kind != "external" || filedAs != scanned || resolution != "resolved" {
+		t.Errorf("file = %s %s %s, want the scan's answer kept", kind, filedAs, resolution)
+	}
+}
+
+// A person's own answer about the file is another matter: nothing automatic
+// settles a want over it.
+func TestAWantWithNoRecordingStopsOnAPersonsAnswerAboutTheFile(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := anchoredWithoutARecording(ctx, t, pool, "deezer", "3459592211")
+	if _, err := queries.ClaimTargetImport(ctx, requestID); err != nil {
+		t.Fatal(err)
+	}
+	preview, _ := SourceOfAnchor("deezer", "3459592211")
+	fileID := importedOnTheAnchor(ctx, t, pool, queries, targetID, requestID,
+		&AcquiredFileEvidence{
+			Name: "worry.flac", Method: "published-sample", Confidence: 1,
+			Agrees: []string{"audio"}, Differs: []string{}, Problems: []string{},
+			Source: &preview,
+		})
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO library_file_identities (library_file_id, kind, method, is_manual, summary)
+		VALUES ($1, 'local_only', 'manual', true, 'kept as my own')
+	`, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	outcome, err := queries.CompleteAcquiredFile(ctx, targetID, "Stopped.", "Proven.")
+	if err != nil {
+		t.Fatalf("CompleteAcquiredFile() error = %v", err)
+	}
+	if outcome.Settled || !outcome.Disagreed {
+		t.Fatalf("outcome = %+v, want the want stopped for a person", outcome)
+	}
+}
