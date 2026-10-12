@@ -135,7 +135,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText(`No sample · ${reason}`)).toBeTruthy();
+    expect(await screen.findByTitle(`Looking · No sample · ${reason}`)).toBeTruthy();
     expect(asked.some((path) => path.includes('status=unresolved%2Cpending%2Csearching'))).toBe(
       true
     );
@@ -153,7 +153,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText('Sample retry in 2d')).toBeTruthy();
+    expect(await screen.findByTitle('Looking · Sample retry in 2d')).toBeTruthy();
   });
 
   // 1,187 rows are 48 pages, so the filter asks the server rather than
@@ -183,8 +183,31 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText('The next copy will be tried.')).toBeTruthy();
+    expect(await screen.findByTitle('Looking · The next copy will be tried.')).toBeTruthy();
     expect(screen.queryByText(/Not in your library yet/)).toBeNull();
+  });
+
+  // On a list of a thousand rows the reason was a line under every one of them,
+  // cut off with "…". It is the mark's tooltip now.
+  it('keeps the reason in the mark rather than on a line of its own', async () => {
+    const why = 'Only copies below your 320 kbps minimum were found. Looked at again weekly.';
+    answering({ looking: [want({ summary: why })] });
+
+    opened();
+
+    expect(await screen.findByTitle(`Looking · ${why}`)).toBeTruthy();
+    expect(screen.queryByText(why)).toBeNull();
+  });
+
+  it('counts the matches of the filter beside the pile', async () => {
+    answering({ looking: [want()] });
+
+    opened({ query: 'talk talk' });
+
+    await screen.findByText('Talk Talk — Ascension Day');
+    expect(asked).toContain(
+      '/api/v1/acquisition-targets?status=unresolved%2Cpending%2Csearching&q=talk+talk&limit=1'
+    );
   });
 
   // The server's clock ran a moment ahead of the browser's and the row read
@@ -335,7 +358,7 @@ describe('the wants being looked for', () => {
     expect(screen.queryByText(/Wishlist tracks are waiting/)).toBeNull();
   });
 
-  it("shows a waiting want's own summary under it", async () => {
+  it("carries a waiting want's own summary on its mark", async () => {
     answering({
       looking: [
         want({
@@ -348,8 +371,8 @@ describe('the wants being looked for', () => {
     opened();
 
     expect(
-      await screen.findByText(
-        'Add an AcoustID key in Settings — nothing here can prove a copy is this recording.'
+      await screen.findByTitle(
+        'Looking · Add an AcoustID key in Settings — nothing here can prove a copy is this recording.'
       )
     ).toBeTruthy();
   });

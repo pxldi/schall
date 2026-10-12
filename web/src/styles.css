@@ -425,6 +425,16 @@ a {
   outline-offset: 2px;
 }
 
+/* A field that wraps its own input — an icon beside the text — takes the ring on
+   its frame. On the input it drew a second box inside the first. */
+.field:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.field input:focus-visible {
+  outline: none;
+}
+
 /* ── Component classes ──────────────────────────────────────────────────────
    Every class the application writes for itself belongs in this layer, and the
    layer is the whole point. Tailwind v4 puts its utilities in @layer utilities,
