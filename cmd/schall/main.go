@@ -42,6 +42,7 @@ import (
 	"github.com/pxldi/schall/internal/notify"
 	"github.com/pxldi/schall/internal/peerchallenge"
 	"github.com/pxldi/schall/internal/playlists"
+	"github.com/pxldi/schall/internal/popular"
 	"github.com/pxldi/schall/internal/preview"
 	"github.com/pxldi/schall/internal/recommendations"
 	"github.com/pxldi/schall/internal/server"
@@ -840,6 +841,7 @@ func run() error {
 		// reachable" but "what did the last sweep leave behind, and what may be
 		// shown of it now".
 		server.WithRecommendations(recommendationService),
+		server.WithPopular(popular.NewService(store, cfg.MusicBrainzUserAgent, logger)),
 		server.WithOverview(store),
 		server.WithWeeklyPlaylist(weeklyPlaylist),
 		server.WithNewReleasesPlaylist(newReleasesPlaylist),

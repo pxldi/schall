@@ -772,3 +772,64 @@ func (client *Client) Listens(
 	}
 	return listens, nil
 }
+
+// ErrNoPopularity is the service saying it has no listen counts for the artist
+// it was asked about.
+var ErrNoPopularity = errors.New("listenbrainz has no listen counts for that artist")
+
+// PopularRecording is one of an artist's most listened recordings across every
+// ListenBrainz account. Like everything else here it is keyed by recording MBID;
+// the names are display text and never looked up by.
+type PopularRecording struct {
+	RecordingMBID string
+	Name          string
+	ReleaseMBID   string
+	ReleaseName   string
+	LengthMS      int64
+	ListenCount   int64
+	ListenerCount int64
+}
+
+// TopRecordingsForArtist reads the artist's most listened recordings, most
+// listened first. The endpoint refuses callers without a user token, so a
+// client built without one gets an HTTPError with status 401.
+func (client *Client) TopRecordingsForArtist(ctx context.Context, artistMBID string) ([]PopularRecording, error) {
+	artistMBID = strings.TrimSpace(artistMBID)
+	if artistMBID == "" {
+		return nil, errors.New("artist MBID is required")
+	}
+	var payload []struct {
+		RecordingMBID    string `json:"recording_mbid"`
+		RecordingName    string `json:"recording_name"`
+		ReleaseMBID      string `json:"release_mbid"`
+		ReleaseName      string `json:"release_name"`
+		Length           *int64 `json:"length"`
+		TotalListenCount int64  `json:"total_listen_count"`
+		TotalUserCount   int64  `json:"total_user_count"`
+	}
+	path := "/1/popularity/top-recordings-for-artist/" + url.PathEscape(artistMBID)
+	if err := client.get(ctx, client.baseURL, path, nil, ErrNoPopularity, &payload); err != nil {
+		return nil, err
+	}
+	popular := make([]PopularRecording, 0, len(payload))
+	for _, entry := range payload {
+		recording := strings.TrimSpace(entry.RecordingMBID)
+		if recording == "" {
+			continue
+		}
+		var length int64
+		if entry.Length != nil {
+			length = *entry.Length
+		}
+		popular = append(popular, PopularRecording{
+			RecordingMBID: recording,
+			Name:          strings.TrimSpace(entry.RecordingName),
+			ReleaseMBID:   strings.TrimSpace(entry.ReleaseMBID),
+			ReleaseName:   strings.TrimSpace(entry.ReleaseName),
+			LengthMS:      length,
+			ListenCount:   entry.TotalListenCount,
+			ListenerCount: entry.TotalUserCount,
+		})
+	}
+	return popular, nil
+}

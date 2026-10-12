@@ -49,6 +49,13 @@ type AlbumRow struct {
 	// asks for the picture only when it is, so a release nobody has pictured
 	// costs the browser no request. A recorded absence counts as no cover.
 	HasCover bool
+	// SecondaryTypes are MusicBrainz's qualifiers on the primary type, such as
+	// compilation, live or mixtape/street. An artist's page files an album
+	// carrying one under Other.
+	SecondaryTypes []string
+	// WantedTrackCount is the release's tracks with a want still being pursued,
+	// so a list can draw the release's own want toggle without its tracklist.
+	WantedTrackCount int64
 }
 
 type ListAlbumsParams struct {
@@ -331,8 +338,23 @@ var albumColumns = `
 			SELECT 1 FROM release_cover_art
 			WHERE release_cover_art.album_id = albums.id
 			  AND release_cover_art.image IS NOT NULL
-		)::boolean AS has_cover
+		)::boolean AS has_cover,
+		albums.secondary_types,
+		` + albumWantedTracks + `::bigint AS wanted_track_count
 `
+
+// albumWantedTracks counts a release's tracks that somebody asked for and that
+// are still being looked for: the open half of the + the release page draws per
+// track. At most one target per recording is outside 'superseded'
+// (acquisition_targets_recording_idx), so a track counts once.
+const albumWantedTracks = `(
+		SELECT count(*)
+		FROM tracks AS wanted_tracks
+		JOIN acquisition_targets AS wants
+		    ON wants.musicbrainz_recording_id = wanted_tracks.musicbrainz_recording_id
+		   AND wants.status NOT IN ('superseded', 'not_wanted', 'acquired')
+		WHERE wanted_tracks.album_id = albums.id
+	)`
 
 const albumJoins = `
 	JOIN artists ON artists.id = albums.artist_id
@@ -470,6 +492,7 @@ func (q *Queries) ListAlbums(ctx context.Context, params ListAlbumsParams) (Albu
 			&row.OwnedTrackCount, &row.DismissedTrackCount, &row.Monitored,
 			&row.MonitorLevel, &row.MusicbrainzReleaseID,
 			&row.EditionSelectionReason, &row.TrackRefreshStatus, &row.HasCover,
+			&row.SecondaryTypes, &row.WantedTrackCount,
 		); err != nil {
 			return page, err
 		}

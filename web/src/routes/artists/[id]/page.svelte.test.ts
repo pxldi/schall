@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup, waitFor } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
-import type { ArtistDetail } from '$lib/api';
+import type { ArtistDetail, PopularTrack, Release } from '$lib/api';
 
 // Named without the leading `+`, like the other colocated route tests:
 // SvelteKit reads every `+` file in a route folder as a route file.
@@ -414,7 +414,10 @@ describe('release tiles', () => {
       artistMonitorLevel: 'everything',
       musicbrainzReleaseId: null,
       trackRefreshStatus: 'completed',
-      hasCover
+      hasCover,
+      inks: null,
+      secondaryTypes: [],
+      wantedTrackCount: 0
     });
     vi.stubGlobal(
       'fetch',
@@ -443,68 +446,244 @@ describe('release tiles', () => {
   });
 });
 
-describe('the order of releases', () => {
-  const release = (id: string, title: string, firstReleaseDate: string, ownedTrackCount: number) => ({
+function releaseRow(id: string, title: string, overrides: Partial<Release> = {}): Release {
+  return {
     id,
     artistId: artistID,
     artistName: 'Kendrick Lamar',
     artistFollowed: false,
     musicbrainzReleaseGroupId: null,
     title,
-    firstReleaseDate,
+    firstReleaseDate: '2015-03-15',
     albumType: 'album',
     trackCount: 12,
-    ownedTrackCount,
+    ownedTrackCount: 0,
     dismissedTrackCount: 0,
     monitored: true,
     artistMonitorLevel: 'main',
     musicbrainzReleaseId: null,
     trackRefreshStatus: 'completed',
-    hasCover: false
+    hasCover: false,
+    inks: null,
+    secondaryTypes: [],
+    wantedTrackCount: 0,
+    ...overrides
+  };
+}
+
+type Write = { method: string; pathname: string; body?: string };
+
+/** Answers the artist, these releases and a popular list, and records every
+ * write the page sends. */
+function answeringReleases(items: Release[], seen: Write[] = [], popular: unknown = { items: [] }) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost');
+      const method = (init?.method ?? 'GET').toUpperCase();
+      const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+      if (method !== 'GET') {
+        seen.push({ method, pathname: url.pathname, body: init?.body as string });
+        return body({ albumId: 'r1', wanted: 12, alreadyWanted: 0, dismissed: 12 });
+      }
+      if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
+      if (url.pathname === `/api/v1/artists/${artistID}/popular`) return body(popular);
+      if (url.pathname === '/api/v1/albums') {
+        return body({ items, total: items.length, limit: 0, offset: 0, scopeTotal: items.length });
+      }
+      return body({ items: [], total: 0, limit: 24, offset: 0 });
+    })
+  );
+}
+
+function titlesIn(kind: string) {
+  const section = screen.getByRole('region', { name: kind });
+  return Array.from(section.querySelectorAll('a[href^="/releases/"]')).map(
+    (link) => link.getAttribute('title')?.split(' · ')[0]
+  );
+}
+
+function singles(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    releaseRow(`s${index}`, `Single ${index}`, {
+      albumType: 'single',
+      firstReleaseDate: `20${10 + index}-01-01`
+    })
+  );
+}
+
+describe('the order of releases', () => {
+  // Newest on top, as Poldi asked. A held release no longer jumps the row,
+  // because the row is read as a timeline.
+  it('puts the newest first even when an older one is held', async () => {
+    answeringReleases([
+      releaseRow('r1', 'Section.80', { firstReleaseDate: '2011-07-02' }),
+      releaseRow('r2', 'To Pimp a Butterfly', { ownedTrackCount: 12 }),
+      releaseRow('r3', 'GNX', { firstReleaseDate: '2024-11-22' })
+    ]);
+    opened();
+    await screen.findByText('GNX');
+
+    expect(titlesIn('Albums')).toEqual(['GNX', 'To Pimp a Butterfly', 'Section.80']);
+  });
+});
+
+describe('the rows of releases', () => {
+  it('files an album with a secondary type under Other', async () => {
+    answeringReleases([
+      releaseRow('r1', 'DAMN.'),
+      releaseRow('r2', 'Overly Dedicated', { secondaryTypes: ['mixtape/street'] })
+    ]);
+    opened();
+    await screen.findByText('DAMN.');
+
+    expect(titlesIn('Other')).toEqual(['Overly Dedicated']);
   });
 
-  function answeringReleases(items: ReturnType<typeof release>[]) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = new URL(String(input), 'http://localhost');
-        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
-        if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
-        if (url.pathname === '/api/v1/albums') {
-          return body({ items, total: items.length, limit: 0, offset: 0, scopeTotal: items.length });
-        }
-        return body({ items: [], total: 0, limit: 24, offset: 0 });
+  it('names the kind of an Other release after its year', async () => {
+    answeringReleases([
+      releaseRow('r2', 'Overly Dedicated', {
+        firstReleaseDate: '2010-09-14',
+        secondaryTypes: ['mixtape/street']
       })
-    );
-  }
-
-  function titles() {
-    return Array.from(document.querySelectorAll('a[href^="/releases/"]')).map((link) =>
-      link.querySelector('[title]')?.getAttribute('title')
-    );
-  }
-
-  it('puts the releases the library holds first', async () => {
-    answeringReleases([
-      release('r1', 'Section.80', '2011-07-02', 0),
-      release('r2', 'To Pimp a Butterfly', '2015-03-15', 16),
-      release('r3', 'GNX', '2024-11-22', 0)
     ]);
     opened();
-    await screen.findByText('GNX');
 
-    expect(titles()[0]).toBe('To Pimp a Butterfly');
+    expect(await screen.findByText('2010 · Mixtape')).toBeTruthy();
   });
 
-  it('puts the newest first among the rest', async () => {
-    answeringReleases([
-      release('r1', 'Section.80', '2011-07-02', 0),
-      release('r3', 'GNX', '2024-11-22', 0)
-    ]);
+  it('draws no row for a kind with nothing in it', async () => {
+    answeringReleases([releaseRow('r1', 'DAMN.')]);
+    opened();
+    await screen.findByText('DAMN.');
+
+    expect(screen.queryByRole('region', { name: 'Other' })).toBeNull();
+  });
+
+  it('shows the newest eight of a long row', async () => {
+    answeringReleases(singles(10));
+    opened();
+    await screen.findByText('Single 9');
+
+    expect(titlesIn('Singles')).toHaveLength(8);
+  });
+
+  it('opens the whole row from Show all', async () => {
+    answeringReleases(singles(10));
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: /Show all 10/ }));
+
+    expect(titlesIn('Singles')).toHaveLength(10);
+  });
+});
+
+describe('wanting a release from its tile', () => {
+  it('wants the missing tracks when the + is pressed', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'GNX')], seen);
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'POST', pathname: '/api/v1/albums/r1/wanted' })
+      )
+    );
+  });
+
+  it('dismisses the rest when a wanted release is pressed again', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'GNX', { wantedTrackCount: 12 })], seen);
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({ method: 'POST', pathname: '/api/v1/albums/r1/not-wanted' })
+      )
+    );
+  });
+
+  it('offers no + on a release the library holds whole', async () => {
+    answeringReleases([releaseRow('r1', 'GNX', { ownedTrackCount: 12 })]);
     opened();
     await screen.findByText('GNX');
 
-    expect(titles()).toEqual(['GNX', 'Section.80']);
+    expect(screen.queryByRole('button', { name: 'Want GNX' })).toBeNull();
+  });
+});
+
+describe('the popular tracks', () => {
+  const track = (overrides: Partial<PopularTrack> = {}): PopularTrack => ({
+    recordingId: 'c0ffee00-0000-4000-8000-000000000001',
+    title: 'HUMBLE.',
+    releaseTitle: 'DAMN.',
+    lengthMs: 177000,
+    listenCount: 900,
+    trackId: null,
+    albumId: null,
+    albumTitle: null,
+    hasCover: false,
+    held: false,
+    wantId: null,
+    wantStatus: null,
+    ...overrides
+  });
+
+  it('lists them under Popular in the order given', async () => {
+    answeringReleases([releaseRow('r1', 'DAMN.')], [], {
+      items: [
+        track(),
+        track({ recordingId: 'c0ffee00-0000-4000-8000-000000000002', title: 'luther' })
+      ]
+    });
+    opened();
+    const box = (await screen.findByRole('heading', { name: 'Popular' })).parentElement;
+    const rows = Array.from(box?.querySelectorAll('li') ?? []);
+
+    expect(rows.map((row) => row.querySelector('[title]')?.getAttribute('title'))).toEqual([
+      'HUMBLE.',
+      'luther'
+    ]);
+  });
+
+  it('says what to do when there is no ListenBrainz token', async () => {
+    const unavailable = 'Add a ListenBrainz token in Settings to see popular tracks.';
+    answeringReleases([releaseRow('r1', 'DAMN.')], [], { items: [], unavailable });
+    opened();
+
+    expect(await screen.findByText(unavailable)).toBeTruthy();
+  });
+
+  it('wants a recording no release carries by its MusicBrainz ID', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'DAMN.')], seen, { items: [track()] });
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+
+    await waitFor(() => expect(seen[0]?.pathname).toBe('/api/v1/acquisition-targets'));
+    expect(JSON.parse(seen[0].body ?? '{}').recordingId).toBe(
+      'c0ffee00-0000-4000-8000-000000000001'
+    );
+  });
+
+  it('wants a recording through its track when the catalogue has one', async () => {
+    const seen: Write[] = [];
+    answeringReleases([releaseRow('r1', 'DAMN.')], seen, {
+      items: [track({ trackId: 't1', albumId: 'r1' })]
+    });
+    opened();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+
+    await waitFor(() => expect(seen[0]?.pathname).toBe('/api/v1/tracks/t1/wanted'));
+  });
+
+  it('draws a tick instead of a + for a recording the library holds', async () => {
+    answeringReleases([releaseRow('r1', 'DAMN.')], [], { items: [track({ held: true })] });
+    opened();
+    await screen.findByText('HUMBLE.');
+
+    expect(screen.queryByRole('button', { name: 'Want HUMBLE.' })).toBeNull();
   });
 });
 

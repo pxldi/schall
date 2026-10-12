@@ -27,6 +27,8 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import PopularTracks from './PopularTracks.svelte';
+  import ReleaseTile from './ReleaseTile.svelte';
 
   type Tile = 'owned' | 'partial' | 'missing' | 'dismissed' | 'unknown' | 'busy' | 'failed';
   // What the header's follow control offers: every monitor level, plus the one
@@ -67,11 +69,11 @@
   // it snap back rather than sit on an option the artist never left.
   let followControlReset = $state(0);
   // A discography arrives whole, and a prolific artist's singles run to
-  // hundreds. Each section shows its first eighteen — three rows on a wide
-  // screen — and says how many it is holding back. Which sections are open is
-  // the reader's, and it is not remembered: opening one is a glance, not a
-  // place to come back to.
-  const sectionCap = 18;
+  // hundreds. Each kind of release is one row of its newest eight, and "Show
+  // all" opens the rest of that kind in place. Which rows are open is the
+  // reader's, and it is not remembered: opening one is a glance, not a place to
+  // come back to.
+  const rowLength = 8;
   let expanded = $state<string[]>([]);
 
   const artist = createQuery({
@@ -350,50 +352,91 @@
   );
   const filterName = $derived(filters.find((entry) => entry.key === completeness)?.name ?? 'All');
 
-  // Grouping by type keeps a long discography readable: an artist's albums are
+  // Grouping by kind keeps a long discography readable: an artist's albums are
   // a different question from their singles, even though both can be missing.
+  // An album MusicBrainz qualifies as a compilation, a mixtape, a live record
+  // or anything else goes under Other with broadcasts and the rest, so Albums
+  // holds the records an artist made as albums. A kind with nothing in it is
+  // not drawn.
   //
-  // The sections divide the page, not the discography, and that is a trade the
-  // paging makes rather than an oversight. A page is a walk of the order an
-  // index holds, and album type is not one of those orders — giving it one is a
-  // new index, which is a schema decision and not this change's to take. So an
-  // artist long enough to need a second page can show the same heading again on
-  // it, with that type's releases split at whatever year the page ended on.
-  // Everything a heading claims is still true of what is under it; it is the
-  // reading order that suffers, and only past forty-eight releases.
-  //
-  // Within a section, releases the library holds any of come first, then
-  // newest first. Oldest first put the first eighteen of a long career in
-  // front and left the one album somebody owns behind "Show all".
-  const order = ['album', 'ep', 'single'];
+  // Newest first in every row, whether or not the library holds it, because
+  // the row is read as a timeline and its eight are the latest.
+  const kinds = ['Albums', 'EPs', 'Singles', 'Other'] as const;
+  type Kind = (typeof kinds)[number];
+  function kindOf(release: Release): Kind {
+    if (release.albumType === 'album' && !release.secondaryTypes?.length) return 'Albums';
+    if (release.albumType === 'ep') return 'EPs';
+    if (release.albumType === 'single') return 'Singles';
+    return 'Other';
+  }
   const sections = $derived(
-    Array.from(new Set(shown.map((release) => release.albumType)))
-      .sort((a, b) => {
-        const byOrder = index(a) - index(b);
-        return byOrder || a.localeCompare(b);
-      })
-      .map((type) => ({
-        type,
+    kinds
+      .map((kind) => ({
+        kind,
         items: shown
-          .filter((release) => release.albumType === type)
+          .filter((release) => kindOf(release) === kind)
           .sort(
             (a, b) =>
-              Number(b.ownedTrackCount > 0) - Number(a.ownedTrackCount > 0) ||
-              (b.firstReleaseDate ?? '').localeCompare(a.firstReleaseDate ?? '')
+              (b.firstReleaseDate ?? '').localeCompare(a.firstReleaseDate ?? '') ||
+              a.title.localeCompare(b.title)
           )
       }))
+      .filter((section) => section.items.length > 0)
   );
 
-  function index(type: string) {
-    const at = order.indexOf(type);
-    return at === -1 ? order.length : at;
+  // What a release in Other is, said after its year, since the heading no
+  // longer does.
+  const otherNames: Record<string, string> = {
+    compilation: 'Compilation',
+    live: 'Live',
+    'mixtape/street': 'Mixtape',
+    remix: 'Remixes',
+    soundtrack: 'Soundtrack',
+    'dj-mix': 'DJ mix',
+    demo: 'Demo',
+    interview: 'Interview',
+    spokenword: 'Spoken word',
+    audiobook: 'Audiobook',
+    broadcast: 'Broadcast'
+  };
+  function otherName(release: Release) {
+    const qualifier = release.secondaryTypes?.find((type) => otherNames[type]);
+    if (qualifier) return otherNames[qualifier];
+    return otherNames[release.albumType] ?? '';
   }
 
-  function label(type: string) {
-    if (type === 'ep') return 'EPs';
-    if (type === 'single') return 'Singles';
-    return `${type[0].toUpperCase()}${type.slice(1)}s`;
+  function meta(release: Release, kind: Kind) {
+    const year = release.firstReleaseDate ? release.firstReleaseDate.slice(0, 4) : '—';
+    const name = kind === 'Other' ? otherName(release) : '';
+    return name ? `${year} · ${name}` : year;
   }
+
+  // The tracks still to get, and whether every one of them is already wanted:
+  // that is when the release's + shows its tick.
+  function gaps(release: Release) {
+    return Math.max(0, countable(release) - release.ownedTrackCount);
+  }
+  function releaseWanted(release: Release) {
+    return gaps(release) > 0 && (release.wantedTrackCount ?? 0) >= gaps(release);
+  }
+
+  // The + on a release wants every track the library does not have, as the
+  // release page's button does. Pressed again it dismisses the tracks still
+  // missing, the release page's "Dismiss the rest": the files the library holds
+  // are not touched.
+  type ReleaseToggle = { kind: 'want' | 'unwant'; id: string };
+  const toggleRelease = createMutation({
+    mutationFn: async ({ kind, id }: ReleaseToggle): Promise<unknown> =>
+      kind === 'want' ? api.wantRelease(id) : api.dismissReleaseRemainder(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['artists'] }),
+        queryClient.invalidateQueries({ queryKey: ['releases'] }),
+        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      ]);
+    }
+  });
 
   // The card's second line and the colour it reads in: ink-3 for a plain fact,
   // accent for a partial release, fail for one missing outright. One function
@@ -646,70 +689,58 @@
     {:else if $releases.isPending}
       {@render ReleaseSkeleton()}
     {:else if sections.length}
-      {#each sections as section (section.type)}
-        {@const opened = expanded.includes(section.type)}
-        {@const visible = opened ? section.items : section.items.slice(0, sectionCap)}
-        <section class="flex flex-col gap-2">
-          <div class="flex items-baseline justify-between gap-3">
-            <span class="text-[0.9375rem] font-semibold text-ink">
-              {label(section.type)}
-              <span class="numeric text-meta font-normal text-ink-4">{section.items.length}</span>
-            </span>
-            {#if section.items.length > sectionCap}
-              <button
-                class="tap w-fit text-meta font-medium text-ink-3 transition hover:text-ink"
-                onclick={() =>
-                  (expanded = opened
-                    ? expanded.filter((type) => type !== section.type)
-                    : [...expanded, section.type])}
-              >
-                {opened
-                  ? 'Show less'
-                  : `Show all ${section.items.length} ${label(section.type).toLocaleLowerCase()}`}
-              </button>
-            {/if}
-          </div>
+      <div class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <div class="flex min-w-0 flex-col gap-5">
+          {#each sections as section (section.kind)}
+            {@const open = expanded.includes(section.kind)}
+            {@const visible = open ? section.items : section.items.slice(0, rowLength)}
+            <section class="flex flex-col gap-2.5" aria-label={section.kind}>
+              <div class="flex items-baseline gap-2.5 border-b border-line-thin pb-1.5">
+                <h2 class="text-[0.9375rem] font-semibold text-ink">
+                  {section.kind}
+                  <span class="numeric text-meta font-normal text-ink-4">{section.items.length}</span>
+                </h2>
+                {#if section.items.length > rowLength}
+                  <button
+                    class="tap inline-flex w-fit items-center gap-1 text-meta font-medium text-ink-3 transition hover:text-ink"
+                    aria-expanded={open}
+                    onclick={() =>
+                      (expanded = open
+                        ? expanded.filter((kind) => kind !== section.kind)
+                        : [...expanded, section.kind])}
+                  >
+                    {open ? 'Show less' : `Show all ${section.items.length}`}
+                    <Icon name={open ? 'chevron-up' : 'chevron-right'} size="sm" />
+                  </button>
+                {/if}
+              </div>
 
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
-            {#each visible as release (release.id)}
-              {@const info = describe(release)}
-              <a href={`/releases/${release.id}`} class="group flex min-w-0 flex-col gap-1.5">
-                <!-- Only what Schall already holds, and only where the row
-                     says it holds one: a page of tiles asks this installation
-                     for the pictures it has and never sets an archive working.
-                     A release nobody has pictured gets generated art in its
-                     place (ADR Duoton). A release with nothing held is faded,
-                     so the ones in the library stand out from the ones that
-                     are not. -->
-                <div
-                  class="aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px] {release.ownedTrackCount ===
-                  0
-                    ? 'opacity-[0.38]'
-                    : ''}"
-                  data-held={release.ownedTrackCount > 0 ? 'some' : 'none'}
-                >
-                  <Cover
-                    src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
-                    seed={release.id}
-                    class="size-full object-cover"
+              <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+                {#each visible as release (release.id)}
+                  <ReleaseTile
+                    {release}
+                    meta={meta(release, section.kind)}
+                    state={describe(release).text}
+                    owned={release.ownedTrackCount}
+                    countable={countable(release)}
+                    wanted={releaseWanted(release)}
+                    wantable={gaps(release) > 0 && tile(release) !== 'busy'}
+                    onwant={() => $toggleRelease.mutateAsync({ kind: 'want', id: release.id })}
+                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'unwant', id: release.id })}
                   />
-                </div>
-                <span class="block truncate text-body font-bold tracking-[-0.01em] text-ink" title={release.title}>
-                  {release.title}
-                </span>
-                <!-- Never cut off. The line is a year and then how much of the
-                     release is held — `2018 · 13 of 14` — and truncation took
-                     the denominator, which is the half that makes the other
-                     half mean anything. A second line is cheaper than a fact
-                     that ends in an ellipsis. -->
-                <span class="numeric -mt-1 block min-w-0 text-meta {info.tone}" title={info.text}
-                  >{info.text}</span
-                >
-              </a>
-            {/each}
-          </div>
-        </section>
-      {/each}
+                {/each}
+              </div>
+            </section>
+          {/each}
+          {#if $toggleRelease.isError}
+            <ErrorNote error={$toggleRelease.error} />
+          {/if}
+        </div>
+
+        <aside class="min-w-0 xl:sticky xl:top-[calc(var(--topbar-height)+1rem)]">
+          <PopularTracks {artistID} artistName={$artist.data.name} />
+        </aside>
+      </div>
 
     {:else}
       <EmptyPanel
@@ -748,12 +779,12 @@
     aria-label="Loading releases"
   >
     <Skeleton class="h-3 w-16" />
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-[18px] gap-y-[22px]">
-      {#each Array(48) as _, placeholderIndex (placeholderIndex)}
-        <div class="flex flex-col gap-1.5" aria-hidden="true">
-          <Skeleton shape="block" class="aspect-square" />
-          <Skeleton class="h-4 w-full" />
-          <Skeleton class="h-3 w-2/3" />
+    <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+      {#each Array(32) as _, placeholderIndex (placeholderIndex)}
+        <div class="flex w-19 flex-col gap-1" aria-hidden="true">
+          <Skeleton shape="block" class="size-19" />
+          <Skeleton class="h-3 w-full" />
+          <Skeleton class="h-2.5 w-2/3" />
         </div>
       {/each}
     </div>
