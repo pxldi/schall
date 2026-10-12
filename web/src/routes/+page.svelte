@@ -205,13 +205,26 @@
 
   // ---- lists --------------------------------------------------------------
 
-  // A list shows its first rows and opens in place to the rest. The lists
-  // used to scroll inside their panels, which caught the mouse wheel on its
-  // way down the page and cut the last row in half.
-  const LIST_ROWS = 5;
-  let opened = $state<Record<string, boolean>>({});
-  function shown<T>(list: string, rows: T[]): T[] {
-    return opened[list] ? rows : rows.slice(0, LIST_ROWS);
+  // A list that can scroll further says so with a fade at its foot, drawn by
+  // the wrapper around it. The flag follows the scroll position, the list's
+  // size and its rows, and goes when the last row is in view.
+  function more(list: HTMLElement) {
+    const update = () =>
+      list.parentElement?.toggleAttribute('data-more', list.scrollTop + list.clientHeight < list.scrollHeight - 1);
+    list.addEventListener('scroll', update, { passive: true });
+    // The test window has no ResizeObserver; the flag is cosmetic there.
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    resized?.observe(list);
+    const changed = new MutationObserver(update);
+    changed.observe(list, { childList: true });
+    update();
+    return {
+      destroy() {
+        list.removeEventListener('scroll', update);
+        resized?.disconnect();
+        changed.disconnect();
+      }
+    };
   }
 
   // ---- halftone charts -----------------------------------------------------
@@ -331,20 +344,6 @@
   </span>
 {/snippet}
 
-<!-- Opens a list to every row the read returned, and closes it again. -->
-{#snippet showAll(list: string, title: string, count: number)}
-  {#if count > LIST_ROWS}
-    <button
-      type="button"
-      class="self-start text-meta text-ink-4 transition hover:text-ink"
-      aria-expanded={opened[list] ?? false}
-      aria-label="{opened[list] ? 'Show fewer' : `Show all ${count}`} in {title}"
-      onclick={() => (opened = { ...opened, [list]: !opened[list] })}
-      >{opened[list] ? 'Show fewer' : `Show all ${count}`}</button
-    >
-  {/if}
-{/snippet}
-
 <!-- What one dot stands for, as a dot and a number. -->
 {#snippet dotKey(per: number, noun: string)}
   <span class="ml-auto inline-flex items-center gap-1.5 font-mono text-micro text-ink-4">
@@ -415,8 +414,9 @@
              content key collide and the throw blanked every panel after it
              (2026-09-08). The lists are replaced whole on each read, so a
              positional key loses nothing. -->
-        <ul class="flex flex-col">
-          {#each shown('most-played', listening.mostPlayed) as song, index (index)}
+        <div class="panel-scroll min-h-[12.5rem]">
+        <ul class="panel-list" use:more>
+          {#each listening.mostPlayed as song, index (index)}
             <li class="want-row flex h-11 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={song.releaseId ? 'a' : 'div'}
@@ -443,7 +443,7 @@
             </li>
           {/each}
         </ul>
-        {@render showAll('most-played', 'Most played', listening.mostPlayed.length)}
+        </div>
       {:else if listening}
         {@render quiet()}
       {/if}
@@ -520,8 +520,9 @@
       {#if $overview.isPending}
         {@render loadingRows('Top artists', 'min-h-[12.5rem]')}
       {:else if listening?.available}
-        <ul class="flex flex-col">
-          {#each shown('top-artists', listening.topArtists) as artist, index (index)}
+        <div class="panel-scroll min-h-[12.5rem]">
+        <ul class="panel-list" use:more>
+          {#each listening.topArtists as artist, index (index)}
             <li class="flex h-11 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={artist.artistId ? 'a' : 'div'}
@@ -545,7 +546,7 @@
             </li>
           {/each}
         </ul>
-        {@render showAll('top-artists', 'Top artists', listening.topArtists.length)}
+        </div>
       {:else if listening}
         {@render quiet()}
       {/if}
@@ -557,8 +558,9 @@
       {#if $overview.isPending}
         {@render loadingRows('Top albums', 'min-h-[12.5rem]')}
       {:else if listening?.available}
-        <ul class="flex flex-col">
-          {#each shown('top-albums', listening.topAlbums) as album, index (index)}
+        <div class="panel-scroll min-h-[12.5rem]">
+        <ul class="panel-list" use:more>
+          {#each listening.topAlbums as album, index (index)}
             <li class="flex h-12 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={album.releaseId ? 'a' : 'div'}
@@ -578,7 +580,7 @@
             </li>
           {/each}
         </ul>
-        {@render showAll('top-albums', 'Top albums', listening.topAlbums.length)}
+        </div>
       {:else if listening}
         {@render quiet()}
       {/if}
@@ -592,8 +594,9 @@
       {:else if listening?.available}
         <!-- One row per sitting: when it ran and how many songs, then who
              was on. A gap over thirty minutes starts the next one. -->
-        <ul class="flex flex-col">
-          {#each shown('recently-played', listening.sessions) as session, index (index)}
+        <div class="panel-scroll min-h-[15rem]">
+        <ul class="panel-list" use:more>
+          {#each listening.sessions as session, index (index)}
             <li class="flex h-12 shrink-0 items-center gap-2.5">
               <!-- Up to three of the session's covers, overlapping, the first
                    on top. The slot is always three covers wide so the text
@@ -620,7 +623,7 @@
             </li>
           {/each}
         </ul>
-        {@render showAll('recently-played', 'Recently played', listening.sessions.length)}
+        </div>
       {:else if listening}
         {@render quiet()}
       {/if}
@@ -632,8 +635,9 @@
       {#if $overview.isPending}
         {@render loadingRows('Recently added', 'min-h-[12.5rem]')}
       {:else if data}
-        <ul class="flex flex-col">
-          {#each shown('recently-added', data.recentlyAdded) as file, index (index)}
+        <div class="panel-scroll min-h-[12.5rem]">
+        <ul class="panel-list" use:more>
+          {#each data.recentlyAdded as file, index (index)}
             <li class="flex h-10 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={file.releaseId ? 'a' : 'div'}
@@ -646,7 +650,7 @@
             </li>
           {/each}
         </ul>
-        {@render showAll('recently-added', 'Recently added', data.recentlyAdded.length)}
+        </div>
       {/if}
     </section>
 
@@ -850,6 +854,47 @@
      indefinite height resolves to the SVG's aspect-ratio height, and a
      year of growth 970px wide wanted 259px. A zero basis lets min-height set
      the floor. */
+  /* A list fills whatever height the row of panels gives it and scrolls
+     inside; `contain: size` keeps its 25 rows out of the row's height
+     calculation, so the charts beside it set the height and the list follows.
+     The cut-off last row says there is more; a scrollbar in a panel this
+     small did not fit. */
+  .panel-scroll {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    contain: size;
+  }
+  .panel-list {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .panel-list::-webkit-scrollbar {
+    display: none;
+  }
+  /* The fade at the foot while there is more below: the panel's own colour
+     coming up over the last visible row, blurred a little so the row reads
+     as continuing under it. The attribute is set by the action, never by the
+     template, so the selector is global or the compiler drops it as unused. */
+  :global(.panel-scroll[data-more])::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2.5rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--panel-bg));
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    mask-image: linear-gradient(to bottom, transparent, black);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black);
+  }
   .fig {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
