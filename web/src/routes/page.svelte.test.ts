@@ -326,9 +326,7 @@ describe('the overview', () => {
     });
   });
 
-  // The lists used to scroll inside their panels, which caught the mouse
-  // wheel on its way down the page.
-  it('shows the first five rows of a list and opens it in place to the rest', async () => {
+  it('shows every row the read returned, scrolling inside the panel', async () => {
     const data = overview();
     data.listening.topArtists = Array.from({ length: 8 }, (_, index) => ({
       name: `Artist ${index}`,
@@ -340,21 +338,7 @@ describe('the overview', () => {
     answering(data);
     show();
     await screen.findByText('812');
-    expect(screen.getAllByText(/^Artist \d$/)).toHaveLength(5);
-
-    const open = screen.getByRole('button', { name: 'Show all 8 in Top artists' });
-    expect(open.getAttribute('aria-expanded')).toBe('false');
-    await fireEvent.click(open);
-
     expect(screen.getAllByText(/^Artist \d$/)).toHaveLength(8);
-    expect(screen.getByRole('button', { name: 'Show fewer in Top artists' }).getAttribute('aria-expanded')).toBe('true');
-  });
-
-  it('offers no way to open a list that already shows every row', async () => {
-    answering(overview());
-    show();
-    await screen.findByText('812');
-    expect(screen.queryByRole('button', { name: /^Show all/ })).toBeNull();
   });
 
   it('gives a sitting of one song its time alone, not a range', async () => {
