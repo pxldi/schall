@@ -5,6 +5,8 @@
   import { formatBytes, relativeTime } from '$lib/utils';
   import type { OverviewSession } from '$lib/api-types';
   import Cover from '$lib/components/Cover.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import type { IconName } from '$lib/icons';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
@@ -87,6 +89,9 @@
       : `color-mix(in srgb, var(--color-duo-light) ${share}%, var(--color-inset))`
   );
   const heatMax = $derived(Math.max(1, ...(listening?.whenYouListen.cells.flat() ?? [0])));
+  // The first hour with the most listens carries a ring, so the eye finds the
+  // peak without reading the line above the grid.
+  const heatPeak = $derived(listening?.whenYouListen.cells.flat().indexOf(heatMax) ?? -1);
   function heatColour(count: number): string {
     if (count === 0) return HEAT[0];
     const step = Math.ceil((count / heatMax) * (HEAT.length - 1));
@@ -235,6 +240,15 @@
     };
   }
 
+  // A ranked row carries a wash behind it as long as its share of the first
+  // row's listens, so the gap between first and fifth is seen, not read.
+  function share(value: number, top: number): number {
+    return top > 0 ? Math.max(4, Math.round((value / top) * 100)) : 0;
+  }
+
+  // Room on the disc as forty tiles, each a fortieth of it.
+  const ROOM_TILES = 40;
+
   // ---- bar charts -------------------------------------------------------------
 
   // Bars are drawn in a viewBox of fixed width so the gaps and rounded ends
@@ -242,7 +256,7 @@
   const BAR_W = 600;
   function bars(days: OverviewDay[], height: number) {
     const max = Math.max(1, ...days.map((day) => day.count));
-    const gap = 3;
+    const gap = 5;
     const width = (BAR_W - gap * (days.length - 1)) / days.length;
     return days.map((day, index) => {
       const h = day.count === 0 ? 2 : Math.max(2, (day.count / max) * height);
@@ -264,10 +278,14 @@
   <title>Overview · Schall</title>
 </svelte:head>
 
-{#snippet head(title: string, period: string, lead = false)}
-  <div class="flex items-baseline gap-2.5">
-    <h2 class="text-quiet-body font-semibold tracking-tight {lead ? 'text-ink' : 'text-ink-3'}">{title}</h2>
-    {#if period}<span class="text-quiet-meta text-ink-4">{period}</span>{/if}
+<!-- A panel's head: its icon and name on one centre line, the period at the
+     far right. The name is set at line-height 1 so the icon and the capitals
+     share a centre. -->
+{#snippet head(icon: IconName, title: string, period: string)}
+  <div class="flex items-center gap-2 text-ink-3">
+    <Icon name={icon} size="sm" />
+    <h2 class="head-title">{title}</h2>
+    {#if period}<span class="ml-auto text-meta leading-none text-ink-4">{period}</span>{/if}
   </div>
 {/snippet}
 
@@ -334,35 +352,33 @@
   {#if $overview.isError}
     <ErrorNote error={$overview.error} retry={() => $overview.refetch()} />
   {:else}
-  <div class="grid grid-cols-1 gap-4 lg:grid-cols-4" aria-busy={$overview.isPending}>
+  <div class="grid grid-cols-1 gap-3.5 lg:grid-cols-12" aria-busy={$overview.isPending}>
     <!-- Listens -->
-    <section data-panel class="panel relative lg:col-span-2">
-      {@render head('Listens', 'last 30 days', true)}
+    <section data-panel class="panel relative lg:col-span-7">
+      {@render head('listen', 'Listens', 'last 30 days')}
       {#if $overview.isPending}
-        {@render loadingChart('Listens', 'min-h-[112px]')}
+        {@render loadingChart('Listens', 'min-h-[132px]')}
       {:else if listening?.available}
-        <div class="flex items-baseline gap-3">
-          <span class="numeric text-quiet-display font-extrabold tracking-tight text-ink"
-            >{listening.listens.total.toLocaleString()}</span
-          >
+        <div class="flex items-center gap-3">
+          <span class="numeric total text-ink">{listening.listens.total.toLocaleString()}</span>
           {#if change !== null}
             <!-- Against the thirty days before; the earlier count itself is
                  not shown. -->
-            <span class="font-mono text-body {change >= 0 ? 'text-ok' : 'text-fail'}"
+            <span class="delta font-mono text-meta font-semibold {change >= 0 ? 'text-ok' : 'text-fail'}"
               title="{listening.listens.previous.toLocaleString()} in the 30 days before"
               >{change >= 0 ? '+' : ''}{change}%</span
             >
           {/if}
         </div>
-        {@const columns = bars(listening.listens.days, 110)}
-        <svg viewBox="0 0 {BAR_W} 112" preserveAspectRatio="none" class="h-0 min-h-[112px] w-full grow" aria-hidden="true">
+        {@const columns = bars(listening.listens.days, 130)}
+        <svg viewBox="0 0 {BAR_W} 132" preserveAspectRatio="none" class="h-0 min-h-[132px] w-full grow" aria-hidden="true">
           {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
             <rect
               x={bar.x - 1.5}
               y="0"
               width={bar.width + 3}
-              height="112"
+              height="132"
               fill="transparent"
               aria-hidden="true"
               onmouseenter={(event) => show(event, 'listens', `${weekdayOf(bar.date)} ${dayLabel(bar.date)} · ${plural(bar.count, 'listen')}`)}
@@ -382,8 +398,8 @@
     </section>
 
     <!-- Most played -->
-    <section data-panel class="panel lg:col-span-2">
-      {@render head('Most played', 'this month', true)}
+    <section data-panel class="panel lg:col-span-5">
+      {@render head('track', 'Most played', 'this month')}
       {#if $overview.isPending}
         {@render loadingRows('Most played', 'min-h-[12.5rem]')}
       {:else if listening?.available}
@@ -395,12 +411,14 @@
         <div class="panel-scroll min-h-[12.5rem]">
         <ul class="panel-list" use:more>
           {#each listening.mostPlayed as song, index (index)}
-            <li class="want-row flex h-10 shrink-0 items-center gap-2.5">
+            <li class="ranked want-row flex h-11 shrink-0 items-center gap-2.5">
+              <span class="wash" style="width: {share(song.listens, listening.mostPlayed[0].listens)}%" aria-hidden="true"></span>
               <svelte:element
                 this={song.releaseId ? 'a' : 'div'}
                 href={song.releaseId ? `/releases/${song.releaseId}` : undefined}
                 class="row-link"
               >
+                <span class="rank" aria-hidden="true">{index + 1}</span>
                 {@render row(song.coverUrl, song.title, song.artist)}
               </svelte:element>
               <!-- A held song is the ordinary case and carries no mark; the
@@ -416,7 +434,7 @@
                   />
                 {/if}
               </span>
-              <span class="w-6 text-right font-mono text-meta text-ink-2">{song.listens}</span>
+              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{song.listens}</span>
             </li>
           {/each}
         </ul>
@@ -427,8 +445,8 @@
     </section>
 
     <!-- When you listen -->
-    <section data-panel class="panel relative lg:col-span-2">
-      {@render head('When you listen', '30 days')}
+    <section data-panel class="panel relative lg:col-span-7">
+      {@render head('waiting', 'When you listen', '30 days')}
       {#if $overview.isPending}
         {@render loadingChart('When you listen', 'min-h-[7rem]')}
       {:else if listening?.available}
@@ -441,7 +459,7 @@
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div
-          class="flex flex-col gap-[3px]"
+          class="flex flex-col gap-1"
           role="group"
           tabindex="0"
           aria-label="Listens by weekday and hour, arrow keys to explore"
@@ -450,15 +468,17 @@
           onblur={() => (heatFocused = false)}
         >
           {#each listening.whenYouListen.cells as hours, day (day)}
-            <div class="grid items-center gap-[3px]" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+            <div class="grid items-center gap-1" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
               <span class="pr-1.5 text-right font-mono text-micro text-ink-4">{WEEKDAYS[day]}</span>
               {#each hours as count, hour (hour)}
                 <span
                   data-cell
-                  class="aspect-square w-full rounded-[3px]"
+                  class="aspect-square w-full rounded-[5px]"
                   style="background: {heatColour(count)}; {heatFocused && heatFocus.day === day && heatFocus.hour === hour
                     ? 'box-shadow: inset 0 0 0 2px var(--color-accent);'
-                    : ''}"
+                    : day * 24 + hour === heatPeak
+                      ? 'box-shadow: inset 0 0 0 2px var(--color-ink);'
+                      : ''}"
                   aria-hidden="true"
                   onmouseenter={(event) => show(event, 'heat', heatCellText(day, hour, count))}
                   onmouseleave={hide}
@@ -467,7 +487,7 @@
               {/each}
             </div>
           {/each}
-          <div class="grid gap-[3px] pt-0.5 font-mono text-micro text-ink-4" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+          <div class="grid gap-1 pt-0.5 font-mono text-micro text-ink-4" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
             <span></span>
             {#each Array.from({ length: 24 }, (_, hour) => hour) as hour (hour)}
               <span class="whitespace-nowrap">{hour % 3 === 0 ? hourLabel(hour).slice(0, 2) : ''}</span>
@@ -482,26 +502,28 @@
     </section>
 
     <!-- Top artists -->
-    <section data-panel class="panel">
-      {@render head('Top artists', 'this month')}
+    <section data-panel class="panel lg:col-span-5">
+      {@render head('artists', 'Top artists', 'this month')}
       {#if $overview.isPending}
         {@render loadingRows('Top artists', 'min-h-[12.5rem]')}
       {:else if listening?.available}
         <div class="panel-scroll min-h-[12.5rem]">
         <ul class="panel-list" use:more>
           {#each listening.topArtists as artist, index (index)}
-            <li class="flex h-10 shrink-0 items-center gap-2.5">
+            <li class="ranked flex h-11 shrink-0 items-center gap-2.5">
+              <span class="wash" style="width: {share(artist.listens, listening.topArtists[0].listens)}%" aria-hidden="true"></span>
               <svelte:element
                 this={artist.artistId ? 'a' : 'div'}
                 href={artist.artistId ? `/artists/${artist.artistId}` : undefined}
                 class="row-link"
               >
+                <span class="rank" aria-hidden="true">{index + 1}</span>
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-thin text-body font-semibold text-ink-2" aria-hidden="true">
                   <Cover src={artist.pictureUrl ?? undefined} alt="" class="h-8 w-8 rounded-full object-cover" fallback={artist.name.slice(0, 1)} />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-body font-medium text-ink">{artist.name}</span>
               </svelte:element>
-              <span class="font-mono text-meta text-ink-2">{artist.listens}</span>
+              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{artist.listens}</span>
             </li>
           {/each}
         </ul>
@@ -512,41 +534,40 @@
     </section>
 
     <!-- Top albums -->
-    <section data-panel class="panel">
-      {@render head('Top albums', 'this month')}
+    <section data-panel class="panel lg:col-span-7">
+      {@render head('release', 'Top albums', 'this month')}
       {#if $overview.isPending}
         {@render loadingRows('Top albums', 'min-h-[12.5rem]')}
       {:else if listening?.available}
-        <div class="panel-scroll min-h-[12.5rem]">
-        <ul class="panel-list" use:more>
-          {#each listening.topAlbums as album, index (index)}
-            <li class="flex h-12 shrink-0 items-center gap-2.5">
+        <!-- The month's five most played albums as a wall of covers, the first
+             twice the size of the rest. -->
+        <ul class="wall">
+          {#each listening.topAlbums.slice(0, 5) as album, index (index)}
+            <li>
               <svelte:element
                 this={album.releaseId ? 'a' : 'div'}
                 href={album.releaseId ? `/releases/${album.releaseId}` : undefined}
-                class="row-link"
+                class="wall-tile"
               >
-                <span role="img" aria-label="Cover for {album.title}" class="h-10 w-10 shrink-0 overflow-hidden rounded-row border border-line-thin bg-surface-thin">
-                  <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-10 w-10 rounded-row object-cover" />
+                <span role="img" aria-label="Cover for {album.title}" class="absolute inset-0 bg-surface-thin">
+                  <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-full w-full object-cover" />
                 </span>
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="truncate text-body font-medium text-ink">{album.title}</span>
-                  <span class="truncate text-meta text-ink-4">{album.artist}</span>
+                <span class="wall-caption">
+                  <span class="truncate font-medium text-white">{album.title}</span>
+                  <span class="truncate text-white/70">{album.artist} · {album.listens}</span>
                 </span>
               </svelte:element>
-              <span class="font-mono text-meta text-ink-2">{album.listens}</span>
             </li>
           {/each}
         </ul>
-        </div>
       {:else if listening}
         {@render quiet()}
       {/if}
     </section>
 
     <!-- Recently played -->
-    <section data-panel class="panel lg:col-span-2">
-      {@render head('Recently played', '')}
+    <section data-panel class="panel lg:col-span-5">
+      {@render head('play', 'Recently played', '')}
       {#if $overview.isPending}
         {@render loadingRows('Recently played', 'min-h-[15rem]')}
       {:else if listening?.available}
@@ -588,8 +609,8 @@
     </section>
 
     <!-- Recently added -->
-    <section data-panel class="panel lg:col-span-2">
-      {@render head('Recently added', '')}
+    <section data-panel class="panel lg:col-span-5">
+      {@render head('plus', 'Recently added', '')}
       {#if $overview.isPending}
         {@render loadingRows('Recently added', 'min-h-[12.5rem]')}
       {:else if data}
@@ -613,8 +634,8 @@
     </section>
 
     <!-- Downloaded -->
-    <section data-panel class="panel relative lg:col-span-2">
-      {@render head('Downloaded', '14 days')}
+    <section data-panel class="panel relative lg:col-span-4">
+      {@render head('download', 'Downloaded', '14 days')}
       {#if $overview.isPending}
         {@render loadingChart('Downloaded', 'min-h-[7rem]')}
       {:else if data}
@@ -627,7 +648,7 @@
         {@const columns = bars(data.arrived.days, 96)}
         <svg viewBox="0 0 {BAR_W} 98" preserveAspectRatio="none" class="h-0 min-h-[98px] w-full grow" aria-hidden="true">
           {#each columns as bar (bar.date)}
-            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="4" class={bar.today ? 'bar-today' : 'bar'} />
             <rect
               x={bar.x - 1.5}
               y="0"
@@ -649,8 +670,8 @@
     </section>
 
     <!-- Library -->
-    <section data-panel class="panel relative lg:col-span-2">
-      {@render head('Library', '')}
+    <section data-panel class="panel relative lg:col-span-3">
+      {@render head('library', 'Library', '')}
       {#if $overview.isPending}
         {@render loadingFigures('Library')}
       {:else if data}
@@ -690,13 +711,15 @@
           <div class="mt-auto flex flex-col gap-1.5">
             <p class="text-meta text-ink-4">Room left <span class="font-mono text-ink-2">{formatBytes(roomLeft.free)}</span></p>
             <div
-              class="h-1 overflow-hidden rounded-full bg-surface-thin"
+              class="room"
               role="img"
               aria-label="{formatBytes(data.library.storage!.usedBytes)} used of {formatBytes(data.library.storage!.totalBytes)}"
               onmouseenter={(event) => show(event, 'library', `${formatBytes(data.library.storage!.usedBytes)} used of ${formatBytes(data.library.storage!.totalBytes)}`)}
               onmouseleave={hide}
             >
-              <div class="h-full rounded-full bg-accent" style="width: {roomLeft.usedShare}%"></div>
+              {#each Array.from({ length: ROOM_TILES }, (_, tile) => tile) as tile (tile)}
+                <span class:used={tile < Math.round((roomLeft.usedShare / 100) * ROOM_TILES)}></span>
+              {/each}
             </div>
           </div>
         {/if}
@@ -743,21 +766,119 @@
   .growth-end {
     fill: var(--color-duo-light);
   }
+  /* A panel takes a breath of the page's dark ink at its top and a hairline
+     of the light ink at its edge, so the boxes belong to the cover above. */
   .panel {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
     min-width: 0;
     min-height: 0;
-    padding: 14px 18px 16px;
-    border-radius: var(--radius-panel);
+    padding: 18px 20px 20px;
+    border-radius: 18px;
     --panel-bg: var(--color-inset);
-    background: var(--panel-bg);
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--color-duo-dark) 18%, var(--panel-bg)), var(--panel-bg) 60%);
+    border: 1px solid color-mix(in srgb, var(--color-duo-light) 9%, var(--color-line-thin));
+  }
+  /* Small capitals at line-height 1, so their middle is the box's middle and
+     the icon beside them sits on the same line. */
+  .head-title {
+    font-size: var(--text-meta);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .total {
+    font-size: 3.25rem;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.045em;
+  }
+  .delta {
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, currentColor 14%, transparent);
+  }
+  /* A ranked row: its place in the light ink and a wash behind it as long as
+     its share of the first row. */
+  .ranked {
+    position: relative;
+    isolation: isolate;
+    padding-inline: 0.625rem;
+  }
+  /* The list scrolls, so it clips sideways: the row keeps its wash and hover
+     inside its own box instead of reaching past the list's edge. */
+  .ranked .row-link {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+  .wash {
+    position: absolute;
+    inset: 4px auto 4px 0;
+    z-index: -1;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--color-duo-light) 13%, transparent);
+  }
+  .rank {
+    width: 1.1rem;
+    flex-shrink: 0;
+    font-size: var(--text-meta);
+    font-weight: 700;
+    color: color-mix(in srgb, var(--color-duo-light) 80%, var(--color-ink-4));
+  }
+  .wall {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .wall > li:first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+  .wall-tile {
+    position: relative;
+    display: block;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 12px;
     border: 1px solid var(--color-line-thin);
   }
-  /* Every panel sits on Inset. Listens and Most played used to be raised on
-     Surface Regular, and two plum panels above seven dark ones read as two
-     different things. The lead panels keep their brighter heading instead. */
+  .wall-tile::after {
+    content: '';
+    position: absolute;
+    inset: 40% 0 0;
+    background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 0.82));
+  }
+  .wall-caption {
+    position: absolute;
+    z-index: 1;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    font-size: var(--text-meta);
+    line-height: 1.25;
+  }
+  .wall > li:first-child .wall-caption {
+    left: 14px;
+    bottom: 12px;
+    font-size: var(--text-body);
+  }
+  .room {
+    display: grid;
+    grid-template-columns: repeat(20, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .room > span {
+    height: 14px;
+    border-radius: 3px;
+    background: var(--color-surface-thin);
+  }
+  .room > span.used {
+    background: var(--color-duo-light);
+  }
   /* Charts grow with `grow`, not `flex-1`: a percentage basis in a panel of
      indefinite height resolves to the SVG's aspect-ratio height, and a
      year of growth 970px wide wanted 259px. A zero basis lets min-height set
@@ -781,6 +902,10 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;
+    scroll-snap-type: y proximity;
+  }
+  .panel-list > li {
+    scroll-snap-align: start;
   }
   .panel-list::-webkit-scrollbar {
     display: none;
@@ -806,8 +931,8 @@
   .fig {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-size: var(--text-quiet-lead);
-    font-weight: 500;
+    font-size: 1.75rem;
+    font-weight: 800;
     line-height: 1;
     letter-spacing: -0.02em;
     color: var(--color-ink);
