@@ -66,12 +66,16 @@
   }
 </script>
 
-<details bind:open={open} class="rounded-row border border-line-thin px-3 py-2">
-  <summary class="cursor-pointer list-none text-meta font-medium text-ink-2 [&::-webkit-details-marker]:hidden">
+<!-- A link in the line under a row until it is opened; then the form takes
+     the full width under that line. -->
+<details bind:open={open} class={open ? 'basis-full' : ''}>
+  <summary
+    class="cursor-pointer list-none text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-duo-light)] [&::-webkit-details-marker]:hidden"
+  >
     Use address
   </summary>
   {#if open}
-    <div class="mt-2 flex flex-col gap-2">
+    <div class="mt-2 flex flex-col gap-2 rounded-row border border-line-thin px-3 py-2">
       <div class="flex flex-wrap items-center gap-2">
         <label class="sr-only" for="source-address-{targetId}">Track address</label>
         <input

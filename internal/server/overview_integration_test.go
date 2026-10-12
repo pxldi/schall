@@ -33,11 +33,13 @@ type overviewJSON struct {
 			Title     string  `json:"title"`
 			Listens   int64   `json:"listens"`
 			TrackID   *string `json:"trackId"`
+			ReleaseID *string `json:"releaseId"`
 			InLibrary bool    `json:"inLibrary"`
 			CoverURL  *string `json:"coverUrl"`
 		} `json:"mostPlayed"`
 		TopArtists []struct {
 			Name       string  `json:"name"`
+			ArtistID   *string `json:"artistId"`
 			Listens    int64   `json:"listens"`
 			PictureURL *string `json:"pictureUrl"`
 		} `json:"topArtists"`
@@ -46,8 +48,11 @@ type overviewJSON struct {
 			PeakHour       int          `json:"peakHour"`
 			BusiestWeekday string       `json:"busiestWeekday"`
 		} `json:"whenYouListen"`
-		TopAlbums []struct{ Title string } `json:"topAlbums"`
-		Sessions  []struct {
+		TopAlbums []struct {
+			Title     string  `json:"title"`
+			ReleaseID *string `json:"releaseId"`
+		} `json:"topAlbums"`
+		Sessions []struct {
 			StartedAt time.Time `json:"startedAt"`
 			EndedAt   time.Time `json:"endedAt"`
 			Songs     int64     `json:"songs"`
@@ -277,8 +282,8 @@ func TestOverviewPicturesRowsFromTheHeldFile(t *testing.T) {
 			if row.CoverURL == nil || *row.CoverURL != want {
 				t.Errorf("most played No Lie cover = %v, want %s", row.CoverURL, want)
 			}
-			if row.TrackID != nil || row.InLibrary {
-				t.Errorf("a file found by its tags must not say the recording is held: %+v", row)
+			if row.TrackID != nil || row.InLibrary || row.ReleaseID != nil {
+				t.Errorf("a file found by its tags must not say the recording is held or link to its release: %+v", row)
 			}
 		case "Stop Breathing":
 			if row.CoverURL != nil {
@@ -304,5 +309,80 @@ func TestOverviewPicturesRowsFromTheHeldFile(t *testing.T) {
 	}
 	if len(got.RecentlyAdded) != 1 || got.RecentlyAdded[0].CoverURL == nil || *got.RecentlyAdded[0].CoverURL != want {
 		t.Errorf("recently added = %+v, want the file's own cover", got.RecentlyAdded)
+	}
+}
+
+// A row opens an artist or release only when an ID names it. Before rows
+// carried no link; now Pashanim opens by its MusicBrainz ID, Playboi Carti by
+// the one artist with that name, and the two artists named Ye and the album
+// with an unknown release ID open nothing.
+func TestOverviewRowsLinkOnlyWhereAnIDAgrees(t *testing.T) {
+	pool := dbtest.Setup(t)
+	store := db.New(pool)
+	handler := NewAPI(store, pool, &fakeArtistSearcher{}, zerolog.Nop(), WithOverview(store))
+	ctx := context.Background()
+
+	var pashanimID, cartiID, albumID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO artists (name, sort_name, musicbrainz_id)
+		VALUES ('Pashanim', 'pashanim', '33333333-3333-3333-3333-333333333333')
+		RETURNING id::text`).Scan(&pashanimID); err != nil {
+		t.Fatalf("insert an artist: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO artists (name, sort_name) VALUES ('Playboi Carti', 'carti')
+		RETURNING id::text`).Scan(&cartiID); err != nil {
+		t.Fatalf("insert an artist: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (name, sort_name) VALUES ('Ye', 'ye'), ('YE', 'ye')`); err != nil {
+		t.Fatalf("insert two artists named Ye: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO albums (artist_id, title) VALUES ($1::uuid, 'traence')
+		RETURNING id::text`, pashanimID).Scan(&albumID); err != nil {
+		t.Fatalf("insert an album: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO release_editions (album_id, musicbrainz_release_id, title, selection_reason)
+		VALUES ($1::uuid, '44444444-4444-4444-4444-444444444444', 'traence', 'test')`, albumID); err != nil {
+		t.Fatalf("insert an edition: %v", err)
+	}
+	now := time.Now()
+	if _, err := store.InsertListens(ctx, []db.ListenInsert{
+		{ListenedAt: now.Add(-time.Minute), ArtistName: "Pashanim", TrackName: "Maske weg", ReleaseName: "traence",
+			ReleaseMBID: "44444444-4444-4444-4444-444444444444", ArtistMBIDs: []string{"33333333-3333-3333-3333-333333333333"}},
+		{ListenedAt: now.Add(-2 * time.Minute), ArtistName: "Pashanim", TrackName: "Shishas", ReleaseName: "traence",
+			ArtistMBIDs: []string{"33333333-3333-3333-3333-333333333333"}},
+		{ListenedAt: now.Add(-3 * time.Minute), ArtistName: "Playboi Carti", TrackName: "No Lie", ReleaseName: "Die Lit",
+			ReleaseMBID: "55555555-5555-5555-5555-555555555555"},
+		{ListenedAt: now.Add(-4 * time.Minute), ArtistName: "Ye", TrackName: "Runaway"},
+	}); err != nil {
+		t.Fatalf("InsertListens() error = %v", err)
+	}
+
+	got := readOverview(t, handler, "UTC")
+	artists := map[string]*string{}
+	for _, artist := range got.Listening.TopArtists {
+		artists[artist.Name] = artist.ArtistID
+	}
+	if id := artists["Pashanim"]; id == nil || *id != pashanimID {
+		t.Errorf("Pashanim links to %v, want %s by its MusicBrainz ID", id, pashanimID)
+	}
+	if id := artists["Playboi Carti"]; id == nil || *id != cartiID {
+		t.Errorf("Playboi Carti links to %v, want %s, the one artist with that name", id, cartiID)
+	}
+	if id, ok := artists["Ye"]; !ok || id != nil {
+		t.Errorf("Ye names two artists, so it must not link; got %v (listed %v)", id, ok)
+	}
+	albums := map[string]*string{}
+	for _, album := range got.Listening.TopAlbums {
+		albums[album.Title] = album.ReleaseID
+	}
+	if id := albums["traence"]; id == nil || *id != albumID {
+		t.Errorf("traence links to %v, want %s by its edition's release ID", id, albumID)
+	}
+	if id, ok := albums["Die Lit"]; !ok || id != nil {
+		t.Errorf("Die Lit has a release ID no edition carries, so it must not link; got %v", id)
 	}
 }

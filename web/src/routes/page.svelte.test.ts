@@ -51,6 +51,7 @@ function overview(overrides: Partial<Overview> = {}): Overview {
           recordingMbid: 'r1',
           coverUrl: null,
           trackId: 't1',
+          releaseId: 'rel1',
           inLibrary: true,
           wanted: false
         },
@@ -61,6 +62,7 @@ function overview(overrides: Partial<Overview> = {}): Overview {
           recordingMbid: 'r2',
           coverUrl: null,
           trackId: 't2',
+          releaseId: null,
           inLibrary: false,
           wanted: false
         },
@@ -71,13 +73,14 @@ function overview(overrides: Partial<Overview> = {}): Overview {
           recordingMbid: null,
           coverUrl: null,
           trackId: null,
+          releaseId: null,
           inLibrary: false,
           wanted: false
         }
       ],
-      topArtists: [{ name: 'Pashanim', artistMbid: 'a1', listens: 95, pictureUrl: null }],
+      topArtists: [{ name: 'Pashanim', artistMbid: 'a1', artistId: null, listens: 95, pictureUrl: null }],
       whenYouListen: { cells, peakHour: 21, busiestWeekday: 'Friday' },
-      topAlbums: [{ title: 'traence', artist: 'Pashanim', listens: 95, releaseMbid: null, coverUrl: null }],
+      topAlbums: [{ title: 'traence', artist: 'Pashanim', listens: 95, releaseMbid: null, releaseId: null, coverUrl: null }],
       sessions: [
         {
           startedAt: new Date(Date.now() - 900_000).toISOString(),
@@ -105,7 +108,7 @@ function overview(overrides: Partial<Overview> = {}): Overview {
       storage: { usedBytes: 4_400_000_000_000, totalBytes: 9_800_000_000_000 }
     },
     recentlyAdded: [
-      { title: 'Nachtfalter', artist: 'Nemo Vice', addedAt: new Date(Date.now() - 3_600_000).toISOString(), trackId: null, coverUrl: null }
+      { title: 'Nachtfalter', artist: 'Nemo Vice', addedAt: new Date(Date.now() - 3_600_000).toISOString(), trackId: null, releaseId: null, coverUrl: null }
     ],
     ...overrides
   };
@@ -234,9 +237,8 @@ describe('the overview', () => {
     answering(overview());
     show();
     await screen.findByText('812');
-    // The chart is aria-hidden now (the table below it is the accessible
-    // view), so the hitbox is reached by position: two rects per day, the
-    // transparent one second, the last day's pair last.
+    // The chart is aria-hidden, so the hitbox is reached by position: one
+    // transparent rect per day over its dots, the last day's last.
     const section = screen.getByRole('heading', { name: 'Listens', level: 2 }).closest('section')!;
     const bars = section.querySelectorAll('svg rect');
     const bar = bars[bars.length - 1];
@@ -250,10 +252,10 @@ describe('the overview', () => {
     answering(overview());
     show();
     await screen.findByText('812');
-    // Same as the bars: the grid is aria-hidden, so the cell is reached by
+    // Same as the dots: the grid is aria-hidden, so the cell is reached by
     // position (day 4, hour 21) rather than by role.
     const section = screen.getByRole('heading', { name: 'When you listen', level: 2 }).closest('section')!;
-    const cells = section.querySelectorAll('[role="group"] span[aria-hidden="true"]');
+    const cells = section.querySelectorAll('[role="group"] [data-cell]');
     const cell = cells[4 * 24 + 21];
     await fireEvent.mouseEnter(cell);
     expect(screen.getByRole('tooltip').textContent).toContain('Fri 21:00 · 14 listens');
@@ -289,6 +291,7 @@ describe('the overview', () => {
     data.listening.topArtists = Array.from({ length: 8 }, (_, index) => ({
       name: `Artist ${index}`,
       artistMbid: `a${index}`,
+      artistId: null,
       listens: 8 - index,
       pictureUrl: null
     }));
@@ -323,8 +326,8 @@ describe('the overview', () => {
     const data = overview();
     const addedAt = new Date(Date.now() - 60_000).toISOString();
     data.recentlyAdded = [
-      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null },
-      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, coverUrl: null }
+      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, releaseId: null, coverUrl: null },
+      { title: 'Beat 01', artist: 'Ye', addedAt, trackId: null, releaseId: null, coverUrl: null }
     ];
     answering(data);
     show();
@@ -337,8 +340,8 @@ describe('the overview', () => {
   it('pictures a top artist the catalogue has a picture of', async () => {
     const data = overview();
     data.listening.topArtists = [
-      { name: 'Cynthoni', artistMbid: 'a1', listens: 95, pictureUrl: '/api/v1/artists/x/image' },
-      { name: 'Ye', artistMbid: null, listens: 4, pictureUrl: null }
+      { name: 'Cynthoni', artistMbid: 'a1', artistId: null, listens: 95, pictureUrl: '/api/v1/artists/x/image' },
+      { name: 'Ye', artistMbid: null, artistId: null, listens: 4, pictureUrl: null }
     ];
     answering(data);
     show();
@@ -348,6 +351,25 @@ describe('the overview', () => {
     const bare = screen.getByText('Ye').closest('li')!;
     expect(bare.querySelector('img')).toBeNull();
     expect(bare.textContent).toContain('Y');
+  });
+
+  it('opens the artist or release a ranked row names, and nothing for a row without one', async () => {
+    const data = overview();
+    data.listening.topArtists = [
+      { name: 'Pashanim', artistMbid: 'a1', artistId: 'art1', listens: 95, pictureUrl: null },
+      { name: 'Ye', artistMbid: null, artistId: null, listens: 4, pictureUrl: null }
+    ];
+    data.listening.topAlbums = [{ title: 'traence', artist: 'Pashanim', listens: 95, releaseMbid: 'm1', releaseId: 'rel9', coverUrl: null }];
+    answering(data);
+    show();
+    await screen.findByText('812');
+    expect(screen.getByText('Maske weg').closest('a')?.getAttribute('href')).toBe('/releases/rel1');
+    expect(screen.getByText('No Lie').closest('a')).toBeNull();
+    expect(screen.getByText('Ye').closest('a')).toBeNull();
+    const artists = screen.getByRole('heading', { name: 'Top artists', level: 2 }).closest('section')!;
+    expect(artists.querySelector('a')?.getAttribute('href')).toBe('/artists/art1');
+    const albums = screen.getByRole('heading', { name: 'Top albums', level: 2 }).closest('section')!;
+    expect(albums.querySelector('a')?.getAttribute('href')).toBe('/releases/rel9');
   });
 
   it('keeps a labelled cover frame when a song has no cover to load', async () => {

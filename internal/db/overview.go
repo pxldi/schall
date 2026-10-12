@@ -36,10 +36,14 @@ type OverviewPlayed struct {
 	CAAReleaseMBID pgtype.Text
 	TrackID        pgtype.UUID
 	AlbumID        pgtype.UUID
-	HasCover       bool
-	FileID         pgtype.UUID
-	InLibrary      bool
-	Wanted         bool
+	// ReleaseID is the release of the catalogue track with the listen's
+	// recording ID. AlbumID can come from a copy matched by tags, which is
+	// good enough for a picture but not for where the row leads.
+	ReleaseID pgtype.UUID
+	HasCover  bool
+	FileID    pgtype.UUID
+	InLibrary bool
+	Wanted    bool
 }
 
 type OverviewArtist struct {
@@ -50,6 +54,9 @@ type OverviewArtist struct {
 	// MusicBrainz ID the listen carried or, without one, by the exact name.
 	// For the picture only.
 	ArtistID pgtype.UUID
+	// PageID is the catalogue artist the row opens: the one with the listen's
+	// MusicBrainz ID or, without one, the only artist with exactly that name.
+	PageID pgtype.UUID
 }
 
 type OverviewAlbum struct {
@@ -58,6 +65,10 @@ type OverviewAlbum struct {
 	Listens        int64
 	ReleaseMBID    pgtype.Text
 	CAAReleaseMBID pgtype.Text
+	// AlbumID is the catalogue release whose chosen edition has the listen's
+	// MusicBrainz release ID. Another edition of the same album is not looked
+	// for, so a row links only when the IDs agree.
+	AlbumID pgtype.UUID
 }
 
 // OverviewSession is one stretch of continuous listening: listens less than
@@ -302,6 +313,7 @@ func (q *Queries) mostPlayed(ctx context.Context, zone string, now time.Time) ([
 		if err != nil {
 			return nil, fmt.Errorf("look up a played recording: %w", err)
 		}
+		played[i].ReleaseID = played[i].AlbumID
 	}
 	for i := range played {
 		if played[i].HasCover {
@@ -357,6 +369,18 @@ func (q *Queries) topArtists(ctx context.Context, zone string, now time.Time) ([
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("look up the picture of %q: %w", out[i].Name, err)
 		}
+		// Two artists can share a name, so a name alone links only when it
+		// names one artist.
+		err = q.db.QueryRow(ctx, `
+			SELECT id FROM artists WHERE musicbrainz_id = $1::uuid
+			UNION ALL
+			SELECT min(id::text)::uuid FROM artists
+			WHERE $1::uuid IS NULL AND lower(name) = lower($2)
+			HAVING count(*) = 1
+			LIMIT 1`, mbid, out[i].Name).Scan(&out[i].PageID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("look up the artist %q: %w", out[i].Name, err)
+		}
 	}
 	return out, nil
 }
@@ -400,16 +424,31 @@ func (q *Queries) topAlbums(ctx context.Context, zone string, now time.Time) ([]
 	if err != nil {
 		return nil, fmt.Errorf("read the top albums: %w", err)
 	}
-	defer rows.Close()
 	out := make([]OverviewAlbum, 0, 4)
 	for rows.Next() {
 		var row OverviewAlbum
 		if err := rows.Scan(&row.Title, &row.Artist, &row.Listens, &row.ReleaseMBID, &row.CAAReleaseMBID); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("read a top album: %w", err)
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if !out[i].ReleaseMBID.Valid {
+			continue
+		}
+		err := q.db.QueryRow(ctx, `
+			SELECT album_id FROM release_editions WHERE musicbrainz_release_id = $1::uuid`,
+			out[i].ReleaseMBID.String).Scan(&out[i].AlbumID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("look up the release of %q: %w", out[i].Title, err)
+		}
+	}
+	return out, nil
 }
 
 // sessionGap is the silence that ends a listening session. Thirty minutes is
