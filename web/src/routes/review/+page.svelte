@@ -12,9 +12,12 @@
   import { page } from '$app/state';
   import { api, type AcquisitionCandidate, type AcquisitionTarget, type ReviewItem } from '$lib/api';
   import {
+    albumKey,
     clock,
+    groupByAlbum,
     groupCopies,
     isCreditOnlyStopped,
+    listenable,
     questionsFrom,
     waitingLabel,
     type QuestionKind
@@ -23,7 +26,9 @@
   import Button from '$lib/components/Button.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import { usePagePrint } from '$lib/duoton';
+  import AlbumBatch from '$lib/components/AlbumBatch.svelte';
   import CopyCard from '$lib/components/CopyCard.svelte';
+  import ListenPlayer from '$lib/components/ListenPlayer.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
@@ -162,12 +167,71 @@
     { key: 'folder', label: 'Folder', icon: 'folder-add' }
   ];
   let filter = $state<QuestionKind | 'all'>('all');
-  const filtered = $derived(
+
+  // Grouped by album, the rail reads the wants of one album together and a
+  // group header opens them as one batch. Remembered per browser.
+  const GROUP_KEY = 'schall:review-by-album';
+  let byAlbum = $state(
+    (() => {
+      try {
+        return localStorage.getItem(GROUP_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })()
+  );
+  function toggleByAlbum() {
+    byAlbum = !byAlbum;
+    batch = undefined;
+    placed = false;
+    try {
+      localStorage.setItem(GROUP_KEY, byAlbum ? '1' : '0');
+    } catch {
+      // Best effort: the grouping still holds for this visit.
+    }
+  }
+
+  // Listening mode asks one question at a time and only the ones with copies
+  // to hear, so the rail and the other kinds step aside.
+  let listen = $state(false);
+  // Audio may start by itself only after a press or a key on the page.
+  let gestured = $state(
+    typeof navigator !== 'undefined' &&
+      Boolean((navigator as { userActivation?: { hasBeenActive?: boolean } }).userActivation?.hasBeenActive)
+  );
+  let player = $state<ReturnType<typeof ListenPlayer> | undefined>();
+  function toggleListen(event: MouseEvent) {
+    listen = !listen;
+    batch = undefined;
+    placed = false;
+    // Space and Y/N go to the page, not to this button.
+    (event.currentTarget as HTMLElement).blur();
+  }
+
+  const kindFiltered = $derived(
     filter === 'all' ? questions : questions.filter((q) => q.kind === filter)
+  );
+  const albums = $derived(byAlbum && !listen ? groupByAlbum(kindFiltered) : undefined);
+  // The order the rail draws is the order the keys step through.
+  const filtered = $derived(
+    listen
+      ? kindFiltered.filter(listenable)
+      : albums
+        ? [...albums.groups.flatMap((group) => group.questions), ...albums.loose]
+        : kindFiltered
+  );
+
+  // The album batch open in place of a single question, by its key. The name
+  // is kept apart from the group so the result still reads once every want in
+  // it has been answered and the group has left the queue.
+  let batch = $state<{ key: string; album: string; artist: string } | undefined>();
+  const batchQuestions = $derived(
+    batch ? (albums?.groups.find((group) => group.key === batch!.key)?.questions ?? []) : []
   );
 
   function chooseFilter(next: QuestionKind | 'all') {
     filter = next;
+    batch = undefined;
     // The list this position was held in just changed shape; start again from
     // its top rather than at wherever the old index now lands.
     placed = false;
@@ -230,6 +294,7 @@
   /** Moves to another question by position, wrapping at either end. */
   function step(index: number) {
     placed = true;
+    batch = undefined;
     if (filtered.length === 0) {
       at = 0;
       held = '';
@@ -283,6 +348,13 @@
       ? groupCopies(current.want.copies, current.want.copyGroups)
       : []
   );
+  // The copy the next question would open on, loaded ahead in listening mode.
+  const nextListen = $derived.by(() => {
+    if (!listen || filtered.length < 2) return '';
+    const next = filtered[(at + 1) % filtered.length]?.want;
+    const best = next ? groupCopies(next.copies, next.copyGroups)[0]?.best : undefined;
+    return best ? api.reviewCopyAudioUrl(best.id) : '';
+  });
   const candidates = $derived(current?.kind === 'version' ? (current.want?.candidates ?? []) : []);
 
   // The selection resets with the question, alongside whether the reader has
@@ -445,12 +517,37 @@
   const INTERACTIVE =
     'button, a, input, textarea, select, summary, [role="radio"], [role="button"], [role="slider"], [contenteditable], [role="dialog"], dialog[open], [role="menu"]';
 
+  // What still takes its own keys in listening mode, where Y, N, Space and
+  // the steps reach the page even with focus on a button.
+  const TYPING =
+    'input, textarea, select, [contenteditable], [role="slider"], [role="dialog"], dialog[open], [role="menu"]';
+
   function onKey(event: KeyboardEvent) {
+    gestured = true;
     if (event.defaultPrevented) return;
     if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-    const target = event.target;
-    if (target instanceof HTMLElement && target.closest(INTERACTIVE)) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest(listen ? TYPING : INTERACTIVE)) return;
     if (!current || deciding) return;
+    // An open album batch answers nothing by key; the steps still leave it.
+    if (batch && !['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'j', 'k'].includes(event.key.toLowerCase())) {
+      return;
+    }
+
+    if (listen) {
+      const key = event.key.toLowerCase();
+      if (key === 'y' || key === 'n' || key === ' ') {
+        // Claimed whatever happens, so the key never opens search or presses
+        // the focused button.
+        event.preventDefault();
+        if (key === ' ') player?.replay();
+        else if (key === 'y') confirm();
+        else if (current.want) $refuse.mutate(current.want.target.id);
+        return;
+      }
+      // Enter on a focused button presses that button; the page leaves it.
+      if (key === 'enter' && target?.closest(INTERACTIVE)) return;
+    }
 
     if (/^[1-9]$/.test(event.key)) {
       const index = Number(event.key) - 1;
@@ -527,7 +624,7 @@
 </script>
 
 <svelte:head><title>Review · Schall</title></svelte:head>
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onpointerdown={() => (gestured = true)} />
 
 {#snippet whyNoSample(target: AcquisitionTarget)}
   <details class="text-meta">
@@ -586,7 +683,20 @@
 
 <!-- "Review" is the page's title, in the place every page keeps it; the song
      being decided heads the panel below. -->
-<Hero title="Review" section />
+<Hero title="Review" section>
+  {#snippet actions()}
+    <Button
+      variant={listen ? 'primary' : 'outline'}
+      icon
+      aria-pressed={listen}
+      aria-label="Listening mode"
+      title="Listening mode: Y accept, N none, Space play, J/K step"
+      onclick={toggleListen}
+    >
+      <Icon name="listen" size={15} />
+    </Button>
+  {/snippet}
+</Hero>
 
 <!-- The queue and the question share one panel, the queue down its left. -->
 <div class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6">
@@ -631,9 +741,10 @@
     </div>
   {:else if !hasQueue}
     <div class="py-5">
-      <EmptyPanel role="ok" heading="Nothing to decide" />
+      <EmptyPanel role="ok" heading={listen ? 'Nothing to listen to' : 'Nothing to decide'} />
     </div>
   {:else}
+    {#if !listen}
     <nav
       id="queue-rail"
       data-queue-rail
@@ -656,6 +767,18 @@
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
+        <button
+          type="button"
+          onclick={toggleByAlbum}
+          aria-pressed={byAlbum}
+          aria-label="Group by album"
+          title="Group by album"
+          class="flex items-center rounded-full border px-2 py-1 text-meta {byAlbum
+            ? 'border-line-regular bg-surface-thick text-ink'
+            : 'border-line-thin text-ink-2'}"
+        >
+          <Icon name="release" size={13} />
+        </button>
       </div>
 
       {#if loadError}
@@ -670,23 +793,57 @@
         use:keepInView={at}
         class="hidden min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-thin lg:flex"
       >
-        {#each filtered as question, index (question.id)}
+        {#snippet row(question: (typeof filtered)[number], index: number)}
+          {@const here = index === at && !batch}
           <button
             type="button"
             data-question={question.id}
-            aria-current={index === at ? 'true' : undefined}
+            aria-current={here ? 'true' : undefined}
             onclick={() => step(index)}
-            class="flex flex-col gap-0.5 border-b border-line-thin px-4 py-2.5 text-left {index ===
-            at
+            class="flex flex-col gap-0.5 border-b border-line-thin px-4 py-2.5 text-left {here
               ? 'queue-current'
               : 'hover:bg-surface-thick'}"
           >
-            <span class="truncate text-body {index === at ? 'font-medium text-ink' : 'text-ink-2'}">
+            <span class="truncate text-body {here ? 'font-medium text-ink' : 'text-ink-2'}">
               {question.title}
             </span>
             <span class="truncate text-meta text-ink-4">{question.detail}</span>
           </button>
-        {/each}
+        {/snippet}
+        {#if albums}
+          {@const indexOf = new Map(filtered.map((question, index) => [question.id, index]))}
+          {#each albums.groups as group (group.key)}
+            {@const open = batch?.key === group.key}
+            <button
+              type="button"
+              data-album={group.key}
+              aria-current={open ? 'true' : undefined}
+              aria-label={`${group.album} by ${group.artist}, ${group.questions.length}`}
+              onclick={() =>
+                (batch = { key: group.key, album: group.album, artist: group.artist })}
+              class="flex items-center gap-2 border-b border-line-thin bg-surface-regular px-4 py-2 text-left {open
+                ? 'queue-current'
+                : 'hover:bg-surface-thick'}"
+            >
+              <Icon name="release" size={13} class="shrink-0 text-ink-3" />
+              <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-body font-medium text-ink">{group.album}</span>
+                <span class="truncate text-meta text-ink-3">{group.artist}</span>
+              </span>
+              <span class="numeric shrink-0 text-meta text-ink-2">{group.questions.length}</span>
+            </button>
+            {#each group.questions as question (question.id)}
+              {@render row(question, indexOf.get(question.id) ?? 0)}
+            {/each}
+          {/each}
+          {#each albums.loose as question (question.id)}
+            {@render row(question, indexOf.get(question.id) ?? 0)}
+          {/each}
+        {:else}
+          {#each filtered as question, index (question.id)}
+            {@render row(question, index)}
+          {/each}
+        {/if}
         {#if moreToRead && !loadError}
           <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
         {/if}
@@ -705,8 +862,9 @@
         />
       </div>
     </nav>
+    {/if}
 
-    {#if !current}
+    {#if !current && !batch}
       <!-- The filter chosen holds nothing. The rail stays, so the reader can
            choose another kind. -->
       <section aria-label="Review" class="flex min-w-0 flex-1 flex-col px-4 pb-6 pt-5 sm:px-6 lg:border-l lg:border-line-thin lg:px-8">
@@ -719,12 +877,27 @@
         {/if}
       </section>
     {:else}
-    <section aria-label="Review" class="flex min-w-0 flex-1 flex-col lg:border-l lg:border-line-thin">
+    <section
+      aria-label="Review"
+      class="flex min-w-0 flex-1 flex-col {listen ? '' : 'lg:border-l lg:border-line-thin'}"
+    >
+      {#if batch}
+        <div class="flex flex-col gap-3 px-4 pt-5 pb-6 sm:px-6 lg:px-8">
+          {#key batch.key}
+            <AlbumBatch
+              album={batch.album}
+              artist={batch.artist}
+              questions={batchQuestions}
+              ondone={invalidate}
+            />
+          {/key}
+        </div>
+      {:else if current}
 
       <div class="flex flex-col gap-3 px-4 sm:px-6 pb-6 pt-5 lg:px-8">
         <header class="flex flex-col gap-1">
           <p class="numeric text-meta text-ink-3">
-            {(at + 1).toLocaleString()} of {counts[filter].toLocaleString()}
+            {(at + 1).toLocaleString()} of {(listen ? filtered.length : counts[filter]).toLocaleString()}
           </p>
           <h2 class="text-quiet-display font-bold text-ink">{current.title}</h2>
           <div class="hero-sub text-quiet-meta text-ink-2">
@@ -744,7 +917,28 @@
           <p class="text-meta text-fail" role="status">{failure.message}</p>
         {/if}
 
-        {#if current.kind === 'downloaded' && current.want}
+        {#if listen && current.want && groups[chosen]}
+          {@const group = groups[chosen]}
+          <div class="flex max-w-[48rem] flex-col gap-3 rounded-card border border-line-thin p-4">
+            <p class="truncate text-meta text-ink-3">
+              Copy {chosen + 1} of {groups.length}{group.best.origin ? ` · from ${group.best.origin.label}` : ''}
+            </p>
+            <ListenPlayer
+              bind:this={player}
+              src={api.reviewCopyAudioUrl(group.best.id)}
+              next={nextListen}
+              name={current.title}
+              autoplay={gestured}
+            />
+          </div>
+          <p class="flex flex-wrap gap-x-4 gap-y-1 text-meta text-ink-3" aria-label="Keys">
+            <span><kbd class="numeric font-medium text-ink-2">Y</kbd> accept</span>
+            <span><kbd class="numeric font-medium text-ink-2">N</kbd> none</span>
+            <span><kbd class="numeric font-medium text-ink-2">Space</kbd> play</span>
+            <span><kbd class="numeric font-medium text-ink-2">J</kbd>/<kbd class="numeric font-medium text-ink-2">K</kbd> step</span>
+            {#if groups.length > 1}<span><kbd class="numeric font-medium text-ink-2">1</kbd>–<kbd class="numeric font-medium text-ink-2">{Math.min(groups.length, 9)}</kbd> copy</span>{/if}
+          </p>
+        {:else if current.kind === 'downloaded' && current.want}
           {#if filed}
             {@const copy = filedCopy}
             {#if copy}
@@ -869,6 +1063,7 @@
           {/if}
         {/if}
       </footer>
+      {/if}
     </section>
     {/if}
   {/if}
