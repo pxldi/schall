@@ -5255,7 +5255,7 @@ func (sweeper *duplicateSweeper) SetAsideDuplicates(context.Context) (int, error
 	return 0, nil
 }
 
-// The pass over duplicate copies is queued once by migration 00111 and queues
+// The pass over duplicate copies is queued once by migration 00112 and queues
 // no replacement.
 func TestThePassOverDuplicateCopiesSetsThemAside(t *testing.T) {
 	jobID := uuid.New()
