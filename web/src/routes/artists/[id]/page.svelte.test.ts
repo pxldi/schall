@@ -563,6 +563,15 @@ describe('the rows of releases', () => {
     expect(await screen.findByText('2010 · Mixtape')).toBeTruthy();
   });
 
+  it('names a release MusicBrainz types as Other', async () => {
+    answeringReleases([
+      releaseRow('r2', 'luther', { albumType: 'other', firstReleaseDate: '2025-04-11' })
+    ]);
+    opened();
+
+    expect(await screen.findByText('2025 · Other')).toBeTruthy();
+  });
+
   it('draws no row for a kind with nothing in it', async () => {
     answeringReleases([releaseRow('r1', 'DAMN.')]);
     opened();
