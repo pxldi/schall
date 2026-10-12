@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStaleCode, reloadOnce, type Reloader } from './reload';
+import { isStaleCode, loadNewerBuild, reloadOnce, type Reloader } from './reload';
 
 function fake(answers: boolean[], stored: string | null = null) {
   const went: string[] = [];
@@ -56,5 +56,27 @@ describe('reloadOnce', () => {
     advance(60_000);
     expect(await reloadOnce('https://schall/review', reloader)).toBe(true);
     expect(went).toEqual(['https://schall/artists', 'https://schall/review', 'https://schall/review']);
+  });
+});
+
+describe('loadNewerBuild', () => {
+  const to = { url: new URL('https://schall/artists') };
+
+  it('loads the next page in full once a newer build is out', () => {
+    const went: string[] = [];
+    expect(loadNewerBuild({ willUnload: false, to }, true, (href) => went.push(href))).toBe(true);
+    expect(went).toEqual(['https://schall/artists']);
+  });
+
+  it('leaves page changes to the router while the build is current', () => {
+    const went: string[] = [];
+    expect(loadNewerBuild({ willUnload: false, to }, false, (href) => went.push(href))).toBe(false);
+    expect(went).toEqual([]);
+  });
+
+  it('leaves a navigation that already leaves the page alone', () => {
+    const went: string[] = [];
+    expect(loadNewerBuild({ willUnload: true, to }, true, (href) => went.push(href))).toBe(false);
+    expect(went).toEqual([]);
   });
 });

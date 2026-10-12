@@ -15,7 +15,8 @@ let address = 'http://localhost/';
 vi.mock('$app/state', () => ({
   get page() {
     return { params: {}, url: new URL(address) };
-  }
+  },
+  updated: { current: false }
 }));
 
 // The shell remembers the section a release was opened from, which it hears
@@ -29,6 +30,7 @@ function arrive(at: string) {
 
 vi.mock('$app/navigation', () => ({
   afterNavigate: (arrival: Arrival) => void arrivals.push(arrival),
+  beforeNavigate: () => {},
   goto: vi.fn(),
   replaceState: vi.fn()
 }));

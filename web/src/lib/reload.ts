@@ -84,3 +84,17 @@ export const browserReloader: Reloader = {
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   go: (href) => location.assign(href)
 };
+
+/** A tab opened before a deploy keeps running the interface it loaded, so new
+ *  fixes stayed invisible until somebody reloaded by hand. Once SvelteKit has
+ *  seen a newer build, the next page change is made as a full page load.
+ *  Returns whether it took the navigation over. */
+export function loadNewerBuild(
+  navigation: { willUnload: boolean; to: { url: URL } | null },
+  newer: boolean,
+  go: (href: string) => void
+): boolean {
+  if (!newer || navigation.willUnload || !navigation.to) return false;
+  go(navigation.to.url.href);
+  return true;
+}
