@@ -428,3 +428,41 @@ func recordedFile(
 	}
 	return class, deletedAt
 }
+
+// A copy set aside as a duplicate goes as a refused copy does. The owner chose
+// this on 2026-10-12, and a better copy of the same audio stays held.
+func TestCleaningTheInboxDeletesADuplicateCopy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := db.New(pool)
+	inbox := t.TempDir()
+	path := filepath.Join(inbox, "Duplicate", "07.flac")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	copyOfWant(ctx, t, pool, "duplicate", "pending", `peer\Duplicate\07.flac`, "07.flac", "")
+	cleaner := NewInboxCleaner(queries, inbox, []string{t.TempDir()}, zerolog.Nop())
+
+	run, err := queries.QueueInboxCleanup(ctx, "leo", false, time.Now())
+	if err != nil {
+		t.Fatalf("ask for the deletion: %v", err)
+	}
+	if err := cleaner.Clean(ctx, run.ID); err != nil {
+		t.Fatalf("clean the inbox: %v", err)
+	}
+
+	if class, _ := recordedFile(ctx, t, pool, run.ID, path); class != db.InboxRefused {
+		t.Errorf("class = %q, want %q", class, db.InboxRefused)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("the duplicate is still in the inbox")
+	}
+}

@@ -271,6 +271,11 @@ func (service *Service) hunt(
 	// Nothing is admitted or refused by this: the copies keep their verdicts and
 	// the want keeps its place in the review queue. What it loses is the next
 	// search. Answering the copies gives it back, and so does an anchor landing.
+	// One copy of each piece of audio is enough to ask about, so the others are
+	// set aside before the want's copies are counted.
+	if _, err := service.setAsideDuplicatesOf(ctx, target.ID); err != nil {
+		return err
+	}
 	waiting, err := service.store.StopWhileACopyWaits(ctx, target.ID, copyWaitingSummary)
 	if err != nil {
 		return err

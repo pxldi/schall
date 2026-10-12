@@ -33,6 +33,11 @@ const (
 	// AcquiredFileHeld is a copy nothing could decide about, kept as a question
 	// rather than accepted or thrown away.
 	AcquiredFileHeld = "held"
+	// AcquiredFileDuplicate is a held copy that sounds the same as a better
+	// copy of the same want, set aside so one copy of each piece of audio is
+	// asked about. It says nothing about which recording the audio is, and its
+	// file is left for the inbox pass to remove (owner's decision, 2026-10-12).
+	AcquiredFileDuplicate = "duplicate"
 )
 
 // AcquiredFileEvidence is everything one candidate file came to against the
@@ -810,6 +815,44 @@ func (q *Queries) AcquisitionTargetFiles(
 	}
 	defer rows.Close()
 	return scanAcquiredFiles(rows)
+}
+
+// WantsHoldingSeveralHeldCopies lists the wants with more than one copy still
+// waiting for an answer, which are the only wants a duplicate can be in.
+func (q *Queries) WantsHoldingSeveralHeldCopies(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT acquisition_target_id FROM acquisition_target_files
+		WHERE verdict = 'held'
+		GROUP BY acquisition_target_id
+		HAVING count(*) > 1
+		ORDER BY acquisition_target_id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list the wants holding several copies: %w", err)
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+}
+
+// MarkCopiesDuplicate sets aside held copies of one want that sound the same as
+// a copy kept for it. Only copies Schall held are touched, so a person's answer
+// and every verdict about the music stay as they are. It reports how many copies
+// it set aside.
+func (q *Queries) MarkCopiesDuplicate(
+	ctx context.Context, targetID uuid.UUID, copyIDs []uuid.UUID, summary string,
+) (int64, error) {
+	if len(copyIDs) == 0 {
+		return 0, nil
+	}
+	tag, err := q.db.Exec(ctx, `
+		UPDATE acquisition_target_files
+		SET verdict = 'duplicate', summary = $3, updated_at = now()
+		WHERE acquisition_target_id = $1 AND id = ANY($2)
+		  AND verdict = 'held' AND decided_by = 'schall'
+	`, targetID, copyIDs, summary)
+	if err != nil {
+		return 0, fmt.Errorf("set aside the duplicate copies of want %s: %w", targetID, err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // scanAcquiredFiles reads offer rows selected in the column order above.
@@ -1775,6 +1818,9 @@ const wantHoldsAnUnansweredCopy = `
 // upload that spread, and a copy with no recorded size counts on its own. On
 // 2026-10-12, 32 wants with by-name anchors held 4,490 of 6,349 fetched copies,
 // one of them 153.
+//
+// A copy set aside as a duplicate still counts. Otherwise a want would fetch the
+// same upload again each time its duplicates were set aside.
 const anotherCopyCannotSettleIt = `
 	(acquisition_targets.anchor_fingerprint IS NULL
 	 OR (COALESCE(acquisition_targets.anchor_source, '')
@@ -1784,7 +1830,7 @@ const anotherCopyCannotSettleIt = `
 	                    + count(*) FILTER (WHERE COALESCE(held.size_bytes, 0) = 0) >= 3
 	          FROM acquisition_target_files held
 	          WHERE held.acquisition_target_id = acquisition_targets.id
-	            AND held.verdict = 'held')))
+	            AND held.verdict IN ('held', 'duplicate'))))
 `
 
 // StopWhileACopyWaits takes away the next look of a pending want that is holding
@@ -3554,6 +3600,83 @@ func (q *Queries) RecordCopyAnchorReading(
 	`, copyID, written, summary)
 	if err != nil {
 		return fmt.Errorf("record the anchor reading of copy %s: %w", copyID, err)
+	}
+	return nil
+}
+
+// acoustIDAskAgainAfter is how long a copy AcoustID did not know waits before
+// it is asked about again. AcoustID learns a recording when somebody submits
+// it, which for a new release is weeks rather than days after it comes out.
+const acoustIDAskAgainAfter = "30 days"
+
+// CopiesAcoustIDDidNotKnow lists the held copies AcoustID gave no recording for,
+// or could not be asked about, at least 30 days ago. Each goes back through
+// validation, which asks AcoustID again from the start, so a recording it has
+// learned since can admit the copy. A copy judged again is stamped with the new
+// decision time and waits another 30 days.
+//
+// Only copies with a stored fingerprint are offered: without one AcoustID was
+// never part of what decided the copy, and the bytes it needs are those
+// validation reads anyway.
+func (q *Queries) CopiesAcoustIDDidNotKnow(ctx context.Context) ([]JudgeAgainRow, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT copies.id, copies.acquisition_target_id, requests.id, requests.provider,
+		       requests.source_directory, copies.file_name, copies.verdict
+		FROM acquisition_target_files copies
+		JOIN acquisition_targets targets ON targets.id = copies.acquisition_target_id
+		JOIN download_requests requests ON requests.id = copies.download_request_id
+		WHERE copies.decided_by = 'schall'
+		  AND copies.verdict = 'held'
+		  AND copies.audio_fingerprint IS NOT NULL
+		  AND copies.file_removed_at IS NULL
+		  AND copies.decided_at < now() - interval '`+acoustIDAskAgainAfter+`'
+		  AND (copies.evidence->'acoustic' IS NULL
+		       OR coalesce(copies.evidence->'acoustic'->>'unavailable', '') <> ''
+		       OR jsonb_array_length(coalesce(
+		              nullif(copies.evidence->'acoustic'->'recordingIds', 'null'::jsonb),
+		              '[]'::jsonb)) = 0)
+		  AND (targets.status IN ('pending', 'awaiting_review') OR `+searchedWant("targets.")+`)
+		  AND requests.status = 'completed'
+		  AND requests.import_status <> 'validating'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM acquisition_target_files answered
+		      WHERE answered.acquisition_target_id = targets.id
+		        AND answered.verdict = 'accepted'
+		  )
+		ORDER BY copies.acquisition_target_id, copies.decided_at, copies.id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list the copies acoustid did not know: %w", err)
+	}
+	defer rows.Close()
+
+	copies := make([]JudgeAgainRow, 0)
+	for rows.Next() {
+		var row JudgeAgainRow
+		if err := rows.Scan(
+			&row.CopyID, &row.AcquisitionTargetID, &row.RequestID, &row.Provider,
+			&row.SourceDirectory, &row.FileName, &row.Verdict,
+		); err != nil {
+			return nil, err
+		}
+		copies = append(copies, row)
+	}
+	return copies, rows.Err()
+}
+
+// QueueAskAcoustIDAgain schedules the next pass over the copies AcoustID did
+// not know. One pass at a time: an existing one keeps its time.
+func (q *Queries) QueueAskAcoustIDAgain(ctx context.Context, runAfter time.Time) error {
+	_, err := q.db.Exec(ctx, `
+		INSERT INTO jobs (kind, payload, max_attempts, run_after)
+		SELECT 'ask_acoustid_again', '{}'::jsonb, 1, $1
+		WHERE NOT EXISTS (
+			SELECT 1 FROM jobs
+			WHERE kind = 'ask_acoustid_again' AND status IN ('queued', 'running')
+		)
+	`, runAfter)
+	if err != nil {
+		return fmt.Errorf("queue a pass asking acoustid again: %w", err)
 	}
 	return nil
 }

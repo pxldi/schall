@@ -208,6 +208,13 @@ var stillness = []quiet{
 	// a browser test.
 	{"upgrade sweeps enabled", `
 		SELECT count(*) FROM upgrade_settings WHERE enabled`},
+	// The weekly pass asks AcoustID again about held copies it did not know a
+	// month ago. The fixture's copies carry no fingerprint, so none is offered.
+	{"held copies acoustid would be asked about again", `
+		SELECT count(*) FROM acquisition_target_files
+		WHERE verdict = 'held' AND decided_by = 'schall'
+		  AND audio_fingerprint IS NOT NULL
+		  AND decided_at < now() - interval '30 days'`},
 	// A job the fixture left runnable would run, and change something.
 	{"runnable jobs", `
 		SELECT count(*) FROM jobs WHERE status IN ('queued', 'running')`},

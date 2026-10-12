@@ -155,6 +155,12 @@ func (store *fakeImportStore) CopiesToJudgeAgain(
 
 // The copies refused on the artist tag alone, kept apart from the offers above
 // because the two passes offer different sets.
+func (store *fakeImportStore) CopiesAcoustIDDidNotKnow(
+	_ context.Context,
+) ([]db.JudgeAgainRow, error) {
+	return nil, nil
+}
+
 func (store *fakeImportStore) CopiesRefusedOnCreditAlone(
 	_ context.Context,
 ) ([]db.JudgeAgainRow, error) {

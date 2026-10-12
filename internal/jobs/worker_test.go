@@ -65,6 +65,7 @@ type fakeQueue struct {
 	genreBackfills                int
 	backfillGenresErr             error
 	copyFingerprintSweepQueuedFor time.Time
+	askAcoustIDAgainQueuedFor     time.Time
 	spectrumSweepQueuedFor        time.Time
 	upgradeSweepQueuedFor         time.Time
 	upgradeSweepPayload           json.RawMessage
@@ -452,6 +453,13 @@ func (queue *fakeQueue) QueueSpectrumSweep(_ context.Context, runAfter time.Time
 	queue.spectrumSweepQueuedFor = runAfter
 	return nil
 }
+func (queue *fakeQueue) QueueAskAcoustIDAgain(_ context.Context, runAfter time.Time) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.askAcoustIDAgainQueuedFor = runAfter
+	return nil
+}
 func (queue *fakeQueue) QueueUpgradeSweep(_ context.Context, runAfter time.Time, payload json.RawMessage) error {
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
@@ -555,6 +563,7 @@ type fakeImporter struct {
 	judgeAgainErr error
 	// The same two for the pass over the copies refused on the artist tag.
 	judgedCreditRefusals   int
+	askedAcoustIDAgain     int
 	judgeCreditRefusalsErr error
 	// fingerprinted counts the backfill passes over held copies, moreToMeasure
 	// is a pass that filled its batch, and fingerprintErr is a pass that could
@@ -572,6 +581,11 @@ func (importer *fakeImporter) Import(_ context.Context, requestID uuid.UUID) err
 func (importer *fakeImporter) JudgeAgain(_ context.Context) error {
 	importer.judgedAgain++
 	return importer.judgeAgainErr
+}
+
+func (importer *fakeImporter) AskAcoustIDAgain(_ context.Context) error {
+	importer.askedAcoustIDAgain++
+	return importer.err
 }
 
 func (importer *fakeImporter) JudgeCreditRefusalsAgain(_ context.Context) error {
@@ -5227,5 +5241,60 @@ func TestThePassOverCreditRefusalsQueuesNoReplacement(t *testing.T) {
 	}
 	if queue.completed != jobID {
 		t.Fatalf("completed = %s, want the pass settled", queue.completed)
+	}
+}
+
+// duplicateSweeper is a want sweeper that can also set duplicate copies aside.
+type duplicateSweeper struct {
+	fakeSweeper
+	setAside int
+}
+
+func (sweeper *duplicateSweeper) SetAsideDuplicates(context.Context) (int, error) {
+	sweeper.setAside++
+	return 0, nil
+}
+
+// The pass over duplicate copies is queued once by migration 00111 and queues
+// no replacement.
+func TestThePassOverDuplicateCopiesSetsThemAside(t *testing.T) {
+	jobID := uuid.New()
+	queue := &fakeQueue{}
+	sweeper := &duplicateSweeper{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithAcquisitionSweeper(sweeper)
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: SetAsideDuplicateCopies, Attempts: 1, MaxAttempts: 1,
+	})
+
+	if sweeper.setAside != 1 {
+		t.Fatalf("passes = %d, want one", sweeper.setAside)
+	}
+	if queue.completed != jobID {
+		t.Fatalf("completed = %s, want the pass settled", queue.completed)
+	}
+}
+
+// The pass over the copies AcoustID did not know queues the next one a week on.
+func TestThePassAskingAcoustIDAgainQueuesTheNextAWeekOn(t *testing.T) {
+	jobID := uuid.New()
+	queue := &fakeQueue{}
+	importer := &fakeImporter{}
+	now := time.Date(2026, 10, 12, 20, 0, 0, 0, time.UTC)
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+	worker.now = func() time.Time { return now }
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: AskAcoustIDAgain, Attempts: 1, MaxAttempts: 1,
+	})
+
+	if importer.askedAcoustIDAgain != 1 {
+		t.Fatalf("passes = %d, want one", importer.askedAcoustIDAgain)
+	}
+	if queue.completed != jobID {
+		t.Fatalf("completed = %s, want the pass settled", queue.completed)
+	}
+	if want := now.Add(7 * 24 * time.Hour); !queue.askAcoustIDAgainQueuedFor.Equal(want) {
+		t.Errorf("next pass at %v, want %v", queue.askAcoustIDAgainQueuedFor, want)
 	}
 }

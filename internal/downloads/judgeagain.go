@@ -71,6 +71,23 @@ func (importer *Importer) JudgeCreditRefusalsAgain(ctx context.Context) error {
 	return err
 }
 
+// AskAcoustIDAgain puts the held copies AcoustID did not know 30 days ago
+// through validation again. AcoustID learns recordings as people submit them,
+// so a copy it could not name when it arrived may be named now. Validation is
+// the same call a new copy gets, so nothing is admitted on looser terms.
+func (importer *Importer) AskAcoustIDAgain(ctx context.Context) error {
+	_, err := importer.askAcoustIDAgain(ctx)
+	return err
+}
+
+func (importer *Importer) askAcoustIDAgain(ctx context.Context) (JudgedAgain, error) {
+	copies, err := importer.store.CopiesAcoustIDDidNotKnow(ctx)
+	if err != nil {
+		return JudgedAgain{}, err
+	}
+	return importer.judgeCopies(ctx, copies)
+}
+
 // judgeAgain is JudgeAgain with the tally the caller does not need. The pass
 // reports itself to the log, which is where somebody who asked for it looks;
 // the numbers are returned so a test can read what one pass did.

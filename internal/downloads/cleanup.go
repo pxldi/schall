@@ -566,7 +566,10 @@ func (cleaner *InboxCleaner) read(ctx context.Context, root string) (inboxRule, 
 		switch {
 		case copied.Verdict == "held" && liveWants[copied.WantStatus]:
 			rule.question[source] = true
-		case copied.Verdict == "discarded_audio", copied.Verdict == "discarded_tags":
+		case copied.Verdict == "discarded_audio", copied.Verdict == "discarded_tags",
+			copied.Verdict == "duplicate":
+			// A duplicate sounds the same as a copy kept for the want, which the
+			// owner asked to let go of on 2026-10-12 (ADR 0021's licence).
 			rule.refused[source] = true
 		case settledWants[copied.WantStatus] &&
 			(copied.Verdict == "held" || copied.Verdict == "accepted"):

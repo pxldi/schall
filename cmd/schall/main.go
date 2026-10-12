@@ -698,6 +698,13 @@ func run() error {
 		return fmt.Errorf("queue upgrade sweep: %w", err)
 	}
 
+	// And one pass asking AcoustID again about the held copies it did not know
+	// a month ago. Each pass queues the next a week on, and the pass on the
+	// books keeps its time.
+	if err := store.QueueAskAcoustIDAgain(ctx, time.Now()); err != nil {
+		return err
+	}
+
 	// And one follow feed sweep, which asks about the followed artists nobody has
 	// looked at for a day and wants what they have released since being followed.
 	if err := store.EnsureFollowFeedSweepQueued(ctx, time.Now()); err != nil {

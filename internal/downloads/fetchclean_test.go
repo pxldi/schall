@@ -40,6 +40,7 @@ func TestTheFetchCleanerRemovesOnlyWhatNothingNeeds(t *testing.T) {
 	}
 	fixtures := []fixture{
 		{name: "refused", copied: &db.InboxCopyRow{Verdict: "discarded_audio", WantStatus: "unresolved"}, removed: true},
+		{name: "duplicate", copied: &db.InboxCopyRow{Verdict: "duplicate", WantStatus: "pending"}, removed: true},
 		{name: "unreadable", copied: &db.InboxCopyRow{Verdict: "undelivered", WantStatus: "unresolved"}, removed: true},
 		{name: "question", copied: &db.InboxCopyRow{Verdict: "held", WantStatus: "unresolved"}},
 		{name: "held, want acquired", copied: &db.InboxCopyRow{Verdict: "held", WantStatus: "acquired"}, removed: true},

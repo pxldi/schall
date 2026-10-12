@@ -697,6 +697,10 @@ func (repository *Repository) QueueSpectrumSweep(ctx context.Context, runAfter t
 	return db.New(repository.pool).QueueSpectrumSweep(ctx, runAfter)
 }
 
+func (repository *Repository) QueueAskAcoustIDAgain(ctx context.Context, runAfter time.Time) error {
+	return db.New(repository.pool).QueueAskAcoustIDAgain(ctx, runAfter)
+}
+
 func (repository *Repository) QueueUpgradeSweep(
 	ctx context.Context, runAfter time.Time, payload json.RawMessage,
 ) error {

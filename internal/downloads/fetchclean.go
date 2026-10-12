@@ -136,7 +136,8 @@ func fetchClasses(root string, copies []db.InboxCopyRow) map[string]string {
 		path := filepath.Join(root, folder, name)
 		class := fetchKept
 		switch {
-		case copied.Verdict == "discarded_audio", copied.Verdict == "discarded_tags":
+		case copied.Verdict == "discarded_audio", copied.Verdict == "discarded_tags",
+			copied.Verdict == "duplicate":
 			class = fetchRefused
 		case copied.Verdict == "undelivered":
 			class = fetchUnreadable

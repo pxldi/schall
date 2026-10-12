@@ -155,3 +155,25 @@ func TestAByNameAnchorDoesNotWakeAWantHoldingEnoughCopies(t *testing.T) {
 		t.Fatal("woken, want the want left waiting on a person")
 	}
 }
+
+// Copies set aside as duplicates still count, or a want would fetch the same
+// upload again after each set-aside.
+func TestDuplicateCopiesCountTowardsTheStop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	heldCopyFor(ctx, t, pool, targetID, requestID)
+	moreHeldCopiesFor(ctx, t, pool, targetID, requestID, 9500000, 9500000, 9500000, 9500000)
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_target_files SET verdict = 'duplicate'
+		WHERE acquisition_target_id = $1 AND size_bytes = 9500000
+	`, targetID); err != nil {
+		t.Fatalf("set the copies aside: %v", err)
+	}
+	anchoredBy(ctx, t, queries, targetID, "youtube")
+
+	if !stopWhileACopyWaits(ctx, t, queries, targetID) {
+		t.Fatal("not stopped, want one held copy and four duplicates enough to stop")
+	}
+}
