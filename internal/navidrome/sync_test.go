@@ -43,6 +43,7 @@ type syncStore struct {
 	snapshotErr    error
 	snapshotTracks []db.NavidromePlaylistSnapshotTrackRow
 	byRemoteID     map[string]db.NavidromePlaylistSnapshotRow
+	keptOut        map[string]bool
 	filesByPath    map[string]db.LibraryFileRefRow
 	filesByID      map[uuid.UUID]string
 	adopted        db.PlaylistRow
@@ -157,6 +158,10 @@ func (store *syncStore) SnapshotByNavidromeID(
 		return db.NavidromePlaylistSnapshotRow{}, pgx.ErrNoRows
 	}
 	return snapshot, nil
+}
+
+func (store *syncStore) NavidromePlaylistKeptOut(_ context.Context, navidromeID string) (bool, error) {
+	return store.keptOut[navidromeID], nil
 }
 
 func (store *syncStore) ReplaceNavidromePlaylistSnapshot(
@@ -875,6 +880,24 @@ func TestTheSweepLeavesAListSchallMadeAlone(t *testing.T) {
 	}
 	if len(result.Adopted) != 0 || len(store.upserted) != 0 {
 		t.Fatalf("adopted = %v, want a list Schall made left alone", store.upserted)
+	}
+}
+
+func TestTheSweepLeavesAKeptOutListAloneWhateverItsComment(t *testing.T) {
+	store := &syncStore{settings: configuredPlayer(), keptOut: map[string]bool{"nd-11": true}}
+	unsigned := Playlist{ID: "nd-11", Name: "Cantus Weekly", Owner: "poldi"}
+	player := &syncPlayer{
+		lists:   []Playlist{unsigned},
+		details: map[string]Playlist{"nd-11": unsigned},
+	}
+
+	result, err := syncerFor(store, player, "", t).Sweep(context.Background())
+
+	if err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(result.Adopted) != 0 || len(store.upserted) != 0 {
+		t.Fatalf("adopted = %v, want a kept-out list left alone", store.upserted)
 	}
 }
 

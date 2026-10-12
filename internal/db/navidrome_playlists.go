@@ -408,3 +408,17 @@ func (q *Queries) AcquiredPlaylistTracks(
 	}
 	return result, rows.Err()
 }
+
+// NavidromePlaylistKeptOut reports whether a remote list is one the sweep must
+// never adopt: Schall pushed it, or the Schall list that held it was removed.
+// 00113 keeps the record by trigger, so it outlives the snapshot.
+func (q *Queries) NavidromePlaylistKeptOut(ctx context.Context, navidromeID string) (bool, error) {
+	var kept bool
+	err := q.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM navidrome_playlists_kept_out
+			WHERE navidrome_playlist_id = $1
+		)
+	`, navidromeID).Scan(&kept)
+	return kept, err
+}

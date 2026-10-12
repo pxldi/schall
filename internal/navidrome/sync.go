@@ -37,6 +37,7 @@ type SyncStore interface {
 	NavidromePlaylistSnapshot(context.Context, uuid.UUID) (db.NavidromePlaylistSnapshotRow, error)
 	NavidromePlaylistSnapshotTracks(context.Context, uuid.UUID) ([]db.NavidromePlaylistSnapshotTrackRow, error)
 	SnapshotByNavidromeID(context.Context, string) (db.NavidromePlaylistSnapshotRow, error)
+	NavidromePlaylistKeptOut(context.Context, string) (bool, error)
 	ReplaceNavidromePlaylistSnapshot(
 		context.Context, db.NavidromePlaylistSnapshotParams, []db.NavidromePlaylistSnapshotTrackParams,
 	) error
@@ -384,7 +385,18 @@ func (syncer *Syncer) Sweep(ctx context.Context) (SweepResult, error) {
 			result.Skipped++
 			continue
 		}
-		_, err := syncer.store.SnapshotByNavidromeID(bounded, listed.ID)
+		// The comment can be edited in the player, and lists pushed before it
+		// existed carry none. The id record also covers a list somebody
+		// stopped following, which would otherwise come back on every sweep.
+		keptOut, err := syncer.store.NavidromePlaylistKeptOut(bounded, listed.ID)
+		if err != nil {
+			return result, fmt.Errorf("read whether navidrome playlist %s is kept out: %w", listed.ID, err)
+		}
+		if keptOut {
+			result.Skipped++
+			continue
+		}
+		_, err = syncer.store.SnapshotByNavidromeID(bounded, listed.ID)
 		if err == nil {
 			result.Skipped++
 			continue
