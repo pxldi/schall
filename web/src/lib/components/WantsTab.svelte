@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
     createMutation,
@@ -9,7 +10,7 @@
     type Query
   } from '@tanstack/svelte-query';
   import { api, lookingFor, type AcquisitionTarget, type AcquisitionTargets } from '$lib/api';
-  import { relativeTime } from '$lib/utils';
+  import { relativeTime, sinceTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
@@ -19,6 +20,7 @@
   import Settle from '$lib/components/Settle.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { leave } from '$lib/motion.svelte';
+  import StateMark from '$lib/components/StateMark.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
 
@@ -35,11 +37,29 @@
   type Role = 'ok' | 'idle' | 'decide' | 'busy' | 'fail';
   type Pile = 'looking' | 'stopped';
 
+  // What was typed in the filter field above the tab. The server searches every
+  // page of the wishlist, so the list asks again rather than narrowing the 25
+  // rows it already holds.
+  let { query = '' }: { query?: string } = $props();
+
   const queryClient = useQueryClient();
   const pageSize = 25;
 
   let pile = $state<Pile>('looking');
   let offset = $state(0);
+
+  // The search waits for a pause in typing, so "money trees" is one request and
+  // not eleven. A new search starts from the first page.
+  let asked = $state(untrack(() => query.trim()));
+  $effect(() => {
+    const next = query.trim();
+    if (next === untrack(() => asked)) return;
+    const timer = setTimeout(() => {
+      asked = next;
+      offset = 0;
+    }, 250);
+    return () => clearTimeout(timer);
+  });
 
   const statuses: Record<Pile, readonly string[]> = {
     looking: lookingFor,
@@ -53,8 +73,9 @@
   // names a pile the list under it is not showing.
   const wants = createQuery(
     toStore(() => ({
-      queryKey: ['wants', 'list', pile, offset],
-      queryFn: () => api.wants({ statuses: statuses[pile], limit: pageSize, offset }),
+      queryKey: ['wants', 'list', pile, asked, offset],
+      queryFn: () =>
+        api.wants({ statuses: statuses[pile], query: asked, limit: pageSize, offset }),
       placeholderData: keepPreviousData,
       // The loop moves these on its own and says so over the event stream, so
       // this is the safety net rather than the mechanism. It only runs while
@@ -96,6 +117,15 @@
       Boolean(want.summary) &&
       !waitingOnYou(want)
     );
+  }
+
+  // "Not in your library yet." opens most of the loop's sentences, and every
+  // row on the wishlist is not in the library yet, so the row keeps only what
+  // follows it.
+  const notInLibrary = 'Not in your library yet.';
+  function summaryLine(want: AcquisitionTarget) {
+    const summary = want.summary ?? '';
+    return summary.startsWith(notInLibrary) ? summary.slice(notInLibrary.length).trim() : summary;
   }
 
   function sampleStatus(want: AcquisitionTarget) {
@@ -206,13 +236,19 @@
     return parts.join(' · ');
   }
 
+  // The chip repeats the mark, so it is only drawn when it says more than the
+  // state almost every row on the wishlist is in.
+  function chipWorthShowing(mark: { text: string }) {
+    return mark.text !== 'Looking';
+  }
+
   // When something last happened, and when the next thing will. A want with
   // neither has been recorded and not yet reached, which is its own answer.
   function timing(want: AcquisitionTarget) {
     if (want.status === 'not_wanted') return '';
     if (waitingOnYou(want)) return 'waiting for you';
     const main = want.lastAttemptAt
-      ? `tried ${relativeTime(want.lastAttemptAt)}`
+      ? `tried ${sinceTime(want.lastAttemptAt)}`
       : want.nextAttemptAt
         ? `next look ${relativeTime(want.nextAttemptAt)}`
         : 'not looked for yet';
@@ -223,12 +259,12 @@
     return [main, search].filter(Boolean).join(' · ');
   }
 
-  const chips: Record<Role, string> = {
-    ok: 'bg-ok/14 text-ok',
-    idle: 'bg-idle/14 text-idle',
-    decide: 'bg-decide/14 text-decide',
-    busy: 'bg-busy/14 text-busy',
-    fail: 'bg-fail/14 text-fail'
+  const markIcons: Record<Role, 'check' | 'minus' | 'pause' | 'busy' | 'close'> = {
+    ok: 'check',
+    idle: 'minus',
+    decide: 'pause',
+    busy: 'busy',
+    fail: 'close'
   };
 
   const emptyHeadings: Record<Pile, string> = {
@@ -292,20 +328,14 @@
           <div
             class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_112px_auto] md:gap-y-0"
           >
-            <span class="grid size-4 shrink-0 place-items-center rounded-row {chips[mark.role]}">
-              {#if mark.role === 'ok'}
-                <Icon name="check" size={10} />
-              {:else}
-                <span class="numeric text-micro font-bold">
-                  {mark.role === 'decide'
-                    ? '?'
-                    : mark.role === 'fail'
-                      ? '!'
-                      : mark.role === 'busy'
-                        ? '·'
-                        : '–'}
-                </span>
-              {/if}
+            <!-- Icons, never typed glyphs, as on the transfers beside it. The
+                 mark carries the state's name on hover and for a screen
+                 reader, because the chip is left off the common case. -->
+            <span class="flex shrink-0" title={mark.text}>
+              <StateMark role={mark.role}>
+                <Icon name={markIcons[mark.role]} size="sm" class="size-2.5 stroke-[3]" />
+              </StateMark>
+              {#if !chipWorthShowing(mark)}<span class="sr-only">{mark.text}</span>{/if}
             </span>
 
             <!-- On a phone the name takes the whole line and everything after
@@ -325,9 +355,9 @@
               </span>
               <span
                 class="mt-0.5 block min-h-4 truncate text-meta text-ink-3"
-                title={sample || (waiting(want) ? want.summary : undefined)}
+                title={sample || (waiting(want) ? summaryLine(want) || undefined : undefined)}
               >
-                {#if sample}{sample}{:else if waiting(want)}{want.summary}{/if}
+                {#if sample}{sample}{:else if waiting(want)}{summaryLine(want)}{/if}
               </span>
             </span>
 
@@ -338,7 +368,9 @@
             <span class="numeric whitespace-nowrap text-meta text-ink-4">{timing(want)}</span>
 
             <span class="flex min-w-0 items-center">
-              <Chip role={mark.role} class="shrink-0">{mark.text}</Chip>
+              {#if chipWorthShowing(mark)}
+                <Chip role={mark.role} class="shrink-0">{mark.text}</Chip>
+              {/if}
               {#if want.floorWaivedAt}
                 <Chip role="idle" class="ml-2 shrink-0">Floor waived</Chip>
               {/if}
@@ -416,8 +448,10 @@
       <Pager {total} {offset} {pageSize} onchange={(next) => (offset = next)} />
     </div>
   {:else}
-    <EmptyPanel role="idle" heading={emptyHeadings[pile]}>
-      {#if pile === 'looking'}
+    <EmptyPanel role="idle" heading={asked ? 'Nothing matches that search' : emptyHeadings[pile]}>
+      {#if asked}
+        Clear the filter to see the whole list.
+      {:else if pile === 'looking'}
         The wishlist fills from a playlist, a followed artist, a suggestion, or the Want it button
         on a release.
       {:else}

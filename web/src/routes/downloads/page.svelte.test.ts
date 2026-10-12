@@ -24,6 +24,12 @@ vi.mock('$app/navigation', () => ({
 }));
 
 const { default: Downloads } = await import('./+page.svelte');
+const { page } = await import('$app/state');
+
+// The mocked page is a plain object, so a test can point it at another address.
+function at(address: string) {
+  (page as { url: URL }).url = new URL(address, 'http://localhost');
+}
 
 function request(overrides: Partial<DownloadRequest> = {}): DownloadRequest {
   return {
@@ -318,6 +324,42 @@ describe('the wants, one tab along from the transfers', () => {
     await vi.waitFor(() => {
       expect(asked).toContain(
         '/api/v1/acquisition-targets?status=unresolved%2Cpending%2Csearching&limit=25'
+      );
+    });
+  });
+});
+
+// The tab is called Wishlist on screen, and an address that said so opened the
+// transfers instead.
+describe('an address that names the wishlist', () => {
+  afterEach(() => {
+    at('/downloads');
+  });
+
+  it('opens the wishlist when it is named as the view', async () => {
+    at('/downloads?view=wishlist');
+    answering(listing);
+    opened();
+
+    await vi.waitFor(() => {
+      expect(asked).toContain(
+        '/api/v1/acquisition-targets?status=unresolved%2Cpending%2Csearching&limit=25'
+      );
+    });
+  });
+
+  it('filters the wishlist from the field above it', async () => {
+    at('/downloads?tab=wanted');
+    answering(listing);
+    opened();
+
+    await fireEvent.input(await screen.findByRole('searchbox', { name: 'Filter wishlist' }), {
+      target: { value: 'money trees' }
+    });
+
+    await vi.waitFor(() => {
+      expect(asked).toContain(
+        '/api/v1/acquisition-targets?status=unresolved%2Cpending%2Csearching&q=money+trees&limit=25'
       );
     });
   });

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -950,6 +951,52 @@ func TestListingWantsNarrowsToOneState(t *testing.T) {
 	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != wanted {
 		t.Fatalf("page = %d of %d, want only the want still being pursued (%s)",
 			len(page.Items), page.Total, wanted)
+	}
+}
+
+// The wishlist is searched by what its rows say, and the count is of the
+// matches, so the pager under a search counts the search. A `%` typed in the box
+// matches a `%` and nothing else.
+func TestListingWantsNarrowsToWhatWasTyped(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+
+	glass, _, err := queries.CreateAcquisitionTarget(ctx, wantParams("Glass", uuid.New()))
+	if err != nil {
+		t.Fatalf("CreateAcquisitionTarget() error = %v", err)
+	}
+	if _, _, err := queries.CreateAcquisitionTarget(ctx, wantParams("Roads", uuid.New())); err != nil {
+		t.Fatalf("CreateAcquisitionTarget() error = %v", err)
+	}
+	percent, _, err := queries.CreateAcquisitionTarget(ctx, wantParams("100% Roads", uuid.New()))
+	if err != nil {
+		t.Fatalf("CreateAcquisitionTarget() error = %v", err)
+	}
+
+	for _, test := range []struct {
+		query string
+		want  []uuid.UUID
+	}{
+		{"gLaSs", []uuid.UUID{glass}},
+		{"portishead glass", []uuid.UUID{glass}},
+		{"0%", []uuid.UUID{percent}},
+		{"nothing like it", nil},
+	} {
+		page, err := queries.ListAcquisitionTargets(ctx, ListAcquisitionTargetsParams{
+			Query: test.query, Limit: 20,
+		})
+		if err != nil {
+			t.Fatalf("ListAcquisitionTargets(%q) error = %v", test.query, err)
+		}
+		got := make([]uuid.UUID, 0, len(page.Items))
+		for _, item := range page.Items {
+			got = append(got, item.ID)
+		}
+		if page.Total != int64(len(test.want)) || !slices.Equal(got, test.want) {
+			t.Errorf("%q: %v of %d, want %v", test.query, got, page.Total, test.want)
+		}
 	}
 }
 

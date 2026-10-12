@@ -315,6 +315,16 @@ export function relativeTime(value: string | null | undefined, now = Date.now())
   return back === 'just now' ? back : `${back} ago`;
 }
 
+// When something already happened, for a fact that cannot lie ahead. The
+// server's clock and the browser's differ by a second or two, so a look recorded
+// a moment ago could read as `in 0s`; this reads it as `just now` instead.
+export function sinceTime(value: string | null | undefined, now = Date.now()): string {
+  if (!value) return '';
+  const at = new Date(value).getTime();
+  if (!Number.isFinite(at)) return '';
+  return at >= now ? 'just now' : relativeTime(value, now);
+}
+
 // Backwards never shows seconds beside minutes: how long ago something happened
 // is read to decide whether to worry about it, and `12m 41s ago` invites a
 // precision the answer does not have.

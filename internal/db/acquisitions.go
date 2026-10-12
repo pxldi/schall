@@ -280,8 +280,12 @@ func (q *Queries) AcquisitionTarget(ctx context.Context, id uuid.UUID) (Acquisit
 // for a copy, being searched for right now — are one thing to the person who
 // asked for the music, and asking for them one at a time would be three reads
 // and three counts of the same list.
+//
+// Query narrows the page to wants whose artist, title or album holds the text,
+// so a wishlist of a thousand rows can be searched rather than paged through.
 type ListAcquisitionTargetsParams struct {
 	Statuses []string
+	Query    string
 	Limit    int32
 	Offset   int32
 }
@@ -294,13 +298,18 @@ func (q *Queries) ListAcquisitionTargets(
 	if statuses == nil {
 		statuses = []string{}
 	}
+	// A search box is not a pattern language, so % and _ are escaped to match
+	// themselves, the same way as the library's file search.
 	filter := `
 		WHERE (cardinality($1::text[]) = 0 OR acquisition_targets.status = ANY($1::text[]))
+		  AND ($2 = '' OR concat_ws(' ', acquisition_targets.entry_artist,
+		          acquisition_targets.entry_title, acquisition_targets.entry_album)
+		      ILIKE '%' || regexp_replace($2, '([\\%_])', '\\\1', 'g') || '%' ESCAPE '\')
 	`
 	if err := q.db.QueryRow(ctx, `
 		SELECT count(*)
 		FROM acquisition_targets`+filter,
-		statuses,
+		statuses, params.Query,
 	).Scan(&result.Total); err != nil {
 		return result, err
 	}
@@ -327,8 +336,8 @@ func (q *Queries) ListAcquisitionTargets(
 		    ON upgrade_of.id = acquisition_targets.upgrade_of_library_file_id
 	`+filter+`
 		ORDER BY acquisition_targets.created_at DESC, acquisition_targets.id
-		LIMIT $2 OFFSET $3
-	`, statuses, params.Limit, params.Offset)
+		LIMIT $3 OFFSET $4
+	`, statuses, params.Query, params.Limit, params.Offset)
 	if err != nil {
 		return result, err
 	}

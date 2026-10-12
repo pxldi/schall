@@ -63,7 +63,15 @@
   // Read once, before anything is tracked, so that following the address bar
   // back into it later cannot become a dependency of the effect that writes it.
   const opened = page.url;
-  let tab = $state<(typeof tabKeys)[number]>(urlChoice(opened, 'tab', tabKeys, 'peers'));
+  let tab = $state<(typeof tabKeys)[number]>(tabFrom(opened));
+
+  // `wishlist` is what the tab is called on screen, so an address that names it
+  // as a view or a tab opens it rather than falling back to the transfers.
+  function tabFrom(url: URL): (typeof tabKeys)[number] {
+    const named = url.searchParams.get('tab') ?? url.searchParams.get('view');
+    if (named === 'wishlist' || named === 'wanted') return 'wanted';
+    return urlChoice(url, 'tab', tabKeys, 'peers');
+  }
 
   // The screen opens on the transfers still under way, and the piles they end
   // up in are beside it rather than under an "everything else" button. Three
@@ -86,9 +94,15 @@
   // whichever pile was last looked at. This depends on the address and on
   // nothing else: the pile it compares against is read untracked, so the effect
   // above, which writes the address, cannot make this one answer it.
+  // The badge links to the transfers, so a view named with no tab beside it
+  // brings the transfers forward from the wishlist or the uploads.
   $effect(() => {
     const asked = urlChoice(page.url, 'view', viewKeys, 'open');
     if (asked !== untrack(() => view)) setView(asked);
+    const named = page.url.searchParams.get('view') ?? '';
+    if (!page.url.searchParams.has('tab') && (viewKeys as readonly string[]).includes(named)) {
+      if (untrack(() => tab) !== 'peers') tab = 'peers';
+    }
   });
 
   // The pile and the page are what the key names, because each of them is a
@@ -537,16 +551,18 @@
     pending={$downloads.isPending || $looking.isPending || $uploads.isPending}
   />
 
-  {#if tab === 'peers'}
-    <!-- The search narrows the peers list, which is the one drawn on this
-         page; the wishlist and uploads tabs are their own components with no
-         search of their own to hand it to. -->
+  {#if tab !== 'uploads'}
+    <!-- The search narrows the transfers drawn on this page, and is handed to
+         the wishlist, which asks the server: it is paged, and a filter over
+         the 25 rows on screen would miss the rest. While the field has focus,
+         typing filters here and does not open the global search. -->
     <label class="field ml-auto flex w-full items-center gap-2 sm:w-56">
       <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
-        placeholder="Filter downloads"
-        aria-label="Filter downloads"
+        type="search"
+        placeholder={tab === 'wanted' ? 'Filter wishlist' : 'Filter downloads'}
+        aria-label={tab === 'wanted' ? 'Filter wishlist' : 'Filter downloads'}
         class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
       />
     </label>
@@ -554,7 +570,7 @@
 </ControlRail>
 
 {#if tab === 'wanted'}
-  <WantsTab />
+  <WantsTab query={search} />
 {:else if tab === 'uploads'}
   <UploadsTab />
 {:else}
@@ -720,13 +736,18 @@
                   <Button href={decide} variant="outline" size="sm">Decide</Button>
                 {/if}
                 {#if item.status === 'requested' || item.status === 'started'}
+                  <!-- A secondary action, so an icon with its name on hover,
+                       beside the one that opens the files. -->
                   <Button
                     variant="ghost"
-                    size="sm"
+                    icon
+                    size="xs"
+                    title="Cancel download"
+                    aria-label="Cancel download"
                     disabled={$cancelDownload.isPending}
                     onclick={() => $cancelDownload.mutate(item.id)}
                   >
-                    Cancel
+                    <Icon name="close" size={14} />
                   </Button>
                 {/if}
                 <Button

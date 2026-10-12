@@ -1727,6 +1727,25 @@ func TestWantsCanBeAskedForInSeveralStatesAtOnce(t *testing.T) {
 	}
 }
 
+// What was typed in the wishlist's filter reaches the store trimmed, so the
+// server searches every page rather than the one on screen.
+func TestWantsCanBeSearched(t *testing.T) {
+	targets := &fakeAcquisitionTargets{
+		target: db.AcquisitionTargetRow{ID: uuid.New(), Status: "pending", Origin: "manual"},
+	}
+	handler := acquisitionHandler(targets)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/api/v1/acquisition-targets?q=+money+trees+", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
+	}
+	if targets.listed.Query != "money trees" {
+		t.Fatalf("query = %q, want %q", targets.listed.Query, "money trees")
+	}
+}
+
 // One unknown name in a list of states is a typo, not a narrower list, and a
 // list narrowed by a typo would read as "nothing is being looked for".
 func TestAnUnknownStateInAListOfStatesIsRefused(t *testing.T) {
