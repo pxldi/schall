@@ -1129,6 +1129,8 @@ a {
 
     .want-row:hover .want-toggle[data-reveal='true'],
     .want-row:has(:focus-visible) .want-toggle[data-reveal='true'],
+    .want-tile:hover .want-toggle[data-reveal='true'],
+    .want-tile:has(:focus-visible) .want-toggle[data-reveal='true'],
     .want-toggle[data-reveal='true']:focus-visible {
       opacity: 1;
     }

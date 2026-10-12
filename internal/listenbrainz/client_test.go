@@ -655,3 +655,46 @@ func TestListensTreatsNoContentAsAnEmptyPage(t *testing.T) {
 		t.Fatalf("Listens() = %v, %v; want an empty page and no error", listens, err)
 	}
 }
+
+func TestTopRecordingsForArtistKeepsTheOrderAndTheIDs(t *testing.T) {
+	client := newTestClient(t, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/1/popularity/top-recordings-for-artist/381086ea-f511-4aba-bdf9-71c753dc5077" {
+			t.Errorf("path = %q", request.URL.Path)
+		}
+		_, _ = response.Write([]byte(`[
+			{"recording_mbid": "b1a9c0e9-d987-4042-ae91-78d6a3267d69", "recording_name": "HUMBLE.",
+			 "release_mbid": "6c4cfa2a-1a1b-4a6f-9e3c-6a0f2a3b7f00", "release_name": "DAMN.",
+			 "length": 177000, "total_listen_count": 900, "total_user_count": 40},
+			{"recording_mbid": "", "recording_name": "No ID"},
+			{"recording_mbid": "0c2e4d1e-6f7a-4f0e-8a55-2b3c4d5e6f70", "recording_name": "luther",
+			 "length": null, "total_listen_count": 800, "total_user_count": 30}
+		]`))
+	})
+
+	popular, err := client.TopRecordingsForArtist(context.Background(), "381086ea-f511-4aba-bdf9-71c753dc5077")
+	if err != nil {
+		t.Fatalf("TopRecordingsForArtist() error = %v", err)
+	}
+	if len(popular) != 2 {
+		t.Fatalf("got %d recordings, want 2 (the one without an ID dropped): %+v", len(popular), popular)
+	}
+	if popular[0].Name != "HUMBLE." || popular[0].LengthMS != 177000 || popular[0].ListenCount != 900 {
+		t.Fatalf("first = %+v", popular[0])
+	}
+	if popular[1].RecordingMBID != "0c2e4d1e-6f7a-4f0e-8a55-2b3c4d5e6f70" || popular[1].LengthMS != 0 {
+		t.Fatalf("second = %+v", popular[1])
+	}
+}
+
+func TestTopRecordingsForArtistReportsAMissingToken(t *testing.T) {
+	client := newTestClient(t, func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusUnauthorized)
+		_, _ = response.Write([]byte(`{"code":401,"error":"you need to provide an Auth token"}`))
+	})
+
+	_, err := client.TopRecordingsForArtist(context.Background(), "381086ea-f511-4aba-bdf9-71c753dc5077")
+	var refused *HTTPError
+	if !errors.As(err, &refused) || refused.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("error = %v, want an HTTPError with 401", err)
+	}
+}

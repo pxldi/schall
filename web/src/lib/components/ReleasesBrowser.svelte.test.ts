@@ -50,6 +50,8 @@ function releaseRow(overrides: Partial<Release> = {}): Release {
     trackRefreshStatus: 'completed',
     hasCover: true,
     inks: null,
+    secondaryTypes: [],
+    wantedTrackCount: 0,
     ...overrides
   };
 }

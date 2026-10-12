@@ -250,6 +250,7 @@ type Database interface {
 }
 
 type API struct {
+	popular      PopularReader
 	store        Store
 	overviews    OverviewReader
 	database     Database
@@ -699,6 +700,7 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Get("/artists/genres", api.listCatalogueGenres)
 			router.Post("/artists", api.createArtist)
 			router.Get("/artists/{artistID}", api.getArtist)
+			router.Get("/artists/{artistID}/popular", api.artistPopular)
 			router.Post("/artists/{artistID}/follow", api.followArtist)
 			router.Delete("/artists/{artistID}/follow", api.unfollowArtist)
 			router.Post("/artists/{artistID}/refresh", api.refreshArtist)
@@ -2370,6 +2372,11 @@ type albumResponse struct {
 	HasCover bool `json:"hasCover"`
 	// Inks are the two inks read from the cover, or null.
 	Inks *inksResponse `json:"inks"`
+	// SecondaryTypes qualify AlbumType: compilation, live, mixtape/street and
+	// the rest of MusicBrainz's list, lowercased.
+	SecondaryTypes []string `json:"secondaryTypes"`
+	// WantedTrackCount is the tracks with a want still being pursued.
+	WantedTrackCount int64 `json:"wantedTrackCount"`
 }
 
 // The shapes a release can be in, as the browser names them, and the orders it
@@ -2495,6 +2502,8 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 			TrackRefreshStatus:        album.TrackRefreshStatus,
 			HasCover:                  album.HasCover,
 			Inks:                      rowInks(inks, album.ID),
+			SecondaryTypes:            nonNil(album.SecondaryTypes),
+			WantedTrackCount:          album.WantedTrackCount,
 		})
 	}
 	body := map[string]any{

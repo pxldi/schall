@@ -373,6 +373,36 @@ export interface Release {
    * one the archives have no sleeve for, has none. */
   hasCover: boolean;
   inks: Inks | null;
+  /** MusicBrainz's qualifiers on the type, lowercased: compilation, live,
+   * mixtape/street and the rest. An artist's page files an album carrying one
+   * under Other. */
+  secondaryTypes: string[];
+  /** Tracks with a want still being pursued. */
+  wantedTrackCount: number;
+}
+
+/** One of an artist's most listened recordings, from ListenBrainz, with what
+ * the catalogue holds of it. The recording is matched by MusicBrainz ID only. */
+export interface PopularTrack {
+  recordingId: string;
+  title: string;
+  /** The release ListenBrainz counted the listens under. */
+  releaseTitle: string;
+  lengthMs: number;
+  listenCount: number;
+  trackId: string | null;
+  albumId: string | null;
+  albumTitle: string | null;
+  hasCover: boolean;
+  held: boolean;
+  wantId: string | null;
+  wantStatus: string | null;
+}
+
+export interface ArtistPopular {
+  items: PopularTrack[];
+  /** Why there is no list, when somebody can fix it. */
+  unavailable?: string;
 }
 
 /** Which releases the browser is asking for. Scope is why a release is worth

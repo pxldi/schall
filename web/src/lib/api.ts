@@ -6,6 +6,7 @@ import type {
   ArtistDetail,
   ArtistFilters,
   ArtistList,
+  ArtistPopular,
   ArtistSearchResult,
   ArtistSearchResults,
   ArtistWantMissing,
@@ -58,6 +59,7 @@ import type {
   PlayerPairing,
   Playlist,
   PlaylistEntry,
+  PopularTrack,
   PlaylistFilePreview,
   Recommendation,
   RecommendationFeedbackSignal,
@@ -244,6 +246,9 @@ export const api = {
    * would find somebody. */
   catalogueGenres: () => request<{ items: string[] }>('/api/v1/artists/genres'),
   artist: (id: string) => request<ArtistDetail>(`/api/v1/artists/${encodeURIComponent(id)}`),
+  /** The artist's most listened recordings, from ListenBrainz. */
+  artistPopular: (id: string) =>
+    request<ArtistPopular>(`/api/v1/artists/${encodeURIComponent(id)}/popular`),
   followHeldArtist: (id: string) =>
     request<Artist>(`/api/v1/artists/${encodeURIComponent(id)}/follow`, { method: 'POST' }),
   unfollowArtist: (id: string) =>
@@ -722,6 +727,20 @@ export const api = {
   // the want came from, and nothing in the acquisition loop branches on it.
   // Asking twice for one recording is one want, so the answer to the second
   // press is the want that already exists rather than a second one.
+  /** Wants one of an artist's popular recordings that no release in the
+   * catalogue carries yet, by its MusicBrainz ID. */
+  wantPopularTrack: (track: PopularTrack, artistName: string) =>
+    request<AcquisitionTarget>('/api/v1/acquisition-targets', {
+      method: 'POST',
+      body: JSON.stringify({
+        origin: 'manual',
+        artist: artistName,
+        title: track.title,
+        album: track.releaseTitle,
+        recordingId: track.recordingId
+      })
+    }),
+
   wantRecommendation: (recommendation: Recommendation) =>
     request<AcquisitionTarget>('/api/v1/acquisition-targets', {
       method: 'POST',
