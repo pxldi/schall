@@ -297,6 +297,29 @@ describe('the three kinds Review holds', () => {
     expect(screen.getByRole('button', { name: 'Wrong song' })).toBeTruthy();
   });
 
+  it('puts the wanted entry beside the copies, with Wrong song on it', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    const card = screen.getByText('Wanted').parentElement!;
+    expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
+  });
+
+  it('keeps the reason for a missing sample behind a disclosure', async () => {
+    const reason = 'This entry carries no ISRC, and a preview is only ever fetched by ISRC.';
+    const item = want('copies');
+    item.target.anchorUnavailable = reason;
+    piles.wants = [item];
+    await open('Evensong');
+
+    expect(screen.getAllByText('No sample')).toHaveLength(1);
+    const details = screen.getByText(reason).closest('details')!;
+    expect(details.open).toBe(false);
+    expect(within(details).getByText('Why no sample')).toBeTruthy();
+  });
+
   it('carries no wrong song link on a version question', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
