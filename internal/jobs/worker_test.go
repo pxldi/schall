@@ -136,6 +136,7 @@ type fakeQueue struct {
 	skippedRows     int64
 	reviveErr       error
 	forgottenBefore time.Time
+	finishedBefore  time.Time
 	forgottenRows   int64
 	forgetErr       error
 	heartbeats      int
@@ -213,6 +214,11 @@ func (queue *fakeQueue) ForgetSpentJobs(_ context.Context, failedBefore time.Tim
 	}
 	queue.forgottenBefore = failedBefore
 	return queue.forgottenRows, nil
+}
+
+func (queue *fakeQueue) ForgetFinishedJobs(_ context.Context, finishedBefore time.Time) (int64, error) {
+	queue.finishedBefore = finishedBefore
+	return 0, nil
 }
 
 func (queue *fakeQueue) Heartbeat(_ context.Context, _ Job) (bool, error) {

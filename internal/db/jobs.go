@@ -469,6 +469,74 @@ func (q *Queries) ForgetSpentJobs(ctx context.Context, failedBefore time.Time) (
 	return tag.RowsAffected(), nil
 }
 
+// forgettableKinds are the kinds whose finished rows nothing reads once a newer
+// row of the kind exists. They are the polls and sweeps that queue their own
+// successor every few seconds or minutes, and the jobs done once per file,
+// release or want, whose duplicate guards only look at queued and running
+// rows. Kinds read as history stay out: artist and label refreshes (the card's
+// refresh state), library scans, recommendation sweeps, tag and transcode runs,
+// uploads (the job is the upload's only record) and source searches (a
+// cancelled one marks a stopped run).
+var forgettableKinds = []string{
+	"poll_downloads", "answer_peer_challenges", "sweep_acquisition_targets",
+	"sync_listens", "sweep_genres", "sweep_preview_anchors",
+	"refresh_album_metadata", "tag_file", "resolve_library_file",
+	"judge_want_copies", "fingerprint_library_witness", "import_download",
+}
+
+// forgetBatch is how many finished jobs one statement removes, so a first pass
+// over a table of a million rows holds no lock for long.
+const forgetBatch = 5000
+
+// ForgetFinishedJobs removes completed and cancelled jobs of the forgettable
+// kinds that finished before the moment given. The newest completed and the
+// newest cancelled row of each kind stay, because the schedule on the jobs
+// page reads when each recurring pass last ran from them. Nothing was ever
+// removed before, and a live table had grown to 1.48 million rows.
+func (q *Queries) ForgetFinishedJobs(ctx context.Context, finishedBefore time.Time) (int64, error) {
+	// The rows to keep are read once, before the batches, through the index on
+	// kind and finish time. Asked per candidate row inside the delete, the same
+	// question scanned the table once a row.
+	var keep []uuid.UUID
+	if err := q.db.QueryRow(ctx, `
+		SELECT coalesce(array_agg(newest.id) FILTER (WHERE newest.id IS NOT NULL), '{}')
+		FROM unnest($1::text[]) AS kinds(kind)
+		CROSS JOIN (VALUES ('completed'), ('cancelled')) AS statuses(status)
+		CROSS JOIN LATERAL (
+			SELECT jobs.id FROM jobs
+			WHERE jobs.kind = kinds.kind
+			  AND jobs.status = statuses.status
+			  AND jobs.completed_at IS NOT NULL
+			ORDER BY jobs.completed_at DESC
+			LIMIT 1
+		) AS newest
+	`, forgettableKinds).Scan(&keep); err != nil {
+		return 0, fmt.Errorf("read the newest finished jobs: %w", err)
+	}
+
+	var total int64
+	for {
+		tag, err := q.db.Exec(ctx, `
+			DELETE FROM jobs
+			WHERE id IN (
+				SELECT id FROM jobs
+				WHERE kind = ANY($2::text[])
+				  AND status IN ('completed', 'cancelled')
+				  AND completed_at < $1
+				  AND id <> ALL($3::uuid[])
+				LIMIT $4
+			)
+		`, finishedBefore, forgettableKinds, keep, forgetBatch)
+		if err != nil {
+			return total, fmt.Errorf("forget finished jobs: %w", err)
+		}
+		total += tag.RowsAffected()
+		if tag.RowsAffected() < forgetBatch || ctx.Err() != nil {
+			return total, nil
+		}
+	}
+}
+
 // JobPayload reads the payload of one job while it is completing, so a worker
 // can see a wake recorded while the job was running.
 func (q *Queries) JobPayload(ctx context.Context, jobID uuid.UUID) ([]byte, error) {

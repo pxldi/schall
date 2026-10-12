@@ -155,6 +155,11 @@ func (repository *Repository) ForgetSpentJobs(ctx context.Context, failedBefore 
 	return db.New(repository.pool).ForgetSpentJobs(ctx, failedBefore)
 }
 
+// ForgetFinishedJobs removes old completed and cancelled jobs nothing reads.
+func (repository *Repository) ForgetFinishedJobs(ctx context.Context, finishedBefore time.Time) (int64, error) {
+	return db.New(repository.pool).ForgetFinishedJobs(ctx, finishedBefore)
+}
+
 func (repository *Repository) ArtistMusicBrainzID(ctx context.Context, artistID uuid.UUID) (uuid.UUID, error) {
 	var musicBrainzID *uuid.UUID
 	err := repository.pool.QueryRow(ctx, `

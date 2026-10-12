@@ -113,25 +113,44 @@ func shrink(data []byte) (Artwork, error) {
 	if len(data) > maxImageBytes {
 		return Artwork{}, ErrNoArtwork
 	}
+	encoded, err := scaleToWidth(data, coverWidth)
+	if err != nil {
+		return Artwork{}, err
+	}
+	return Artwork{
+		Image:       encoded,
+		ContentType: "image/jpeg",
+		Source:      NameEmbedded,
+	}, nil
+}
+
+// Thumbnail is a stored picture made at most width pixels wide, as a JPEG. A
+// list draws covers at 40 to 100 pixels and the stored ones are 500, so a page
+// of them moved ten times the bytes it drew.
+func Thumbnail(data []byte, width int) ([]byte, error) {
+	return scaleToWidth(data, width)
+}
+
+// scaleToWidth decodes a picture and re-encodes it as a JPEG no wider than
+// width, keeping its shape. A picture already narrower keeps its size.
+func scaleToWidth(data []byte, width int) ([]byte, error) {
 	source, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		// Something that will not decode is not a picture, whatever it claims.
-		return Artwork{}, ErrNoArtwork
+		return nil, ErrNoArtwork
 	}
 	bounds := source.Bounds()
 	if bounds.Dx() == 0 || bounds.Dy() == 0 {
-		return Artwork{}, ErrNoArtwork
+		return nil, ErrNoArtwork
 	}
 
-	target := bounds
-	if bounds.Dx() > coverWidth {
-		height := bounds.Dy() * coverWidth / bounds.Dx()
+	target := image.Rect(0, 0, bounds.Dx(), bounds.Dy())
+	if bounds.Dx() > width {
+		height := bounds.Dy() * width / bounds.Dx()
 		if height < 1 {
 			height = 1
 		}
-		target = image.Rect(0, 0, coverWidth, height)
-	} else {
-		target = image.Rect(0, 0, bounds.Dx(), bounds.Dy())
+		target = image.Rect(0, 0, width, height)
 	}
 
 	scaled := image.NewRGBA(target)
@@ -139,11 +158,7 @@ func shrink(data []byte) (Artwork, error) {
 
 	var encoded bytes.Buffer
 	if err := jpeg.Encode(&encoded, scaled, &jpeg.Options{Quality: coverQuality}); err != nil {
-		return Artwork{}, fmt.Errorf("re-encode an embedded cover: %w", err)
+		return nil, fmt.Errorf("re-encode a cover: %w", err)
 	}
-	return Artwork{
-		Image:       encoded.Bytes(),
-		ContentType: "image/jpeg",
-		Source:      NameEmbedded,
-	}, nil
+	return encoded.Bytes(), nil
 }

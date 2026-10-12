@@ -3,6 +3,7 @@
 // Ported from the prototype the ADR was accepted on.
 
 import { clampInks, hexToRgb, inksFromPixels, mix, type Inks } from './inks';
+import { coverAt } from '$lib/cover-size';
 
 function hash(seed: string): number {
   let h = 2166136261;
@@ -149,7 +150,9 @@ const extracted = new Map<string, Promise<Inks | undefined>>();
 export function inksOfPicture(src: string): Promise<Inks | undefined> {
   let found = extracted.get(src);
   if (!found) {
-    found = loadPicture(src).then((image) => {
+    // The smallest copy the API makes is plenty for a 48px sample, and it is
+    // the one a list's thumbnail has usually loaded already.
+    found = loadPicture(coverAt(src, 128)).then((image) => {
       if (!image || !canPaint()) return undefined;
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 48;

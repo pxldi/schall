@@ -21,6 +21,7 @@
 
 <script lang="ts">
   import GeneratedCover from './GeneratedCover.svelte';
+  import { COVER_WIDTHS, coverAt } from '$lib/cover-size';
   import type { Inks } from '$lib/duoton/inks';
 
   // A picture that arrives instead of appearing.
@@ -82,11 +83,25 @@
     }
   }
   const missing = $derived(!src || stage === 'missing' || missingSources.has(src));
+
+  // Covers are stored 500 pixels wide and most are drawn at 40 to 100. The API
+  // makes 128 and 256 on request, and the browser picks by the size the image
+  // is laid out at (`sizes="auto"`, lazy images only). A browser that cannot
+  // read "auto" falls through to 500px and loads the stored picture as before.
+  const srcset = $derived(
+    !eager && src?.startsWith('/api/')
+      ? COVER_WIDTHS.map((width) => `${coverAt(src, width)} ${width}w`)
+          .concat(`${src} 500w`)
+          .join(', ')
+      : undefined
+  );
 </script>
 
 {#if !missing}
   <img
     {src}
+    {srcset}
+    sizes={srcset ? 'auto, 500px' : undefined}
     {alt}
     loading={eager ? 'eager' : 'lazy'}
     decoding="async"

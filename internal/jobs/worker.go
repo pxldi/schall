@@ -528,6 +528,8 @@ type Queue interface {
 	ReviveSpentJobs(context.Context, []uuid.UUID) (int64, int64, error)
 	// ForgetSpentJobs removes the failures that are old enough to be history.
 	ForgetSpentJobs(context.Context, time.Time) (int64, error)
+	// ForgetFinishedJobs removes old completed and cancelled jobs nothing reads.
+	ForgetFinishedJobs(context.Context, time.Time) (int64, error)
 	Claim(context.Context, Lane) (Job, error)
 	Heartbeat(context.Context, Job) (bool, error)
 	ArtistMusicBrainzID(context.Context, uuid.UUID) (uuid.UUID, error)
@@ -1455,6 +1457,22 @@ func (worker *Worker) forgetSpent(ctx context.Context) {
 			Int64("jobs", forgotten).
 			Dur("kept_for", spentJobRetention).
 			Msg("forgot failures older than the window they are kept for")
+	}
+
+	// Finished jobs are kept as long as failures, so a job somebody opens from
+	// the jobs page a few days later is still there to read.
+	finished, err := worker.queue.ForgetFinishedJobs(ctx, worker.now().Add(-spentJobRetention))
+	if err != nil {
+		if ctx.Err() == nil {
+			worker.logger.Error().Err(err).Msg("forget the finished jobs that are older than the window")
+		}
+		return
+	}
+	if finished > 0 {
+		worker.logger.Info().
+			Int64("jobs", finished).
+			Dur("kept_for", spentJobRetention).
+			Msg("forgot finished jobs older than the window they are kept for")
 	}
 }
 
