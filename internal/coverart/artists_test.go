@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -302,6 +303,39 @@ func TestAStreamingPageWithNoPictureIsAnAbsence(t *testing.T) {
 	}
 	if fetched {
 		t.Fatal("the placeholder was fetched and would have been cached as a face")
+	}
+}
+
+// A silhouette can also arrive under an address with a real-looking hash. The
+// picture itself is what gives it away.
+func TestAStreamingPageServingAStockAvatarIsAnAbsence(t *testing.T) {
+	avatar := encodeJPEG(t, func(x, y int) color.RGBA {
+		if (x-48)*(x-48)+(y-36)*(y-36) < 300 {
+			return color.RGBA{186, 186, 186, 255}
+		}
+		return color.RGBA{238, 238, 238, 255}
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if strings.HasPrefix(request.URL.Path, "/artist/") {
+			_, _ = response.Write([]byte(
+				`{"id":1,"picture_big":"https://cdn.test/images/artist/4c2d9a/500x500.jpg"}`))
+			return
+		}
+		response.Header().Set("Content-Type", "image/jpeg")
+		_, _ = response.Write(avatar)
+	}))
+	t.Cleanup(server.Close)
+
+	artists := NewArtists(
+		fakeRelations{urls: []musicbrainz.URLRelation{
+			{Type: "free streaming", Resource: "https://www.deezer.com/artist/1"},
+		}},
+		NewClient(Options{}),
+	)
+	artists.images.httpClient = &http.Client{Transport: rewriteHost{to: server.Listener.Addr().String()}}
+
+	if _, err := artists.Picture(context.Background(), uuid.New()); !errors.Is(err, ErrNoArtwork) {
+		t.Fatalf("error = %v, want the stock avatar reported as an absence", err)
 	}
 }
 

@@ -250,9 +250,10 @@
   type Badge = { label: string; role: 'decide' | 'busy' | 'fail' | 'idle' };
   function badgeOf(artist: ArtistListItem): Badge | null {
     // An uploader on another service has no discography and never will, so
-    // "not scanned" would be a promise nothing is going to keep. Completeness
-    // is not a question that applies to them.
-    if (artist.source) return { label: 'not applicable', role: 'idle' };
+    // "not scanned" would be a promise nothing is going to keep. The card's
+    // second line already says "from SoundCloud", and a chip saying "not
+    // applicable" only raised the question of what did not apply.
+    if (artist.source) return null;
     if (artist.reviewCount > 0) {
       return { label: artist.reviewCount === 1 ? 'review' : `review ${artist.reviewCount}`, role: 'decide' };
     }
@@ -603,7 +604,9 @@
           {:else if badge.role === 'fail'}
             <Icon name="close" size="sm" />
           {:else}
-            <Icon name="busy" size="sm" />
+            <!-- Not the busy glyph: "not scanned" is a state, and a spinner
+                 shape beside it read as work under way. -->
+            <Icon name="info" size="sm" />
           {/if}
           {badge.label}
         </Chip>

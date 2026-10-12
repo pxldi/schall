@@ -118,6 +118,59 @@ describe('artist cards', () => {
   });
 });
 
+describe('an uploader from SoundCloud', () => {
+  it('says where they are from without a chip', async () => {
+    pageState.url = new URL('http://localhost/artists');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === '/api/v1/artists') {
+          return body({
+            items: [
+              {
+                id: 'a1',
+                musicbrainzId: null,
+                name: 'Abo',
+                sortName: 'Abo',
+                followed: false,
+                followedAt: null,
+                lastRefreshedAt: null,
+                refreshStatus: 'pending',
+                source: 'soundcloud',
+                releaseCount: 0,
+                ownedReleaseCount: 0,
+                trackCount: 0,
+                ownedTrackCount: 0,
+                inFlightCount: 0,
+                reviewCount: 0,
+                needsAttention: false
+              }
+            ],
+            total: 1,
+            limit: 50,
+            offset: 0,
+            followedCount: 0,
+            heldCount: 1,
+            allCount: 1,
+            incompleteCount: 0,
+            completeCount: 0,
+            attentionCount: 0,
+            refreshingCount: 0
+          });
+        }
+        return body({});
+      })
+    );
+
+    opened();
+
+    expect(await screen.findByText('from SoundCloud')).toBeTruthy();
+    expect(screen.queryByText('not applicable')).toBeNull();
+  });
+});
+
 describe('artist pictures', () => {
   it('asks only for the pictures the rows say are cached', async () => {
     pageState.url = new URL('http://localhost/artists');

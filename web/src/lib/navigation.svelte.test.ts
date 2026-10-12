@@ -12,7 +12,8 @@ const listeners = new Set<(navigation: unknown) => void>();
 vi.mock('$app/navigation', () => ({
   afterNavigate: (callback: (navigation: unknown) => void) => {
     listeners.add(callback);
-  }
+  },
+  beforeNavigate: () => {}
 }));
 
 let previousScreen: typeof import('$lib/navigation.svelte').previousScreen;

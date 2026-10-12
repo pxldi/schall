@@ -114,6 +114,7 @@ type CoverArtStore interface {
 	DeleteUserReleaseCoverArt(context.Context, uuid.UUID) (int64, error)
 	ReleaseInks(context.Context, []uuid.UUID) ([]db.ReleaseInksRow, error)
 	ArtistImage(context.Context, uuid.UUID) (db.ArtistImageRow, error)
+	SaveArtistImage(context.Context, db.SaveArtistImageParams) error
 }
 
 // FileCoverArtStore caches the picture of a file that belongs to no release — a
@@ -3079,6 +3080,18 @@ func (api *API) artistImage(response http.ResponseWriter, request *http.Request)
 	}
 	if err != nil {
 		api.internalError(response, request, err)
+		return
+	}
+	// A stock "no photo" avatar cached before the fetch learned to refuse one
+	// is replaced by the absence it stands for, so the list stops asking for it.
+	if len(cached.Image) > 0 && coverart.Placeholder(cached.Image) {
+		if err := api.covers.SaveArtistImage(request.Context(), db.SaveArtistImageParams{
+			ArtistID: artistID, Source: coverart.NameNobody,
+		}); err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		api.cachedCoverMiss(response, "no artist picture")
 		return
 	}
 	api.writeCover(response, request, cached.Image, cached.ContentType)

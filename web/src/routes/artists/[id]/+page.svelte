@@ -361,6 +361,10 @@
   // it, with that type's releases split at whatever year the page ended on.
   // Everything a heading claims is still true of what is under it; it is the
   // reading order that suffers, and only past forty-eight releases.
+  //
+  // Within a section, releases the library holds any of come first, then
+  // newest first. Oldest first put the first eighteen of a long career in
+  // front and left the one album somebody owns behind "Show all".
   const order = ['album', 'ep', 'single'];
   const sections = $derived(
     Array.from(new Set(shown.map((release) => release.albumType)))
@@ -372,7 +376,11 @@
         type,
         items: shown
           .filter((release) => release.albumType === type)
-          .sort((a, b) => (a.firstReleaseDate ?? '').localeCompare(b.firstReleaseDate ?? ''))
+          .sort(
+            (a, b) =>
+              Number(b.ownedTrackCount > 0) - Number(a.ownedTrackCount > 0) ||
+              (b.firstReleaseDate ?? '').localeCompare(a.firstReleaseDate ?? '')
+          )
       }))
   );
 
@@ -588,7 +596,7 @@
           Unfollow {$artist.data.name}?
         </h2>
         <p class="text-body leading-relaxed text-ink-2">
-          Their tracks stop counting as missing. Nothing you own is touched.
+          Schall stops looking for their new releases. Nothing you own is touched.
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <Button disabled={$unfollow.isPending} onclick={() => $unfollow.mutate()}>
@@ -615,7 +623,13 @@
         <span class="text-body font-semibold text-ink">
           {$artist.data.catalogueSummary ?? 'This artist is here because your library has their music.'}
         </span>
-        <span class="text-meta text-ink-2">nothing counts as missing</span>
+        <!-- What not following means. It used to say "nothing counts as
+             missing", above a Missing count and a Want missing button that
+             both still apply: the grid counts against the monitor level
+             whether or not anybody follows the artist. -->
+        <span class="text-meta text-ink-2">
+          Not followed. Schall won't look for new releases or want anything on its own.
+        </span>
       </div>
     {/if}
 

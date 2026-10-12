@@ -195,7 +195,7 @@ func listedArtistNames(rows []ListArtistsRow) []string {
 }
 
 // A page boundary must not disturb the order the page promises: one run
-// through the filing names, whether or not an artist is followed.
+// through the names, whether or not an artist is followed.
 //
 // Followed artists used to come first, which made the list start at A, run to
 // the end of the followed ones, and then start at A again — under a control
@@ -217,8 +217,8 @@ func TestListArtistsPagesInSortOrder(t *testing.T) {
 		paged = append(paged, listedArtistNames(page)...)
 	}
 
-	// The filing name is what is sorted, so The Knife is under K and stands
-	// between Boards of Canada and Portishead.
+	// A leading article is dropped, so The Knife is under K and stands between
+	// Boards of Canada and Portishead.
 	want := []string{"Aphex Twin", "Boards of Canada", "The Knife", "Portishead", "Sewerslvt"}
 	if strings.Join(paged, "|") != strings.Join(want, "|") {
 		t.Errorf("paged = %v, want %v", paged, want)
@@ -288,6 +288,94 @@ func TestListArtistsSortsWithoutRegardToCase(t *testing.T) {
 	want := []string{"American Football", "AZALEA", "nthng"}
 	if got := listedArtistNames(listed); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("listed = %v, want %v", got, want)
+	}
+}
+
+// The tile prints the name, so the name is what the list is in order of. The
+// filing name put Kendrick Lamar under L, between Labyrinth Ear and Lana Del
+// Rey, which reads as shuffled to anybody looking at the tiles.
+func TestListArtistsSortsByTheNameOnTheTile(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	for _, entry := range [][2]string{
+		{"Labyrinth Ear", "Labyrinth Ear"},
+		{"Kendrick Lamar", "Lamar, Kendrick"},
+		{"Jon Hopkins", "Hopkins, Jon"},
+	} {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO artists (id, musicbrainz_id, name, sort_name, followed_at)
+			VALUES ($1, $2, $3, $4, now())
+		`, uuid.New(), uuid.New(), entry[0], entry[1]); err != nil {
+			t.Fatalf("seed artist %s: %v", entry[0], err)
+		}
+	}
+
+	listed, err := New(pool).ListArtists(ctx, ListArtistsParams{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListArtists() error = %v", err)
+	}
+
+	want := []string{"Jon Hopkins", "Kendrick Lamar", "Labyrinth Ear"}
+	if got := listedArtistNames(listed); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("listed = %v, want %v", got, want)
+	}
+}
+
+// Various Artists is held whenever a compilation is, and it is nobody to
+// browse. A placeholder somebody followed on purpose stays.
+func TestListArtistsLeavesOutHeldPlaceholderArtists(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedArtistRoster(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (id, musicbrainz_id, name, sort_name, followed_at, catalogue_summary)
+		VALUES ($1, '89ad4ac3-39f7-470e-963a-56509c546377', 'Various Artists', 'Various Artists',
+		        NULL, 'Kept because your library holds their music.')
+	`, uuid.New()); err != nil {
+		t.Fatalf("seed Various Artists: %v", err)
+	}
+	queries := New(pool)
+
+	listed, err := queries.ListArtists(ctx, ListArtistsParams{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListArtists() error = %v", err)
+	}
+	for _, name := range listedArtistNames(listed) {
+		if name == "Various Artists" {
+			t.Errorf("listed = %v, want no Various Artists", listedArtistNames(listed))
+		}
+	}
+	totals, err := queries.ArtistListTotals(ctx, ArtistListTotalsParams{})
+	if err != nil {
+		t.Fatalf("ArtistListTotals() error = %v", err)
+	}
+	if totals.HeldCount != 3 {
+		t.Errorf("held count = %d, want 3", totals.HeldCount)
+	}
+}
+
+func TestListArtistsKeepsAFollowedPlaceholderArtist(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (id, musicbrainz_id, name, sort_name, followed_at)
+		VALUES ($1, '89ad4ac3-39f7-470e-963a-56509c546377', 'Various Artists', 'Various Artists', now())
+	`, uuid.New()); err != nil {
+		t.Fatalf("seed Various Artists: %v", err)
+	}
+
+	listed, err := New(pool).ListArtists(ctx, ListArtistsParams{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListArtists() error = %v", err)
+	}
+	if got := listedArtistNames(listed); strings.Join(got, "|") != "Various Artists" {
+		t.Errorf("listed = %v, want [Various Artists]", got)
 	}
 }
 

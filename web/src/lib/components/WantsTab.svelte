@@ -411,7 +411,7 @@
                   disabled={$stop.isPending}
                   onclick={() => $stop.mutate(want.id)}
                 >
-                  Stop looking
+                  <Icon name="dismiss" size="sm" /> Don't want
                 </Button>
               {/if}
             </span>
@@ -455,7 +455,7 @@
         The wishlist fills from a playlist, a followed artist, a suggestion, or the Want it button
         on a release.
       {:else}
-        A want you stop looking for waits here, and can be taken back.
+        A want you no longer want waits here, and can be taken back.
       {/if}
     </EmptyPanel>
   {/if}

@@ -1,4 +1,5 @@
 import type { Playlist, PlaylistEntry } from '$lib/api';
+import type { IconName } from '$lib/icons';
 import { calendarDate } from '$lib/utils';
 import { holding, progress, quiet } from '$lib/vocabulary';
 
@@ -11,6 +12,8 @@ export interface EntryState {
   /** The one word the row is read by. */
   label: string;
   role: EntryRole;
+  /** The icon a row draws in place of the word. The word is its tooltip. */
+  icon: IconName;
   /** What is happening and what happens next, in the want's own words, or ''
    * when the label has already said everything there is. */
   note: string;
@@ -33,24 +36,24 @@ export interface EntryState {
  * repeating 'In your library.' would bury the four rows that are still moving. */
 export function entryState(entry: PlaylistEntry): EntryState {
   const note = entry.ownedFileId ? '' : (entry.targetSummary ?? '');
-  if (entry.ownedFileId) return { label: quiet(holding.complete), role: 'ok', note };
+  if (entry.ownedFileId) return { label: quiet(holding.complete), role: 'ok', icon: 'check', note };
   switch (entry.targetStatus) {
     case 'acquired':
-      return { label: 'acquired', role: 'ok', note };
+      return { label: 'acquired', role: 'ok', icon: 'check', note };
     case 'awaiting_review':
-      return { label: quiet(progress.needsReview), role: 'fail', note };
+      return { label: quiet(progress.needsReview), role: 'fail', icon: 'listen', note };
     case 'searching':
-      return { label: quiet(progress.searching), role: 'busy', note };
+      return { label: quiet(progress.searching), role: 'busy', icon: 'search', note };
     case 'pending':
-      return { label: quiet(progress.wanted), role: 'busy', note };
+      return { label: quiet(progress.wanted), role: 'busy', icon: 'want', note };
     case 'unresolved':
-      return { label: quiet(progress.resolving), role: 'idle', note };
+      return { label: quiet(progress.resolving), role: 'idle', icon: 'busy', note };
     case 'not_wanted':
-      return { label: quiet(progress.dismissed), role: 'idle', note };
+      return { label: quiet(progress.dismissed), role: 'idle', icon: 'dismiss', note };
     case 'superseded':
-      return { label: 'merged', role: 'idle', note };
+      return { label: 'merged', role: 'idle', icon: 'link', note };
   }
-  return { label: 'no want', role: 'idle', note };
+  return { label: 'no want', role: 'idle', icon: 'plus', note };
 }
 
 /** How much of a list the user has, counted off the rows on screen rather than

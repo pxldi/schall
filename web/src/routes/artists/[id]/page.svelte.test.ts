@@ -443,6 +443,82 @@ describe('release tiles', () => {
   });
 });
 
+describe('the order of releases', () => {
+  const release = (id: string, title: string, firstReleaseDate: string, ownedTrackCount: number) => ({
+    id,
+    artistId: artistID,
+    artistName: 'Kendrick Lamar',
+    artistFollowed: false,
+    musicbrainzReleaseGroupId: null,
+    title,
+    firstReleaseDate,
+    albumType: 'album',
+    trackCount: 12,
+    ownedTrackCount,
+    dismissedTrackCount: 0,
+    monitored: true,
+    artistMonitorLevel: 'main',
+    musicbrainzReleaseId: null,
+    trackRefreshStatus: 'completed',
+    hasCover: false
+  });
+
+  function answeringReleases(items: ReturnType<typeof release>[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === `/api/v1/artists/${artistID}`) return body(detail());
+        if (url.pathname === '/api/v1/albums') {
+          return body({ items, total: items.length, limit: 0, offset: 0, scopeTotal: items.length });
+        }
+        return body({ items: [], total: 0, limit: 24, offset: 0 });
+      })
+    );
+  }
+
+  function titles() {
+    return Array.from(document.querySelectorAll('a[href^="/releases/"]')).map((link) =>
+      link.querySelector('[title]')?.getAttribute('title')
+    );
+  }
+
+  it('puts the releases the library holds first', async () => {
+    answeringReleases([
+      release('r1', 'Section.80', '2011-07-02', 0),
+      release('r2', 'To Pimp a Butterfly', '2015-03-15', 16),
+      release('r3', 'GNX', '2024-11-22', 0)
+    ]);
+    opened();
+    await screen.findByText('GNX');
+
+    expect(titles()[0]).toBe('To Pimp a Butterfly');
+  });
+
+  it('puts the newest first among the rest', async () => {
+    answeringReleases([
+      release('r1', 'Section.80', '2011-07-02', 0),
+      release('r3', 'GNX', '2024-11-22', 0)
+    ]);
+    opened();
+    await screen.findByText('GNX');
+
+    expect(titles()).toEqual(['GNX', 'Section.80']);
+  });
+});
+
+describe('an artist nobody follows', () => {
+  it('does not claim nothing counts as missing', async () => {
+    answering(detail({ followed: false, followedAt: null }));
+    opened();
+    await screen.findByRole('heading', { name: 'Talk Talk' });
+
+    expect(screen.queryByText(/nothing counts as missing/)).toBeNull();
+    expect(screen.getByText(/Not followed/)).toBeTruthy();
+  });
+});
+
 describe('the releases fail to load', () => {
   it('shows the failure instead of the empty "Nothing scanned yet" state', async () => {
     vi.stubGlobal(

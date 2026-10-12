@@ -219,7 +219,7 @@ describe('a track the library does not hold', () => {
     opened();
 
     const title = await screen.findByText('Eden');
-    expect(title.closest('div.flex')!.textContent).toContain('dismissed');
+    expect(title.closest('div.flex')!.querySelector('[aria-label="dismissed"]')).not.toBeNull();
   });
 
   it('counts what the library holds on the owned bar beside the title', async () => {

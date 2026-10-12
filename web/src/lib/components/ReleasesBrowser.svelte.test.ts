@@ -22,7 +22,8 @@ vi.mock('$app/state', () => ({ page: routed }));
 vi.mock('$app/navigation', () => ({
   goto: routed.goto,
   replaceState: routed.replaceState,
-  afterNavigate: (callback: (navigation: unknown) => void) => routed.listeners.push(callback)
+  afterNavigate: (callback: (navigation: unknown) => void) => routed.listeners.push(callback),
+  beforeNavigate: () => {}
 }));
 
 const { default: ReleasesBrowser } = await import('$lib/components/ReleasesBrowser.svelte');

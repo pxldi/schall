@@ -26,6 +26,8 @@
   import SetCoverDialog from '$lib/components/SetCoverDialog.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
+  import StateIcon from '$lib/components/StateIcon.svelte';
+  import type { IconName } from '$lib/icons';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -197,18 +199,23 @@
   // the product uses for what is happening to a thing, read quietly because
   // they sit inside a row rather than beside a heading. "needs review" is the
   // one that asks for a person, so it is the one tone that stands out.
-  function trackTag(status: string): { label: string; tone: 'neutral' | 'attention' } | null {
+  //
+  // Every state but "needs review" is an icon, with the word as its tooltip:
+  // a column of words in boxes was more text than the track list.
+  function trackTag(
+    status: string
+  ): { label: string; tone: 'neutral' | 'attention'; icon?: IconName } | null {
     switch (status) {
       case 'awaiting_review':
         return { label: quiet(progress.needsReview), tone: 'attention' };
       case 'not_wanted':
-        return { label: quiet(progress.dismissed), tone: 'neutral' };
+        return { label: quiet(progress.dismissed), tone: 'neutral', icon: 'dismiss' };
       case 'searching':
-        return { label: quiet(progress.searching), tone: 'neutral' };
+        return { label: quiet(progress.searching), tone: 'neutral', icon: 'search' };
       case 'acquired':
         return null;
       default:
-        return { label: quiet(progress.wanted), tone: 'neutral' };
+        return { label: quiet(progress.wanted), tone: 'neutral', icon: 'want' };
     }
   }
 
@@ -764,7 +771,11 @@
                   <StateMark role="ok"><Icon name="check" size="sm" class="size-3" /></StateMark>
                 {:else}
                   {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
-                  {#if tag}<StateTag tone={tag.tone}>{tag.label}</StateTag>{/if}
+                  {#if tag?.icon}
+                    <StateIcon icon={tag.icon} label={tag.label} role={tag.icon === 'search' ? 'busy' : 'idle'} />
+                  {:else if tag}
+                    <StateTag tone={tag.tone}>{tag.label}</StateTag>
+                  {/if}
                 {/if}
               </span>
             </div>
