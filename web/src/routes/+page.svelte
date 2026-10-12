@@ -47,7 +47,9 @@
       covers.push({ src: file.coverUrl, seed: key, inks: file.inks });
       if (covers.length === 8) break;
     }
-    return { covers, height: 20 };
+    // The height every top-bar destination prints at, so the page below the
+    // title starts where it does on the others.
+    return { covers, height: 15 };
   });
 
   // ---- figures --------------------------------------------------------------
@@ -350,7 +352,7 @@
 
 <!-- No line under the title: every figure it could carry is already in a
      panel below, and saying it twice is noise. -->
-<Hero title="Overview" size="xl" />
+<Hero title="Overview" section />
 <div class="flex flex-col gap-4 px-4 pb-6 pt-2 sm:px-6">
   {#if $overview.isError}
     <ErrorNote error={$overview.error} retry={() => $overview.refetch()} />

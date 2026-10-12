@@ -526,7 +526,7 @@
   <title>{tab === 'uploads' ? 'Uploads' : tab === 'wanted' ? 'Wishlist' : 'Downloads'} · Schall</title>
 </svelte:head>
 
-<Hero title="Downloads" size="xl" />
+<Hero title="Downloads" section />
 
 <ControlRail label="Incoming">
   <Segmented

@@ -89,7 +89,7 @@
 
 <!-- Only the size under the title: the release and file counts are on the
      chips below. -->
-<Hero title="Library" size="xl">
+<Hero title="Library" section>
   {#snippet sub()}
     {#if $librarySummary.data}
       <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>

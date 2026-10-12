@@ -7,6 +7,12 @@
   // whatever height the page asked for in `usePagePrint`.
   //
   // It is the page's <h1>. A page that draws a Hero draws no PageHeader.
+  //
+  // The seven destinations of the top bar pass `section`. Their prints differ
+  // in height, and a title sitting on the foot of each print landed between
+  // 145 and 289px down depending on the page. A section title instead hangs
+  // from a fixed distance under the top bar at one size, so it does not move
+  // when the reader goes from one destination to the next.
 
   let {
     title,
@@ -14,9 +20,12 @@
     kicker,
     sub,
     actions,
-    back
+    back,
+    section = false
   }: {
     title: string;
+    /** A top-bar destination: `xl`, at the same place on every one of them. */
+    section?: boolean;
     /** `xl` for one-word list pages (Artists, Library), `l` for a release or an
      *  artist, `m` for a long name. */
     size?: 'm' | 'l' | 'xl';
@@ -38,7 +47,8 @@
 </script>
 
 <section
-  class="relative flex flex-col justify-end px-4 pb-4 sm:px-6"
+  class="relative flex flex-col px-4 pb-4 sm:px-6 {section ? 'justify-start pt-16' : 'justify-end'}"
+ 
   style="min-height: calc(var(--print-height) - var(--topbar-height));"
 >
   <!-- The way back sits at the top of the print, where it is in the same place
@@ -52,7 +62,7 @@
   {/if}
   <div class="flex items-end justify-between gap-6">
     <div class="min-w-0">
-      <h1 class="-ml-[0.04em] mb-3 font-extrabold text-balance text-ink {sizes[size]}">{title}</h1>
+      <h1 class="-ml-[0.04em] mb-3 font-extrabold text-balance text-ink {sizes[section ? 'xl' : size]}">{title}</h1>
       {#if sub}
         <div class="hero-sub text-quiet-meta text-ink-2">{@render sub()}</div>
       {/if}

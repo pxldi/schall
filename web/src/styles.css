@@ -203,12 +203,12 @@
      A page title set over the print (ADR Duoton): 72 to 160px at 800, tracked
      tight and set solid so two lines of it still sit inside the print. They
      are rem like everything else, so at the owner's 133% root `poster-l` is
-     the prototype's 112px. `poster-xl` grows with the window for the strip
-     pages, whose titles are one or two words. */
-  --text-poster-m: 4rem;
+     the prototype's 112px. All three shrink with a narrow window, so a two-word
+     name still fits half a screen. */
+  --text-poster-m: clamp(2.75rem, 7vw, 4rem);
   --text-poster-m--line-height: 0.86;
   --text-poster-m--letter-spacing: -0.05em;
-  --text-poster-l: 5.25rem;
+  --text-poster-l: clamp(3.25rem, 9vw, 5.25rem);
   --text-poster-l--line-height: 0.84;
   --text-poster-l--letter-spacing: -0.055em;
   --text-poster-xl: clamp(4.5rem, 8.25vw, 7.5rem);
@@ -823,6 +823,8 @@ a {
   }
 
   .topbar-item.active {
+    /* An icon on the light ink prints its plate in its own colour (SPEC). */
+    --plate: currentColor;
     background: var(--color-duo-light);
     color: var(--color-duo-dark);
   }
@@ -831,7 +833,6 @@ a {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-width: 13rem;
     padding: 0.3rem 0.4rem 0.3rem 0.75rem;
     border: 1px solid color-mix(in srgb, var(--color-duo-light) 30%, transparent);
     border-radius: var(--radius-pill);
@@ -842,6 +843,26 @@ a {
 
   .topbar-search:hover {
     border-color: color-mix(in srgb, var(--color-duo-light) 55%, transparent);
+  }
+
+  /* In half a screen the bar has to hold the wordmark, seven pills and search
+     on one line: at 753px it did not, and the wordmark broke into three lines
+     under a search field lying over Review. Below 1024px the pills are drawn
+     tighter and search is its icon alone. */
+  @media (width >= 64rem) {
+    .topbar-search {
+      min-width: 13rem;
+    }
+  }
+
+  @media (width < 64rem) {
+    .topbar-item {
+      padding-inline: 0.45rem;
+    }
+
+    .topbar-search {
+      padding: 0.3rem 0.5rem;
+    }
   }
 
   /* The wordmark: the one face at 800, tracked tight, lowercase. */
@@ -1467,6 +1488,13 @@ body {
    room for them. Broken anywhere, a narrow column printed "LENGT" over "H". */
 th {
   overflow-wrap: normal;
+}
+
+/* A page title is set at poster size and is a name, so it wraps between words
+   and breaks a word only when that word alone is wider than the page. Broken
+   anywhere, "Schall Weekly" printed "Weekl" over "y" in half a screen. */
+h1 {
+  overflow-wrap: break-word;
 }
 
 ::selection {

@@ -320,7 +320,7 @@
 
 <svelte:head><title>Artists · Schall</title></svelte:head>
 
-<Hero title="Artists" size="xl">
+<Hero title="Artists" section>
   {#snippet sub()}
     <span>
       {#if $dashboard.data}
