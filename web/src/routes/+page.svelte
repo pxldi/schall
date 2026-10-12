@@ -6,8 +6,6 @@
   import type { OverviewSession } from '$lib/api-types';
   import Cover from '$lib/components/Cover.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
-  import DotColumns from '$lib/components/DotColumns.svelte';
-  import { measure } from '$lib/measure';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import { usePagePrint, type CoverRef } from '$lib/duoton';
@@ -81,9 +79,19 @@
   });
 
   const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  // The dots are the page's light ink. The inks are chrome, and how often
-  // somebody listens at an hour is not a state.
+  // The ramp runs from the panel to the page's light ink. The inks are chrome,
+  // and how often somebody listens at an hour is not a state.
+  const HEAT = [0, 18, 34, 52, 74, 100].map((share) =>
+    share === 0
+      ? 'var(--color-surface-thin)'
+      : `color-mix(in srgb, var(--color-duo-light) ${share}%, var(--color-inset))`
+  );
   const heatMax = $derived(Math.max(1, ...(listening?.whenYouListen.cells.flat() ?? [0])));
+  function heatColour(count: number): string {
+    if (count === 0) return HEAT[0];
+    const step = Math.ceil((count / heatMax) * (HEAT.length - 1));
+    return HEAT[Math.min(HEAT.length - 1, Math.max(1, step))];
+  }
 
   // ---- dates ----------------------------------------------------------------
 
@@ -227,53 +235,28 @@
     };
   }
 
-  // ---- halftone charts -----------------------------------------------------
+  // ---- bar charts -------------------------------------------------------------
 
-  // The charts are printed in dots of the light ink (ADR Duoton). A day
-  // column's unit comes back from the chart for its key.
-  let listensUnit = $state(1);
-  let arrivedUnit = $state(1);
-
-  // The heatmap and the growth curve are drawn in screen pixels, so a dot is
-  // round at any panel width. The test window measures nothing; a plain width
-  // stands in there.
-  let heatWidth = $state(0);
-  const heat = $derived.by(() => {
-    const width = heatWidth || 600;
-    const cell = (width - HEAT_LABEL) / 24;
-    return { width, cell, height: cell * 7 + 16, radius: cell * 0.46 };
-  });
-  const HEAT_LABEL = 36;
-  // Dot area follows the count, so a dot with twice the listens carries twice
-  // the ink.
-  function heatRadius(count: number): number {
-    if (count === 0) return 1;
-    return Math.max(1.6, Math.sqrt(count / heatMax) * heat.radius);
+  // Bars are drawn in a viewBox of fixed width so the gaps and rounded ends
+  // stay the same at any panel width; the SVG stretches to fill the row.
+  const BAR_W = 600;
+  function bars(days: OverviewDay[], height: number) {
+    const max = Math.max(1, ...days.map((day) => day.count));
+    const gap = 3;
+    const width = (BAR_W - gap * (days.length - 1)) / days.length;
+    return days.map((day, index) => {
+      const h = day.count === 0 ? 2 : Math.max(2, (day.count / max) * height);
+      return { ...day, x: index * (width + gap), width, h, y: height - h, today: index === days.length - 1 };
+    });
   }
 
-  let growthWidth = $state(0);
-  let growthHeight = $state(0);
-  const gw = $derived(growthWidth || 480);
-  const gh = $derived(growthHeight || 80);
-  const growth = $derived(growthPath(data?.library.growth ?? [], gw, gh));
   function growthPath(months: { month: string; files: number }[], width: number, height: number) {
     const max = Math.max(1, ...months.map((m) => m.files));
-    const pad = 6;
-    const step = months.length > 1 ? (width - 2 * pad) / (months.length - 1) : 0;
-    const points = months.map((m, i) => ({ x: pad + i * step, y: height - (m.files / max) * (height - 2 * pad) - pad, ...m }));
+    const step = months.length > 1 ? width / (months.length - 1) : 0;
+    const points = months.map((m, i) => ({ x: i * step, y: height - (m.files / max) * (height - 4) - 2, ...m }));
     const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    const last = points[points.length - 1];
-    const area = last ? `${line} L${last.x.toFixed(1)},${height} L${pad},${height} Z` : '';
-    return { points, line, area, step };
-  }
-
-  // Room on the disc as fifty dots, each a fiftieth of it.
-  const ROOM_DOTS = 50;
-
-  // A ranked row's bar: dots against the first row, which gets twelve.
-  function rankDots(value: number, top: number): number {
-    if (value <= 0 || top <= 0) return 0;
-    return Math.max(1, Math.round((value / top) * 12));
+    const area = `${line} L${width},${height} L0,${height} Z`;
+    return { points, line, area };
   }
 </script>
 
@@ -344,20 +327,6 @@
   </span>
 {/snippet}
 
-<!-- What one dot stands for, as a dot and a number. -->
-{#snippet dotKey(per: number, noun: string)}
-  <span class="ml-auto inline-flex items-center gap-1.5 font-mono text-micro text-ink-4">
-    <svg width="8" height="8" aria-hidden="true"><circle cx="4" cy="4" r="3.5" class="key-dot" /></svg>
-    one dot, {plural(per, noun)}
-  </span>
-{/snippet}
-
-<!-- A ranked row's place, in the light ink. Only the ranked lists carry it;
-     Recently added is in time order and has none. -->
-{#snippet rank(index: number)}
-  <span class="rank" aria-hidden="true">{index + 1}</span>
-{/snippet}
-
 <!-- No line under the title: every figure it could carry is already in a
      panel below, and saying it twice is noise. -->
 <Hero title="Overview" section />
@@ -373,7 +342,9 @@
         {@render loadingChart('Listens', 'min-h-[112px]')}
       {:else if listening?.available}
         <div class="flex items-baseline gap-3">
-          <span class="numeric total text-ink">{listening.listens.total.toLocaleString()}</span>
+          <span class="numeric text-quiet-display font-extrabold tracking-tight text-ink"
+            >{listening.listens.total.toLocaleString()}</span
+          >
           {#if change !== null}
             <!-- Against the thirty days before; the earlier count itself is
                  not shown. -->
@@ -382,16 +353,23 @@
               >{change >= 0 ? '+' : ''}{change}%</span
             >
           {/if}
-          {@render dotKey(listensUnit, 'listen')}
         </div>
-        <DotColumns
-          days={listening.listens.days}
-          bind:unit={listensUnit}
-          class="h-0 min-h-[120px] w-full grow"
-          label={(day) => `${weekdayOf(day.date)} ${dayLabel(day.date)} · ${plural(day.count, 'listen')}`}
-          onhover={(event, text) => show(event, 'listens', text)}
-          onleave={hide}
-        />
+        {@const columns = bars(listening.listens.days, 110)}
+        <svg viewBox="0 0 {BAR_W} 112" preserveAspectRatio="none" class="h-0 min-h-[112px] w-full grow" aria-hidden="true">
+          {#each columns as bar (bar.date)}
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
+            <rect
+              x={bar.x - 1.5}
+              y="0"
+              width={bar.width + 3}
+              height="112"
+              fill="transparent"
+              aria-hidden="true"
+              onmouseenter={(event) => show(event, 'listens', `${weekdayOf(bar.date)} ${dayLabel(bar.date)} · ${plural(bar.count, 'listen')}`)}
+              onmouseleave={hide}
+            />
+          {/each}
+        </svg>
         <div class="flex justify-between font-mono text-micro text-ink-4">
           <span>{dayLabel(listening.listens.days[0].date)}</span>
           <span>{dayLabel(listening.listens.days[14].date)}</span>
@@ -417,13 +395,12 @@
         <div class="panel-scroll min-h-[12.5rem]">
         <ul class="panel-list" use:more>
           {#each listening.mostPlayed as song, index (index)}
-            <li class="want-row flex h-11 shrink-0 items-center gap-2.5">
+            <li class="want-row flex h-10 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={song.releaseId ? 'a' : 'div'}
                 href={song.releaseId ? `/releases/${song.releaseId}` : undefined}
                 class="row-link"
               >
-                {@render rank(index)}
                 {@render row(song.coverUrl, song.title, song.artist)}
               </svelte:element>
               <!-- A held song is the ordinary case and carries no mark; the
@@ -439,7 +416,7 @@
                   />
                 {/if}
               </span>
-              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{song.listens}</span>
+              <span class="w-6 text-right font-mono text-meta text-ink-2">{song.listens}</span>
             </li>
           {/each}
         </ul>
@@ -464,48 +441,38 @@
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div
-          class="w-full"
+          class="flex flex-col gap-[3px]"
           role="group"
           tabindex="0"
           aria-label="Listens by weekday and hour, arrow keys to explore"
           onkeydown={moveHeatFocus}
           onfocus={() => (heatFocused = true)}
           onblur={() => (heatFocused = false)}
-          use:measure={(w) => (heatWidth = w)}
         >
-          <svg width={heat.width} height={heat.height} class="block" aria-hidden="true">
-            {#each listening.whenYouListen.cells as hours, day (day)}
-              <text x="0" y={day * heat.cell + heat.cell / 2 + 4} class="axis">{WEEKDAYS[day]}</text>
+          {#each listening.whenYouListen.cells as hours, day (day)}
+            <div class="grid items-center gap-[3px]" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+              <span class="pr-1.5 text-right font-mono text-micro text-ink-4">{WEEKDAYS[day]}</span>
               {#each hours as count, hour (hour)}
-                {@const cx = HEAT_LABEL + hour * heat.cell + heat.cell / 2}
-                {@const cy = day * heat.cell + heat.cell / 2}
-                {#if count === heatMax && count > 0}
-                  <circle {cx} {cy} r={heat.radius + 1.5} class="peak" />
-                {/if}
-                {#if heatFocused && heatFocus.day === day && heatFocus.hour === hour}
-                  <circle {cx} {cy} r={heat.radius + 1.5} class="focus" />
-                {/if}
-                <circle {cx} {cy} r={heatRadius(count)} class={count ? 'dot' : 'none'} />
-                <rect
+                <span
                   data-cell
+                  class="aspect-square w-full rounded-[3px]"
+                  style="background: {heatColour(count)}; {heatFocused && heatFocus.day === day && heatFocus.hour === hour
+                    ? 'box-shadow: inset 0 0 0 2px var(--color-accent);'
+                    : ''}"
                   aria-hidden="true"
-                  x={cx - heat.cell / 2}
-                  y={cy - heat.cell / 2}
-                  width={heat.cell}
-                  height={heat.cell}
-                  fill="transparent"
                   onmouseenter={(event) => show(event, 'heat', heatCellText(day, hour, count))}
                   onmouseleave={hide}
                   onclick={() => touchHeatCell(day, hour, count)}
-                />
+                ></span>
               {/each}
+            </div>
+          {/each}
+          <div class="grid gap-[3px] pt-0.5 font-mono text-micro text-ink-4" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))">
+            <span></span>
+            {#each Array.from({ length: 24 }, (_, hour) => hour) as hour (hour)}
+              <span class="whitespace-nowrap">{hour % 3 === 0 ? hourLabel(hour).slice(0, 2) : ''}</span>
             {/each}
-            {#each Array.from({ length: 8 }, (_, index) => index * 3) as hour (hour)}
-              <text x={HEAT_LABEL + hour * heat.cell + heat.cell / 2} y={heat.height - 2} text-anchor="middle" class="axis"
-                >{hourLabel(hour).slice(0, 2)}</text
-              >
-            {/each}
-          </svg>
+          </div>
         </div>
         <p aria-live="polite" class="sr-only">{heatAnnounce}</p>
       {:else if listening}
@@ -523,26 +490,18 @@
         <div class="panel-scroll min-h-[12.5rem]">
         <ul class="panel-list" use:more>
           {#each listening.topArtists as artist, index (index)}
-            <li class="flex h-11 shrink-0 items-center gap-2.5">
+            <li class="flex h-10 shrink-0 items-center gap-2.5">
               <svelte:element
                 this={artist.artistId ? 'a' : 'div'}
                 href={artist.artistId ? `/artists/${artist.artistId}` : undefined}
                 class="row-link"
               >
-                {@render rank(index)}
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-thin text-body font-semibold text-ink-2" aria-hidden="true">
                   <Cover src={artist.pictureUrl ?? undefined} alt="" class="h-8 w-8 rounded-full object-cover" fallback={artist.name.slice(0, 1)} />
                 </span>
-                <span class="flex min-w-0 flex-1 flex-col gap-1">
-                  <span class="truncate text-body font-medium text-ink">{artist.name}</span>
-                  <span class="flex gap-[3px]" aria-hidden="true">
-                    {#each Array.from({ length: rankDots(artist.listens, listening.topArtists[0].listens) }) as _, k (k)}
-                      <span class="rank-dot"></span>
-                    {/each}
-                  </span>
-                </span>
+                <span class="min-w-0 flex-1 truncate text-body font-medium text-ink">{artist.name}</span>
               </svelte:element>
-              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{artist.listens}</span>
+              <span class="font-mono text-meta text-ink-2">{artist.listens}</span>
             </li>
           {/each}
         </ul>
@@ -567,7 +526,6 @@
                 href={album.releaseId ? `/releases/${album.releaseId}` : undefined}
                 class="row-link"
               >
-                {@render rank(index)}
                 <span role="img" aria-label="Cover for {album.title}" class="h-10 w-10 shrink-0 overflow-hidden rounded-row border border-line-thin bg-surface-thin">
                   <Cover src={album.coverUrl ?? undefined} seed={`${album.artist} – ${album.title}`} alt="" class="h-10 w-10 rounded-row object-cover" />
                 </span>
@@ -576,7 +534,7 @@
                   <span class="truncate text-meta text-ink-4">{album.artist}</span>
                 </span>
               </svelte:element>
-              <span class="w-7 text-right font-mono text-body font-semibold text-ink">{album.listens}</span>
+              <span class="font-mono text-meta text-ink-2">{album.listens}</span>
             </li>
           {/each}
         </ul>
@@ -665,16 +623,23 @@
           <span class="text-body text-ink-4">today</span>
           <span class="font-mono text-quiet-body text-ink-2">{data.arrived.downloading.toLocaleString()}</span>
           <span class="text-body text-ink-4">downloading</span>
-          {@render dotKey(arrivedUnit, 'file')}
         </div>
-        <DotColumns
-          days={data.arrived.days}
-          bind:unit={arrivedUnit}
-          class="h-0 min-h-[100px] w-full grow"
-          label={(day) => `${dayLabel(day.date)} · ${day.count.toLocaleString()} downloaded`}
-          onhover={(event, text) => show(event, 'arrived', text)}
-          onleave={hide}
-        />
+        {@const columns = bars(data.arrived.days, 96)}
+        <svg viewBox="0 0 {BAR_W} 98" preserveAspectRatio="none" class="h-0 min-h-[98px] w-full grow" aria-hidden="true">
+          {#each columns as bar (bar.date)}
+            <rect x={bar.x} y={bar.y} width={bar.width} height={bar.h} rx="2" class={bar.today ? 'bar-today' : 'bar'} />
+            <rect
+              x={bar.x - 1.5}
+              y="0"
+              width={bar.width + 3}
+              height="98"
+              fill="transparent"
+              aria-hidden="true"
+              onmouseenter={(event) => show(event, 'arrived', `${dayLabel(bar.date)} · ${bar.count.toLocaleString()} downloaded`)}
+              onmouseleave={hide}
+            />
+          {/each}
+        </svg>
         <div class="flex justify-between font-mono text-micro text-ink-4">
           <span>{dayLabel(data.arrived.days[0].date)}</span>
           <span>today</span>
@@ -699,49 +664,39 @@
             <span class="text-quiet-meta text-ink-3">total size</span>
           </div>
         </div>
-        <!-- The year of growth as a line over a halftone of the light ink. -->
-        <div class="relative h-0 min-h-20 w-full grow" use:measure={(w, h) => ((growthWidth = w), (growthHeight = h))}>
-          <svg width={gw} height={gh} class="absolute inset-0" aria-label="Library files over the last year">
-            <defs>
-              <pattern id="overview-halftone" width="6" height="6" patternUnits="userSpaceOnUse">
-                <circle cx="3" cy="3" r="1.3" class="screen" />
-              </pattern>
-            </defs>
-            <path d={growth.area} fill="url(#overview-halftone)" />
-            <path d={growth.line} class="growth-line" stroke-width="2" />
-            {#if growth.points.length > 0}
-              {@const end = growth.points[growth.points.length - 1]}
-              <circle cx={end.x} cy={end.y} r="4.5" class="growth-end" />
-            {/if}
-            {#each growth.points as point (point.month)}
-              <rect
-                x={point.x - growth.step / 2}
-                y="0"
-                width={growth.step || gw}
-                height={gh}
-                fill="transparent"
-                role="img"
-                aria-label="{monthLabel(point.month)} · {plural(point.files, 'file')}"
-                onmouseenter={(event) => show(event, 'library', `${monthLabel(point.month)} · ${plural(point.files, 'file')}`)}
-                onmouseleave={hide}
-              />
-            {/each}
-          </svg>
-        </div>
+        {@const growth = growthPath(data.library.growth, 240, 64)}
+        <svg viewBox="0 0 240 64" preserveAspectRatio="none" class="h-0 min-h-16 w-full grow" aria-label="Library files over the last year">
+          <path d={growth.area} class="growth-area" />
+          <path d={growth.line} class="growth-line" stroke-width="2" vector-effect="non-scaling-stroke" />
+          {#if growth.points.length > 0}
+            {@const end = growth.points[growth.points.length - 1]}
+            <circle cx={end.x} cy={end.y} r="3" class="growth-end" />
+          {/if}
+          {#each growth.points as point, index (point.month)}
+            <rect
+              x={index === 0 ? 0 : point.x - 10}
+              y="0"
+              width="20"
+              height="64"
+              fill="transparent"
+              role="img"
+              aria-label="{monthLabel(point.month)} · {plural(point.files, 'file')}"
+              onmouseenter={(event) => show(event, 'library', `${monthLabel(point.month)} · ${plural(point.files, 'file')}`)}
+              onmouseleave={hide}
+            />
+          {/each}
+        </svg>
         {#if roomLeft}
-          {@const usedDots = Math.round((roomLeft.usedShare / 100) * ROOM_DOTS)}
           <div class="mt-auto flex flex-col gap-1.5">
             <p class="text-meta text-ink-4">Room left <span class="font-mono text-ink-2">{formatBytes(roomLeft.free)}</span></p>
             <div
-              class="flex flex-wrap gap-[3px]"
+              class="h-1 overflow-hidden rounded-full bg-surface-thin"
               role="img"
               aria-label="{formatBytes(data.library.storage!.usedBytes)} used of {formatBytes(data.library.storage!.totalBytes)}"
               onmouseenter={(event) => show(event, 'library', `${formatBytes(data.library.storage!.usedBytes)} used of ${formatBytes(data.library.storage!.totalBytes)}`)}
               onmouseleave={hide}
             >
-              {#each Array.from({ length: ROOM_DOTS }) as _, k (k)}
-                <span class="room-dot" class:used={k < usedDots}></span>
-              {/each}
+              <div class="h-full rounded-full bg-accent" style="width: {roomLeft.usedShare}%"></div>
             </div>
           </div>
         {/if}
@@ -755,65 +710,22 @@
 <style>
   /* Chart marks in the page's light ink. Set as properties, because an SVG
      presentation attribute does not read a custom property everywhere. */
-  .screen {
-    fill: var(--color-duo-light);
-    fill-opacity: 0.5;
+  .bar {
+    fill: color-mix(in srgb, var(--color-duo-light) 62%, var(--color-inset));
   }
-  .dot,
-  .key-dot {
+  .bar-today {
     fill: var(--color-duo-light);
   }
-  .none {
-    fill: var(--color-line-regular);
+  .growth-area {
+    fill: var(--color-duo-light);
+    fill-opacity: 0.14;
   }
-  .peak,
-  .focus {
+  .growth-line {
     fill: none;
-    stroke-width: 1.5;
-  }
-  .peak {
-    stroke: var(--color-ink);
-  }
-  .focus {
     stroke: var(--color-duo-light);
-    stroke-dasharray: 3 2;
   }
-  .axis {
-    fill: var(--color-ink-4);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .total {
-    font-size: var(--text-poster-m);
-    font-weight: 800;
-    line-height: 0.85;
-    letter-spacing: -0.05em;
-  }
-  .rank {
-    width: 1.5rem;
-    flex-shrink: 0;
-    text-align: right;
-    font-size: var(--text-quiet-lead);
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    color: color-mix(in srgb, var(--color-duo-light) 60%, var(--color-ink-4));
-  }
-  .rank-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 9999px;
-    background: var(--color-duo-light);
-  }
-  .room-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 9999px;
-    background: var(--color-line-regular);
-  }
-  .room-dot.used {
-    background: var(--color-duo-light);
-  }
-  /* A row that opens a page; a row with nothing to open keeps the layout. */
+  /* A row that names a release or artist opens it; the whole row is the
+     target, so the hover wash runs to the panel's edges. */
   .row-link {
     display: flex;
     flex: 1 1 0;
@@ -827,10 +739,6 @@
   }
   a.row-link:hover {
     background: color-mix(in srgb, var(--color-duo-light) 9%, transparent);
-  }
-  .growth-line {
-    fill: none;
-    stroke: var(--color-duo-light);
   }
   .growth-end {
     fill: var(--color-duo-light);
