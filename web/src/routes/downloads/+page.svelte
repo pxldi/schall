@@ -3,8 +3,10 @@
   import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
+    createInfiniteQuery,
     createMutation,
     createQuery,
+    type InfiniteData,
     keepPreviousData,
     type Query,
     useQueryClient
@@ -79,12 +81,20 @@
   // it fail — and one button cannot answer them; it would also put every
   // request back in the page, which is the thing being fixed.
   const viewKeys = ['open', 'review', 'imported', 'discarded', 'failed', 'all'] as const;
+  const PAGE = 50;
+  const SEARCH_PAUSE_MS = 250;
   let view = $state<DownloadView>(urlChoice(opened, 'view', viewKeys, 'open'));
 
-  // What the reader typed to narrow the list on screen. The server pages this
-  // pile rather than searching it, so the search is read against the page it
-  // already sent rather than asked of it again.
+  // What the reader typed to narrow the list. The pile is read a page at a
+  // time, so the search is asked of the server once typing pauses; until then
+  // the rows already loaded are narrowed in place.
   let search = $state(urlText(opened, 'q'));
+  let asked = $state(urlText(opened, 'q').trim());
+  $effect(() => {
+    const next = search.trim();
+    const timer = setTimeout(() => (asked = next), SEARCH_PAUSE_MS);
+    return () => clearTimeout(timer);
+  });
 
   $effect(() => {
     keepInUrl(opened.pathname, { tab, view, q: search }, { tab: 'peers', view: 'open', q: '' });
@@ -111,33 +121,65 @@
   // request was still in flight — the refetch joined the request already
   // running, which had been built with the pile the screen opened on, so the
   // strip said Imported over the open transfers.
-  const downloads = createQuery(
+  // Imported and All hold thousands of rows, and reading a whole pile at once
+  // sent megabytes for the first screenful. The pile is read PAGE rows at a
+  // time, and the next page as the reader nears the end of the list.
+  const downloads = createInfiniteQuery(
     toStore(() => ({
-      queryKey: ['downloads', 'list', view],
-      queryFn: () => api.downloads({ view }),
+      queryKey: ['downloads', 'list', view, asked],
+      queryFn: ({ pageParam }: { pageParam: number }) =>
+        api.downloads({ view, q: asked || undefined, limit: PAGE, offset: pageParam }),
+      initialPageParam: 0,
+      getNextPageParam: (last: DownloadRequests) =>
+        last.items.length > 0 && last.offset + last.items.length < last.total
+          ? last.offset + last.items.length
+          : undefined,
       placeholderData: keepPreviousData,
       // Transfers move on their own and the server says so over the event
       // stream, so this is the safety net rather than the mechanism: it covers a
       // stream blocked by a proxy or dropped without reconnecting yet. It still
       // stops entirely once all work has settled.
-      refetchInterval: (query: Query<DownloadRequests>) =>
-        query.state.data?.items.some(
-          (item) =>
-            item.status === 'started' ||
-            (item.status === 'completed' &&
-              (item.importStatus === 'pending' || item.importStatus === 'validating'))
+      refetchInterval: (query: Query<DownloadRequests, Error, InfiniteData<DownloadRequests, number>>) =>
+        query.state.data?.pages.some((loaded) =>
+          loaded.items.some(
+            (item) =>
+              item.status === 'started' ||
+              (item.status === 'completed' &&
+                (item.importStatus === 'pending' || item.importStatus === 'validating'))
+          )
         )
           ? 20_000
           : false
     }))
   );
-  const items = $derived(
-    [...($downloads.data?.items ?? [])].sort(
-      (a, b) =>
-        b.requestedAt.localeCompare(a.requestedAt) || a.id.localeCompare(b.id)
-    )
-  );
-  const counts = $derived($downloads.data?.counts);
+  // Rows can move between pages while the pile changes under them, so one
+  // that arrives twice is kept once.
+  const items = $derived.by(() => {
+    const seen = new Map<string, DownloadRequest>();
+    for (const loaded of $downloads.data?.pages ?? []) {
+      for (const item of loaded.items) seen.set(item.id, item);
+    }
+    return [...seen.values()].sort(
+      (a, b) => b.requestedAt.localeCompare(a.requestedAt) || a.id.localeCompare(b.id)
+    );
+  });
+  const moreToRead = $derived(Boolean($downloads.hasNextPage));
+  function readMore() {
+    if ($downloads.hasNextPage && !$downloads.isFetchingNextPage) void $downloads.fetchNextPage();
+  }
+  // Reads the next page when the end of the list comes into view.
+  function readAhead(node: HTMLElement) {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) readMore();
+      },
+      { rootMargin: '600px 0px' }
+    );
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+  const counts = $derived($downloads.data?.pages[0]?.counts);
 
   // The print is the covers of the pile on screen, the transfers moving now
   // first, so the page takes its inks from what is arriving (ADR Duoton). A
@@ -256,7 +298,9 @@
   // whichever filter it is read under.
   const nothingRequested = $derived(counts?.all === 0);
   // A search that finds nothing is its own reason, not the pile's.
-  const nothingMatches = $derived(items.length > 0 && filteredItems.length === 0);
+  const nothingMatches = $derived(
+    Boolean(search.trim()) && filteredItems.length === 0 && (counts?.[view] ?? 0) > 0
+  );
   const emptyHeading = $derived(
     nothingMatches
       ? 'Nothing matches that search'
@@ -1085,6 +1129,13 @@
           </article>
         {/each}
       </div>
+      {#if moreToRead}
+        <div use:readAhead class="flex justify-center">
+          <Button variant="outline" disabled={$downloads.isFetchingNextPage} onclick={readMore}>
+            Show more
+          </Button>
+        </div>
+      {/if}
 
     {:else if nothingMatches}
       <EmptyPanel role="idle" heading={emptyHeading}>

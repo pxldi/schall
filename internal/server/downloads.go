@@ -504,6 +504,7 @@ func (api *API) writeDownloadRequests(response http.ResponseWriter, request *htt
 		}
 		params.View = raw
 	}
+	params.Search = strings.TrimSpace(request.URL.Query().Get("q"))
 	if raw := strings.TrimSpace(request.URL.Query().Get("limit")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 || value > 200 {

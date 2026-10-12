@@ -935,6 +935,7 @@ export const api = {
   downloads: (filters: DownloadFilters = {}) => {
     const parameters = new URLSearchParams();
     if (filters.view) parameters.set('view', filters.view);
+    if (filters.q) parameters.set('q', filters.q);
     if (filters.limit) parameters.set('limit', String(filters.limit));
     if (filters.offset) parameters.set('offset', String(filters.offset));
     const query = parameters.toString();

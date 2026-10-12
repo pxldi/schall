@@ -1057,6 +1057,59 @@ func TestEachViewOfTheDownloadListHoldsWhatItNames(t *testing.T) {
 	}
 }
 
+// The screen reads a pile a page at a time, so a search has to be asked of
+// the server: a filter over the loaded page would miss every older row. It
+// matches the release, its artist and the peer, and the pager's total is the
+// number that match while the counts stay those of the whole pile.
+func TestSearchingTheDownloadListFindsRowsPastTheFirstPage(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	params := seedRequestParams(ctx, t, pool)
+
+	for index := range 30 {
+		seedRequestInState(ctx, t, pool, queries, params,
+			fmt.Sprintf(`@@peer\Music\Settled\%d`, index), "completed", "imported",
+			time.Now().Add(-time.Duration(index)*time.Hour))
+	}
+	other := params
+	other.SourceUsername = "50%_off"
+	old := seedRequestInState(ctx, t, pool, queries, other,
+		`@@other\Music\Old`, "completed", "imported", time.Now().Add(-90*24*time.Hour))
+
+	for _, search := range []string{"50%_", "50%_OFF"} {
+		page, err := queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{
+			View: "imported", Search: search, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("search %q: ListDownloadRequests() error = %v", search, err)
+		}
+		if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != old {
+			t.Errorf("search %q = %d items / total %d, want the one request from 50%%_off",
+				search, len(page.Items), page.Total)
+		}
+		if page.Counts.Imported != 31 {
+			t.Errorf("search %q: imported count = %d, want the whole pile of 31", search, page.Counts.Imported)
+		}
+	}
+	// A wildcard is a character, so "5_" matches nothing here.
+	page, err := queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{View: "imported", Search: "5_", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListDownloadRequests() error = %v", err)
+	}
+	if page.Total != 0 || len(page.Items) != 0 {
+		t.Errorf("search 5_ = %d items / total %d, want none", len(page.Items), page.Total)
+	}
+	page, err = queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{View: "imported", Search: "portis", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListDownloadRequests() error = %v", err)
+	}
+	if page.Total != 31 || len(page.Items) != 10 {
+		t.Errorf("search portis = %d items / total %d, want 10 of 31", len(page.Items), page.Total)
+	}
+}
+
 // Review asks only about a paused import whose latest pause compared
 // something. The questions view counts and pages exactly those, so the
 // Review chip and its list cannot disagree once the list runs past one page.

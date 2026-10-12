@@ -142,12 +142,12 @@ describe('the page heading', () => {
 });
 
 describe('the pile the screen opens on', () => {
-  it('asks the server for all open transfers', async () => {
+  it('asks the server for the first page of open transfers', async () => {
     answering(listing);
     opened();
 
     await screen.findByRole('article');
-    expect(downloadsAsked()[0]).toBe('/api/v1/downloads?view=open');
+    expect(downloadsAsked()[0]).toBe('/api/v1/downloads?view=open&limit=50');
   });
 
   it('shows the server’s count of open work, not a count of the rows on screen', async () => {
@@ -208,7 +208,7 @@ describe('choosing another pile', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^Imported/ }));
 
     await vi.waitFor(() => {
-      expect(downloadsAsked().at(-1)).toBe('/api/v1/downloads?view=imported');
+      expect(downloadsAsked().at(-1)).toBe('/api/v1/downloads?view=imported&limit=50');
     });
   });
 });
@@ -266,6 +266,43 @@ describe('the search field', () => {
   });
 });
 
+describe('a long pile', () => {
+  it('reads the next page when Show more is pressed', async () => {
+    answering(() => listing({ total: 120, limit: 50, offset: 0 }));
+    opened();
+
+    await screen.findByRole('article');
+    await fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+
+    await vi.waitFor(() => {
+      // The next page starts after the rows that arrived, one here.
+      expect(downloadsAsked()).toContain('/api/v1/downloads?view=open&limit=50&offset=1');
+    });
+  });
+
+  it('offers no more once every row has arrived', async () => {
+    answering(() => listing({ total: 1, limit: 50, offset: 0 }));
+    opened();
+
+    await screen.findByRole('article');
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+
+  it('asks the server for what was typed, so rows past the first page are found', async () => {
+    answering(listing);
+    opened();
+
+    await screen.findByRole('article');
+    await fireEvent.input(screen.getByLabelText('Filter downloads'), {
+      target: { value: 'nemo vice' }
+    });
+
+    await vi.waitFor(() => {
+      expect(downloadsAsked()).toContain('/api/v1/downloads?view=open&q=nemo+vice&limit=50');
+    });
+  });
+});
+
 describe('a pile pressed while the opening request is still in flight', () => {
   it('asks the server for that pile too', async () => {
     // The open transfers are still on their way when Imported is pressed. Each
@@ -279,7 +316,7 @@ describe('a pile pressed while the opening request is still in flight', () => {
     letTheFirstAnswerThrough();
 
     await vi.waitFor(() => {
-      expect(downloadsAsked()).toContain('/api/v1/downloads?view=imported');
+      expect(downloadsAsked()).toContain('/api/v1/downloads?view=imported&limit=50');
     });
   });
 });

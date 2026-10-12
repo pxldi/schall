@@ -2395,6 +2395,8 @@ export interface DownloadCounts {
 export interface DownloadFilters {
   /** `questions` is Review's read of the paused imports, not a Downloads pile. */
   view?: DownloadView | 'questions';
+  /** Narrows the pile to rows whose release, artist or peer contains it. */
+  q?: string;
   limit?: number;
   offset?: number;
 }
