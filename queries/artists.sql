@@ -1007,6 +1007,29 @@ WHERE artists.musicbrainz_id IS NOT NULL
 ORDER BY artist_images.fetched_at ASC NULLS FIRST, artists.created_at
 LIMIT sqlc.arg(batch);
 
+-- name: HeldReleaseTitles :many
+-- The artist's releases the library has any of, most held first, for the
+-- sentence an artist nobody follows is explained by. It is read each time
+-- rather than stored, because a stored sentence named the release that first
+-- brought the artist in, and a file re-identified since then left it naming a
+-- release the library no longer holds anything of.
+SELECT albums.title, (count(*) OVER ())::bigint AS total_count
+FROM albums
+WHERE albums.artist_id = sqlc.arg('artist_id')
+  AND albums.owned_track_count > 0
+ORDER BY albums.owned_track_count DESC, albums.release_date DESC NULLS LAST, albums.id
+LIMIT 2;
+
+-- name: SmallArtistImages :many
+-- Cached artist pictures small enough to be a provider's stock "no photo"
+-- avatar. The sweep decodes each and replaces the ones that are with an
+-- absence; a real photograph is rarely this small, so the size keeps the pass
+-- from reading every picture.
+SELECT artist_id, image
+FROM artist_images
+WHERE image IS NOT NULL
+  AND octet_length(image) < sqlc.arg(max_bytes)::int;
+
 -- name: ArtistsMissingBiography :many
 -- The artists nobody has asked an encyclopaedia about yet.
 --

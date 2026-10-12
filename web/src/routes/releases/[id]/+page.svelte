@@ -12,7 +12,7 @@
     type Track
   } from '$lib/api';
   import { formatBytes, wantedSummary } from '$lib/utils';
-  import { progress, quiet } from '$lib/vocabulary';
+  import { holding, progress, quiet } from '$lib/vocabulary';
   import { usePagePrint } from '$lib/duoton';
   import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -24,7 +24,6 @@
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import ReleaseEditions from '$lib/components/ReleaseEditions.svelte';
   import SetCoverDialog from '$lib/components/SetCoverDialog.svelte';
-  import StateMark from '$lib/components/StateMark.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import type { IconName } from '$lib/icons';
@@ -768,7 +767,9 @@
               </span>
               <span class="flex w-24 shrink-0 items-center justify-end gap-1.5">
                 {#if trackDone(track)}
-                  <StateMark role="ok"><Icon name="check" size="sm" class="size-3" /></StateMark>
+                  <!-- The same tick a playlist row draws, with the word as its
+                       tooltip and accessible name like every other state here. -->
+                  <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
                 {:else}
                   {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
                   {#if tag?.icon}

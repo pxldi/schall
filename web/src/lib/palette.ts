@@ -151,8 +151,14 @@ export function paletteCategories(
         // It never says "held". That word is the review queue's name for a
         // copy nobody could identify either way, and using it here for having
         // something meant one word carried two meanings, one of them a decision.
+        //
+        // The fraction is the artist page's own, "1 of 167 releases owned",
+        // where owned means complete. A count of releases with any file on them
+        // said "3 releases owned" here while the page said one.
         subtitle:
-          artist.releaseCount > 0 ? counted(artist.releaseCount, 'release') + ' owned' : '',
+          artist.countedReleases > 0
+            ? `${artist.ownedReleases} of ${artist.countedReleases} releases owned`
+            : '',
         meta: counted(artist.fileCount, 'file'),
         role: artist.followed ? 'ok' : 'idle',
         mark: artist.followed ? { icon: 'follow', label: 'Following' } : undefined,

@@ -48,6 +48,7 @@ type Store interface {
 	SaveReleaseInks(context.Context, db.SaveReleaseInksParams) (int64, error)
 	ArtistsMissingImage(context.Context, db.ArtistsMissingImageParams) ([]db.ArtistsMissingImageRow, error)
 	SaveArtistImage(context.Context, db.SaveArtistImageParams) error
+	SmallArtistImages(context.Context, int32) ([]db.SmallArtistImagesRow, error)
 	ArtistsMissingBiography(context.Context, int32) ([]db.ArtistsMissingBiographyRow, error)
 	SaveArtistBiography(context.Context, db.SaveArtistBiographyParams) error
 }
@@ -75,6 +76,10 @@ type Sweeper struct {
 	logger zerolog.Logger
 	// pause is a field so a test does not wait out the real pace.
 	pause time.Duration
+	// stockChecked says the cached pictures have been checked for stock
+	// avatars since this process started. Pictures fetched since then are
+	// checked as they arrive, so once is enough.
+	stockChecked bool
 }
 
 func NewSweeper(store Store, sources Sources, logger zerolog.Logger) *Sweeper {
@@ -280,6 +285,12 @@ func (sweeper *Sweeper) pictureArtists(ctx context.Context) (bool, error) {
 	if sweeper.artists == nil {
 		return false, nil
 	}
+	if !sweeper.stockChecked {
+		if err := sweeper.dropStockAvatars(ctx); err != nil {
+			return true, err
+		}
+		sweeper.stockChecked = true
+	}
 	// The artists asked about are those nobody has looked for, and those written
 	// off as having no picture by a chain older than the one asking now. Every
 	// row this pass touches is recorded, absence included, so a re-asked artist
@@ -333,4 +344,31 @@ func wait(ctx context.Context, duration time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+// stockAvatarBytes bounds the pictures checked for a stock avatar. Deezer's
+// grey silhouette is 5,922 bytes.
+const stockAvatarBytes = 16 * 1024
+
+// dropStockAvatars replaces cached stock "no photo" avatars with a recorded
+// absence. They were cached before the fetch learned to refuse them, and an
+// artist page or grid showed a glaring grey silhouette instead of generated art.
+func (sweeper *Sweeper) dropStockAvatars(ctx context.Context) error {
+	rows, err := sweeper.store.SmallArtistImages(ctx, stockAvatarBytes)
+	if err != nil {
+		return fmt.Errorf("list small artist pictures: %w", err)
+	}
+	for _, row := range rows {
+		if !Placeholder(row.Image) {
+			continue
+		}
+		if err := sweeper.store.SaveArtistImage(ctx, db.SaveArtistImageParams{
+			ArtistID: row.ArtistID, Source: NameNobody,
+		}); err != nil {
+			return fmt.Errorf("drop stock picture of artist %s: %w", row.ArtistID, err)
+		}
+		sweeper.logger.Info().Str("artist_id", row.ArtistID.String()).
+			Msg("dropped a stock artist picture")
+	}
+	return nil
 }

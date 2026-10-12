@@ -176,6 +176,18 @@ describe('the pressings', () => {
   });
 });
 
+describe('a track the library holds', () => {
+  it('names its tick for a pointer and a screen reader', async () => {
+    answering({ tracks: [track()] });
+    opened();
+
+    const held = await screen.findByText('The Rainbow');
+    const tick = held.closest('div.flex')!.querySelector('[title="complete"]');
+    expect(tick).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'complete' })).toBeTruthy();
+  });
+});
+
 describe('a track the library does not hold', () => {
   it('reads as absent, with no word naming a state on the row', async () => {
     answering({

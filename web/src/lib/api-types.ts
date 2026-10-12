@@ -604,6 +604,9 @@ export interface GlobalSearchArtist {
    * completeness fraction, which counts releases the library holds entirely. */
   fileCount: number;
   releaseCount: number;
+  /** The artist page's own fraction: complete releases over the ones counted. */
+  ownedReleases: number;
+  countedReleases: number;
 }
 
 export interface GlobalSearchRelease {
