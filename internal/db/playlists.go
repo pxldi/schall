@@ -148,6 +148,43 @@ const entryRelease = `
 	LIMIT 1
 `
 
+// entryLength is how long an entry runs when the entry itself does not say,
+// as a lateral beside answeringFile: the catalogue track the answering file is
+// mapped to, then a catalogue track of the recording its want asks for, then
+// the file's own length. Lists that never stored a length (the weekly list
+// before it did, Navidrome adoptions) show one this way without a backfill.
+const entryLength = `
+	SELECT lengths.duration_ms
+	FROM (
+		SELECT tracks.duration_ms, 1 AS preference
+		FROM track_mappings
+		JOIN tracks ON tracks.id = track_mappings.track_id
+		WHERE track_mappings.library_file_id = answering.library_file_id
+
+		UNION ALL
+
+		SELECT tracks.duration_ms, 2
+		FROM playlist_entry_targets
+		JOIN acquisition_targets joined
+		    ON joined.id = playlist_entry_targets.acquisition_target_id
+		LEFT JOIN acquisition_targets survivor
+		    ON survivor.id = joined.superseded_by_id
+		JOIN tracks ON tracks.musicbrainz_recording_id =
+		    coalesce(survivor.musicbrainz_recording_id, joined.musicbrainz_recording_id)
+		WHERE playlist_entry_targets.playlist_entry_id = playlist_entries.id
+
+		UNION ALL
+
+		SELECT coalesce(library_files.measured_duration_ms, library_files.duration_ms), 3
+		FROM library_files
+		WHERE library_files.id = answering.library_file_id
+	) lengths
+	WHERE playlist_entries.entry_duration_ms IS NULL
+	  AND lengths.duration_ms IS NOT NULL
+	ORDER BY lengths.preference
+	LIMIT 1
+`
+
 // playlistCover is the release a playlist is pictured by: the release of its
 // first entry that has one (ADR on Duoton). It is read the same way the rows
 // of the playlist page read theirs, so the header and the first pictured row
@@ -348,6 +385,10 @@ type PlaylistEntryRow struct {
 	TargetSource         pgtype.Text
 	TargetExternalURL    pgtype.Text
 	TargetMinimumBitrate pgtype.Int4
+	// TargetHoldsCopy is whether the want holds a copy nobody has answered,
+	// which is a question waiting in Review. Filled by PlaylistEntry and
+	// PlaylistEntries alone.
+	TargetHoldsCopy bool
 
 	// ReleaseID is the release the entry is pictured by (entryRelease). Filled
 	// by PlaylistEntry and PlaylistEntries alone, like AnsweringFileID.
@@ -364,21 +405,29 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 			playlist_entries.id, playlist_entries.playlist_id, playlist_entries.position,
 			playlist_entries.source_track_id, playlist_entries.entry_artist,
 			playlist_entries.entry_title, playlist_entries.entry_album,
-			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
+			coalesce(playlist_entries.entry_duration_ms, entry_length.duration_ms),
+			playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
 			live_target.id, live_target.status, live_target.summary,
 			live_target.source, live_target.external_url, live_target.minimum_bitrate,
+			coalesce(live_target.holds_copy, false),
 			entry_release.album_id
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
 		LEFT JOIN LATERAL (`+entryRelease+`) entry_release ON true
+		LEFT JOIN LATERAL (`+entryLength+`) entry_length ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
 			       coalesce(survivor.summary, joined.summary) AS summary,
 			       coalesce(survivor.source, joined.source) AS source,
 			       coalesce(survivor.external_url, joined.external_url) AS external_url,
-			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate
+			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate,
+			       EXISTS (
+			           SELECT 1 FROM acquisition_target_files held
+			           WHERE held.acquisition_target_id = coalesce(survivor.id, joined.id)
+			             AND held.verdict = 'held'
+			       ) AS holds_copy
 			FROM playlist_entry_targets
 			JOIN acquisition_targets joined
 			    ON joined.id = playlist_entry_targets.acquisition_target_id
@@ -397,7 +446,7 @@ func (q *Queries) PlaylistEntry(ctx context.Context, entryID uuid.UUID) (Playlis
 		&entry.OwnedFileID, &entry.AnsweringFileID,
 		&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
 		&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
-		&entry.ReleaseID,
+		&entry.TargetHoldsCopy, &entry.ReleaseID,
 	)
 	return entry, err
 }
@@ -409,21 +458,29 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			playlist_entries.id, playlist_entries.playlist_id, playlist_entries.position,
 			playlist_entries.source_track_id, playlist_entries.entry_artist,
 			playlist_entries.entry_title, playlist_entries.entry_album,
-			playlist_entries.entry_duration_ms, playlist_entries.entry_isrc,
+			coalesce(playlist_entries.entry_duration_ms, entry_length.duration_ms),
+			playlist_entries.entry_isrc,
 			playlist_entries.owned_library_file_id, answering.library_file_id,
 			live_target.id, live_target.status, live_target.summary,
 			live_target.source, live_target.external_url, live_target.minimum_bitrate,
+			coalesce(live_target.holds_copy, false),
 			entry_release.album_id
 		FROM playlist_entries
 		LEFT JOIN LATERAL (`+answeringFile+`) answering ON true
 		LEFT JOIN LATERAL (`+entryRelease+`) entry_release ON true
+		LEFT JOIN LATERAL (`+entryLength+`) entry_length ON true
 		LEFT JOIN LATERAL (
 			SELECT coalesce(survivor.id, joined.id) AS id,
 			       coalesce(survivor.status, joined.status) AS status,
 			       coalesce(survivor.summary, joined.summary) AS summary,
 			       coalesce(survivor.source, joined.source) AS source,
 			       coalesce(survivor.external_url, joined.external_url) AS external_url,
-			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate
+			       coalesce(survivor.minimum_bitrate, joined.minimum_bitrate) AS minimum_bitrate,
+			       EXISTS (
+			           SELECT 1 FROM acquisition_target_files held
+			           WHERE held.acquisition_target_id = coalesce(survivor.id, joined.id)
+			             AND held.verdict = 'held'
+			       ) AS holds_copy
 			FROM playlist_entry_targets
 			JOIN acquisition_targets joined
 			    ON joined.id = playlist_entry_targets.acquisition_target_id
@@ -451,7 +508,7 @@ func (q *Queries) PlaylistEntries(ctx context.Context, playlistID uuid.UUID) ([]
 			&entry.OwnedFileID, &entry.AnsweringFileID,
 			&entry.TargetID, &entry.TargetStatus, &entry.TargetSummary,
 			&entry.TargetSource, &entry.TargetExternalURL, &entry.TargetMinimumBitrate,
-			&entry.ReleaseID,
+			&entry.TargetHoldsCopy, &entry.ReleaseID,
 		); err != nil {
 			return nil, err
 		}

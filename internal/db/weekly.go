@@ -778,6 +778,19 @@ func (q *Queries) WeeklyPlaylistArrivals(
 	return result, rows.Err()
 }
 
+// recordingLength is how long the catalogue says the recording in $2 runs,
+// or NULL when no catalogue track carries it. Neither the suggestions nor the
+// library pool state a length, and without one the list's Length column was
+// empty for every weekly row.
+const recordingLength = `
+	SELECT tracks.duration_ms
+	FROM tracks
+	WHERE tracks.musicbrainz_recording_id = $2::text::uuid
+	  AND tracks.duration_ms IS NOT NULL
+	ORDER BY tracks.duration_ms, tracks.id
+	LIMIT 1
+`
+
 // AppendWeeklyPlaylistEntryParams is one suggestion put on this week's list.
 type AppendWeeklyPlaylistEntryParams struct {
 	PlaylistID             uuid.UUID
@@ -800,18 +813,20 @@ func (q *Queries) AppendWeeklyPlaylistEntry(
 	err := q.db.QueryRow(ctx, `
 		INSERT INTO playlist_entries (
 			playlist_id, position, source_track_id,
-			entry_artist, entry_title, entry_album
+			entry_artist, entry_title, entry_album, entry_duration_ms
 		)
 		VALUES (
 			$1,
 			(SELECT coalesce(max(position), 0) + 1 FROM playlist_entries WHERE playlist_id = $1),
-			$2, $3, $4, $5
+			$2, $3, $4, $5,
+			(`+recordingLength+`)
 		)
 		ON CONFLICT (playlist_id, source_track_id) WHERE source_track_id IS NOT NULL
 		DO UPDATE SET
 			entry_artist = excluded.entry_artist,
 			entry_title = excluded.entry_title,
 			entry_album = excluded.entry_album,
+			entry_duration_ms = coalesce(excluded.entry_duration_ms, playlist_entries.entry_duration_ms),
 			updated_at = now()
 		RETURNING id, playlist_id, position, source_track_id, entry_artist,
 			entry_title, entry_album, entry_duration_ms, entry_isrc,

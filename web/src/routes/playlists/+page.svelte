@@ -6,7 +6,7 @@
   import { isAuthError } from '$lib/errors';
   import { coverSrc, usePagePrint } from '$lib/duoton';
   import { keepInUrl, urlChoice } from '$lib/utils';
-  import { playlistOrigin } from '$lib/playlists';
+  import { oncePerCover, playlistOrigin } from '$lib/playlists';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
@@ -79,9 +79,11 @@
     };
   }
 
-  // A strip of the lists' covers, in the inks of the first one.
+  // A strip of the lists' covers, in the inks of the first one, each release
+  // once.
+  const stripCovers = $derived(oncePerCover(items).slice(0, 6).map(coverOf));
   usePagePrint(() =>
-    items.length ? { covers: items.slice(0, 6).map(coverOf), inks: items[0].inks } : undefined
+    items.length ? { covers: stripCovers, inks: items[0].inks } : undefined
   );
 
   const playlistSkeletonCount = $derived(Math.max($playlists.data?.items.length ?? 0, 4));

@@ -66,56 +66,67 @@
   }
 </script>
 
-<!-- A link in the line under a row until it is opened; then the form takes
-     the full width under that line. -->
-<details bind:open={open} class={open ? 'basis-full' : ''}>
-  <summary
-    class="cursor-pointer list-none text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-duo-light)] [&::-webkit-details-marker]:hidden"
+<!-- A link in the line under a row. Opened, the link stays where it is and
+     the form takes the next line of the same row, at a width an address
+     needs. -->
+<button
+  type="button"
+  aria-expanded={open}
+  aria-controls="source-address-form-{targetId}"
+  class="cursor-pointer text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-duo-light)]"
+  onclick={() => (open = !open)}
+>
+  Use address
+</button>
+{#if open}
+  <div
+    id="source-address-form-{targetId}"
+    class="mt-1 flex w-full max-w-2xl basis-full flex-col gap-2 rounded-row border border-line-thin px-3 py-2"
   >
-    Use address
-  </summary>
-  {#if open}
-    <div class="mt-2 flex flex-col gap-2 rounded-row border border-line-thin px-3 py-2">
-      <div class="flex flex-wrap items-center gap-2">
-        <label class="sr-only" for="source-address-{targetId}">Track address</label>
-        <input
-          id="source-address-{targetId}"
-          bind:value={address}
-          type="url"
-          placeholder="Track address"
-          class="min-w-0 flex-1 rounded-control border border-line-regular bg-inset px-2.5 py-1.5 font-mono text-meta text-ink outline-none focus:border-line-thick"
-          onkeydown={(event) => event.key === 'Enter' && void lookUp()}
-        />
-        <Button variant="outline" size="xs" disabled={!address.trim() || lookingUp} onclick={lookUp}>
-          {lookingUp ? 'Looking up…' : 'Look up'}
-        </Button>
-      </div>
-
-      {#if lookup}
-        <div class="grid gap-2 rounded-row bg-surface-regular px-2.5 py-2 text-meta sm:grid-cols-2">
-          <div>
-            <span class="block text-ink-3">Entry</span>
-            <span class="block truncate text-ink">{entryTitle} · {entryArtist}</span>
-            <span class="numeric text-ink-3">{entryDurationMs != null ? clock(entryDurationMs / 1000) : '—'}</span>
-          </div>
-          <div>
-            <span class="block text-ink-3">Address</span>
-            <span class="block truncate text-ink">{lookup.title} · {lookup.artist}</span>
-            <span class="numeric text-ink-3">
-              {lookup.durationMs != null ? clock(lookup.durationMs / 1000) : '—'}
-              {#if lengthDiffers()} · length differs by more than 5 seconds{/if}
-            </span>
-          </div>
-        </div>
-        <Button disabled={using} onclick={useAddress}>{using ? 'Using…' : 'Use address'}</Button>
-      {/if}
-
-      {#if lookupError}
-        <ErrorNote error={lookupError} bare />
-      {/if}
-      {#if useError}
-        <ErrorNote error={useError} bare />
-      {/if}
+    <div class="flex flex-wrap items-center gap-2">
+      <label class="sr-only" for="source-address-{targetId}">Track link on SoundCloud, YouTube or Bandcamp</label>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        id="source-address-{targetId}"
+        bind:value={address}
+        type="url"
+        autofocus
+        placeholder="SoundCloud, YouTube or Bandcamp link"
+        class="min-w-0 flex-1 rounded-control border border-line-regular bg-inset px-2.5 py-1.5 font-mono text-meta text-ink outline-none focus:border-line-thick"
+        onkeydown={(event) => {
+          if (event.key === 'Enter') void lookUp();
+          if (event.key === 'Escape') open = false;
+        }}
+      />
+      <Button variant="outline" size="xs" disabled={!address.trim() || lookingUp} onclick={lookUp}>
+        {lookingUp ? 'Looking up…' : 'Look up'}
+      </Button>
     </div>
-  {/if}
-</details>
+
+    {#if lookup}
+      <div class="grid gap-2 rounded-row bg-surface-regular px-2.5 py-2 text-meta sm:grid-cols-2">
+        <div>
+          <span class="block text-ink-3">Entry</span>
+          <span class="block truncate text-ink">{entryTitle} · {entryArtist}</span>
+          <span class="numeric text-ink-3">{entryDurationMs != null ? clock(entryDurationMs / 1000) : '—'}</span>
+        </div>
+        <div>
+          <span class="block text-ink-3">Address</span>
+          <span class="block truncate text-ink">{lookup.title} · {lookup.artist}</span>
+          <span class="numeric text-ink-3">
+            {lookup.durationMs != null ? clock(lookup.durationMs / 1000) : '—'}
+            {#if lengthDiffers()} · length differs by more than 5 seconds{/if}
+          </span>
+        </div>
+      </div>
+      <Button disabled={using} onclick={useAddress}>{using ? 'Using…' : 'Use address'}</Button>
+    {/if}
+
+    {#if lookupError}
+      <ErrorNote error={lookupError} bare />
+    {/if}
+    {#if useError}
+      <ErrorNote error={useError} bare />
+    {/if}
+  </div>
+{/if}

@@ -329,6 +329,9 @@ type playlistEntryResponse struct {
 	// attempt from one that has reached a dead end, both being 'unresolved', and
 	// the interface must never offer this where it is not the thing that helps.
 	MusicBrainzSeed *musicbrainzSeedResponse `json:"musicbrainzSeed,omitempty"`
+	// CopyWaiting is set while the want holds a copy nobody has answered, so
+	// the row can lead to that question in Review.
+	CopyWaiting bool `json:"copyWaiting,omitempty"`
 }
 
 // The release editor as a form somebody can submit: where it goes and every
@@ -441,6 +444,7 @@ func (api *API) getPlaylist(response http.ResponseWriter, request *http.Request)
 				minimumBitrate := entry.TargetMinimumBitrate.Int32
 				item.MinimumBitrate = &minimumBitrate
 			}
+			item.CopyWaiting = entry.TargetHoldsCopy && !entry.AnsweringFileID.Valid
 			item.MusicBrainzSeed = seedFor(entry, playlist.Source, artistIDs)
 		}
 		items = append(items, item)
@@ -465,7 +469,8 @@ func (api *API) artistIDsForSeeding(
 ) map[string]uuid.UUID {
 	var names []string
 	for _, entry := range entries {
-		if acquisition.MusicBrainzHasNothing(entry.TargetStatus.String, entry.TargetSummary.String) {
+		if !entry.AnsweringFileID.Valid &&
+			acquisition.MusicBrainzHasNothing(entry.TargetStatus.String, entry.TargetSummary.String) {
 			names = append(names, acquisition.CreditNames(entry.EntryArtist)...)
 		}
 	}
@@ -491,7 +496,10 @@ func (api *API) artistIDsForSeeding(
 func seedFor(
 	entry db.PlaylistEntryRow, source string, artistIDs map[string]uuid.UUID,
 ) *musicbrainzSeedResponse {
-	if !acquisition.MusicBrainzHasNothing(entry.TargetStatus.String, entry.TargetSummary.String) {
+	// A row a file already answers has nothing left to add: its want can
+	// still read "unresolved" when a list import adopted the file for it.
+	if entry.AnsweringFileID.Valid ||
+		!acquisition.MusicBrainzHasNothing(entry.TargetStatus.String, entry.TargetSummary.String) {
 		return nil
 	}
 	return seededRelease(acquisition.SeedEntry{

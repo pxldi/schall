@@ -16,7 +16,7 @@
   import StateTag from '$lib/components/StateTag.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
-  import { entryState, ownedOf, playlistOrigin, type EntryRole } from '$lib/playlists';
+  import { entryState, ownedOf, playlistOrigin, reviewHref, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
 
@@ -419,12 +419,20 @@
           <tbody>
             {#each entries as entry, index (entry.id)}
               {@const state = entryState(entry)}
+              <!-- Only a row still waiting has anything to offer: a row a file
+                   answers is finished, whatever its want still reads. -->
+              {@const open = !entry.ownedFileId}
+              {@const addressable = open && !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
+              {@const seed = open ? entry.musicbrainzSeed : undefined}
+              {@const decide = state.role === 'fail'}
+              <!-- The sentence stays in the state's tooltip; the line under the
+                   row is drawn only when it carries something to do. -->
+              {@const line = addressable || !!seed || decide}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
-              {@const addressable = !!entry.targetId && entry.targetStatus === 'unresolved' && !entry.source}
               <tr
                 id="entry-{entry.id}"
-                class="want-row scroll-mt-24 {state.note || addressable ? '' : 'border-b border-line-thin last:border-b-0'}"
+                class="want-row scroll-mt-24 {line ? '' : 'border-b border-line-thin last:border-b-0'}"
               >
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{index + 1}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
@@ -450,21 +458,14 @@
                     >
                       Keyed{#if entry.minimumBitrate} · {entry.minimumBitrate} kbit/s{/if}
                     </a>
-                  {:else if state.role === 'ok'}
-                    <span
-                      class="inline-flex text-ok"
-                      title={state.label}
-                      aria-label={state.label}
-                    >
-                      <Icon name="check" size="md" />
-                    </span>
-                  {:else if state.role === 'fail'}
+                  {:else if decide}
                     <a
-                      href="/review"
-                      class="inline-flex items-center gap-1 text-accent hover:text-accent-soft"
+                      href={reviewHref(entry)}
+                      class="inline-flex text-fail hover:text-ink"
+                      title={[state.label, state.note].filter(Boolean).join(' · ')}
+                      aria-label="{state.label}, open in Review"
                     >
-                      <StateTag tone="attention">{state.label}</StateTag>
-                      <Icon name="chevron-right" size="sm" class="size-3" />
+                      <Icon name={state.icon} size="md" />
                     </a>
                   {:else if state.label === 'no want'}
                     <!-- The + on the hovered or focused row only, the way a
@@ -479,14 +480,14 @@
                       onunwant={() => {}}
                     />
                   {:else}
-                    <StateIcon icon={state.icon} label={state.label} role={state.role} />
+                    <!-- The reason rides in the tooltip with the word. -->
+                    <StateIcon icon={state.icon} label={state.label} role={state.role} note={state.note} />
                   {/if}
                 </td>
               </tr>
-              {#if state.note || addressable}
+              {#if line}
                 <!-- One line under the row: what happened, then what can be
-                     done about it. "Use address" is a link in that line and
-                     opens its form below it. -->
+                     done about it. "Use address" opens its form under it. -->
                 <tr class="border-b border-line-thin last:border-b-0">
                   <td></td>
                   <td class="px-3 pb-2" colspan="5">
@@ -494,8 +495,16 @@
                       {#if state.note}
                         <span class="text-meta text-ink-3">{state.note}</span>
                       {/if}
-                      {#if entry.musicbrainzSeed}
-                        <AddToMusicBrainz seed={entry.musicbrainzSeed} />
+                      {#if decide}
+                        <a
+                          href={reviewHref(entry)}
+                          class="text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink"
+                        >
+                          Answer in Review
+                        </a>
+                      {/if}
+                      {#if seed}
+                        <AddToMusicBrainz {seed} />
                       {/if}
                       {#if addressable}
                         <UseAddress
