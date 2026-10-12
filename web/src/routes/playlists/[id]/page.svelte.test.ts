@@ -125,3 +125,50 @@ describe('the playlist detail', () => {
     expect(loading.querySelectorAll('[aria-hidden="true"]')).toHaveLength(40);
   });
 });
+
+describe('the playlist rows', () => {
+  it('numbers rows by where they sit when stored positions have gaps', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              playlist: playlist({ source: 'weekly', ownerName: '', importedAt: null }),
+              entries: [
+                entry({ id: 'e2', position: 2, title: 'Second' }),
+                entry({ id: 'e8', position: 8, title: 'Eighth' })
+              ]
+            }),
+            { status: 200 }
+          )
+        )
+      )
+    );
+    opened();
+
+    const second = (await screen.findByText('Eighth')).closest('tr');
+    expect(second?.querySelector('td')?.textContent?.trim()).toBe('2');
+  });
+
+  it('leaves out Re-import for a list that did not come from Spotify', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              playlist: playlist({ source: 'weekly', ownerName: '', importedAt: null }),
+              entries: [entry()]
+            }),
+            { status: 200 }
+          )
+        )
+      )
+    );
+    opened();
+
+    expect(await screen.findByText(/Made by Schall/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Re-import' })).toBeNull();
+  });
+});

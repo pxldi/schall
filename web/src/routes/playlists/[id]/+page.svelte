@@ -15,7 +15,7 @@
   import StateStrip from '$lib/components/StateStrip.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
-  import { entryState, ownedOf, type EntryRole } from '$lib/playlists';
+  import { entryState, ownedOf, playlistOrigin, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
 
@@ -148,14 +148,18 @@
   // The line under the title, one part per fact; the hero puts the dots
   // between them.
   function factParts(value: NonNullable<typeof playlist>, entryList: PlaylistEntry[]) {
-    if (!value.ownerName && !value.importedAt) return ['Importing playlist…'];
-    const parts = [value.ownerName ? `by ${value.ownerName}` : 'Owner not recorded'];
-    parts.push(`${entryList.length} song${entryList.length === 1 ? '' : 's'}`);
+    const origin = playlistOrigin(value);
+    if (origin[0] === 'Importing playlist…') return origin;
+    const parts = [origin[0], `${entryList.length} song${entryList.length === 1 ? '' : 's'}`];
     const duration = totalDuration(entryList);
     if (duration) parts.push(duration);
-    if (value.importedAt) parts.push(`imported ${calendarDate(value.importedAt)}`);
-    return parts;
+    return [...parts, ...origin.slice(1)];
   }
+
+  // Rows are numbered by where they sit, not by the stored position: the
+  // weekly list drops entries and keeps the others' positions, which numbered
+  // it 2, 3, 4, 8. The unpaired list uses the same numbers so the two agree.
+  const rowNumber = $derived(new Map(entries.map((entry, index) => [entry.id, index + 1])));
 
   // The releases the list leads to, in list order, once each. The print lays
   // up to five side by side; a list that leads to one prints it large.
@@ -199,19 +203,23 @@
     {/if}
     Check player
   </Button>
-  <Button
-    variant="outline"
-    disabled={!playlist || playlist.source !== 'spotify' || $reimport.isPending}
-    onclick={() => $reimport.mutate()}
-    title={playlist?.source === 'spotify' ? 'Re-import from Spotify' : 'Only Spotify playlists can be re-imported'}
-  >
-    {#if $reimport.isPending}
-      <Icon name="busy" size="sm" class="animate-spin" />
-    {:else}
-      <Icon name="refresh" size="sm" />
-    {/if}
-    Re-import
-  </Button>
+  <!-- Only a Spotify list has somewhere to be imported from again, so the
+       others leave the button out rather than show it disabled for good. -->
+  {#if !playlist || playlist.source === 'spotify'}
+    <Button
+      variant="outline"
+      disabled={!playlist || $reimport.isPending}
+      onclick={() => $reimport.mutate()}
+      title="Re-import from Spotify"
+    >
+      {#if $reimport.isPending}
+        <Icon name="busy" size="sm" class="animate-spin" />
+      {:else}
+        <Icon name="refresh" size="sm" />
+      {/if}
+      Re-import
+    </Button>
+  {/if}
   <Button
     disabled={!playlist || $sendToPlayer.isPending}
     onclick={() => $sendToPlayer.mutate()}
@@ -358,7 +366,7 @@
                   class="flex flex-col gap-1 border-b border-line-thin px-4 py-2 last:border-b-0"
                 >
                   <div class="flex items-center gap-3">
-                    <span class="numeric text-meta text-ink-4">{file.position}</span>
+                    <span class="numeric text-meta text-ink-4">{rowNumber.get(file.entryId) ?? file.position}</span>
                     <span class="truncate text-body font-medium text-ink">{nameFor(file)}</span>
                     <span class="ml-auto shrink-0">
                       <StateTag tone={state.role === 'fail' ? 'broken' : 'neutral'}>{state.label}</StateTag>
@@ -408,7 +416,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each entries as entry (entry.id)}
+            {#each entries as entry, index (entry.id)}
               {@const state = entryState(entry)}
               <!-- A note and the entry it belongs to are one row, so the border
                    waits for whichever of the two is last. -->
@@ -417,7 +425,7 @@
                 id="entry-{entry.id}"
                 class="want-row scroll-mt-24 {state.note || addressable ? '' : 'border-b border-line-thin last:border-b-0'}"
               >
-                <td class="numeric px-4 py-1.5 text-meta text-ink-4">{entry.position}</td>
+                <td class="numeric px-4 py-1.5 text-meta text-ink-4">{index + 1}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
                   <span class="block truncate">{entry.title}</span>
                   <span class="block truncate text-meta font-normal text-ink-3 md:hidden">

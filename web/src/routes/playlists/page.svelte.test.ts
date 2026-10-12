@@ -114,6 +114,25 @@ describe('the playlist list', () => {
     expect(screen.queryByText(/unknown/)).toBeNull();
   });
 
+  it('says Schall made the weekly list instead of reading it as importing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              items: [playlist({ source: 'weekly', ownerName: '', importedAt: null })]
+            }),
+            { status: 200 }
+          )
+      )
+    );
+    opened();
+
+    expect(await screen.findByText('Made by Schall')).toBeTruthy();
+    expect(screen.queryByText('Importing playlist…')).toBeNull();
+  });
+
   it('shows the failure instead of "No playlists followed" when the request fails', async () => {
     vi.stubGlobal(
       'fetch',
