@@ -98,6 +98,16 @@ async function ask(query: string) {
   return field();
 }
 
+/**
+ * The pointer arriving at a place on screen. jsdom has no PointerEvent, and
+ * fireEvent falls back to an event with no coordinates, so this is a mouse
+ * event under the pointer's name.
+ */
+async function pointTo(target: Element, screenX: number, screenY: number) {
+  target.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, screenX, screenY }));
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 /** The row the arrow keys are on, which the field points at. */
 function marked() {
   return field().getAttribute('aria-activedescendant');
@@ -341,6 +351,45 @@ describe('CommandPalette', () => {
 
     expect(routed.goto).toHaveBeenCalledWith('/artists/a1');
     expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  // Results drawn under a pointer that has not moved make the browser report it
+  // over a row. Enter opened that row instead of the top one.
+  it('keeps the mark on the first result under a resting pointer', async () => {
+    mount();
+    await pointTo(document.body, 300, 300);
+    const box = await ask('radiohead');
+    await answered();
+
+    // What a browser sends when a row is drawn under a resting pointer: the
+    // pointer is over the row now, at the same place it already was.
+    const row = screen.getByRole('option', { name: /Kid A/ });
+    await fireEvent.mouseEnter(row);
+    await pointTo(row, 300, 300);
+    await fireEvent.keyDown(box, { key: 'Enter' });
+
+    expect(routed.goto).toHaveBeenCalledWith('/artists/a1');
+  });
+
+  it('moves the mark to the row the pointer moves over', async () => {
+    mount();
+    await pointTo(document.body, 300, 300);
+    await ask('radiohead');
+    await answered();
+
+    await pointTo(screen.getByRole('option', { name: /Kid A/ }), 302, 304);
+
+    expect(marked()).toBe('palette-releases-r1');
+  });
+
+  // An idle thing is in no state. A dash on its cover read as a badge nobody
+  // could explain.
+  it('draws no mark for a result in no state', async () => {
+    mount();
+    await ask('radiohead');
+    await answered();
+
+    expect(screen.queryByText('–')).toBeNull();
   });
 
   // The escape belonging to a category used to be a jump Tab made from

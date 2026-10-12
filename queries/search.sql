@@ -19,7 +19,14 @@
 -- above finds every artist whose name answers; only five of them are shown, and
 -- walking a discography for the rest to throw the answer away is the difference
 -- between five lateral joins and one per artist in the collection.
-WITH matched AS (
+WITH needle AS (
+    -- The query as a pattern that only matches where a word starts, so a
+    -- word start can be told from a match inside a word. Every character but
+    -- letters, digits and spaces is escaped, which a regular expression reads
+    -- as that character itself.
+    SELECT '\m' || regexp_replace(sqlc.arg('query')::text, '([^[:alnum:][:space:]])', '\\\1', 'g') AS word_start
+),
+matched AS (
     SELECT
         artists.id,
         artists.name,
@@ -31,10 +38,15 @@ WITH matched AS (
         -- cannot be written off a list that was already cut down to five.
         (count(*) OVER ())::bigint AS total_count,
         -- Kept as a column so the join below cannot lose the order the limit
-        -- was taken in.
-        (CASE WHEN lower(artists.name) = lower(sqlc.arg('query')::text)
-              THEN 0 ELSE 1 END)::int AS named_exactly
+        -- was taken in. The name exactly, then the name's start, then the start
+        -- of any word in it, then a match inside a word: "kend" puts Kendrick
+        -- Lamar before an artist whose name only contains "weekend".
+        (CASE WHEN lower(artists.name) = lower(sqlc.arg('query')::text) THEN 0
+              WHEN strpos(lower(artists.name), lower(sqlc.arg('query')::text)) = 1 THEN 1
+              WHEN concat_ws(' ', artists.name, artists.sort_name) ~* needle.word_start THEN 2
+              ELSE 3 END)::int AS rank
     FROM artists
+    CROSS JOIN needle
     -- A search box is not a pattern language, so % and _ have to be escaped to
     -- match themselves, and so does the escape character or it would eat the
     -- escapes put in beside it. One regexp pass over all three is what keeps
@@ -44,7 +56,7 @@ WITH matched AS (
           ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
           ESCAPE '\'
     ORDER BY
-        CASE WHEN lower(artists.name) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+        rank,
         artists.sort_name,
         artists.id
     LIMIT sqlc.arg('limit')
@@ -73,7 +85,7 @@ JOIN LATERAL (
     WHERE albums.artist_id = matched.id
       AND library_files.missing_at IS NULL
 ) AS holding ON true
-ORDER BY matched.named_exactly, matched.sort_name, matched.id;
+ORDER BY matched.rank, matched.sort_name, matched.id;
 
 -- name: SearchReleases :many
 -- Releases are searched over the title and the artist together, the pair the
@@ -96,12 +108,23 @@ SELECT
     (count(*) OVER ())::bigint AS total_count
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
+CROSS JOIN (
+    -- See the needle in SearchArtists above.
+    SELECT '\m' || regexp_replace(sqlc.arg('query')::text, '([^[:alnum:][:space:]])', '\\\1', 'g') AS word_start
+) AS needle
 -- Escaped the same way as SearchArtists above.
 WHERE concat_ws(' ', albums.title, artists.name)
       ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
       ESCAPE '\'
+-- Ranked the way SearchArtists ranks a name, with the title first: a word of
+-- the title starting with the query, then a word of the artist's name, then a
+-- match inside a word.
 ORDER BY
-    CASE WHEN lower(albums.title) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+    CASE WHEN lower(albums.title) = lower(sqlc.arg('query')::text) THEN 0
+         WHEN strpos(lower(albums.title), lower(sqlc.arg('query')::text)) = 1 THEN 1
+         WHEN albums.title ~* needle.word_start THEN 2
+         WHEN concat_ws(' ', artists.name, albums.title) ~* needle.word_start THEN 3
+         ELSE 4 END,
     artists.name,
     albums.release_date,
     albums.id
@@ -125,7 +148,11 @@ LIMIT sqlc.arg('limit');
 --
 -- Nothing here is evidence. This says the library has the recording somewhere;
 -- it never says which file is this track.
-WITH matched AS (
+WITH needle AS (
+    -- See the needle in SearchArtists above.
+    SELECT '\m' || regexp_replace(sqlc.arg('query')::text, '([^[:alnum:][:space:]])', '\\\1', 'g') AS word_start
+),
+matched AS (
     SELECT
         tracks.id,
         tracks.title,
@@ -139,17 +166,24 @@ WITH matched AS (
         artists.name AS artist_name,
         -- Counted over everything that answered; see SearchArtists above.
         (count(*) OVER ())::bigint AS total_count,
-        (CASE WHEN lower(tracks.title) = lower(sqlc.arg('query')::text)
-              THEN 0 ELSE 1 END)::int AS named_exactly
+        -- Ranked the way SearchReleases ranks, title first, then the
+        -- artist's name, then the three together.
+        (CASE WHEN lower(tracks.title) = lower(sqlc.arg('query')::text) THEN 0
+              WHEN strpos(lower(tracks.title), lower(sqlc.arg('query')::text)) = 1 THEN 1
+              WHEN tracks.title ~* needle.word_start THEN 2
+              WHEN artists.name ~* needle.word_start THEN 3
+              WHEN concat_ws(' ', artists.name, albums.title, tracks.title) ~* needle.word_start THEN 4
+              ELSE 5 END)::int AS rank
     FROM tracks
     JOIN albums ON albums.id = tracks.album_id
     JOIN artists ON artists.id = albums.artist_id
+    CROSS JOIN needle
     -- Escaped the same way as SearchArtists above.
     WHERE concat_ws(' ', artists.name, albums.title, tracks.title)
           ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
           ESCAPE '\'
     ORDER BY
-        CASE WHEN lower(tracks.title) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+        rank,
         artists.name,
         albums.title,
         tracks.disc_number,
@@ -203,7 +237,7 @@ JOIN LATERAL (
     )::boolean AS owned
 ) AS holding ON true
 ORDER BY
-    matched.named_exactly,
+    matched.rank,
     matched.artist_name,
     matched.album_title,
     matched.disc_number,
@@ -232,15 +266,22 @@ SELECT
     -- Counted over everything that answered; see SearchArtists above.
     (count(*) OVER ())::bigint AS total_count
 FROM library_files
+CROSS JOIN (
+    -- See the needle in SearchArtists above.
+    SELECT '\m' || regexp_replace(sqlc.arg('query')::text, '([^[:alnum:][:space:]])', '\\\1', 'g') AS word_start
+) AS needle
 -- Escaped the same way as SearchArtists above.
 WHERE concat_ws(' ', library_files.path, library_files.artist_tag,
                 library_files.album_tag, library_files.title_tag)
       ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
       ESCAPE '\'
--- A file the library still holds before one it has lost, then the order the
--- library list is read in.
+-- A file the library still holds before one it has lost, then a file where a
+-- word starts with the query before one that only contains it, then the order
+-- the library list is read in.
 ORDER BY
     library_files.missing_at NULLS FIRST,
+    CASE WHEN concat_ws(' ', library_files.path, library_files.artist_tag, library_files.album_tag, library_files.title_tag) ~* needle.word_start
+         THEN 0 ELSE 1 END,
     coalesce(library_files.artist_tag, ''),
     coalesce(library_files.album_tag, ''),
     coalesce(library_files.disc_number, 1),
@@ -265,12 +306,20 @@ SELECT
     -- Counted over everything that answered; see SearchArtists above.
     (count(*) OVER ())::bigint AS total_count
 FROM playlists
+CROSS JOIN (
+    -- See the needle in SearchArtists above.
+    SELECT '\m' || regexp_replace(sqlc.arg('query')::text, '([^[:alnum:][:space:]])', '\\\1', 'g') AS word_start
+) AS needle
 -- Escaped the same way as SearchArtists above.
 WHERE concat_ws(' ', playlists.name, playlists.owner_name)
       ILIKE '%' || regexp_replace(sqlc.arg('query')::text, '([\\%_])', '\\\1', 'g') || '%'
       ESCAPE '\'
 ORDER BY
-    CASE WHEN lower(playlists.name) = lower(sqlc.arg('query')::text) THEN 0 ELSE 1 END,
+    CASE WHEN lower(playlists.name) = lower(sqlc.arg('query')::text) THEN 0
+         WHEN strpos(lower(playlists.name), lower(sqlc.arg('query')::text)) = 1 THEN 1
+         WHEN playlists.name ~* needle.word_start THEN 2
+         WHEN concat_ws(' ', playlists.name, playlists.owner_name) ~* needle.word_start THEN 3
+         ELSE 4 END,
     playlists.name,
     playlists.id
 LIMIT sqlc.arg('limit');

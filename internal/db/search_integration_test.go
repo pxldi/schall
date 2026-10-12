@@ -350,6 +350,42 @@ func TestSearchRefusesAnUnboundedAnswer(t *testing.T) {
 	}
 }
 
+// A name is looked for by how it starts. "kend" typed for Kendrick Lamar used
+// to answer with "Hymn for the Weekend" first because it sorted earlier, so
+// every kind now puts the exact name, then the name's start, then the start of
+// any word in it before a match inside a word.
+func TestSearchRanksWordStartsAboveMatchesInsideAWord(t *testing.T) {
+	ctx, pool, queries := searchTestPool(t)
+	seedSearchable(t, ctx, pool, []string{
+		"A Weekend", "Bkend", "Zed (Kendall)", "Kendrick Lamar", "Kend",
+	})
+
+	results, err := queries.Search(ctx, SearchParams{Query: "kend", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search error = %v", err)
+	}
+	want := []string{"Kend", "Kendrick Lamar", "Zed (Kendall)", "A Weekend", "Bkend"}
+	for kind, got := range searchedNames(results) {
+		if kind == "files" {
+			// Files have no name of their own to rank by; the word start is
+			// what sorts them, and the rest is the library list's order.
+			if !slices.Equal(sorted(got[:3]), sorted(want[:3])) {
+				t.Errorf("files = %v, want %v first", got, want[:3])
+			}
+			continue
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s = %v, want %v", kind, got, want)
+		}
+	}
+}
+
+func sorted(values []string) []string {
+	out := slices.Clone(values)
+	slices.Sort(out)
+	return out
+}
+
 // searchedNames is what every kind answered with, by the one field all five
 // seeded kinds carry the query in.
 func searchedNames(results SearchResults) map[string][]string {

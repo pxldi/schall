@@ -125,8 +125,7 @@
     fail: 'bg-fail/14 text-fail'
   };
 
-  const markGlyphs: Record<Exclude<PaletteRole, 'ok'>, string> = {
-    idle: '–',
+  const markGlyphs: Record<Exclude<PaletteRole, 'ok' | 'idle'>, string> = {
     decide: '?',
     fail: '!'
   };
@@ -186,11 +185,31 @@
   }
 
   // The pointer moves the same one selection the arrow keys do; a palette with
-  // two marks on it would be saying enter goes to one of two places.
+  // two marks on it would be saying enter goes to one of two places. Only a
+  // pointer that moved counts. Results drawn under a resting pointer, or
+  // scrolled under it by the arrow keys, make the browser report the pointer
+  // over a new row without it having moved, and Enter then opened that row
+  // instead of the top one.
   function selectRow(id: string) {
+    if (!pointerMoved) return;
     const at = entries.findIndex((entry) => entry.id === id);
     if (at >= 0) selected = at;
   }
+
+  // Where the pointer last was, and whether the move being handled changed
+  // that. Read on the window before any row sees the event. Plain, not $state.
+  let pointerAt: { x: number; y: number } | null = null;
+  let pointerMoved = false;
+
+  $effect(() => {
+    const record = (event: PointerEvent) => {
+      pointerMoved =
+        pointerAt !== null && (pointerAt.x !== event.screenX || pointerAt.y !== event.screenY);
+      pointerAt = { x: event.screenX, y: event.screenY };
+    };
+    window.addEventListener('pointermove', record, { capture: true });
+    return () => window.removeEventListener('pointermove', record, { capture: true });
+  });
 
   function move(by: number) {
     if (entries.length === 0) return;
@@ -406,7 +425,7 @@
                         event.preventDefault();
                         leaveFor(row.href);
                       }}
-                      onmouseenter={() => selectRow(row.id)}
+                      onpointermove={() => selectRow(row.id)}
                     >
                       <span aria-hidden="true" class="relative size-9">
                         {#if row.cover}
@@ -418,28 +437,38 @@
                         {/if}
                         <!-- The thing's state, pinned to the picture's corner
                              on a solid chip so it reads on any cover, or
-                             standing alone where there is no picture. -->
-                        <span
-                          class={cn(
-                            'absolute rounded-row',
-                            row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
-                          )}
-                        >
+                             standing alone where there is no picture. Idle
+                             has no mark: it means nothing is owned, wrong or
+                             waiting, and a dash on every cover read as an
+                             unexplained badge. The line beside it says the
+                             rest. -->
+                        {#if row.role !== 'idle'}
                           <span
                             class={cn(
-                              'grid size-4 place-items-center rounded-row',
-                              markTones[row.role]
+                              'absolute rounded-row',
+                              row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
                             )}
                           >
-                            {#if row.role === 'ok'}
-                              <Icon name="check" size="sm" class="size-2.5" />
-                            {:else}
-                              <span class="text-micro font-bold leading-none"
-                                >{markGlyphs[row.role]}</span
-                              >
-                            {/if}
+                            <span
+                              class={cn(
+                                'grid size-4 place-items-center rounded-row',
+                                markTones[row.role]
+                              )}
+                            >
+                              {#if row.role === 'ok'}
+                                <Icon name="check" size="sm" class="size-2.5" />
+                              {:else}
+                                <span class="text-micro font-bold leading-none"
+                                  >{markGlyphs[row.role]}</span
+                                >
+                              {/if}
+                            </span>
                           </span>
-                        </span>
+                        {:else if !row.cover}
+                          <span class="grid size-9 place-items-center text-ink-4">
+                            <Icon name="track" size="sm" />
+                          </span>
+                        {/if}
                       </span>
                       <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="truncate text-body text-ink"
@@ -484,7 +513,7 @@
                         event.preventDefault();
                         leaveFor(href);
                       }}
-                      onmouseenter={() => selectRow(viewAllId)}
+                      onpointermove={() => selectRow(viewAllId)}
                     >
                       <span>View all results in {category.allLabel}</span>
                       <span class="font-mono text-micro text-ink-4">{category.total}</span>
@@ -549,9 +578,10 @@
       0 30px 80px rgb(0 0 0 / 0.55);
   }
 
-  /* A light dim, so the page stays visible around the glass. */
+  /* A light dim, so the page stays visible around the glass but steps back
+     behind it. At 0.28 the live audit could not tell it was there. */
   .palette-scrim {
-    background: rgb(5 6 8 / 0.28);
+    background: rgb(5 6 8 / 0.4);
   }
 
   /* The state badge sits on the picture, in a solid chip so it reads on any
