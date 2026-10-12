@@ -245,23 +245,47 @@ describe('paletteCategories', () => {
     expect(paletteCategories(missing, 'idioteque')[0].rows[0].role).toBe('idle');
   });
 
-  it('says how much of a followed artist the library holds', () => {
+  it('says how much of an artist the library holds', () => {
     const [artists] = paletteCategories(everything, 'radiohead');
 
-    expect(artists.rows[0].subtitle).toBe('Following · 9 releases owned');
+    expect(artists.rows[0].subtitle).toBe('9 releases owned');
   });
 
-  // For an artist the library merely has, being in the library is the whole
-  // sentence. It never reads "held": that word names a review decision state.
-  it('says of an unfollowed artist only that they are in the library', () => {
+  // Following is an icon on the photo, not a word in the line under the name.
+  it('marks a followed artist with the follow icon', () => {
+    const [artists] = paletteCategories(everything, 'radiohead');
+
+    expect(artists.rows[0].mark).toEqual({ icon: 'follow', label: 'Following' });
+  });
+
+  it('leaves an unfollowed artist unmarked', () => {
     const held = answer({
       artists: [{ ...artist, followed: false }],
       totals: { ...everything.totals, artists: 1 }
     });
 
-    expect(paletteCategories(held, 'radiohead')[0].rows[0].subtitle).toBe(
-      'In your library, not followed'
-    );
+    expect(paletteCategories(held, 'radiohead')[0].rows[0].mark).toBeUndefined();
+  });
+
+  // A wanted track used to keep the same mark as one nobody wanted.
+  it('marks a wanted track with the want icon', () => {
+    const wanted = answer({
+      tracks: [{ ...track, owned: false, wantStatus: 'pending' }],
+      totals: { ...everything.totals, tracks: 1 }
+    });
+
+    const [row] = paletteCategories(wanted, 'idioteque')[0].rows;
+    expect(row.role).toBe('busy');
+    expect(row.mark).toEqual({ icon: 'want', label: 'Wanted' });
+  });
+
+  it('marks a dismissed track as dismissed', () => {
+    const dismissed = answer({
+      tracks: [{ ...track, owned: false, wantStatus: 'not_wanted' }],
+      totals: { ...everything.totals, tracks: 1 }
+    });
+
+    expect(paletteCategories(dismissed, 'idioteque')[0].rows[0].mark?.label).toBe('Dismissed');
   });
 
   it('reads a file as its name over the folder it sits in', () => {

@@ -340,6 +340,41 @@ func TestSearchCallsATrackNothingHoldsUnowned(t *testing.T) {
 	}
 }
 
+// A track somebody wants says so in search, the way it does on its release
+// page. Before, search carried only owned, so a wanted track looked untouched.
+func TestSearchSaysATrackIsWanted(t *testing.T) {
+	ctx, pool, queries := searchTestPool(t)
+	seedSearchable(t, ctx, pool, []string{"Money Trees"})
+	recordingID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		UPDATE tracks SET musicbrainz_recording_id = $1 WHERE title = 'Money Trees'
+	`, recordingID); err != nil {
+		t.Fatalf("seed recording: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_targets (
+			id, origin, entry_artist, entry_title, musicbrainz_recording_id,
+			status, resolution_method, resolved_at, next_attempt_at, attempts
+		)
+		VALUES ($1, 'playlist', 'Kendrick Lamar', 'Money Trees', $2,
+		        'pending', 'isrc', now(), now(), 0)
+	`, uuid.New(), recordingID); err != nil {
+		t.Fatalf("seed want: %v", err)
+	}
+
+	results, err := queries.Search(ctx, SearchParams{Query: "money trees", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search error = %v", err)
+	}
+
+	if len(results.Tracks) != 1 {
+		t.Fatalf("tracks = %v, want the seeded track", results.Tracks)
+	}
+	if got := results.Tracks[0].WantStatus.String; got != "pending" {
+		t.Errorf("track want status = %q, want pending", got)
+	}
+}
+
 // An answer with no room in it is a caller that has not decided how much it
 // wants, not a request for everything.
 func TestSearchRefusesAnUnboundedAnswer(t *testing.T) {

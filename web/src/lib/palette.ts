@@ -1,4 +1,5 @@
-import type { GlobalSearchResults } from './api';
+import type { GlobalSearchResults, GlobalSearchTrack } from './api';
+import type { IconName } from './icons';
 import { formatBytes } from './utils';
 import { coverSrc } from './duoton/page.svelte';
 
@@ -9,9 +10,17 @@ import { coverSrc } from './duoton/page.svelte';
 // row's state mark is the state its own page would draw, read off the fields
 // the search already answers with — never a grading invented for the palette.
 
-// The four states a palette row can be in. 'busy' is absent on purpose: nothing
-// a search answers with is in progress.
-export type PaletteRole = 'ok' | 'idle' | 'decide' | 'fail';
+// The states a palette row can be in. 'busy' is a track somebody wants, which
+// Schall is looking for.
+export type PaletteRole = 'ok' | 'idle' | 'busy' | 'decide' | 'fail';
+
+// The icon a row's state is drawn with, and the word a screen reader says for
+// it. Absent for a row in no state: a mark on every cover that meant "nothing
+// to report" read as a badge nobody could explain.
+export interface PaletteMark {
+  icon: IconName;
+  label: string;
+}
 
 export interface PaletteRow {
   /** The element id the input points at with aria-activedescendant. */
@@ -21,6 +30,7 @@ export interface PaletteRow {
   /** The one figure the row's kind is counted in. Never a second title. */
   meta: string;
   role: PaletteRole;
+  mark?: PaletteMark;
   href: string;
   /** The picture the row is drawn with: a release's cover, or generated art
    * from the seed when there is none. Files have no picture. */
@@ -32,6 +42,8 @@ export type PaletteKey = 'artists' | 'releases' | 'tracks' | 'files' | 'playlist
 export interface PaletteCategory {
   key: PaletteKey;
   label: string;
+  /** The kind, drawn beside its heading. */
+  icon: IconName;
   rows: PaletteRow[];
   /** How many answered, which is more than `rows` whenever the limit bit. */
   total: number;
@@ -123,6 +135,7 @@ export function paletteCategories(
   const categories: PaletteCategory[] = [
     {
       key: 'artists',
+      icon: 'artist',
       label: headings.artists,
       total: results.totals.artists,
       rows: results.artists.map((artist) => ({
@@ -132,14 +145,17 @@ export function paletteCategories(
         // releases owned is said beside it only for a followed artist: for one
         // the library merely has, being in the library is the whole sentence.
         //
-        // Neither line says "held". That word is the review queue's name for a
+        // Following is the mark on the photo now, and an artist without it is
+        // one the library merely has, so the line only says what is owned.
+        //
+        // It never says "held". That word is the review queue's name for a
         // copy nobody could identify either way, and using it here for having
         // something meant one word carried two meanings, one of them a decision.
-        subtitle: artist.followed
-          ? joined('Following', artist.releaseCount > 0 && counted(artist.releaseCount, 'release') + ' owned')
-          : 'In your library, not followed',
+        subtitle:
+          artist.releaseCount > 0 ? counted(artist.releaseCount, 'release') + ' owned' : '',
         meta: counted(artist.fileCount, 'file'),
         role: artist.followed ? 'ok' : 'idle',
+        mark: artist.followed ? { icon: 'follow', label: 'Following' } : undefined,
         href: `/artists/${artist.id}`,
         // The photo the artists grid shows. An artist without one answers 404
         // and the cover falls back to the drawn stand-in, as before.
@@ -148,6 +164,7 @@ export function paletteCategories(
     },
     {
       key: 'releases',
+      icon: 'release',
       label: headings.releases,
       total: results.totals.releases,
       rows: results.releases.map((release) => ({
@@ -162,16 +179,16 @@ export function paletteCategories(
         // The rule the releases browser reads a release by: owned when every
         // track the library counts is here, and idle otherwise. A release that
         // is merely incomplete is not waiting on a decision.
-        role:
-          release.trackCount > 0 && release.ownedTrackCount === release.trackCount
-            ? 'ok'
-            : 'idle',
+        ...(release.trackCount > 0 && release.ownedTrackCount === release.trackCount
+          ? { role: 'ok' as const, mark: owned }
+          : { role: 'idle' as const }),
         href: `/releases/${release.id}`,
         cover: { src: coverSrc(release.id), seed: release.id }
       }))
     },
     {
       key: 'tracks',
+      icon: 'track',
       label: headings.tracks,
       total: results.totals.tracks,
       rows: results.tracks.map((track) => ({
@@ -179,7 +196,7 @@ export function paletteCategories(
         title: track.title,
         subtitle: joined(track.artistName, track.albumTitle),
         meta: minutesSeconds(track.durationMs),
-        role: track.owned ? 'ok' : 'idle',
+        ...trackState(track),
         // A catalogue track has no page; it is a line on the release.
         href: `/releases/${track.albumId}`,
         cover: { src: coverSrc(track.albumId), seed: track.albumId }
@@ -187,6 +204,7 @@ export function paletteCategories(
     },
     {
       key: 'files',
+      icon: 'library',
       label: headings.files,
       total: results.totals.files,
       rows: results.files.map((file) => {
@@ -196,13 +214,14 @@ export function paletteCategories(
           title: name,
           subtitle: folder,
           meta: formatBytes(file.sizeBytes),
-          role: fileRole(file.matchStatus, file.missing),
+          ...fileState(file.matchStatus, file.missing),
           href: `/library?view=files&q=${encodeURIComponent(file.path)}`
         };
       })
     },
     {
       key: 'playlists',
+      icon: 'playlist',
       label: headings.playlists,
       total: results.totals.playlists,
       rows: results.playlists.map((playlist) => ({
@@ -221,7 +240,7 @@ export function paletteCategories(
               ),
         meta: counted(playlist.trackCount, 'track'),
         // A playlist is not in a state. Nothing is waiting on it and nothing is
-        // wrong with it, so it takes the mark for having none.
+        // wrong with it, so it has no mark.
         role: 'idle',
         href: `/playlists/${playlist.id}`,
         cover: { seed: playlist.id }
@@ -242,14 +261,34 @@ export function paletteCategories(
     );
 }
 
+const owned: PaletteMark = { icon: 'check', label: 'Owned' };
+
+// A track's state, read the way its release page reads it: owned when the
+// library holds the recording, then the want that governs it. Wanted carries
+// the want button's own icon.
+function trackState(track: GlobalSearchTrack): { role: PaletteRole; mark?: PaletteMark } {
+  if (track.owned || track.wantStatus === 'acquired') return { role: 'ok', mark: owned };
+  if (track.wantStatus === 'not_wanted') {
+    return { role: 'idle', mark: { icon: 'dismiss', label: 'Dismissed' } };
+  }
+  if (track.wantStatus) return { role: 'busy', mark: { icon: 'want', label: 'Wanted' } };
+  return { role: 'idle' };
+}
+
 // A file's state, said the way the library list says it, out of the two fields
 // a search result carries. A file the last scan could not find is the one that
-// leads nowhere, so it is the one that reads as a failure.
-function fileRole(matchStatus: string, missing: boolean): PaletteRole {
-  if (missing) return 'fail';
-  if (matchStatus === 'matched') return 'ok';
-  if (matchStatus === 'ambiguous') return 'decide';
-  return 'idle';
+// leads nowhere, so it is the one that reads as a failure. Files have no
+// picture, so even an unmatched one has a mark to stand in its place.
+function fileState(
+  matchStatus: string,
+  missing: boolean
+): { role: PaletteRole; mark: PaletteMark } {
+  if (missing) return { role: 'fail', mark: { icon: 'close', label: 'Missing' } };
+  if (matchStatus === 'matched') return { role: 'ok', mark: { icon: 'check', label: 'Matched' } };
+  if (matchStatus === 'ambiguous') {
+    return { role: 'decide', mark: { icon: 'pause', label: 'Needs a decision' } };
+  }
+  return { role: 'idle', mark: { icon: 'file-unknown', label: 'Not matched' } };
 }
 
 function capitalised(value: string) {

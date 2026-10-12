@@ -76,6 +76,9 @@ type searchTrackResult struct {
 	// the rest of Schall reads it by. It never says which file, and no caller
 	// may read it as a match.
 	Owned bool `json:"owned"`
+	// WantStatus is the status of the want that governs this track, as the
+	// release page reads it, or absent when nothing wants it.
+	WantStatus string `json:"wantStatus,omitempty"`
 }
 
 type searchFileResult struct {
@@ -221,7 +224,7 @@ func searchResults(
 			ID: row.ID, Title: row.Title, DiscNumber: row.DiscNumber,
 			TrackNumber: int32Pointer(row.TrackNumber), DurationMs: int32Pointer(row.DurationMs),
 			AlbumID: row.AlbumID, AlbumTitle: row.AlbumTitle, ArtistID: row.ArtistID,
-			ArtistName: row.ArtistName, Owned: row.Owned,
+			ArtistName: row.ArtistName, Owned: row.Owned, WantStatus: row.WantStatus.String,
 		})
 	}
 	for _, row := range results.Files {

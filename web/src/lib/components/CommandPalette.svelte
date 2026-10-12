@@ -121,13 +121,9 @@
   const markTones: Record<PaletteRole, string> = {
     ok: 'bg-ok/14 text-ok',
     idle: 'bg-idle/14 text-idle',
+    busy: 'bg-busy/14 text-busy',
     decide: 'bg-decide/14 text-decide',
     fail: 'bg-fail/14 text-fail'
-  };
-
-  const markGlyphs: Record<Exclude<PaletteRole, 'ok' | 'idle'>, string> = {
-    decide: '?',
-    fail: '!'
   };
 
   // The panel drops 8px into place while it fades in, and lifts away faster
@@ -408,8 +404,8 @@
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
                   <div class="mb-0.5 border-b border-line-thin px-[1.125rem] pb-1.5">
                     <span
-                      class="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-3"
-                      >{category.label}</span
+                      class="inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase leading-none tracking-[0.08em] text-ink-3"
+                      ><Icon name={category.icon} size={12} />{category.label}</span
                     >
                   </div>
 
@@ -435,38 +431,30 @@
                             class="size-9 rounded-[6px] object-cover"
                           />
                         {/if}
-                        <!-- The thing's state, pinned to the picture's corner
-                             on a solid chip so it reads on any cover, or
-                             standing alone where there is no picture. Idle
-                             has no mark: it means nothing is owned, wrong or
-                             waiting, and a dash on every cover read as an
-                             unexplained badge. The line beside it says the
-                             rest. -->
-                        {#if row.role !== 'idle'}
+                        <!-- The thing's state as an icon, pinned to the
+                             picture's corner on a solid chip so it reads on
+                             any cover, or standing alone where there is no
+                             picture. A row in no state has no mark. -->
+                        {#if row.mark}
                           <span
                             class={cn(
                               'absolute rounded-row',
-                              row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-4'
+                              row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-5'
                             )}
                           >
                             <span
                               class={cn(
-                                'grid size-4 place-items-center rounded-row',
+                                'grid place-items-center rounded-row [--plate:currentColor]',
+                                row.cover ? 'size-4' : 'size-5',
                                 markTones[row.role]
                               )}
                             >
-                              {#if row.role === 'ok'}
-                                <Icon name="check" size="sm" class="size-2.5" />
-                              {:else}
-                                <span class="text-micro font-bold leading-none"
-                                  >{markGlyphs[row.role]}</span
-                                >
-                              {/if}
+                              <Icon
+                                name={row.mark.icon}
+                                size="sm"
+                                class={row.cover ? 'size-2.5' : 'size-3.5'}
+                              />
                             </span>
-                          </span>
-                        {:else if !row.cover}
-                          <span class="grid size-9 place-items-center text-ink-4">
-                            <Icon name="track" size="sm" />
                           </span>
                         {/if}
                       </span>
@@ -474,7 +462,8 @@
                         <span class="truncate text-body text-ink"
                           >{#each highlight(row.title, query) as piece, part (part)}<span
                               class={cn(piece.hit && 'font-semibold text-ink')}>{piece.text}</span
-                            >{/each}</span
+                            >{/each}{#if row.mark}<span class="sr-only">, {row.mark.label}</span
+                            >{/if}</span
                         >
                         {#if row.subtitle}
                           <span class="truncate text-meta text-ink-3"

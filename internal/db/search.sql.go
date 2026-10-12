@@ -162,6 +162,10 @@ matched AS (
         albums.title AS album_title,
         artists.id AS artist_id,
         artists.name AS artist_name,
+        -- The want that governs this track, read the way the release page
+        -- reads it (ListAlbumTracks): at most one target per recording outside
+        -- 'superseded', so this join cannot fan a track out or change the count.
+        want.status AS want_status,
         -- Counted over everything that answered; see SearchArtists above.
         (count(*) OVER ())::bigint AS total_count,
         -- Ranked the way SearchReleases ranks, title first, then the
@@ -176,6 +180,10 @@ matched AS (
     JOIN albums ON albums.id = tracks.album_id
     JOIN artists ON artists.id = albums.artist_id
     CROSS JOIN needle
+    LEFT JOIN acquisition_targets AS want
+        ON tracks.musicbrainz_recording_id IS NOT NULL
+       AND want.musicbrainz_recording_id = tracks.musicbrainz_recording_id
+       AND want.status <> 'superseded'
     -- Escaped the same way as SearchArtists above.
     WHERE concat_ws(' ', artists.name, albums.title, tracks.title)
           ILIKE '%' || regexp_replace($1::text, '([\\%_])', '\\\1', 'g') || '%'
@@ -200,6 +208,7 @@ SELECT
     matched.album_title,
     matched.artist_id,
     matched.artist_name,
+    matched.want_status,
     matched.total_count,
     holding.owned
 FROM matched
@@ -259,6 +268,7 @@ type SearchCatalogueTracksRow struct {
 	AlbumTitle  string      `json:"album_title"`
 	ArtistID    uuid.UUID   `json:"artist_id"`
 	ArtistName  string      `json:"artist_name"`
+	WantStatus  pgtype.Text `json:"want_status"`
 	TotalCount  int64       `json:"total_count"`
 	Owned       bool        `json:"owned"`
 }
@@ -299,6 +309,7 @@ func (q *Queries) SearchCatalogueTracks(ctx context.Context, arg SearchCatalogue
 			&i.AlbumTitle,
 			&i.ArtistID,
 			&i.ArtistName,
+			&i.WantStatus,
 			&i.TotalCount,
 			&i.Owned,
 		); err != nil {

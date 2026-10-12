@@ -636,6 +636,9 @@ export interface GlobalSearchTrack {
    * proven on a file that is mapped onto nothing, or carried by another
    * release's track. It never says which file is this track. */
   owned: boolean;
+  /** The status of the want that governs this track, as the release page
+   * reads it. Absent when nothing wants it. */
+  wantStatus?: string;
 }
 
 export interface GlobalSearchFile {

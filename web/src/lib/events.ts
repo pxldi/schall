@@ -55,7 +55,15 @@ const invalidations: Record<string, string[][]> = {
   // topic reaches all three. It is also every pass that defers a want because
   // the download source is not logged in (#495), which is what keeps the
   // dashboard's banner about it from waiting on the next unrelated refetch.
-  acquisitions: [['playlists'], ['review-queue'], ['wants'], ['dashboard'], ...queue]
+  // Search marks a wanted track, so it hears about wants too.
+  acquisitions: [
+    ['playlists'],
+    ['review-queue'],
+    ['wants'],
+    ['dashboard'],
+    ['global-search'],
+    ...queue
+  ]
 };
 
 // connectEvents holds a server-sent event stream open and invalidates the views
