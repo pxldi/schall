@@ -251,3 +251,88 @@ describe('a 401 on the artist list', () => {
     ).toBeTruthy();
   });
 });
+
+describe('a long artist list', () => {
+  // jsdom lays nothing out. This stands in for the browser: like a real
+  // observer it reports once on every observe, and `atTheEnd` is the reader
+  // having scrolled to the bottom of the list.
+  let atTheEnd = false;
+  let report: (() => void) | undefined;
+  class FakeIntersectionObserver {
+    constructor(private answer: (entries: IntersectionObserverEntry[]) => void) {}
+    observe() {
+      report = () => this.answer([{ isIntersecting: atTheEnd } as IntersectionObserverEntry]);
+      queueMicrotask(report);
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+
+  function artistsAnswering(count: number) {
+    const items = Array.from({ length: count }, (_, index) => ({
+      id: `a${index}`,
+      musicbrainzId: null,
+      name: `Artist ${index}`,
+      sortName: `Artist ${index}`,
+      followed: true,
+      followedAt: '2026-01-01T00:00:00Z',
+      lastRefreshedAt: '2026-01-01T00:00:00Z',
+      refreshStatus: 'completed',
+      releaseCount: 1,
+      ownedReleaseCount: 1,
+      trackCount: 1,
+      ownedTrackCount: 1,
+      inFlightCount: 0,
+      reviewCount: 0,
+      needsAttention: false
+    }));
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+      if (url.pathname === '/api/v1/artists') {
+        return body({
+          items,
+          total: count,
+          limit: 0,
+          offset: 0,
+          followedCount: count,
+          heldCount: 0,
+          allCount: count,
+          incompleteCount: 0,
+          completeCount: count,
+          attentionCount: 0,
+          refreshingCount: 0
+        });
+      }
+      return body({});
+    });
+  }
+
+  it('draws the first cards before the reader scrolls', async () => {
+    pageState.url = new URL('http://localhost/artists?scope=followed');
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+    vi.stubGlobal('fetch', artistsAnswering(300));
+    atTheEnd = false;
+
+    opened();
+
+    await screen.findByText('Artist 0');
+    expect(screen.queryByText('Artist 119')).not.toBeNull();
+    expect(screen.queryByText('Artist 120')).toBeNull();
+  });
+
+  it('draws the rest as the reader nears the end', async () => {
+    pageState.url = new URL('http://localhost/artists?scope=held');
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+    vi.stubGlobal('fetch', artistsAnswering(300));
+    atTheEnd = false;
+
+    opened();
+
+    await screen.findByText('Artist 0');
+    atTheEnd = true;
+    report?.();
+
+    expect(await screen.findByText('Artist 299')).not.toBeNull();
+  });
+});
