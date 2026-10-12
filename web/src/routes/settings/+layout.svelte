@@ -29,8 +29,8 @@
   let { children }: { children: Snippet } = $props();
 
   // Settings has no music of its own, so it is printed from the newest
-  // arrivals: a short strip, since the page is a form and not a poster.
-  useNewestPrint({ height: 12, count: 4 });
+  // arrivals, at the height every top-bar destination prints at.
+  useNewestPrint({ height: 15, count: 4 });
 
   const current = $derived(
     categories.find((category) => page.url.pathname.startsWith(category.href))
@@ -39,7 +39,7 @@
 
 <svelte:head><title>{current?.name ?? 'Settings'} · Schall</title></svelte:head>
 
-<Hero title="Settings" size="m" />
+<Hero title="Settings" section />
 
 <!-- Each category page carries a hidden h2 naming itself, under the Hero's h1. -->
 <div class="flex flex-row gap-10 px-4 pb-10 pt-6 sm:px-6">

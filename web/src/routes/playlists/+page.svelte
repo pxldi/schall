@@ -140,7 +140,7 @@
 
 <!-- The page's name over a strip of its playlists' covers, with the ways to
      follow a new one beside it. -->
-<Hero title="Playlists" size="xl">
+<Hero title="Playlists" section>
   {#snippet actions()}
     <Button type="button" variant="outline" onclick={() => (fileModalOpen = true)}>
       <Icon name="upload" size="sm" />

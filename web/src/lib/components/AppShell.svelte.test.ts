@@ -75,6 +75,15 @@ describe('AppShell', () => {
     }
   });
 
+  it('names each destination by a tooltip, for the width where only its icon shows', () => {
+    opened();
+
+    const top = within(screen.getByRole('navigation', { name: 'Sections' }));
+    for (const label of seven) {
+      expect(top.getByRole('link', { name: label }).getAttribute('title')).toBe(label);
+    }
+  });
+
   it('draws the top bar as the only navigation', () => {
     opened();
 

@@ -3,15 +3,15 @@
   import { page } from '$app/state';
   import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
+  import type { IconName } from '$lib/icons';
   import Icon from './Icon.svelte';
   import Print from './Print.svelte';
 
   let { children } = $props();
 
   // The chrome is a top bar sitting on the page's print (ADR Duoton): the
-  // wordmark, the seven destinations as pills, and search pushed right. Every
-  // destination prints its own name, so there are no tooltips, and there are
-  // no counts or state marks on it: what is waiting is read on the Overview and
+  // wordmark, the seven destinations as pills, and search pushed right. There
+  // are no counts or state marks on it: what is waiting is read on the Overview and
   // on the pages themselves. There is no phone form; the phone is served by the
   // native app, decided 2026-09-20.
   //
@@ -19,14 +19,17 @@
   // its own <h1>, visible or not. `<main>` is the landing spot for the skip
   // link, the first focusable element in the document.
 
-  const destinations = [
-    { href: '/', label: 'Overview' },
-    { href: '/artists', label: 'Artists' },
-    { href: '/playlists', label: 'Playlists' },
-    { href: '/downloads?view=open', label: 'Downloads' },
-    { href: '/review', label: 'Review' },
-    { href: '/library', label: 'Library' },
-    { href: '/settings/jobs', label: 'Settings' }
+  // Each destination has a Misprint icon. Below 1280px the bar shows the
+  // icons alone, named by a tooltip and by the link itself, so the seven still
+  // fit on one line.
+  const destinations: { href: string; label: string; icon: IconName }[] = [
+    { href: '/', label: 'Overview', icon: 'listen' },
+    { href: '/artists', label: 'Artists', icon: 'artists' },
+    { href: '/playlists', label: 'Playlists', icon: 'playlist' },
+    { href: '/downloads?view=open', label: 'Downloads', icon: 'download' },
+    { href: '/review', label: 'Review', icon: 'checklist' },
+    { href: '/library', label: 'Library', icon: 'library' },
+    { href: '/settings/jobs', label: 'Settings', icon: 'settings' }
   ];
 
   // A destination is its first segment and nothing more. Two of the seven
@@ -113,8 +116,10 @@
           class:active
           aria-current={active ? 'page' : undefined}
           class="topbar-item whitespace-nowrap"
+          title={destination.label}
         >
-          {destination.label}
+          <Icon name={destination.icon} size="sm" />
+          <span class="max-xl:sr-only">{destination.label}</span>
         </a>
       {/each}
     </nav>

@@ -823,6 +823,8 @@ a {
   }
 
   .topbar-item.active {
+    /* An icon on the light ink prints its plate in its own colour (SPEC). */
+    --plate: currentColor;
     background: var(--color-duo-light);
     color: var(--color-duo-dark);
   }
