@@ -51,13 +51,22 @@ type JudgedAgain struct {
 // same call a copy gets the moment it arrives, so there is one set of rules and
 // this pass cannot be looser than the live path. It only chooses what to offer.
 //
-// It runs once and stops. The list is read at the start and worked through, so
-// the pass ends whatever it finds, and a want whose copies all stay questions is
-// not tried again until somebody asks for another pass.
-func (importer *Importer) JudgeAgain(ctx context.Context) error {
-	_, err := importer.judgeAgain(ctx)
-	return err
+// A pass is worked in parts of judgeAgainWants wants, in want id order, and
+// each part returns where it stopped. A copy that stays a question stays on the
+// list, so a pass that started over after every restart would judge the same
+// first wants again and never reach the rest. The caller carries the place
+// instead. The pass ends after the last want, and a want whose copies all stay
+// questions is not tried again until somebody asks for another pass.
+func (importer *Importer) JudgeAgain(ctx context.Context, after uuid.UUID) (uuid.UUID, bool, error) {
+	_, next, more, err := importer.judgeAgainPart(ctx, after)
+	return next, more, err
 }
+
+// judgeAgainWants is how many wants one part of a pass judges. Each copy is a
+// decode and an AcoustID lookup, so 20 wants is a few minutes of work: short
+// enough to finish between restarts and to let the lane's other jobs in between
+// parts.
+const judgeAgainWants = 20
 
 // JudgeCreditRefusalsAgain puts the copies refused on the artist tag alone
 // through validation a second time.
@@ -92,11 +101,51 @@ func (importer *Importer) askAcoustIDAgain(ctx context.Context) (JudgedAgain, er
 // reports itself to the log, which is where somebody who asked for it looks;
 // the numbers are returned so a test can read what one pass did.
 func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
-	copies, err := importer.store.CopiesToJudgeAgain(ctx)
-	if err != nil {
-		return JudgedAgain{}, err
+	var total JudgedAgain
+	after := uuid.Nil
+	for {
+		part, next, more, err := importer.judgeAgainPart(ctx, after)
+		total.Offered += part.Offered
+		total.Judged += part.Judged
+		total.Missing += part.Missing
+		total.Answered += part.Answered
+		if err != nil || !more {
+			return total, err
+		}
+		after = next
 	}
-	return importer.judgeCopies(ctx, copies)
+}
+
+// judgeAgainPart judges the copies of the next judgeAgainWants wants after the
+// one given. It answers the last want it took and whether any want is left.
+func (importer *Importer) judgeAgainPart(
+	ctx context.Context, after uuid.UUID,
+) (JudgedAgain, uuid.UUID, bool, error) {
+	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, after)
+	if err != nil {
+		return JudgedAgain{}, after, false, err
+	}
+	part, more := firstWants(copies, judgeAgainWants)
+	if len(part) == 0 {
+		return JudgedAgain{}, after, false, nil
+	}
+	result, err := importer.judgeCopies(ctx, part)
+	return result, part[len(part)-1].AcquisitionTargetID, more, err
+}
+
+// firstWants cuts a list read in want order after its first wants wants, and
+// says whether anything was left behind the cut.
+func firstWants(copies []db.JudgeAgainRow, wants int) ([]db.JudgeAgainRow, bool) {
+	seen := 0
+	for index, copied := range copies {
+		if index == 0 || copied.AcquisitionTargetID != copies[index-1].AcquisitionTargetID {
+			if seen == wants {
+				return copies[:index], true
+			}
+			seen++
+		}
+	}
+	return copies, false
 }
 
 // judgeCreditRefusalsAgain is JudgeCreditRefusalsAgain with the same tally.

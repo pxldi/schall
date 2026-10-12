@@ -483,16 +483,16 @@ func TestTheAnchorLaneClaimsOnlyTheSweep(t *testing.T) {
 	}
 }
 
-// A pressed re-judge goes ahead of the per-want judges the anchor sweep queues.
-func TestTheJudgingLaneClaimsOnlyJudgesAndPressesGoFirst(t *testing.T) {
+// The judging lane claims its judges and nothing else.
+func TestTheJudgingLaneClaimsOnlyJudges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	pool := dbtest.Setup(t)
 	seedJobs(ctx, t, pool,
-		JudgeWantCopies, JudgeCreditRefusals, JudgeCopiesAgain, SweepPreviewAnchors)
+		JudgeCopiesAgain, JudgeWantCopies, JudgeCreditRefusals, SweepPreviewAnchors)
 
 	repository := NewRepository(pool)
-	for _, want := range []string{JudgeCopiesAgain, JudgeWantCopies, JudgeCreditRefusals} {
+	for _, want := range []string{JudgeWantCopies, JudgeCreditRefusals, JudgeCopiesAgain} {
 		job, err := repository.Claim(ctx, Judging())
 		if err != nil {
 			t.Fatalf("Claim() error = %v", err)
@@ -503,6 +503,24 @@ func TestTheJudgingLaneClaimsOnlyJudgesAndPressesGoFirst(t *testing.T) {
 	}
 	if _, err := repository.Claim(ctx, Judging()); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("fourth claim error = %v, want no non-judge kind", err)
+	}
+}
+
+// A part of the pass over every want waits its turn behind a library decode
+// queued before it. Live, a pass that went first held twelve decodes for more
+// than two hours.
+func TestAPartOfTheJudgeAgainPassWaitsBehindAnEarlierDecode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedJobs(ctx, t, pool, FingerprintLibraryWitness, JudgeCopiesAgain)
+
+	job, err := NewRepository(pool).Claim(ctx, Judging())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if job.Kind != FingerprintLibraryWitness {
+		t.Fatalf("kind = %q, want the decode queued first", job.Kind)
 	}
 }
 

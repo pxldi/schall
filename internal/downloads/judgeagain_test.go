@@ -352,3 +352,52 @@ func TestANewlyAnchoredWantIsAskedToLookAgain(t *testing.T) {
 		t.Fatalf("rearmed = %v, want the judged want asked to look again", store.rearmed)
 	}
 }
+
+// A pass is worked in parts of judgeAgainWants wants. A part that leaves wants
+// behind names the last want it took, and the next part starts after it, so a
+// restart between parts does not judge the first wants again.
+func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
+	store, inbox, libraryPath, _ := fetchedCandidate(t, 3)
+	store.answeredWants = map[uuid.UUID]bool{}
+	for range judgeAgainWants + 1 {
+		row := offered(store, uuid.New())
+		row.AcquisitionTargetID = uuid.New()
+		store.answeredWants[row.AcquisitionTargetID] = true
+		store.judgeAgain = append(store.judgeAgain, row)
+	}
+	importer := candidateImporter(store, inbox, libraryPath, nil,
+		&fakeVerifier{verification: identity.Verification{}})
+
+	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil)
+	if err != nil {
+		t.Fatalf("judgeAgainPart() error = %v", err)
+	}
+	if first.Answered != judgeAgainWants || !more {
+		t.Fatalf("first part = %+v, more = %v, want %d wants and one left",
+			first, more, judgeAgainWants)
+	}
+	second, _, more, err := importer.judgeAgainPart(context.Background(), next)
+	if err != nil {
+		t.Fatalf("judgeAgainPart() error = %v", err)
+	}
+	if second.Answered != 1 || more {
+		t.Fatalf("second part = %+v, more = %v, want the one want left and the pass over",
+			second, more)
+	}
+}
+
+// Every copy of a want lands in the same part, because the judges are serial
+// per want and a want split across parts could take two copies.
+func TestAPartNeverSplitsAWantsCopies(t *testing.T) {
+	first, second := uuid.New(), uuid.New()
+	copies := []db.JudgeAgainRow{
+		{AcquisitionTargetID: first}, {AcquisitionTargetID: first},
+		{AcquisitionTargetID: second}, {AcquisitionTargetID: second},
+	}
+
+	part, more := firstWants(copies, 1)
+
+	if len(part) != 2 || !more {
+		t.Fatalf("part = %d copies, more = %v, want both copies of the first want", len(part), more)
+	}
+}
