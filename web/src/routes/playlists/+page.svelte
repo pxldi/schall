@@ -20,7 +20,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import WeeklyPlaylist from '$lib/components/WeeklyPlaylist.svelte';
 
-  const COLUMNS = 'grid-cols-[2.5rem_minmax(0,1fr)_180px_300px]';
+  const COLUMNS = 'grid-cols-[2.5rem_minmax(0,1fr)_max-content_max-content]';
 
   const queryClient = useQueryClient();
 
@@ -241,18 +241,22 @@
           <p class="text-body text-ink-3">Paste a Spotify link or import a file to follow one.</p>
         </EmptyPanel>
       {:else}
-        <div class="flex flex-col">
-          <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3`}>
+        <!-- One grid for the header and every row, so the owned and action
+             columns size to the widest row and line up down the list. A fixed
+             action column let a Spotify row's three buttons spill left over
+             its owned count. -->
+        <div class={`grid ${COLUMNS} gap-x-4`}>
+          <div class="col-span-full grid grid-cols-subgrid border-b border-line-thin px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
             <span class="flex h-7 items-center"></span>
             <span class="flex h-7 items-center">Playlist</span>
             <span class="flex h-7 items-center">Owned</span>
             <span class="flex h-7 items-center"></span>
           </div>
 
-          <ul class="flex flex-col divide-y divide-line-thin">
+          <ul class="col-span-full grid grid-cols-subgrid divide-y divide-line-thin">
             {#each items as playlist (playlist.id)}
               {@const cover = coverOf(playlist)}
-              <li class={`grid ${COLUMNS} min-h-[52px] items-center gap-x-4 px-1 py-2`}>
+              <li class="col-span-full grid min-h-[52px] grid-cols-subgrid items-center px-1 py-2">
                 <Cover
                   src={cover.src ?? undefined}
                   seed={cover.seed}

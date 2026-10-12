@@ -222,18 +222,48 @@
   function startsSearch(event: KeyboardEvent): boolean {
     if (event.defaultPrevented || event.isComposing) return false;
     if (event.metaKey || event.ctrlKey || event.altKey) return false;
-    if (event.key.length !== 1 || event.key.trim() === '') return false;
+    // A space opens nothing, but once the palette is open or opening it is
+    // part of the query like any other key.
+    if (event.key.length !== 1) return false;
+    if (event.key.trim() === '' && !open && waitingKeys === 0) return false;
     const target = event.target;
     if (target instanceof Element && target.closest(typingTargets)) return false;
     return document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]') === null;
   }
 
+  // Keys that have been pressed but not yet read. Plain, not $state.
+  let waitingKeys = 0;
+
+  // Every key typed while the palette opens is kept, in order. Each key waits
+  // its own task, and keys pressed before the first of those ran used to
+  // overwrite one another, while keys pressed after the palette opened but
+  // before the field held focus were dropped: "souly" typed fast arrived as "s".
   function onWindowKeydown(event: KeyboardEvent) {
-    if (open || !startsSearch(event)) return;
+    if (!startsSearch(event)) return;
+    if (open) {
+      // The field is not focused yet, or focus moved to a result: the key is
+      // still meant for the query.
+      event.preventDefault();
+      append(event.key);
+      return;
+    }
+    waitingKeys++;
     setTimeout(() => {
-      if (open || event.defaultPrevented) return;
-      typed = event.key;
-      summon();
+      waitingKeys--;
+      if (event.defaultPrevented) return;
+      if (open) append(event.key);
+      else if (event.key.trim() !== '') {
+        typed += event.key;
+        summon();
+      }
+    });
+  }
+
+  function append(key: string) {
+    typed += key;
+    queueMicrotask(() => {
+      box?.focus();
+      box?.setSelectionRange(typed.length, typed.length);
     });
   }
 

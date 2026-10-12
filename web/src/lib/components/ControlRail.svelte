@@ -22,16 +22,7 @@
   // each other. The inner one passes `sticky={false}` and scrolls away, which is
   // right anyway: the question it answers is narrower than the one above it.
 
-  // `width` is 'full' everywhere except the one page whose table sits in
-  // `layout-width` below it: at 1440px and wider, a full-width rail and a
-  // centred, capped table do not share a left edge. 'layout' wraps the same
-  // children in that table's own box, so the two line up at every width.
-  let {
-    children,
-    label,
-    sticky = true,
-    width = 'full'
-  }: { children: Snippet; label?: string; sticky?: boolean; width?: 'full' | 'layout' } =
+  let { children, label, sticky = true }: { children: Snippet; label?: string; sticky?: boolean } =
     $props();
 </script>
 
@@ -40,11 +31,7 @@
   role={label ? 'group' : undefined}
   aria-label={label}
 >
-  <div
-    class="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5 {width === 'layout'
-      ? 'layout-width px-4 sm:px-6'
-      : 'px-4 sm:px-6'}"
-  >
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
     {@render children()}
   </div>
 </div>

@@ -568,7 +568,7 @@
     />
   </ControlRail>
 
-  <div class="layout-width flex flex-col gap-4 px-4 sm:px-6 py-5">
+  <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
     {#if $downloads.isError}
       <!-- It is the list that failed, so the failure stands where the list
            would have been rather than above it. -->
@@ -590,7 +590,9 @@
       </div>
         {/snippet}
     {#if filteredItems.length}
-      <div class="flex flex-col">
+      <div
+        class="flex flex-col md:grid md:grid-cols-[1rem_2.5rem_minmax(0,1fr)_max-content_max-content_max-content] md:gap-x-3"
+      >
         {#each filteredItems as item (item.id)}
           {@const role = stateRole(item)}
           {@const mark = dotRole(item)}
@@ -598,18 +600,16 @@
           {@const failures = rowErrors[item.id] ?? []}
           {@const showProgress = item.status === 'started' && !waiting(item)}
           <article
-            class="border-b border-line-thin last:border-b-0 {item.status === 'cancelled'
+            class="border-b border-line-thin last:border-b-0 md:col-span-full md:grid md:grid-cols-subgrid md:[&>*]:col-span-full {item.status === 'cancelled'
               ? 'opacity-55'
               : ''}"
           >
-            <!-- Every column after the name is a fixed width. Each row is its
-                 own grid, so an `auto` actions column resolved the columns
-                 differently per row — `Retry 1 file` is wider than `Cancel`,
-                 which pushed that row's chip and figure left of the row above
-                 and left a state column that wandered down the page. Only the
-                 name flexes now, so the other four line up. -->
+            <!-- The row takes its columns from the list's grid, so the state,
+                 the size and the buttons size to the widest row and still line
+                 up down the page. Fixed widths let `Start` and `Cancel` spill
+                 left over the size beside them. -->
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_2.5rem_minmax(0,1fr)_128px_72px_184px] md:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-subgrid md:gap-y-0"
             >
               <!-- No badge for the score. It measures how good a copy is and knows
                    nothing about which release it holds, so a green number here read

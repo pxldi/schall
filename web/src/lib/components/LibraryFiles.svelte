@@ -675,7 +675,7 @@
            strip where the column names will stand, and bars the height of a
            row. The list keeps its shape when the files land. -->
       <div
-        class="layout-width max-h-[calc(100dvh-9rem)] overflow-hidden rounded-panel border border-line-thin"
+        class="max-h-[calc(100dvh-9rem)] overflow-hidden rounded-panel border border-line-thin"
         role="status"
         aria-label="Loading files"
       >
@@ -698,7 +698,7 @@
            whole document the header slides away with the rows. Below the
            column names' own width the box scrolls sideways instead of
            reflowing the row — `Table.Root` scrolls by default. -->
-      <Table.Root wrapperClass="layout-width max-h-[68dvh] scroll-pt-9 rounded-panel border border-line-thin">
+      <Table.Root wrapperClass="max-h-[68dvh] scroll-pt-9 rounded-panel border border-line-thin">
         <Table.Header>
           <Table.Row class="hover:bg-transparent">
             <Table.Head class="w-10 text-center">#</Table.Head>

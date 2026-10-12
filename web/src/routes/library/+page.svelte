@@ -89,17 +89,13 @@
 
 <!-- Only the size under the title: the release and file counts are on the
      chips below. -->
-<!-- In the table's box, so the title, the rail and the rows share one left
-     edge at every width. -->
-<div class="layout-width">
-  <Hero title="Library" size="xl">
-    {#snippet sub()}
-      {#if $librarySummary.data}
-        <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
-      {/if}
-    {/snippet}
-  </Hero>
-</div>
+<Hero title="Library" size="xl">
+  {#snippet sub()}
+    {#if $librarySummary.data}
+      <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
+    {/if}
+  {/snippet}
+</Hero>
 
 <!-- One page for the music, in the two shapes it comes in. They were two pages
      saying the same thing from either end: the catalogue is what the library is
@@ -107,7 +103,7 @@
      answers a question depends on the question, not on which page you opened.
 
      The three chips below say which of it is showing. -->
-<ControlRail label="Which part of the library to show" width="layout">
+<ControlRail label="Which part of the library to show">
   <Segmented
     options={[
       { value: 'releases', name: 'Releases', count: $releaseTotal.data?.scopeTotal },
