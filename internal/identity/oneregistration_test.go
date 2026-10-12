@@ -103,18 +103,47 @@ func TestTwoRowsWithDifferentCodesAreNotOneRegistration(t *testing.T) {
 	}
 }
 
-// A credit that names one more artist is another recording. "The Road to Hell
-// Is Highway 59" by $uicideboy$ and the same title by $uicideboy$ x RVMIRXZ are
-// the pair, and the want stops for a person.
-func TestAFiledRowCreditingAnotherArtistIsNotOneRegistration(t *testing.T) {
+// A credit that adds a guest to the same lead, under one title and one length,
+// is one registration entered twice. "The Road to Hell Is Highway 59" by
+// $uicideboy$ and the same title by $uicideboy$ x RVMIRXZ run 133 seconds each.
+// This test asserted the opposite until the owner chose, on 2026-10-12, to let
+// a guest-only difference settle stopped wants (seven of them were Kanye West
+// rows differing only in the feature).
+func TestAFiledRowAddingAGuestIsOneRegistration(t *testing.T) {
 	title := "The Road to Hell Is Highway 59"
 	wanted := creditedTo(
 		recording(firstID, title, "$uicideboy$", 133000), []string{"$uicideboy$"})
 	filed := creditedTo(recording(secondID, title, "$uicideboy$ x RVMIRXZ", 133000),
 		[]string{"$uicideboy$"}, []string{"RVMIRXZ"})
 
+	if !askOneRegistration(t, wanted, filed, nil, 133000) {
+		t.Error("a credit adding a guest to the same lead is not read as one registration")
+	}
+}
+
+// Another lead artist is another recording, which is how a cover is kept out.
+func TestAFiledRowWithAnotherLeadIsNotOneRegistration(t *testing.T) {
+	title := "The Road to Hell Is Highway 59"
+	wanted := creditedTo(
+		recording(firstID, title, "$uicideboy$", 133000), []string{"$uicideboy$"})
+	filed := creditedTo(recording(secondID, title, "RVMIRXZ x $uicideboy$", 133000),
+		[]string{"RVMIRXZ"}, []string{"$uicideboy$"})
+
 	if askOneRegistration(t, wanted, filed, nil, 133000) {
-		t.Error("a credit naming another artist is read as one registration")
+		t.Error("a credit led by another artist is read as one registration")
+	}
+}
+
+// A guest who adds a verse adds length, and the length keeps the two apart.
+func TestAFiledRowAddingAGuestAndAVerseIsNotOneRegistration(t *testing.T) {
+	title := "The Road to Hell Is Highway 59"
+	wanted := creditedTo(
+		recording(firstID, title, "$uicideboy$", 133000), []string{"$uicideboy$"})
+	filed := creditedTo(recording(secondID, title, "$uicideboy$ x RVMIRXZ", 161000),
+		[]string{"$uicideboy$"}, []string{"RVMIRXZ"})
+
+	if askOneRegistration(t, wanted, filed, nil, 161000) {
+		t.Error("a longer row with a guest is read as one registration")
 	}
 }
 

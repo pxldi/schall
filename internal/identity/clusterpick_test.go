@@ -156,3 +156,48 @@ func TestAClusterTiedWithAnotherIsNotPickedFrom(t *testing.T) {
 		t.Fatalf("admitted by audio from a tied cluster: %q", verification.Summary)
 	}
 }
+
+// An upload found under the want's name, reproduced by the copy.
+func uploadFoundByName() *AnchorComparison {
+	return &AnchorComparison{
+		RecordingID: uuid.MustParse(firstID), Rate: 0.05, Source: AnchorByName,
+	}
+}
+
+func TestAnUploadAndTheTagsPickTheWantOutOfTheCluster(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	copied := copyHeardAsBoth()
+	copied.Anchor = uploadFoundByName()
+
+	verification := verifyAgainstClusterOfTwo(t, copied, wanted, other)
+	if !verification.Audio {
+		t.Fatalf("not admitted by audio: %q", verification.Summary)
+	}
+}
+
+// When the other row carries the same title and length, the tags cannot tell
+// the two apart, and the upload found by name may be either.
+func TestAnUploadPicksNothingWhenTheTagsFitBothRows(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	other.Title = wanted.Title
+	other.DurationMS = wanted.DurationMS
+	copied := copyHeardAsBoth()
+	copied.Anchor = uploadFoundByName()
+
+	verification := verifyAgainstClusterOfTwo(t, copied, wanted, other)
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
+
+func TestAnUploadPicksNothingWithoutTheArtistTag(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	copied := copyHeardAsBoth()
+	copied.Anchor = uploadFoundByName()
+	copied.Artist = ""
+
+	verification := verifyAgainstClusterOfTwo(t, copied, wanted, other)
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
