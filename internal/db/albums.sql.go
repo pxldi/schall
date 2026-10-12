@@ -306,7 +306,15 @@ SELECT
     -- recording outside 'superseded' (acquisition_targets_recording_idx), so
     -- this join cannot fan a track out.
     want.id AS want_id,
-    want.status AS want_status
+    want.status AS want_status,
+    -- When a file of this recording is due to be deleted, because somebody
+    -- removed it (scheduled_removals). Empty when nothing is leaving.
+    (
+        SELECT min(scheduled_removals.removes_at)
+        FROM scheduled_removals
+        WHERE scheduled_removals.state = 'scheduled'
+          AND scheduled_removals.musicbrainz_recording_id = tracks.musicbrainz_recording_id
+    )::timestamptz AS removes_at
 FROM tracks
 LEFT JOIN track_mappings
     ON track_mappings.track_id = tracks.id
@@ -341,21 +349,22 @@ ORDER BY tracks.disc_number, tracks.track_number NULLS LAST, tracks.id
 `
 
 type ListAlbumTracksRow struct {
-	ID                     uuid.UUID     `json:"id"`
-	MusicbrainzRecordingID uuid.NullUUID `json:"musicbrainz_recording_id"`
-	Title                  string        `json:"title"`
-	DiscNumber             int32         `json:"disc_number"`
-	TrackNumber            pgtype.Int4   `json:"track_number"`
-	DurationMs             pgtype.Int4   `json:"duration_ms"`
-	Isrc                   pgtype.Text   `json:"isrc"`
-	Owned                  bool          `json:"owned"`
-	HeldElsewhere          bool          `json:"held_elsewhere"`
-	MatchMethod            pgtype.Text   `json:"match_method"`
-	MatchConfidence        pgtype.Float4 `json:"match_confidence"`
-	MatchManual            bool          `json:"match_manual"`
-	LibraryFileID          uuid.NullUUID `json:"library_file_id"`
-	WantID                 uuid.NullUUID `json:"want_id"`
-	WantStatus             pgtype.Text   `json:"want_status"`
+	ID                     uuid.UUID          `json:"id"`
+	MusicbrainzRecordingID uuid.NullUUID      `json:"musicbrainz_recording_id"`
+	Title                  string             `json:"title"`
+	DiscNumber             int32              `json:"disc_number"`
+	TrackNumber            pgtype.Int4        `json:"track_number"`
+	DurationMs             pgtype.Int4        `json:"duration_ms"`
+	Isrc                   pgtype.Text        `json:"isrc"`
+	Owned                  bool               `json:"owned"`
+	HeldElsewhere          bool               `json:"held_elsewhere"`
+	MatchMethod            pgtype.Text        `json:"match_method"`
+	MatchConfidence        pgtype.Float4      `json:"match_confidence"`
+	MatchManual            bool               `json:"match_manual"`
+	LibraryFileID          uuid.NullUUID      `json:"library_file_id"`
+	WantID                 uuid.NullUUID      `json:"want_id"`
+	WantStatus             pgtype.Text        `json:"want_status"`
+	RemovesAt              pgtype.Timestamptz `json:"removes_at"`
 }
 
 // Owned is the mapping this release has onto a file, which is what a row's match
@@ -396,6 +405,7 @@ func (q *Queries) ListAlbumTracks(ctx context.Context, albumID uuid.UUID) ([]Lis
 			&i.LibraryFileID,
 			&i.WantID,
 			&i.WantStatus,
+			&i.RemovesAt,
 		); err != nil {
 			return nil, err
 		}

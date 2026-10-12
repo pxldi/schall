@@ -30,8 +30,10 @@
     label?: [string, string];
     size?: 'xs' | 'sm';
     /** Draw the + only while the row is hovered or holds focus. The row says
-     *  where it starts with the `want-row` class. A wanted toggle always shows. */
-    reveal?: boolean;
+     *  where it starts with the `want-row` class. A wanted toggle always shows,
+     *  unless this is 'all': a row the library holds already draws its tick
+     *  elsewhere, so its toggle waits for the pointer in both states. */
+    reveal?: boolean | 'all';
     disabled?: boolean;
     class?: string;
   };
@@ -85,7 +87,8 @@
   const name = $derived(title ? `Want ${title}` : 'Want');
   // The tooltip says what a press does, in both states. "Not wanted" on a
   // wanted track read as the track's state, which is the opposite of true.
-  const hint = $derived(shown ? (title ? `Don't want ${title}` : "Don't want") : name);
+  // Removing takes the want away, and a downloaded file goes 30 days later.
+  const hint = $derived(shown ? (title ? `Remove ${title}` : 'Remove') : name);
 </script>
 
 <button
@@ -99,7 +102,7 @@
   )}
   data-wanted={shown ? 'true' : 'false'}
   data-fresh={fresh ? 'true' : 'false'}
-  data-reveal={reveal ? 'true' : 'false'}
+  data-reveal={reveal === 'all' ? 'all' : reveal ? 'true' : 'false'}
   aria-pressed={shown}
   aria-label={label ? undefined : name}
   aria-busy={inFlight}

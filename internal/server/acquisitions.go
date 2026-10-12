@@ -387,6 +387,9 @@ func (api *API) createAcquisitionTarget(response http.ResponseWriter, request *h
 type wantAlbumResponse struct {
 	AlbumID uuid.UUID `json:"albumId"`
 	acquisition.Counts
+	// WantedAgain is tracks somebody had removed or dismissed that this press
+	// wants again.
+	WantedAgain int `json:"wantedAgain"`
 }
 
 // wantArtistResponse is a discography's worth, with the number of releases
@@ -409,9 +412,9 @@ type artistWantMissingResponse struct {
 // so nothing has to be resolved and the targets land due immediately.
 //
 // Pressing it twice is not two wants. Creation is idempotent on the recording
-// ID, so the second press answers with the targets that exist, which is also
-// what keeps a track somebody stopped pursuing stopped: wanting the release
-// around it must never quietly re-open a not-wanted decision.
+// ID, so the second press answers with the targets that exist. A track somebody
+// removed or dismissed is wanted again: a press on the release is the person
+// asking for all of it.
 //
 // Nothing here decides anything about a file. It creates rows the loop already
 // knows how to drain, and every copy the loop fetches is still proven by its
@@ -439,6 +442,26 @@ func (api *API) wantAlbum(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	// Wanting a release somebody removed takes the removal back for each of
+	// its tracks: the want is pursued again, and a file waiting to be deleted
+	// stays. A press on the release is as explicit as a press on each track.
+	reopened := 0
+	again := make(map[uuid.UUID]struct{}, len(tracks))
+	for _, track := range tracks {
+		if !track.WantID.Valid || track.WantStatus.String != "not_wanted" {
+			continue
+		}
+		if _, repeat := again[track.WantID.UUID]; repeat {
+			continue
+		}
+		again[track.WantID.UUID] = struct{}{}
+		if err := api.wantAgain(request.Context(), track.WantID.UUID); err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		reopened++
+	}
+
 	// Either way of holding the music counts as held. A file proven to be the
 	// recording but never mapped onto this release is one the loop would settle
 	// the want against the moment it looked, so wanting it would be asking
@@ -462,7 +485,7 @@ func (api *API) wantAlbum(response http.ResponseWriter, request *http.Request) {
 		api.internalError(response, request, err)
 		return
 	}
-	result := wantAlbumResponse{AlbumID: albumID, Counts: walked.Counts}
+	result := wantAlbumResponse{AlbumID: albumID, Counts: walked.Counts, WantedAgain: reopened}
 	api.logger.Info().
 		Str("album_id", albumID.String()).
 		Int("wanted", result.Wanted).
@@ -677,24 +700,50 @@ func trackEntry(track db.GetTrackForWantingRow) acquisition.Entry {
 }
 
 // wantOneTrack records the want for a single catalogue track, which is what a
-// per-track toggle on a release page presses. Asking for a track somebody
-// stopped pursuing does not quietly re-open that decision: the existing
-// not_wanted target comes back unchanged, and taking the decision back is the
-// explicit pursue-again call.
+// per-track toggle on a release page presses. Pressing it on a track somebody
+// removed wants the track again, and keeps a file of it that was waiting to be
+// deleted.
 func (api *API) wantOneTrack(response http.ResponseWriter, request *http.Request) {
 	track, ok := api.wantedTrack(response, request)
 	if !ok {
 		return
 	}
 	if track.Owned || track.HeldElsewhere {
-		api.problem(response, http.StatusConflict,
-			"this track is already in your library", nil)
+		// Wanting a track the library holds means something only while its
+		// file is waiting to be deleted: the press keeps the file.
+		targetID, kept, err := api.keepOwnedTrack(request.Context(), track.MusicbrainzRecordingID.UUID)
+		if err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		if !kept {
+			api.problem(response, http.StatusConflict,
+				"this track is already in your library", nil)
+			return
+		}
+		target, err := api.wants.Target(request.Context(), targetID)
+		if err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		api.writeJSON(response, http.StatusOK, acquisitionTargetResponseFrom(target))
 		return
 	}
 	target, _, err := api.wants.Create(request.Context(), trackEntry(track))
 	if err != nil {
 		api.internalError(response, request, err)
 		return
+	}
+	// Pressing want on a track somebody removed is taking the removal back.
+	if target.Status == "not_wanted" {
+		if err := api.wantAgain(request.Context(), target.ID); err != nil {
+			api.internalError(response, request, err)
+			return
+		}
+		if target, err = api.wants.Target(request.Context(), target.ID); err != nil {
+			api.internalError(response, request, err)
+			return
+		}
 	}
 	api.logger.Info().
 		Str("track_id", track.ID.String()).
@@ -1023,6 +1072,13 @@ func (api *API) pursueAcquisitionTargetAgain(response http.ResponseWriter, reque
 	targetID, ok := api.acquisitionTargetID(response, request)
 	if !ok {
 		return
+	}
+	// A file waiting to be deleted because this want was removed stays.
+	if api.removals != nil {
+		if _, err := api.removals.Keep(request.Context(), targetID); err != nil {
+			api.internalError(response, request, err)
+			return
+		}
 	}
 	target, err := api.wants.PursueAgain(request.Context(), targetID)
 	switch {

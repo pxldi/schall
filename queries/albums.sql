@@ -97,7 +97,15 @@ SELECT
     -- recording outside 'superseded' (acquisition_targets_recording_idx), so
     -- this join cannot fan a track out.
     want.id AS want_id,
-    want.status AS want_status
+    want.status AS want_status,
+    -- When a file of this recording is due to be deleted, because somebody
+    -- removed it (scheduled_removals). Empty when nothing is leaving.
+    (
+        SELECT min(scheduled_removals.removes_at)
+        FROM scheduled_removals
+        WHERE scheduled_removals.state = 'scheduled'
+          AND scheduled_removals.musicbrainz_recording_id = tracks.musicbrainz_recording_id
+    )::timestamptz AS removes_at
 FROM tracks
 LEFT JOIN track_mappings
     ON track_mappings.track_id = tracks.id

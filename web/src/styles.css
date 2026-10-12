@@ -1114,7 +1114,8 @@ a {
      left. A screen with no hover shows every +, since a finger
      has nothing to rest on. */
   @media (hover: hover) {
-    .want-toggle[data-reveal='true'][data-wanted='false'] {
+    .want-toggle[data-reveal='true'][data-wanted='false'],
+    .want-toggle[data-reveal='all'] {
       opacity: 0;
       transition:
         opacity var(--motion-state) var(--motion-ease),
@@ -1127,7 +1128,12 @@ a {
     .want-row:has(:focus-visible) .want-toggle[data-reveal='true'],
     .want-tile:hover .want-toggle[data-reveal='true'],
     .want-tile:has(:focus-visible) .want-toggle[data-reveal='true'],
-    .want-toggle[data-reveal='true']:focus-visible {
+    .want-toggle[data-reveal='true']:focus-visible,
+    .want-row:hover .want-toggle[data-reveal='all'],
+    .want-row:has(:focus-visible) .want-toggle[data-reveal='all'],
+    .want-tile:hover .want-toggle[data-reveal='all'],
+    .want-tile:has(:focus-visible) .want-toggle[data-reveal='all'],
+    .want-toggle[data-reveal='all']:focus-visible {
       opacity: 1;
     }
   }
