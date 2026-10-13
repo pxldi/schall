@@ -484,3 +484,53 @@ func TestACopyThatHangsIsCutOffAndThePassGoesOn(t *testing.T) {
 		t.Fatalf("released = %v, want the hung copy given back", store.released)
 	}
 }
+
+// sleepyVerifier takes a moment over every copy, like a want whose copies are
+// each a few decodes and paced requests.
+type sleepyVerifier struct{ asked int }
+
+func (verifier *sleepyVerifier) Verify(
+	_ context.Context, _ identity.Evidence, _ uuid.UUID,
+) (identity.Verification, error) {
+	verifier.asked++
+	time.Sleep(30 * time.Millisecond)
+	return identity.Verification{Summary: "nothing could decide"}, nil
+}
+
+// A want held in many copies gets a share of the pass, not all of it. Before,
+// a want with dozens of copies each under the slow mark held the pass with
+// nothing in the log to say so.
+func TestAWantsCopiesStopWhenItsTimeRunsOutAndThePassGoesOn(t *testing.T) {
+	limit := judgeWantLimit
+	judgeWantLimit = 10 * time.Millisecond
+	t.Cleanup(func() { judgeWantLimit = limit })
+
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	many := []db.JudgeAgainRow{offered(store, requestID)}
+	for range 3 {
+		many = append(many, offered(store, uuid.New()))
+	}
+	next := offered(store, uuid.New())
+	next.AcquisitionTargetID = uuid.New()
+	store.answeredWants = map[uuid.UUID]bool{next.AcquisitionTargetID: true}
+	store.judgeAgain = append(many, next)
+	verifier := &sleepyVerifier{}
+	importer := candidateImporter(store, inbox, libraryPath, nil, verifier)
+
+	var kept []uuid.UUID
+	result, _, _, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{},
+		func(_ context.Context, want uuid.UUID) error {
+			kept = append(kept, want)
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("judgeAgainPart() error = %v", err)
+	}
+	if verifier.asked != 1 || result.Deferred != 3 {
+		t.Fatalf("asked %d, result %+v, want one copy judged and three left", verifier.asked, result)
+	}
+	if result.Answered != 1 || len(kept) != 2 {
+		t.Fatalf("result %+v, places %v, want the next want reached and both places kept",
+			result, kept)
+	}
+}
