@@ -270,6 +270,9 @@
                   <OwnedBar owned={playlist.ownedCount} total={playlist.entryCount} width={64} noun="songs" />
                 </span>
 
+                <!-- Below 1024px the three buttons are icons with their name in
+                     the tooltip; with words they ran past the right edge of a
+                     half-screen window. -->
                 <span class="flex items-center justify-end gap-1">
                   {#if playlist.source === 'spotify'}
                     <Button
@@ -277,8 +280,9 @@
                       variant="ghost"
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
+                      title="Re-import"
                     >
-                      <Icon name="refresh" size="sm" /> Re-import
+                      <Icon name="refresh" size="sm" /><span class="max-lg:sr-only">Re-import</span>
                     </Button>
                   {/if}
                   <Button
@@ -286,8 +290,9 @@
                     variant="ghost"
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
+                    title="Send to player"
                   >
-                    <Icon name="send" size="sm" /> Send to player
+                    <Icon name="send" size="sm" /><span class="max-lg:sr-only">Send to player</span>
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
@@ -295,8 +300,9 @@
                       variant="ghost"
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
+                      title="Stop following"
                     >
-                      <Icon name="unfollow" size="sm" /> Stop following
+                      <Icon name="unfollow" size="sm" /><span class="max-lg:sr-only">Stop following</span>
                     </Button>
                   {/if}
                 </span>

@@ -1302,20 +1302,20 @@
            short) and the detail — the one thing here that runs long — drops
            to a line of its own. `sm` and up are the original four cells in a
            row, unchanged. -->
-      <div class="flex flex-col gap-0.5 border-b border-line-thin py-2.5 sm:flex-row sm:items-center sm:gap-3.5">
+      <div class="flex flex-col gap-0.5 border-b border-line-thin py-2.5 @xl:flex-row @xl:items-center @xl:gap-3.5">
         <div class="flex min-w-0 items-center gap-3.5">
           <span aria-hidden="true" class="size-2 shrink-0 rounded-full {dots[entry.role]}"></span>
-          <span class="min-w-0 flex-1 truncate text-body text-ink sm:w-[8.125rem] sm:flex-none">
+          <span class="min-w-0 flex-1 truncate text-body text-ink @xl:w-[8.125rem] @xl:flex-none">
             {entry.name}
           </span>
-          <span class="shrink-0 text-body font-medium sm:hidden {stateColors[entry.role]}">
+          <span class="shrink-0 text-body font-medium @xl:hidden {stateColors[entry.role]}">
             {entry.state}
           </span>
         </div>
-        <span class="hidden shrink-0 text-body font-medium sm:block sm:w-[6.875rem] {stateColors[entry.role]}">
+        <span class="hidden shrink-0 text-body font-medium @xl:block @xl:w-[6.875rem] {stateColors[entry.role]}">
           {entry.state}
         </span>
-        <span class="min-w-0 truncate text-meta text-ink-3 sm:flex-1">{entry.detail}</span>
+        <span class="min-w-0 truncate text-meta text-ink-3 @xl:flex-1">{entry.detail}</span>
       </div>
     {/each}
   </div>
@@ -1400,7 +1400,7 @@
     <h2 class="font-display text-lead font-bold text-ink">slskd</h2>
 
     <form
-      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 sm:grid-cols-[130px_340px_minmax(0,1fr)]"
+      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
       onsubmit={(event) => {
         event.preventDefault();
         $save.mutate();
@@ -1459,7 +1459,7 @@
       </label>
       {@render SourceHint('off stops all source searches')}
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <Button
           type="button"
@@ -1515,7 +1515,7 @@
     <h2 class="font-display text-lead font-bold text-ink">Navidrome</h2>
 
     <form
-      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 sm:grid-cols-[130px_340px_minmax(0,1fr)]"
+      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
       onsubmit={(event) => {
         event.preventDefault();
         $saveNavidrome.mutate();
@@ -1570,7 +1570,7 @@
       </label>
       {@render SourceHint('off stops telling Navidrome anything')}
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <Button
           type="button"
@@ -1845,7 +1845,7 @@
         </details>
       </div>
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <SettingsSaveButton
           pending={$savePreferences.isPending}
@@ -1911,7 +1911,7 @@
         {/if}
       </span>
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <SettingsSaveButton
           pending={$saveUpgrades.isPending}
@@ -2059,7 +2059,7 @@
         {notifyEnabled ? 'told when the queue has a question' : 'not told'}
       </label>
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <SettingsSaveButton
           pending={$saveNotifications.isPending}
@@ -2109,7 +2109,7 @@
     <h2 class="font-display text-lead font-bold text-ink">ListenBrainz</h2>
 
     <form
-      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 sm:grid-cols-[130px_340px_minmax(0,1fr)]"
+      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
       onsubmit={(event) => {
         event.preventDefault();
         $saveListenBrainz.mutate();
@@ -2176,7 +2176,7 @@
       </label>
       {@render SourceHint('off stops asking ListenBrainz anything')}
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <Button
           type="button"
@@ -2319,7 +2319,7 @@
         {@render WeeklyChoice('remove', 'Remove', 'deletes an unkept trial song from the disc — never anything else in the library')}
       </div>
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <SettingsSaveButton
           pending={$saveWeekly.isPending}
@@ -2395,7 +2395,7 @@
         class="field w-20"
       />
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <SettingsSaveButton
           pending={$saveNewReleases.isPending}
@@ -2468,7 +2468,7 @@
     </div>
 
     <form
-      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 sm:grid-cols-[130px_340px_minmax(0,1fr)]"
+      class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
       onsubmit={(event) => {
         event.preventDefault();
         $saveSpotify.mutate();
@@ -2498,7 +2498,7 @@
       />
       {@render SourceHint('')}
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <Button
           type="button"
@@ -2695,7 +2695,7 @@
           {duplicatesEnabled ? 'delete proven duplicates automatically' : 'leave every duplicate for you to decide'}
         </label>
 
-        <span class="hidden sm:block"></span>
+        <span class="hidden @xl:block"></span>
         <div class="flex flex-wrap items-center gap-2 pt-1">
           <SettingsSaveButton
             pending={$saveDuplicates.isPending}
@@ -2858,7 +2858,7 @@
         class="field w-full"
       />
 
-      <span class="hidden sm:block"></span>
+      <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2.5 pt-1">
         <SettingsSaveButton
           pending={$saveLayout.isPending}

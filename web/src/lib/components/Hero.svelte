@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { lineStartMarks } from '$lib/separators';
 
   // The top of a page in Duoton: the page's name set very large over the print,
   // with a line of context under it and the page's actions to the right. It
@@ -60,15 +61,18 @@
   {#if kicker}
     <p class="mb-1 text-dense-meta text-ink-2">{@render kicker()}</p>
   {/if}
-  <div class="flex items-end justify-between gap-6">
+  <!-- The actions wrap under the title when both do not fit on one line. Kept
+       beside it at any width, they squeezed the title into a column one or two
+       letters wide in a half-screen window. -->
+  <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
       <h1 class="-ml-[0.04em] mb-3 font-extrabold text-balance text-ink {sizes[section ? 'xl' : size]}">{title}</h1>
       {#if sub}
-        <div class="hero-sub text-quiet-meta text-ink-2">{@render sub()}</div>
+        <div class="hero-sub text-quiet-meta text-ink-2" use:lineStartMarks>{@render sub()}</div>
       {/if}
     </div>
     {#if actions}
-      <div class="flex shrink-0 flex-wrap items-center gap-2">{@render actions()}</div>
+      <div class="flex min-w-0 flex-wrap items-center gap-2">{@render actions()}</div>
     {/if}
   </div>
 </section>

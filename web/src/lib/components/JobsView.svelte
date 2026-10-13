@@ -858,7 +858,7 @@
             {/each}
 
             <div
-              class="hidden text-ink-3 md:grid md:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] md:gap-x-3 md:border-b md:border-line-thin md:px-3 md:pb-1.5"
+              class="hidden text-ink-3 @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-x-3 @xl:border-b @xl:border-line-thin @xl:px-3 @xl:pb-1.5"
             >
               <span class="label">Job</span>
               <span class="label">Status</span>
@@ -874,7 +874,7 @@
                    one. -->
               <div class="border-b border-line-thin last:border-b-0">
                 <div
-                  class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] md:gap-y-0"
+                  class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-y-0"
                 >
                   <span class="truncate text-body text-ink" title={primaryOf(job)}>
                     {primaryOf(job)}
@@ -1060,7 +1060,7 @@
                   {@const jobRow = failureRow(failure, presses[failure.id], now)}
                   <div class="border-b border-line-thin last:border-b-0">
                     <div
-                      class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[minmax(0,1.7fr)_124px_76px_96px] md:gap-y-0"
+                      class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1.7fr)_124px_76px_96px] @xl:gap-y-0"
                     >
                       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                         <!-- The primary truncates on one line like every other
@@ -1146,7 +1146,7 @@
       {#snippet placeholder()}
         <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading the sweeps">
           <div
-            class="hidden border-b border-line-thin px-3 pb-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:items-center md:gap-x-3"
+            class="hidden border-b border-line-thin px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
           >
             <span class="label">Sweep</span>
             <span class="label text-right">Last run</span>
@@ -1154,7 +1154,7 @@
           </div>
           {#each Array(placeholderRowCount) as _, index (index)}
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
             >
               <Skeleton class="h-9 min-w-0 flex-1" />
               <Skeleton class="h-7 w-24 justify-self-end" />
@@ -1173,7 +1173,7 @@
     {:else}
       <div class="flex flex-col">
         <div
-          class="hidden border-b border-line-thin px-3 pb-2 md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:items-center md:gap-x-3"
+          class="hidden border-b border-line-thin px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
         >
           <span class="label">Sweep</span>
           <span class="label text-right">Last run</span>
@@ -1183,9 +1183,11 @@
         {#each $schedule.data?.items ?? [] as item (item.kind)}
           {@const condition = waitsFor(item)}
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 transition last:border-b-0 hover:bg-surface-thick md:grid md:grid-cols-[minmax(0,1fr)_128px_188px] md:gap-y-0"
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 transition last:border-b-0 hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
           >
-            <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+            <!-- A line of its own when the columns stack, or the two times
+                 beside it squeezed the name to two letters. -->
+            <span class="flex min-w-0 basis-full flex-col gap-0.5 @xl:basis-auto">
               <span class="truncate text-body text-ink">{sweepLabel(item)}</span>
               <span class="truncate text-meta text-ink-3">
                 {sweepCopy[item.kind]?.does ?? ''}

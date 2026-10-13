@@ -61,7 +61,7 @@
     {/each}
   </nav>
 
-  <div class="settings-body min-w-0 flex-1">
+  <div class="settings-body @container min-w-0 flex-1">
     {@render children()}
   </div>
 </div>
