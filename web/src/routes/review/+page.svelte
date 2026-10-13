@@ -14,10 +14,12 @@
   import {
     albumKey,
     clock,
+    contradicted,
     groupByAlbum,
     groupCopies,
     isCreditOnlyStopped,
     listenable,
+    namesDiffer,
     questionsFrom,
     waitingLabel,
     type QuestionKind
@@ -374,6 +376,15 @@
     chosen = 0;
     saidWhich = false;
   });
+  // A copy whose evidence speaks against it can still be accepted, but not as
+  // the main action: the library file whose credit names somebody else, or a
+  // copy with a field that differs.
+  const acceptDoubted = $derived(
+    filed
+      ? namesDiffer(current?.want?.fileArtist, current?.want?.target.artist) ||
+          namesDiffer(current?.want?.fileTitle, current?.want?.target.title)
+      : contradicted(groups[chosen]?.best)
+  );
 
   const evidenceOf = (candidate: AcquisitionCandidate) =>
     [
@@ -769,32 +780,35 @@
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
-        {#if !listen}
+        <!-- The two views stay together, so neither wraps onto a line alone. -->
+        <span class="ml-auto flex gap-1">
+          {#if !listen}
+            <button
+              type="button"
+              onclick={toggleByAlbum}
+              aria-pressed={byAlbum}
+              aria-label="Group by album"
+              title="Group by album: open an album and accept its copies together"
+              class="flex items-center rounded-full border px-2 py-1 text-meta {byAlbum
+                ? 'border-line-regular bg-surface-thick text-ink'
+                : 'border-line-thin text-ink-2'}"
+            >
+              <Icon name="release" size={13} />
+            </button>
+          {/if}
           <button
             type="button"
-            onclick={toggleByAlbum}
-            aria-pressed={byAlbum}
-            aria-label="Group by album"
-            title="Group by album: open an album and accept its copies together"
-            class="flex items-center rounded-full border px-2 py-1 text-meta {byAlbum
+            onclick={toggleListen}
+            aria-pressed={listen}
+            aria-label="Listening mode"
+            title="Listening mode: Y accept, N none, Space play or pause, J/K step"
+            class="flex items-center rounded-full border px-2 py-1 text-meta {listen
               ? 'border-line-regular bg-surface-thick text-ink'
               : 'border-line-thin text-ink-2'}"
           >
-            <Icon name="release" size={13} />
+            <Icon name="listen" size={13} />
           </button>
-        {/if}
-        <button
-          type="button"
-          onclick={toggleListen}
-          aria-pressed={listen}
-          aria-label="Listening mode"
-          title="Listening mode: Y accept, N none, Space play or pause, J/K step"
-          class="flex items-center rounded-full border px-2 py-1 text-meta {listen
-            ? 'border-line-regular bg-surface-thick text-ink'
-            : 'border-line-thin text-ink-2'}"
-        >
-          <Icon name="listen" size={13} />
-        </button>
+        </span>
       </div>
 
       {#if loadError}
@@ -1070,9 +1084,17 @@
             >
               None of these
             </Button>
-            <Button disabled={deciding || !groups[chosen]} onclick={confirm}>Accept copy</Button>
+            <Button
+              variant={acceptDoubted ? 'outline' : 'primary'}
+              disabled={deciding || !groups[chosen]}
+              onclick={confirm}>Accept copy</Button
+            >
           {:else if current.kind === 'downloaded' && filed}
-            <Button disabled={deciding || !filedCopy} onclick={confirm}>Accept copy</Button>
+            <Button
+              variant={acceptDoubted ? 'outline' : 'primary'}
+              disabled={deciding || !filedCopy}
+              onclick={confirm}>Accept copy</Button
+            >
           {:else if current.kind === 'version'}
             <Button disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
               Use recording

@@ -60,13 +60,27 @@ type JudgedAgain struct {
 // questions is not tried again until somebody asks for another pass.
 //
 // since is when the pass first started. A copy decided at or after it was
-// judged by this pass before a restart, and is not judged twice.
+// judged by this pass before a restart, and is not judged twice. finished is
+// told each want the part is done with, so the caller can keep its place one
+// want at a time: a part that a restart cuts off then resumes at the want it was
+// on rather than at the part's first want.
 func (importer *Importer) JudgeAgain(
-	ctx context.Context, after uuid.UUID, since time.Time,
+	ctx context.Context, after uuid.UUID, since time.Time, finished func(context.Context, uuid.UUID) error,
 ) (uuid.UUID, bool, error) {
-	_, next, more, err := importer.judgeAgainPart(ctx, after, since)
+	_, next, more, err := importer.judgeAgainPart(ctx, after, since, finished)
 	return next, more, err
 }
+
+// judgeCopyLimit is how long judging one copy again may take. A copy is a
+// decode, a few comparisons and a handful of paced requests, which is seconds;
+// a copy still going after this is waiting on something that is not coming
+// back, and the copies behind it are worth more than it is. It is given back
+// and offered again by the next pass.
+var judgeCopyLimit = 5 * time.Minute
+
+// slowCopy is how long judging one copy may take before the log names it, so
+// a pass that crawls says which copy and how long.
+const slowCopy = time.Minute
 
 // judgeAgainWants is how many wants one part of a pass judges. Each copy is a
 // decode and an AcoustID lookup, so 20 wants is a few minutes of work: short
@@ -110,7 +124,7 @@ func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
 	var total JudgedAgain
 	after := uuid.Nil
 	for {
-		part, next, more, err := importer.judgeAgainPart(ctx, after, time.Time{})
+		part, next, more, err := importer.judgeAgainPart(ctx, after, time.Time{}, nil)
 		total.Offered += part.Offered
 		total.Judged += part.Judged
 		total.Missing += part.Missing
@@ -125,7 +139,7 @@ func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
 // judgeAgainPart judges the copies of the next judgeAgainWants wants after the
 // one given. It answers the last want it took and whether any want is left.
 func (importer *Importer) judgeAgainPart(
-	ctx context.Context, after uuid.UUID, since time.Time,
+	ctx context.Context, after uuid.UUID, since time.Time, finished func(context.Context, uuid.UUID) error,
 ) (JudgedAgain, uuid.UUID, bool, error) {
 	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, after, since)
 	if err != nil {
@@ -135,8 +149,33 @@ func (importer *Importer) judgeAgainPart(
 	if len(part) == 0 {
 		return JudgedAgain{}, after, false, nil
 	}
-	result, err := importer.judgeCopies(ctx, part)
-	return result, part[len(part)-1].AcquisitionTargetID, more, err
+	var total JudgedAgain
+	for start := 0; start < len(part); {
+		want := part[start].AcquisitionTargetID
+		end := start
+		for end < len(part) && part[end].AcquisitionTargetID == want {
+			end++
+		}
+		result, err := importer.judgeCopies(ctx, part[start:end])
+		total.Offered += result.Offered
+		total.Judged += result.Judged
+		total.Missing += result.Missing
+		total.Answered += result.Answered
+		if err != nil {
+			return total, want, more, err
+		}
+		if finished != nil {
+			// A place that could not be written costs a restart some repeated
+			// work and nothing else, so the part carries on.
+			if err := finished(ctx, want); err != nil {
+				importer.logger.Warn().Err(err).
+					Str("acquisition_target_id", want.String()).
+					Msg("keep the place of a judging pass")
+			}
+		}
+		start = end
+	}
+	return total, part[len(part)-1].AcquisitionTargetID, more, nil
 }
 
 // firstWants cuts a list read in want order after its first wants wants, and
@@ -199,7 +238,7 @@ func (importer *Importer) judgeCopies(
 			}
 			return result, err
 		}
-		if err := importer.ImportOne(ctx, copied.RequestID); err != nil {
+		if err := importer.judgeOne(ctx, copied); err != nil {
 			// One copy that could not be judged is not a reason to stop judging the
 			// rest. Nothing retries this pass for the copy, so the claim the pass
 			// took is given back: a request left at 'validating' would hide the copy
@@ -214,10 +253,37 @@ func (importer *Importer) judgeCopies(
 		result.Judged++
 	}
 	importer.logger.Info().
+		Str("acquisition_target_id", wantOf(copies)).
 		Int("offered", result.Offered).Int("judged", result.Judged).
 		Int("missing", result.Missing).Int("already_answered", result.Answered).
 		Msg("copies already decided about were judged again")
 	return result, nil
+}
+
+// judgeOne puts one copy through ImportOne within judgeCopyLimit, and names the
+// copy in the log when it took longer than slowCopy.
+func (importer *Importer) judgeOne(ctx context.Context, copied db.JudgeAgainRow) error {
+	limited, cancel := context.WithTimeout(ctx, judgeCopyLimit)
+	defer cancel()
+	started := time.Now()
+	err := importer.ImportOne(limited, copied.RequestID)
+	if took := time.Since(started); took >= slowCopy {
+		importer.logger.Warn().
+			Str("acquisition_target_id", copied.AcquisitionTargetID.String()).
+			Str("request_id", copied.RequestID.String()).
+			Dur("took", took).Bool("cut_off", errors.Is(limited.Err(), context.DeadlineExceeded)).
+			Msg("judging one copy again was slow")
+	}
+	return err
+}
+
+// wantOf names the want a list of copies belongs to when they all belong to
+// one, which is how the parts of a pass call judgeCopies.
+func wantOf(copies []db.JudgeAgainRow) string {
+	if len(copies) == 0 || copies[0].AcquisitionTargetID != copies[len(copies)-1].AcquisitionTargetID {
+		return ""
+	}
+	return copies[0].AcquisitionTargetID.String()
 }
 
 // candidatePresent reports whether the copy's bytes are still where validation
@@ -297,7 +363,7 @@ func (importer *Importer) JudgeWantCopies(
 			}
 			return err
 		}
-		if err := importer.ImportOne(ctx, copied.RequestID); err != nil {
+		if err := importer.judgeOne(ctx, copied); err != nil {
 			// One copy that could not be judged is not a reason to stop judging the
 			// rest, exactly as in JudgeAgain, and its claim is given back the same way.
 			importer.logger.Warn().Err(err).

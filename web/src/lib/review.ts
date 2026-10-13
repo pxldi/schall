@@ -215,6 +215,27 @@ export function batchProof(copy: AcquiredCopy): string {
   return '';
 }
 
+/** Whether something in a copy's evidence speaks against it: a field that
+ * differs, or audio that named another recording. Such a copy can still be
+ * accepted, but it is not offered as the main action. */
+export function contradicted(copy: AcquiredCopy | undefined): boolean {
+  const evidence = copy?.evidence;
+  if (!evidence) return false;
+  return (
+    (evidence.differs ?? []).length > 0 ||
+    evidence.acoustic?.agrees === false ||
+    evidence.anchor?.agrees === false
+  );
+}
+
+/** Whether two credits or titles name different things. An empty side is
+ * silence, so it differs from nothing. */
+export function namesDiffer(a?: string, b?: string): boolean {
+  const left = a?.trim().toLocaleLowerCase() ?? '';
+  const right = b?.trim().toLocaleLowerCase() ?? '';
+  return left !== '' && right !== '' && left !== right;
+}
+
 /** Where a copy starts when nobody chose a spot: a third of the way in. The
  * opening is often a count-in or silence that sounds alike on every copy. */
 export function listenFrom(duration: number): number {

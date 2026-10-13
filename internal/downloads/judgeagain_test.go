@@ -1,10 +1,12 @@
 package downloads
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -369,7 +371,7 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{})
+	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{}, nil)
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}
@@ -377,7 +379,7 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 		t.Fatalf("first part = %+v, more = %v, want %d wants and one left",
 			first, more, judgeAgainWants)
 	}
-	second, _, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{})
+	second, _, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{}, nil)
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}
@@ -400,5 +402,85 @@ func TestAPartNeverSplitsAWantsCopies(t *testing.T) {
 
 	if len(part) != 2 || !more {
 		t.Fatalf("part = %d copies, more = %v, want both copies of the first want", len(part), more)
+	}
+}
+
+// A part keeps its place one want at a time. A restart in the middle of a part
+// then resumes at the want it was on, not at the part's first want.
+func TestAPartKeepsItsPlaceAfterEachWant(t *testing.T) {
+	store, inbox, libraryPath, _ := fetchedCandidate(t, 3)
+	store.answeredWants = map[uuid.UUID]bool{}
+	for range 3 {
+		row := offered(store, uuid.New())
+		row.AcquisitionTargetID = uuid.New()
+		store.answeredWants[row.AcquisitionTargetID] = true
+		store.judgeAgain = append(store.judgeAgain, row)
+	}
+	importer := candidateImporter(store, inbox, libraryPath, nil,
+		&fakeVerifier{verification: identity.Verification{}})
+
+	var kept []uuid.UUID
+	_, _, err := importer.JudgeAgain(context.Background(), uuid.Nil, time.Time{},
+		func(_ context.Context, want uuid.UUID) error {
+			kept = append(kept, want)
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("JudgeAgain() error = %v", err)
+	}
+	wants := make([]uuid.UUID, 0, len(store.judgeAgain))
+	for _, row := range store.judgeAgain {
+		wants = append(wants, row.AcquisitionTargetID)
+	}
+	slices.SortFunc(wants, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	if !slices.Equal(kept, wants) {
+		t.Fatalf("places kept = %v, want each want in order %v", kept, wants)
+	}
+}
+
+// hangingVerifier never answers until the caller gives up, like a request that
+// is waiting on a connection nothing will ever write to.
+type hangingVerifier struct{}
+
+func (hangingVerifier) Verify(
+	ctx context.Context, _ identity.Evidence, _ uuid.UUID,
+) (identity.Verification, error) {
+	<-ctx.Done()
+	return identity.Verification{}, ctx.Err()
+}
+
+// One copy that hangs is cut off, given back, and the pass goes on to the
+// next want. Before, the part waited on it for as long as it hung.
+func TestACopyThatHangsIsCutOffAndThePassGoesOn(t *testing.T) {
+	limit := judgeCopyLimit
+	judgeCopyLimit = 50 * time.Millisecond
+	t.Cleanup(func() { judgeCopyLimit = limit })
+
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	hung := offered(store, requestID)
+	next := offered(store, uuid.New())
+	next.AcquisitionTargetID = uuid.New()
+	store.answeredWants = map[uuid.UUID]bool{next.AcquisitionTargetID: true}
+	store.judgeAgain = []db.JudgeAgainRow{hung, next}
+	importer := candidateImporter(store, inbox, libraryPath, nil, hangingVerifier{})
+
+	done := make(chan JudgedAgain, 1)
+	go func() {
+		result, _, _, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{}, nil)
+		if err != nil {
+			t.Errorf("judgeAgainPart() error = %v", err)
+		}
+		done <- result
+	}()
+	select {
+	case result := <-done:
+		if result.Judged != 0 || result.Answered != 1 {
+			t.Fatalf("result = %+v, want the hung copy unjudged and the next want reached", result)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the pass is still waiting on a copy that hangs")
+	}
+	if !slices.Contains(store.released, requestID) {
+		t.Fatalf("released = %v, want the hung copy given back", store.released)
 	}
 }

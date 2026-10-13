@@ -69,6 +69,7 @@ type fakeQueue struct {
 	judgeAgainQueuedFor           time.Time
 	judgeAgainQueuedAfter         uuid.UUID
 	judgeAgainQueuedSince         time.Time
+	judgedUpTo                    []uuid.UUID
 	firstStarted                  time.Time
 	spectrumSweepQueuedFor        time.Time
 	upgradeSweepQueuedFor         time.Time
@@ -480,6 +481,12 @@ func (queue *fakeQueue) QueueJudgeCopiesAgainAfter(
 func (queue *fakeQueue) StartedFirstAt(_ context.Context, _ Job) (time.Time, error) {
 	return queue.firstStarted, nil
 }
+
+// JudgedUpTo records each place a judge-again part kept.
+func (queue *fakeQueue) JudgedUpTo(_ context.Context, _ Job, want uuid.UUID) error {
+	queue.judgedUpTo = append(queue.judgedUpTo, want)
+	return nil
+}
 func (queue *fakeQueue) QueueAskAcoustIDAgain(_ context.Context, runAfter time.Time) error {
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
@@ -592,6 +599,8 @@ type fakeImporter struct {
 	// judgeAgainNext the last want it answers taking (uuid.Nil: none left).
 	judgedAgainAfter uuid.UUID
 	judgeAgainNext   uuid.UUID
+	// judgeAgainFinishes are the wants a part reports finishing, in order.
+	judgeAgainFinishes []uuid.UUID
 	// judgedSince is the first-start moment a judging pass was given.
 	judgedSince time.Time
 	// The same two for the pass over the copies refused on the artist tag.
@@ -612,11 +621,17 @@ func (importer *fakeImporter) Import(_ context.Context, requestID uuid.UUID) err
 }
 
 func (importer *fakeImporter) JudgeAgain(
-	_ context.Context, after uuid.UUID, since time.Time,
+	ctx context.Context, after uuid.UUID, since time.Time,
+	finished func(context.Context, uuid.UUID) error,
 ) (uuid.UUID, bool, error) {
 	importer.judgedAgain++
 	importer.judgedAgainAfter = after
 	importer.judgedSince = since
+	for _, want := range importer.judgeAgainFinishes {
+		if err := finished(ctx, want); err != nil {
+			return uuid.Nil, false, err
+		}
+	}
 	return importer.judgeAgainNext, importer.judgeAgainNext != uuid.Nil, importer.judgeAgainErr
 }
 
@@ -5077,6 +5092,23 @@ func TestAPartOfThePassCarriesWhenThePassFirstStarted(t *testing.T) {
 	if !importer.judgedSince.Equal(started) || !queue.judgeAgainQueuedSince.Equal(started) {
 		t.Fatalf("judged since %s, next part since %s, want both %s",
 			importer.judgedSince, queue.judgeAgainQueuedSince, started)
+	}
+}
+
+// A part writes its place into the job after each want, so a restart resumes at
+// the want it was on rather than at the part's first want.
+func TestAPartOfThePassKeepsItsPlaceAfterEachWant(t *testing.T) {
+	queue := &fakeQueue{}
+	first, second := uuid.New(), uuid.New()
+	importer := &fakeImporter{judgeAgainFinishes: []uuid.UUID{first, second}}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: JudgeCopiesAgain, Attempts: 1, MaxAttempts: 1,
+	})
+
+	if !slices.Equal(queue.judgedUpTo, []uuid.UUID{first, second}) {
+		t.Fatalf("places kept = %v, want %v", queue.judgedUpTo, []uuid.UUID{first, second})
 	}
 }
 

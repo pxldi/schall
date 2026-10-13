@@ -583,6 +583,9 @@ type Queue interface {
 	// StartedFirstAt answers when a job was first started, across the restarts
 	// that put it back on the queue.
 	StartedFirstAt(context.Context, Job) (time.Time, error)
+	// JudgedUpTo writes the last want a part of a judge-again pass finished into
+	// the job, so a restart resumes after it.
+	JudgedUpTo(context.Context, Job, uuid.UUID) error
 	QueueUpgradeSweep(context.Context, time.Time, json.RawMessage) error
 	QueueNavidromePlaylistSweep(context.Context, time.Time) error
 	QueueGenreSweep(context.Context, time.Time) error
@@ -639,8 +642,11 @@ type DownloadImporter interface {
 	// since changed. It answers the last want it took and whether any are left.
 	// What it did is reported to the log by the pass itself.
 	// Copies decided at or after the moment given are skipped: the pass already
-	// judged them before a restart cut it off.
-	JudgeAgain(context.Context, uuid.UUID, time.Time) (uuid.UUID, bool, error)
+	// judged them before a restart cut it off. The function is told each want
+	// the part has finished with, so the job can keep its place as it goes.
+	JudgeAgain(
+		context.Context, uuid.UUID, time.Time, func(context.Context, uuid.UUID) error,
+	) (uuid.UUID, bool, error)
 	// JudgeCreditRefusalsAgain does the same for the copies refused on the
 	// artist tag alone, which is a different set and a different rule change
 	// (ADR 0030).
@@ -2126,7 +2132,10 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, err, true)
 		return
 	}
-	next, more, err := worker.importer.JudgeAgain(ctx, position.After, since)
+	next, more, err := worker.importer.JudgeAgain(ctx, position.After, since,
+		func(ctx context.Context, want uuid.UUID) error {
+			return worker.queue.JudgedUpTo(ctx, job, want)
+		})
 	if err != nil {
 		worker.finishFailed(ctx, job, fmt.Errorf("judge copies again: %w", err), true)
 		return
@@ -2144,8 +2153,9 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 }
 
 // judgeAgainPosition is the last want a part of a judge-again pass finished.
-// A restart runs the part that was cut short again from the same place, and
-// the copies that part already judged are skipped by when they were decided.
+// It is written after every want, so a restart runs the part that was cut short
+// from the want it was on, and the copies of that want it already judged are
+// skipped by when they were decided.
 type judgeAgainPosition struct {
 	After uuid.UUID `json:"after"`
 }
