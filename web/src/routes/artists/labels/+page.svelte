@@ -229,7 +229,7 @@
           role="idle"
         />
       {:else}
-        {#each [$unfollow.error, $refresh.error, $setMonitor.error] as error, errorIndex (errorIndex)}
+        {#each [$follow.error, $unfollow.error, $refresh.error, $setMonitor.error] as error, errorIndex (errorIndex)}
           {#if error}
             <ErrorNote {error} />
           {/if}

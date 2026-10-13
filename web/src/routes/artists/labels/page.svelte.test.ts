@@ -161,3 +161,26 @@ describe('the safety-net poll', () => {
     expect(await listReadsOver(list)).toBe(0);
   });
 });
+
+describe('a failed follow', () => {
+  it('says why it failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/labels' && init?.method === undefined) {
+          const items = [label({ followed: false, followedAt: null })];
+          return new Response(JSON.stringify({ items, total: 1, followedCount: 0 }));
+        }
+        return new Response(JSON.stringify({ title: 'MusicBrainz is temporarily unavailable' }), {
+          status: 503
+        });
+      })
+    );
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Follow' }));
+
+    expect(await screen.findByText('MusicBrainz is not answering.')).toBeTruthy();
+  });
+});
