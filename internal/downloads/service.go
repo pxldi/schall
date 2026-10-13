@@ -548,12 +548,12 @@ func (service *Service) Poll(ctx context.Context) (bool, error) {
 			continue
 		}
 
-		byPath := make(map[string]sources.Transfer, len(transfers))
+		byPath := make(map[string][]sources.Transfer, len(transfers))
 		for _, transfer := range transfers {
-			byPath[transfer.Path] = transfer
+			byPath[transfer.Path] = append(byPath[transfer.Path], transfer)
 		}
 		for _, request := range peerRequests {
-			updated, err := service.record(ctx, request, byPath)
+			updated, err := service.record(ctx, request, transfersFor(request, byPath))
 			if err != nil {
 				return active, err
 			}
@@ -584,6 +584,39 @@ func (service *Service) Poll(ctx context.Context) (bool, error) {
 		service.notices.Publish(events.TopicDownloadProgress)
 	}
 	return active, nil
+}
+
+// transfersFor picks, for each file of one request, the transfer the provider
+// lists for it. After a retry slskd can list a path twice, the failed attempt
+// beside the new one, and the old failure must not settle the request again.
+// The attempt the request already follows wins; failing that, one still moving.
+func transfersFor(
+	request db.DownloadRequestRow, byPath map[string][]sources.Transfer,
+) map[string]sources.Transfer {
+	followed := make(map[string]string, len(request.Transfers))
+	for _, transfer := range request.Transfers {
+		followed[transfer.Path] = transfer.ProviderID
+	}
+	chosen := make(map[string]sources.Transfer, len(request.Files))
+	for _, file := range request.Files {
+		listed := byPath[file.Path]
+		if len(listed) == 0 {
+			continue
+		}
+		pick := listed[len(listed)-1]
+		for _, transfer := range listed {
+			if !transfer.Settled() {
+				pick = transfer
+			}
+		}
+		for _, transfer := range listed {
+			if id := followed[file.Path]; id != "" && transfer.ID == id {
+				pick = transfer
+			}
+		}
+		chosen[file.Path] = pick
+	}
+	return chosen
 }
 
 // record stores the progress of one request. A requested file the provider does

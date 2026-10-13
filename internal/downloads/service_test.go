@@ -662,6 +662,50 @@ func TestPollRecordsWhatTheProviderReports(t *testing.T) {
 	}
 }
 
+// After a retry slskd can list the same file twice: the failed attempt it has
+// not forgotten yet and the new one in its queue. The failure is the past, and
+// recording it would settle the request the retry just reopened.
+func TestPollFollowsTheRetryWhenTheProviderStillListsTheFailedAttempt(t *testing.T) {
+	store := &fakeStore{request: requestRow(), settings: enabledSettings()}
+	store.request.Status = "started"
+	store.request.Files = store.request.Files[:1]
+	downloader := &fakeDownloader{transfers: []sources.Transfer{
+		{ID: "retry", Path: `@@peer\Music\01.flac`, State: sources.TransferQueued},
+		{ID: "first", Path: `@@peer\Music\01.flac`, State: sources.TransferFailed, Detail: "Rejected"},
+	}}
+	service := NewService(store, downloader, zerolog.Nop())
+
+	if _, err := service.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.recorded) != 1 || store.recorded[0].ProviderID != "retry" {
+		t.Fatalf("recorded = %#v, want the retry's transfer", store.recorded)
+	}
+}
+
+// The transfer this request already follows is the one read, whatever else the
+// provider lists under the same name.
+func TestPollReadsTheTransferTheRequestAlreadyFollows(t *testing.T) {
+	store := &fakeStore{request: requestRow(), settings: enabledSettings()}
+	store.request.Status = "started"
+	store.request.Files = store.request.Files[:1]
+	store.request.Transfers = []db.FileTransfer{
+		{Path: `@@peer\Music\01.flac`, Status: "downloading", ProviderID: "ours"},
+	}
+	downloader := &fakeDownloader{transfers: []sources.Transfer{
+		{ID: "ours", Path: `@@peer\Music\01.flac`, State: sources.TransferCompleted},
+		{ID: "other", Path: `@@peer\Music\01.flac`, State: sources.TransferDownloading},
+	}}
+	service := NewService(store, downloader, zerolog.Nop())
+
+	if _, err := service.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.recorded) != 1 || store.recorded[0].ProviderID != "ours" {
+		t.Fatalf("recorded = %#v, want the transfer the request follows", store.recorded)
+	}
+}
+
 // A file the provider no longer mentions is left alone: slskd forgets finished
 // transfers, and a forgotten transfer is not a lost one.
 func TestPollLeavesForgottenTransfersAlone(t *testing.T) {

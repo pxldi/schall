@@ -103,6 +103,10 @@ type FileTransfer struct {
 	Error            string `json:"error,omitempty"`
 	// Attempt is which try this row is on: 1 until a retry requeues it.
 	Attempt int32 `json:"attempt"`
+	// ProviderID is the provider's own name for the attempt in flight, empty
+	// until a poll has seen it. The poller uses it to tell this attempt from an
+	// older one the provider still lists under the same path.
+	ProviderID string `json:"providerId,omitempty"`
 	// Attempts is what every settled attempt came to, oldest first. The attempt
 	// in flight is not in here — an attempt joins the history once it has
 	// settled, so the last entry is the last thing that actually happened.
@@ -352,6 +356,7 @@ const downloadRequestJoins = `
 					'transferredBytes', downloads.transferred_bytes,
 					'error', coalesce(downloads.error_message, ''),
 					'attempt', downloads.attempt,
+					'providerId', coalesce(downloads.provider_transfer_id, ''),
 					'attempts', coalesce(attempts.entries, '[]'::json)
 				)
 				ORDER BY downloads.remote_path
