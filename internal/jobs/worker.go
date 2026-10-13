@@ -579,7 +579,7 @@ type Queue interface {
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
 	QueueAskAcoustIDAgain(context.Context, time.Time) error
-	QueueJudgeCopiesAgainAfter(context.Context, time.Time, uuid.UUID, time.Time) error
+	QueueJudgeCopiesAgainAfter(context.Context, time.Time, db.JudgeAgainPlace, time.Time) error
 	// StartedFirstAt answers when a job was first started, across the restarts
 	// that put it back on the queue.
 	StartedFirstAt(context.Context, Job) (time.Time, error)
@@ -645,8 +645,8 @@ type DownloadImporter interface {
 	// judged them before a restart cut it off. The function is told each want
 	// the part has finished with, so the job can keep its place as it goes.
 	JudgeAgain(
-		context.Context, uuid.UUID, time.Time, func(context.Context, uuid.UUID) error,
-	) (uuid.UUID, bool, error)
+		context.Context, db.JudgeAgainPlace, time.Time, func(context.Context, uuid.UUID) error,
+	) (db.JudgeAgainPlace, bool, error)
 	// JudgeCreditRefusalsAgain does the same for the copies refused on the
 	// artist tag alone, which is a different set and a different rule change
 	// (ADR 0030).
@@ -2132,7 +2132,7 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, err, true)
 		return
 	}
-	next, more, err := worker.importer.JudgeAgain(ctx, position.After, since,
+	next, more, err := worker.importer.JudgeAgain(ctx, db.JudgeAgainPlace(position), since,
 		func(ctx context.Context, want uuid.UUID) error {
 			return worker.queue.JudgedUpTo(ctx, job, want)
 		})
@@ -2157,6 +2157,7 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 // from the want it was on, and the copies of that want it already judged are
 // skipped by when they were decided.
 type judgeAgainPosition struct {
+	Rest  bool      `json:"rest,omitempty"`
 	After uuid.UUID `json:"after"`
 }
 

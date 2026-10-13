@@ -66,10 +66,15 @@ type JudgedAgain struct {
 // told each want the part is done with, so the caller can keep its place one
 // want at a time: a part that a restart cuts off then resumes at the want it was
 // on rather than at the part's first want.
+//
+// The pass goes round twice (db.JudgeAgainPlace): first over the wants the
+// review queue is asking about, then over the rest, so the answers a person
+// would notice come first.
 func (importer *Importer) JudgeAgain(
-	ctx context.Context, after uuid.UUID, since time.Time, finished func(context.Context, uuid.UUID) error,
-) (uuid.UUID, bool, error) {
-	_, next, more, err := importer.judgeAgainPart(ctx, after, since, finished)
+	ctx context.Context, place db.JudgeAgainPlace, since time.Time,
+	finished func(context.Context, uuid.UUID) error,
+) (db.JudgeAgainPlace, bool, error) {
+	_, next, more, err := importer.judgeAgainPart(ctx, place, since, finished)
 	return next, more, err
 }
 
@@ -85,11 +90,11 @@ var judgeCopyLimit = 5 * time.Minute
 const slowCopy = 30 * time.Second
 
 // judgeWantLimit is how long a pass spends on one want's copies. Each copy is
-// several decodes and paced requests, so a want held in dozens of copies could
-// hold the pass for most of an hour with no copy slow enough to name. Copies
+// several decodes and paced requests, so a want held in hundreds of copies
+// could hold the pass for hours with no copy slow enough to name. Copies
 // still waiting when it runs out keep the verdict they had, which is a question
 // for a person and never an admission, and the pass moves to the next want.
-var judgeWantLimit = 10 * time.Minute
+var judgeWantLimit = 5 * time.Minute
 
 // judgeAgainWants is how many wants one part of a pass judges. Each copy is a
 // decode and an AcoustID lookup, so 20 wants is a few minutes of work: short
@@ -131,32 +136,38 @@ func (importer *Importer) askAcoustIDAgain(ctx context.Context) (JudgedAgain, er
 // the numbers are returned so a test can read what one pass did.
 func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
 	var total JudgedAgain
-	after := uuid.Nil
+	var place db.JudgeAgainPlace
 	for {
-		part, next, more, err := importer.judgeAgainPart(ctx, after, time.Time{}, nil)
+		part, next, more, err := importer.judgeAgainPart(ctx, place, time.Time{}, nil)
 		total.Offered += part.Offered
 		total.Judged += part.Judged
 		total.Missing += part.Missing
 		total.Answered += part.Answered
+		total.Deferred += part.Deferred
 		if err != nil || !more {
 			return total, err
 		}
-		after = next
+		place = next
 	}
 }
 
 // judgeAgainPart judges the copies of the next judgeAgainWants wants after the
-// one given. It answers the last want it took and whether any want is left.
+// place given. It answers where it stopped and whether anything is left. The
+// end of the first round is a place too: the start of the second.
 func (importer *Importer) judgeAgainPart(
-	ctx context.Context, after uuid.UUID, since time.Time, finished func(context.Context, uuid.UUID) error,
-) (JudgedAgain, uuid.UUID, bool, error) {
-	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, after, since)
+	ctx context.Context, place db.JudgeAgainPlace, since time.Time,
+	finished func(context.Context, uuid.UUID) error,
+) (JudgedAgain, db.JudgeAgainPlace, bool, error) {
+	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, place, since)
 	if err != nil {
-		return JudgedAgain{}, after, false, err
+		return JudgedAgain{}, place, false, err
 	}
 	part, more := firstWants(copies, judgeAgainWants)
 	if len(part) == 0 {
-		return JudgedAgain{}, after, false, nil
+		if !place.Rest {
+			return JudgedAgain{}, db.JudgeAgainPlace{Rest: true}, true, nil
+		}
+		return JudgedAgain{}, place, false, nil
 	}
 	var total JudgedAgain
 	for start := 0; start < len(part); {
@@ -176,7 +187,7 @@ func (importer *Importer) judgeAgainPart(
 		total.Answered += result.Answered
 		total.Deferred += result.Deferred
 		if err != nil {
-			return total, want, more, err
+			return total, db.JudgeAgainPlace{Rest: place.Rest, After: want}, more, err
 		}
 		if finished != nil {
 			// A place that could not be written costs a restart some repeated
@@ -189,7 +200,10 @@ func (importer *Importer) judgeAgainPart(
 		}
 		start = end
 	}
-	return total, part[len(part)-1].AcquisitionTargetID, more, nil
+	if !more && !place.Rest {
+		return total, db.JudgeAgainPlace{Rest: true}, true, nil
+	}
+	return total, db.JudgeAgainPlace{Rest: place.Rest, After: part[len(part)-1].AcquisitionTargetID}, more, nil
 }
 
 // firstWants cuts a list read in want order after its first wants wants, and

@@ -703,9 +703,9 @@ func (repository *Repository) QueueSpectrumSweep(ctx context.Context, runAfter t
 }
 
 func (repository *Repository) QueueJudgeCopiesAgainAfter(
-	ctx context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
+	ctx context.Context, runAfter time.Time, place db.JudgeAgainPlace, since time.Time,
 ) error {
-	return db.New(repository.pool).QueueJudgeCopiesAgainAfter(ctx, runAfter, after, since)
+	return db.New(repository.pool).QueueJudgeCopiesAgainAfter(ctx, runAfter, place, since)
 }
 
 // StartedFirstAt answers when a job was first started. The first claim writes
