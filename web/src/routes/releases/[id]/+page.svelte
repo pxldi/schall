@@ -913,8 +913,11 @@
         <div
           bind:this={sourcesPanel}
           class="mt-5 scroll-mt-[calc(var(--topbar-height)+1rem)] rounded-panel border border-line-thin p-5"
-          style="min-height: 20rem"
+          style="min-height: max(20rem, calc(100dvh - var(--topbar-height, 0px) - 2rem))"
         >
+          <!-- At least a screen tall in every state, so the page under the
+               panel it was scrolled to keeps its length when a short answer
+               replaces the placeholders and the browser has nothing to clamp. -->
           <form class="flex flex-wrap gap-3" onsubmit={(event) => { event.preventDefault(); findSources(sourceQuery); }}>
             <input
               bind:value={sourceQuery}
@@ -926,23 +929,21 @@
           </form>
 
           {#if sourcesLoading}
-            <div
-              class="mt-5 max-h-[calc(100dvh-31rem)] flex flex-col gap-2 overflow-hidden"
-              role="status"
-              aria-label="Loading source results"
-            >
-              {#each Array(40) as _, placeholderIndex (placeholderIndex)}
-                <Skeleton shape="block" class="h-24" />
-              {/each}
+            <div class="mt-5 flex flex-col gap-2" role="status" aria-label="Loading source results">
+              <!-- First, where it is read: under forty placeholders it was cut
+                   off by the panel and the search looked idle. -->
               <p class="flex items-center gap-2 text-body text-ink-3">
                 <Icon name="busy" size="md" class="animate-spin" /> Searching peers for “{sourceQuery}”…
               </p>
+              {#each Array(4) as _, placeholderIndex (placeholderIndex)}
+                <Skeleton shape="block" class="h-24" />
+              {/each}
             </div>
           {:else if sourcesError}
             <ErrorNote error={sourcesError} class="mt-5" />
           {:else if sources.length}
             <p class="mt-5 text-meta text-ink-4">
-              {sources.length} folders matched “{searchedQuery}”
+              {sources.length === 1 ? '1 folder' : `${sources.length} folders`} matched “{searchedQuery}”
             </p>
             <!-- Rows in the panel, not cards inside it: the panel already is the
                  bordered surface. -->

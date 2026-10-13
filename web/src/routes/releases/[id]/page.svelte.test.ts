@@ -601,4 +601,30 @@ describe('a source search', () => {
     const field = await screen.findByRole('textbox', { name: 'Search terms' });
     expect(scrolled.some((element) => element.contains(field))).toBe(true);
   });
+
+  it('counts one folder in the singular', async () => {
+    answering({
+      sources: { query: 'talk talk spirit of eden', expectedTrackCount: 2, items: [candidate()] }
+    });
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    expect(await screen.findByText('1 folder matched “talk talk spirit of eden”')).toBeTruthy();
+  });
+
+  it('says it is searching first, while the search runs', async () => {
+    answering();
+    const answered = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).includes('/sources')) return new Promise<Response>(() => {});
+      return answered(input, init);
+    });
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    const loading = await screen.findByRole('status', { name: 'Loading source results' });
+    expect(loading.firstElementChild?.textContent).toContain('Searching peers for');
+  });
 });
