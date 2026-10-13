@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -299,5 +300,43 @@ func TestTheSweepLeavesAnAlreadyMP3FileAlone(t *testing.T) {
 	}
 	if !checked {
 		t.Fatal("the file was not marked checked")
+	}
+}
+
+// A file the sweep shrank is a file Schall wrote, so the next scan has to find
+// it as the sweep left it. A row still carrying the original's modification
+// time reads to the scan as bytes somebody changed, and that sends a proven
+// file back to the resolution queue.
+func TestAScanFindsAShrunkFileUnchanged(t *testing.T) {
+	needsFfmpeg(t)
+	pool := dbtest.Setup(t)
+	rootID, root := libraryRoot(t, pool)
+
+	original := filepath.Join(root, "resolved.wav")
+	sineFile(t, original, 0.5)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(original, old, old); err != nil {
+		t.Fatal(err)
+	}
+	fileID := resolvedFile(t, pool, rootID, original, true)
+
+	sweep := newTranscodeSweep(pool, "")
+	if _, err := sweep.Sweep(context.Background(), queueTranscodeSweep(t, pool)); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if path, _, _, _ := fileRow(t, pool, fileID); filepath.Ext(path) != ".mp3" {
+		t.Fatalf("the file was not shrunk: %q", path)
+	}
+
+	if _, err := NewScanner(pool).Scan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT resolution_status FROM library_files WHERE id = $1`, fileID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "resolved" {
+		t.Fatalf("resolution_status after a scan = %q, want the shrunk file still resolved", status)
 	}
 }

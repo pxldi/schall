@@ -349,6 +349,13 @@ func (sweep *TranscodeSweep) recordShrink(
 	ctx context.Context, file existingFile, placement transcode.Placement,
 	destination string, written tagging.AudioProperties,
 ) (uuid.UUID, error) {
+	// The row takes the size and time of the file really written, the way
+	// tags.go's follow does, so the next scan finds it unchanged rather than
+	// sending a proven file back to the resolution queue.
+	info, err := os.Stat(destination)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("read back the smaller copy %s: %w", destination, err)
+	}
 	transaction, err := sweep.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, err
@@ -384,7 +391,7 @@ func (sweep *TranscodeSweep) recordShrink(
 	// against, and nothing here is read as evidence of anything.
 	if _, err := transaction.Exec(ctx, `
 		UPDATE library_files
-		SET path = $2, size_bytes = $3, duration_ms = $4,
+		SET path = $2, size_bytes = $3, modified_at = $10, duration_ms = $4,
 		    transcoded_from_format = $5, original_size_bytes = $6,
 		    bit_rate_kbps = $7, sample_rate_hz = $8, channels = $9,
 		    measured_duration_ms = $4, properties_read_at = now(),
@@ -395,9 +402,10 @@ func (sweep *TranscodeSweep) recordShrink(
 		    transcode_suspected = NULL, spectrum_read_at = NULL,
 		    updated_at = now()
 		WHERE id = $1
-	`, file.id, destination, placement.SizeBytes, written.DurationMS,
+	`, file.id, destination, info.Size(), written.DurationMS,
 		placement.FromFormat, placement.OriginalSizeBytes,
 		written.BitRateKbps, written.SampleRateHz, written.Channels,
+		databaseTime(info.ModTime()),
 	); err != nil {
 		return uuid.Nil, fmt.Errorf("move the library row for %s onto its smaller copy: %w", file.path, err)
 	}
