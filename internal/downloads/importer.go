@@ -1275,6 +1275,12 @@ func containedDirectory(root, candidate string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The candidate is compared by its real path, so the root has to be too, or
+	// an inbox configured through a symlink holds nothing. A root that cannot be
+	// resolved is compared as written.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	candidate, err = filepath.EvalSymlinks(candidate)
 	if err != nil {
 		return "", fmt.Errorf("resolve downloaded folder: %w", err)
