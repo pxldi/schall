@@ -165,11 +165,6 @@ const pages: {
     // The sources below the track list arrive in a second read, after the
     // heading, and lengthen the page when they do.
     ready: (page) => expect(page.getByText('1 open request')).toBeVisible(),
-    // The header print is drawn one of two ways depending on whether the
-    // canvas is more than 1.4 times as wide as tall when it paints, and the
-    // canvas reaches its final height at a moment that varies. Until the print
-    // paints from its final size, it is left out of the comparison.
-    mask: (page) => [page.locator('.print[data-mode="single"]')]
   },
   {
     name: 'playlists',

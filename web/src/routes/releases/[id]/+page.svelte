@@ -31,6 +31,7 @@
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
+  import ArtistReleases from './ArtistReleases.svelte';
 
   const releaseID = page.params.id ?? '';
   // Schall serves the picture itself, from a cache it filled once by the
@@ -140,7 +141,14 @@
   // Missing tracks nobody has asked for yet. Wanting the release only adds
   // these, so the button counts them: after wanting the last missing track it
   // said "Want 1 missing" for a track that was already wanted.
-  const unwantedCount = $derived(missingCount - wantedCount);
+  // A missing track whose want already settled is not asked for again by the
+  // button either: the server answers it with the settled want.
+  const unwantedCount = $derived(
+    missingCount -
+      wantedCount -
+      ($tracks.data?.items.filter((track) => !held(track) && track.wantStatus === 'acquired')
+        .length ?? 0)
+  );
   // Wanting a release creates one want per track the library does not have and
   // nothing else: no transfer starts here, and every copy the loop later fetches
   // is still proven by its audio before it enters the library. Pressing twice is
@@ -207,11 +215,17 @@
       track.wantStatus && track.wantStatus !== 'not_wanted' && track.wantStatus !== 'acquired'
     );
   }
-  // A track already proven in the library, or one whose acquisition already
-  // settled: both draw the tick and nothing else. `held` alone is what the
-  // arithmetic above counts by; this is only for choosing what the row draws.
+  // A track proven in the library draws the tick. It used to be drawn for a
+  // settled want too, and a want can settle on a file the library no longer
+  // maps: 88GLAM 2.5 said "2 missing" in its header over sixteen ticks.
   function trackDone(track: Track) {
-    return held(track) || track.wantStatus === 'acquired';
+    return held(track);
+  }
+  // That case on its own: Schall fetched the track once and holds no file for
+  // it now. Wanting it again answers with the settled want and changes
+  // nothing, so the row offers no + and says what it knows instead.
+  function lost(track: Track) {
+    return !held(track) && track.wantStatus === 'acquired';
   }
   // The tag a track's want status draws in the row: the same words the rest of
   // the product uses for what is happening to a thing, read quietly because
@@ -487,13 +501,13 @@
           <Skeleton class="h-20 w-[28rem] max-w-full" />
           <Skeleton class="h-4 w-72" />
         </div>
-        <div class="grid gap-8 px-4 pt-4 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]" aria-hidden="true">
-          <Skeleton shape="block" class="aspect-square w-full max-w-60" />
+        <div class="grid gap-x-8 gap-y-6 px-4 pt-4 sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]" aria-hidden="true">
           <div class="flex flex-col gap-2">
             {#each Array(8) as _, placeholderIndex (placeholderIndex)}
               <Skeleton class="h-9" />
             {/each}
           </div>
+          <Skeleton shape="block" class="size-30" />
         </div>
       </div>
     {/snippet}
@@ -550,144 +564,77 @@
       {/if}
     {/snippet}
     {#snippet actions()}
-      <!-- One primary press, the page's light ink, and two quiet ones beside
-           it. Find sources stands with the actions it belongs with. -->
+      <!-- The quiet actions are icons with their names as tooltips, and the
+           one primary press keeps a word and its count. Remove and Dismiss
+           draw different glyphs and say what they touch: Remove is about what
+           the library has or wants, Dismiss about what it is missing. -->
       <Button
         variant="outline"
+        icon
+        title="Find sources"
+        aria-label="Find sources"
         onclick={() => findSources(sourcesOpen ? sourceQuery : undefined)}
         disabled={sourcesLoading}
       >
-        {#if sourcesLoading}
-          <Icon name="busy" size="md" class="animate-spin" />
-        {:else}
-          <Icon name="search" size="md" />
-        {/if}
-        Find sources
+        <Icon name={sourcesLoading ? 'busy' : 'search'} size="md" class={sourcesLoading ? 'animate-spin' : ''} />
       </Button>
       {#if $tracks.isPending}
         <span class="flex gap-2" role="status" aria-label="Loading track actions">
-          <span class="invisible h-8 w-28 rounded-pill bg-surface-regular" aria-hidden="true"></span>
-          <span class="invisible h-8 w-36 rounded-pill bg-surface-regular" aria-hidden="true"></span>
+          <span class="invisible size-8 rounded-pill bg-surface-regular" aria-hidden="true"></span>
+          <span class="invisible h-8 w-24 rounded-pill bg-surface-regular" aria-hidden="true"></span>
         </span>
       {:else}
         {#if ownedCount - leaving.length > 0 || wantedCount > 0}
           <Button
             variant="outline"
+            icon
+            title="Remove: stop wanting it, and delete what Schall downloaded in 30 days"
+            aria-label="Remove"
             disabled={$removeRelease.isPending}
             onclick={() => $removeRelease.mutate()}
           >
-            {#if $removeRelease.isPending}
-              <Icon name="busy" size="md" class="animate-spin" />
-            {:else}
-              <Icon name="delete" size="md" />
-            {/if}
-            Remove
+            <Icon
+              name={$removeRelease.isPending ? 'busy' : 'delete'}
+              size="md"
+              class={$removeRelease.isPending ? 'animate-spin' : ''}
+            />
           </Button>
         {/if}
-      {/if}
-      {#if !$tracks.isPending && missingCount > 0}
-        <Button
-          variant="outline"
-          disabled={$dismissRemainder.isPending}
-          onclick={() => $dismissRemainder.mutate()}
-        >
-          {#if $dismissRemainder.isPending}
-            <Icon name="busy" size="md" class="animate-spin" />
-          {/if}
-          Dismiss {missingCount === 1 ? 'it' : 'the rest'}
-        </Button>
-        {#if unwantedCount > 0}
-          <Button disabled={$wantRelease.isPending} onclick={() => $wantRelease.mutate()}>
-            {#if $wantRelease.isPending}
-              <Icon name="busy" size="md" class="animate-spin" />
-            {:else}
-              <Icon name="want" size="md" />
-            {/if}
-            Want {unwantedCount} missing
+        {#if missingCount > 0}
+          <Button
+            variant="outline"
+            icon
+            title={`Dismiss the ${missingCount} missing`}
+            aria-label={missingCount === 1 ? 'Dismiss it' : 'Dismiss the rest'}
+            disabled={$dismissRemainder.isPending}
+            onclick={() => $dismissRemainder.mutate()}
+          >
+            <Icon
+              name={$dismissRemainder.isPending ? 'busy' : 'dismiss'}
+              size="md"
+              class={$dismissRemainder.isPending ? 'animate-spin' : ''}
+            />
           </Button>
+          {#if unwantedCount > 0}
+            <Button
+              aria-label={`Want ${unwantedCount} missing`}
+              disabled={$wantRelease.isPending}
+              onclick={() => $wantRelease.mutate()}
+            >
+              <Icon
+                name={$wantRelease.isPending ? 'busy' : 'plus'}
+                size="md"
+                class={$wantRelease.isPending ? 'animate-spin' : ''}
+              />
+              Want {unwantedCount}
+            </Button>
+          {/if}
         {/if}
       {/if}
     {/snippet}
   </Hero>
 
-  <div class="grid gap-8 px-4 pb-8 pt-4 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
-    <!-- The sleeve at the size a record is looked at, and what is known about
-         this pressing under it. -->
-    <aside class="flex min-w-0 flex-col gap-3">
-      <!-- The sleeve, and the one way to put one there by hand. Some records
-           have no picture anywhere, so a release can be blank for good, and the
-           person looking at it usually has the sleeve. A missing one is drawn
-           from the release's seed so the frame is never a grey square; the
-           control appears on hover, or stays up when there is no picture. -->
-      <span class="group relative block aspect-square w-full max-w-60 overflow-hidden rounded-card shadow-[0_20px_50px_rgb(0_0_0/0.45)]">
-        <Cover
-          eager
-          onmissing={() => (coverMissing = true)}
-          src={coverSrc}
-          seed={releaseID}
-          inks={$release.data.inks}
-          class="size-full object-cover"
-        />
-        <span
-          class="absolute bottom-2 left-2 transition focus-within:opacity-100 group-hover:opacity-100 {coverMissing
-            ? ''
-            : 'opacity-0'}"
-        >
-          <Button size="sm" variant="outline" class="bg-ground/70" onclick={() => (settingCover = true)}>
-            Set cover
-          </Button>
-        </span>
-      </span>
-      <!-- A cover found by name is a guess and says so. One found by the
-           release's own identifier says nothing, because there is nothing to
-           qualify. -->
-      <span class="block min-h-4 max-w-60 text-meta leading-tight text-ink-3">
-        {#if coverMissing}
-          No cover yet
-        {:else if $release.data.coverSource === 'itunes'}
-          Cover matched by name
-        {:else if $release.data.coverSource === 'embedded'}
-          Cover from your copy
-        {/if}
-      </span>
-
-      <!-- What MusicBrainz's community voted this release is. A tag rather
-           than a filter chip, because a genre is information, not something to
-           narrow by. A release with no votes shows nothing. -->
-      {#if $release.data.genres?.length}
-        <ul class="flex flex-wrap items-center gap-1.5">
-          {#each $release.data.genres as genre (genre)}
-            <li><StateTag>{genre}</StateTag></li>
-          {/each}
-        </ul>
-      {/if}
-
-      <!-- The pressing in use, collapsed to the four facts a comparison needs.
-           Every other pressing MusicBrainz knows of sits behind "Change",
-           because most visits never question which one this is. -->
-      {#if $release.data.musicbrainzReleaseGroupId}
-        <p class="text-meta text-ink-3">
-          {#if selectedEdition}
-            Edition · {selectedEdition.releaseDate || '—'} · {selectedEdition.country || '—'} · {selectedEdition.status ||
-              '—'} ·
-          {:else}
-            No pressing selected ·
-          {/if}
-          <button
-            type="button"
-            class="font-semibold text-ink-2 underline-offset-2 transition hover:text-ink hover:underline"
-            onclick={() => (editionsOpen = !editionsOpen)}
-          >
-            {editionsOpen ? 'Hide' : 'Change'}
-          </button>
-        </p>
-      {:else}
-        <p class="text-meta text-ink-3">
-          This release is not linked to MusicBrainz, so there are no other pressings to compare.
-        </p>
-      {/if}
-    </aside>
-
+  <div class="grid items-start gap-x-8 gap-y-6 px-4 pb-8 pt-4 sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
   <div class="flex min-w-0 flex-col gap-4">
   <!-- The answer sits under the button that asked, because "wanted 3 of 12" is
        what somebody pressing it needs to see and a page-level toast would say
@@ -801,7 +748,7 @@
                    removed; its toggle waits for the pointer, because the
                    tick at the end of the row already says it is here. -->
               <span class="flex w-6 shrink-0 items-center justify-center">
-                {#if track.musicbrainzRecordingId}
+                {#if track.musicbrainzRecordingId && !lost(track)}
                   <WantToggle
                     reveal={trackDone(track) ? 'all' : true}
                     wanted={trackDone(track) ? !track.removesAt : isWanted(track)}
@@ -829,6 +776,8 @@
                   <!-- The same tick a playlist row draws, with the word as its
                        tooltip and accessible name like every other state here. -->
                   <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
+                {:else if lost(track)}
+                  <StateIcon icon="alert" label="Fetched once, file gone" note="Find sources to get it again" />
                 {:else}
                   {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
                   {#if tag?.icon}
@@ -1071,6 +1020,101 @@
       {/if}
     </section>
   </div>
+
+    <!-- The artist page's grid: the tracks take the wide column, and the box
+         where the artist page keeps Popular holds the sleeve, the pressing and
+         the artist's discography, so the next release is one press away. -->
+    <aside class="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[calc(var(--topbar-height)+1rem)]">
+      <div class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-start gap-3.5">
+      <!-- The sleeve, and the one way to put one there by hand. Some records
+           have no picture anywhere, so a release can be blank for good, and the
+           person looking at it usually has the sleeve. A missing one is drawn
+           from the release's seed so the frame is never a grey square; the
+           control appears on hover, or stays up when there is no picture. -->
+      <span class="group relative block aspect-square w-full overflow-hidden rounded-row shadow-[0_10px_28px_rgb(0_0_0/0.4)]">
+        <Cover
+          eager
+          onmissing={() => (coverMissing = true)}
+          src={coverSrc}
+          seed={releaseID}
+          inks={$release.data.inks}
+          class="size-full object-cover"
+        />
+        <span
+          class="absolute bottom-1.5 left-1.5 transition focus-within:opacity-100 group-hover:opacity-100 {coverMissing
+            ? ''
+            : 'opacity-0'}"
+        >
+          <Button
+            size="xs"
+            variant="outline"
+            icon
+            class="bg-ground/70"
+            title="Set cover"
+            aria-label="Set cover"
+            onclick={() => (settingCover = true)}
+          >
+            <Icon name="image" size="sm" />
+          </Button>
+        </span>
+      </span>
+      <div class="flex min-w-0 flex-col gap-2.5">
+      <!-- A cover found by name is a guess and says so. One found by the
+           release's own identifier says nothing, because there is nothing to
+           qualify. -->
+      <span class="block text-meta leading-tight text-ink-3 empty:hidden">
+        {#if coverMissing}
+          No cover yet
+        {:else if $release.data.coverSource === 'itunes'}
+          Cover matched by name
+        {:else if $release.data.coverSource === 'embedded'}
+          Cover from your copy
+        {/if}
+      </span>
+
+      <!-- What MusicBrainz's community voted this release is. A tag rather
+           than a filter chip, because a genre is information, not something to
+           narrow by. A release with no votes shows nothing. -->
+      {#if $release.data.genres?.length}
+        <ul class="flex flex-wrap items-center gap-1.5">
+          {#each $release.data.genres as genre (genre)}
+            <li><StateTag>{genre}</StateTag></li>
+          {/each}
+        </ul>
+      {/if}
+
+      <!-- The pressing in use, collapsed to the four facts a comparison needs.
+           Every other pressing MusicBrainz knows of sits behind "Change",
+           because most visits never question which one this is. -->
+      {#if $release.data.musicbrainzReleaseGroupId}
+        <p class="text-meta text-ink-3">
+          {#if selectedEdition}
+            Edition · {selectedEdition.releaseDate || '—'} · {selectedEdition.country || '—'} · {selectedEdition.status ||
+              '—'} ·
+          {:else}
+            No pressing selected ·
+          {/if}
+          <button
+            type="button"
+            class="font-semibold text-ink-2 underline-offset-2 transition hover:text-ink hover:underline"
+            onclick={() => (editionsOpen = !editionsOpen)}
+          >
+            {editionsOpen ? 'Hide' : 'Change'}
+          </button>
+        </p>
+      {:else}
+        <p class="text-meta text-ink-3">
+          This release is not linked to MusicBrainz, so there are no other pressings to compare.
+        </p>
+      {/if}
+      </div>
+      </div>
+      <ArtistReleases
+        artistID={$release.data.artistId}
+        artistName={$release.data.artistName}
+        {releaseID}
+      />
+    </aside>
   </div>
 
   <SetCoverDialog

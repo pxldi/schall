@@ -85,6 +85,12 @@
   // arrived. Until then the previous print, or the bare ink, stays up.
   const WAIT_MS = 600;
 
+  // A box that is resized repaints once its size has held this long. A window
+  // being dragged repainted on every step, and a screenshot that briefly
+  // measured the page 320 pixels wide caught the print painted at that width
+  // and stretched back across 1440.
+  const RESIZE_SETTLE_MS = 150;
+
   // The pictures are asked for at the width this box draws them at, once its
   // size is known. Every print used to load 500 pixel covers, and a page of
   // them moved megabytes for prints a fifth of that size.
@@ -131,14 +137,26 @@
   $effect(() => {
     const first = canvases[0];
     if (!first || !canPaint()) return;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(([entry]) => {
-      size = {
+      const next = {
         width: Math.round(entry.contentRect.width),
         height: Math.round(entry.contentRect.height)
       };
+      clearTimeout(settle);
+      if (!size.width || !size.height) {
+        size = next;
+        return;
+      }
+      settle = setTimeout(() => {
+        if (next.width !== size.width || next.height !== size.height) size = next;
+      }, RESIZE_SETTLE_MS);
     });
     observer.observe(first);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      clearTimeout(settle);
+    };
   });
 
   // Painting waits for the next frame with room in it, so a size, the covers
