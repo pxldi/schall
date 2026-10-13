@@ -343,6 +343,27 @@ func (service *Service) store(ctx context.Context, fileID uuid.UUID, outcome Out
 	`, fileID); err != nil {
 		return err
 	}
+	// Copies may have been admitted on the strength of the identity this
+	// replaces. Where the answer changes they lose that proof, as they do when
+	// a person changes it (replaceIdentity).
+	var replaced uuid.NullUUID
+	if err := transaction.QueryRow(ctx, `
+		SELECT musicbrainz_recording_id FROM library_file_identities
+		WHERE library_file_id = $1 AND NOT is_manual
+	`, fileID).Scan(&replaced); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	var fallen []uuid.UUID
+	if replaced.Valid &&
+		(outcome.Identity == nil || outcome.Identity.RecordingID != replaced.UUID) {
+		if fallen, err = WithdrawAdmittedBy(ctx, transaction, fileID); err != nil {
+			return err
+		}
+		if err := RearmWantsHoldingFiles(ctx, transaction,
+			fallen, db.RearmedByAResolutionSummary); err != nil {
+			return err
+		}
+	}
 	if _, err := transaction.Exec(ctx, `
 		DELETE FROM library_file_identities
 		WHERE library_file_id = $1 AND NOT is_manual
@@ -398,6 +419,9 @@ func (service *Service) store(ctx context.Context, fileID uuid.UUID, outcome Out
 		}
 	}
 	if err := transaction.Commit(ctx); err != nil {
+		return err
+	}
+	if err := service.reconcileAll(ctx, fallen); err != nil {
 		return err
 	}
 	if outcome.Identity != nil {
