@@ -42,7 +42,7 @@ test('a want that is simply being looked for is on the downloads screen', async 
 
   await expect(page.getByText(seeded.wanted.looking.name, { exact: true })).toBeVisible();
   // What has been tried for it, which is the other half of the answer.
-  await expect(page.getByText(/3 copies looked at/)).toBeVisible();
+  await expect(page.getByText(/3 copies checked/)).toBeVisible();
 });
 
 // Stopping is a decision about pursuit, and a decision the user made is theirs
@@ -51,10 +51,10 @@ test('a want that is simply being looked for is on the downloads screen', async 
 test('a want somebody stopped is kept where the stop can be taken back', async ({ page }) => {
   await page.goto('/downloads?tab=wanted');
 
-  await page.getByRole('button', { name: /^Not wanted/ }).click();
+  await page.getByRole('button', { name: /^Removed/ }).click();
 
   await expect(page.getByText(seeded.wanted.stopped.name, { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Look again' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add back' })).toBeVisible();
 });
 
 test('opening a want list shows what it wants and what it already has', async ({ page }) => {

@@ -33,7 +33,7 @@ describe('TranscodeChip', () => {
 
     expect(screen.getByText('Likely transcode')).toBeTruthy();
     expect(container.querySelector('details')?.textContent).toContain(
-      'stops where a lossy encoder would have stopped it'
+      'Sound cuts off like a lossy encode.'
     );
   });
 });

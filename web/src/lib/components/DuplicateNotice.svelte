@@ -26,7 +26,7 @@
   <div class="flex items-start gap-3">
     <Icon name="library" size={17} class="mt-0.5 shrink-0 text-decide" />
     <div class="min-w-0">
-      <p class="text-body font-semibold text-decide">This release may already be in the library</p>
+      <p class="text-body font-semibold text-decide">Maybe already in your library</p>
       <p class="mt-1 text-body text-ink-2">{evidence.summary}</p>
     </div>
   </div>
@@ -35,13 +35,13 @@
        already a bordered surface, and a bordered row inside it would be the
        second border deep. -->
   {#if unresolved.length}
-    <p class="label mt-4">Not resolved</p>
+    <p class="label mt-4">Unclear</p>
     <div class="mt-1">
       {#each unresolved as file (file.id)}
         <div class="border-b border-line-thin px-1 py-2 last:border-b-0">
           <p class="truncate text-body text-ink">{file.path}</p>
           <p class="mt-0.5 text-meta text-ink-3">
-            {file.tags ? `${file.tags} — ` : ''}{file.evidence}
+            {file.tags ? `${file.tags} · ` : ''}{file.evidence}
           </p>
         </div>
       {/each}
@@ -65,7 +65,7 @@
       <Icon name="check" size={15} /> Download anyway
     </Button>
     <Button variant="ghost" disabled={pending} onclick={oncancel}>
-      <Icon name="close" size={15} /> Keep what I have
+      <Icon name="close" size={15} /> Don't download
     </Button>
     <a href="/library" class="text-meta font-semibold text-ink-3 transition hover:text-ink">
       Open Library

@@ -97,7 +97,7 @@
 
 <div class="mt-3 border-t border-line-regular pt-3">
   <p class="text-meta font-semibold uppercase tracking-[0.18em] text-decide/70">
-    What validation compared
+    What Schall compared
   </p>
 
   {#if problems.length}
@@ -195,7 +195,7 @@
                         </span>
                       {/if}
                       {#if candidate.takenBy}
-                        <span class="text-ink-4"> · already matched by {candidate.takenBy}</span>
+                        <span class="text-ink-4"> · taken by {candidate.takenBy}</span>
                       {/if}
                     </li>
                   {/each}
@@ -251,7 +251,7 @@
                   </div>
                 {:else if !file.resolvable}
                   <p class="mt-1 text-ink-4">
-                    Not a judgement call. Download the file again.
+                    Can't fix by hand. Download it again.
                   </p>
                 {/if}
               </td>
@@ -263,8 +263,8 @@
               <td colspan="2" class="pb-1">
                 <div class="flex flex-wrap items-center gap-2 text-busy/90">
                   <span>
-                    Resolved as “{decision.trackTitle}”{decision.note ? ` — ${decision.note}` : ''}.
-                    Validate again to apply it.
+                    Resolved as “{decision.trackTitle}”{decision.note ? `: ${decision.note}` : ''}.
+                    Check again to apply.
                   </span>
                   <button
                     class="flex items-center gap-1 text-ink-3 transition hover:text-ink-2"
@@ -285,7 +285,7 @@
   {#if unmatched.length}
     <div class="mt-3 border-t border-line-regular pt-2">
       <p class="text-micro uppercase tracking-[0.14em] text-ink-3">
-        Catalogue tracks no file claimed
+        Tracks with no file
       </p>
       <ul class="mt-1 space-y-0.5 text-meta text-ink-3">
         {#each unmatched as track}

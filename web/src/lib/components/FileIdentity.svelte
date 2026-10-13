@@ -81,7 +81,7 @@
         <p class="mt-2 text-meta text-ink-3">
           <!-- The server writes the sentence. The method beside it is a name
                Schall uses to itself, and printing it told the reader nothing. -->
-          {identity.manual ? 'Decided by hand' : identity.methodText}{identity.evidence
+          {identity.manual ? 'Set by hand' : identity.methodText}{identity.evidence
             .length
             ? ` · ${identity.evidence.join(', ')} agree`
             : ''}
@@ -95,7 +95,7 @@
         {rows}
         {chosen}
         {onchoose}
-        label="Recordings this file could be"
+        label="Songs this file could be"
       >
         {#snippet detail(_row, index)}
           {#if candidates[index]?.summary}

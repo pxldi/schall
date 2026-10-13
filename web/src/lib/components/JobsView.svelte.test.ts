@@ -258,7 +258,7 @@ describe('JobsView', () => {
     expect(screen.getByText(/next attempt in 4m 12s/)).toBeTruthy();
     // The reason is written for a reader now, with the words the job recorded
     // one press away underneath, and the whole row stays in the quiet ink.
-    expect(screen.getByText('Attempt 1 did not finish.')).toBeTruthy();
+    expect(screen.getByText('Attempt 1 didn\'t finish.')).toBeTruthy();
     expect(screen.getByText(/no source responded within 30s/).getAttribute('data-monospace')).toBe(
       'true'
     );
@@ -367,7 +367,7 @@ describe('JobsView', () => {
     const button = await vi.waitFor(() => jobPress('Queued'));
 
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    const detail = screen.getByText(/Pressing again does not queue it twice/);
+    const detail = screen.getByText(/It won't queue twice/);
     expect(detail.textContent).toContain('Already queued 4 seconds ago');
     expect(detail.getAttribute('data-tone')).toBe('quiet');
   });
@@ -435,7 +435,7 @@ describe('JobsView', () => {
     expect(screen.getByText('Finds library files below the quality floor')).toBeTruthy();
     expect(screen.getByText('Shrinks library files to the configured format')).toBeTruthy();
     expect(screen.getByText('Refreshes the weekly playlist and its trials')).toBeTruthy();
-    expect(screen.getByText('Updates the playlist of new releases the library owns')).toBeTruthy();
+    expect(screen.getByText('Updates the new releases playlist')).toBeTruthy();
   });
 
   // The artist goes in front of the subject and the count after it, so the two
@@ -510,8 +510,8 @@ describe('JobsView', () => {
     answering({ queue: queueOf([]), failed: [], schedule: [] });
     opened();
 
-    expect(await screen.findByText('Nothing has spent its attempts')).toBeTruthy();
-    expect(await screen.findByText('No sweeps are scheduled')).toBeTruthy();
+    expect(await screen.findByText('No failed jobs')).toBeTruthy();
+    expect(await screen.findByText('No sweeps scheduled')).toBeTruthy();
     expect(screen.queryByText('Last run')).toBeNull();
   });
 

@@ -108,7 +108,7 @@
   {:else if action}
     <span class="text-meta leading-relaxed text-ink-2">{action}</span>
   {:else if notice.transient}
-    <span class="text-meta leading-relaxed text-ink-2">Reload the page to ask again.</span>
+    <span class="text-meta leading-relaxed text-ink-2">Reload the page to try again.</span>
   {/if}
   {#if notice.raw && notice.raw !== sentence}
     <!-- The explanation is not deleted, it moves behind a disclosure. Closed,

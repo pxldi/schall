@@ -233,7 +233,7 @@ describe('a finished row', () => {
     opened();
 
     await screen.findByLabelText('complete');
-    expect(screen.queryByRole('button', { name: 'Use address' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Use link' })).toBeNull();
   });
 });
 
@@ -312,7 +312,7 @@ describe('a waiting row with something to do', () => {
     served([entry({ targetId: 't1', targetStatus: 'unresolved', targetSummary: reason })]);
     opened();
 
-    expect(await screen.findByRole('button', { name: 'Use address' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Use link' })).toBeTruthy();
     expect(screen.queryByText(reason)).toBeNull();
     expect(screen.getByLabelText('waiting').parentElement?.getAttribute('title')).toBe(
       `waiting · ${reason}`

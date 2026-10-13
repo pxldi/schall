@@ -89,7 +89,7 @@ describe('a file being decided about', () => {
     await fireEvent.click(screen.getByLabelText('Play this file from the middle'));
     await fireEvent.error(audio());
 
-    expect(screen.getByText('Schall could not play this file.')).toBeTruthy();
+    expect(screen.getByText("Can't play this file.")).toBeTruthy();
   });
 });
 

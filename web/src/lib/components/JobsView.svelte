@@ -95,7 +95,7 @@
   const laneNames: Record<string, string> = {
     acquisition: 'Search lane',
     transfers: 'Download lane',
-    anchors: 'Anchor lane',
+    anchors: 'Sample lane',
     judging: 'Judging lane',
     general: 'General lane'
   };
@@ -186,17 +186,17 @@
     },
     sweep_preview_anchors: {
       label: 'Preview sweep',
-      does: 'Fetches a sample of each wanted song',
+      does: 'Fetches a sample of each wishlist song',
       waitsFor: 'a worker to run it'
     },
     tag_library: {
       label: 'Tag write sweep',
-      does: 'Rewrites tags for files whose catalogue data changed since they were matched',
+      does: 'Rewrites tags when catalogue data changes',
       waitsFor: 'a worker to run it'
     },
     sweep_duplicates: {
       label: 'Duplicate sweep',
-      does: 'Keeps one proven copy of duplicate recordings',
+      does: 'Keeps one proven copy of each duplicate song',
       waitsFor: 'a worker to run it'
     },
     sweep_loudness: {
@@ -251,7 +251,7 @@
     },
     refresh_new_releases_playlist: {
       label: 'New releases refresh',
-      does: 'Updates the playlist of new releases the library owns',
+      does: 'Updates the new releases playlist',
       waitsFor: 'a feed pass or library scan'
     }
   };
@@ -315,10 +315,10 @@
   const numbers = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
 
   function attemptsLeft(remaining: number) {
-    if (remaining < 1) return 'This is its last attempt.';
+    if (remaining < 1) return 'Last attempt.';
     const count = numbers[remaining] ?? String(remaining);
     const noun = remaining === 1 ? 'attempt' : 'attempts';
-    return `${count} ${noun} left; the wait doubles each time.`;
+    return `${count} ${noun} left. The wait doubles each time.`;
   }
 
   type ActiveState = { role: Role; chip: string; when: string };
@@ -575,7 +575,7 @@
       detail:
         press.pending || press.requeued !== false
           ? ''
-          : `Already queued ${elapsedInWords(queued, at)}. Pressing again does not queue it twice.`
+          : `Already queued ${elapsedInWords(queued, at)}. It won't queue twice.`
     };
   }
 
@@ -716,7 +716,7 @@
     if (item.running) return { lead: 'Asks for', rest: 'its next time when this pass finishes' };
     const copy = sweepCopy[item.kind];
     if (copy) return { lead: 'Waits for', rest: copy.waitsFor };
-    return { lead: '', rest: item.detail ?? 'Nothing is scheduled' };
+    return { lead: '', rest: item.detail ?? 'Not scheduled' };
   }
 
   function nextClause(item: RecurringJob) {
@@ -725,12 +725,12 @@
   }
 
   function causeTitle(cause: FailureCause) {
-    return cause.cause === 'other' ? 'These jobs failed for different reasons.' : cause.title;
+    return cause.cause === 'other' ? 'Failed for different reasons.' : cause.title;
   }
 
   function causeDetail(cause: FailureCause) {
     return cause.cause === 'other'
-      ? 'Review each recorded error below, then retry the jobs you want to run again.'
+      ? 'Read each error below, then retry the ones you want.'
       : cause.detail;
   }
 </script>
@@ -739,7 +739,7 @@
   bind:open={cancelOpen}
   title={cancelling ? `Cancel every queued “${kindName(cancelling.kind)}” job?` : ''}
   description={cancelling
-    ? `${backlogCount(cancelling)} are queued now. This cannot be undone.`
+    ? `${backlogCount(cancelling)} are queued now. This can't be undone.`
     : ''}
   action="Cancel jobs"
   keep="Keep queued"
@@ -799,7 +799,7 @@
         <!-- The heading already says the queue is empty. What is worth adding is
              the one thing that stops an empty queue reading as a dead worker. -->
         <p class="text-meta leading-[1.65] text-ink-2">
-          The sweeps below are still on their own clocks.
+          The sweeps below still run on schedule.
         </p>
       </EmptyPanel>
     {:else}
@@ -931,7 +931,7 @@
                     <ErrorNote
                       bare
                       error={job.error}
-                      fallback="Attempt {job.attempts} did not finish."
+                      fallback="Attempt {job.attempts} didn't finish."
                       action={attemptsLeft(job.maxAttempts - job.attempts - 1)}
                     />
                   </div>
@@ -944,7 +944,7 @@
 
       {#if $queue.data?.truncated}
         <p class="mt-3 text-meta text-ink-4">
-          Top of the queue — {$queue.data.total.toLocaleString()} jobs are running or waiting in all.
+          Top of the queue. {$queue.data.total.toLocaleString()} jobs running or waiting in all.
         </p>
       {/if}
     {/if}
@@ -980,7 +980,7 @@
     {#if $failed.isError && !$failed.data}
       {@render Refused($failed.error, () => $failed.refetch())}
     {:else if causes.length === 0}
-      <EmptyPanel role="ok" level={3} heading="Nothing has spent its attempts" />
+      <EmptyPanel role="ok" level={3} heading="No failed jobs" />
     {:else}
       <!-- One row per cause, not per job. Seventy-one jobs stopped by one
            outage are one fact, and seventy-one rows saying it seventy-one times
@@ -1169,7 +1169,7 @@
     {#if $schedule.isError && !$schedule.data}
       {@render Refused($schedule.error, () => $schedule.refetch())}
     {:else if ($schedule.data?.items ?? []).length === 0}
-      <EmptyPanel role="idle" level={3} heading="No sweeps are scheduled" />
+      <EmptyPanel role="idle" level={3} heading="No sweeps scheduled" />
     {:else}
       <div class="flex flex-col">
         <div
