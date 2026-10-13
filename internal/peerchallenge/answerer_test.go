@@ -88,6 +88,33 @@ func TestAnswerAsksAgainEvenWhenTheMessagesCannotBeMarkedRead(t *testing.T) {
 	}
 }
 
+// The word went out and the record of it could not be written. Marking the
+// message read is then the only thing that stops the next pass from sending the
+// word again, so it is still marked read.
+func TestAnswerMarksTheMessageReadWhenTheSentWordCannotBeRecorded(t *testing.T) {
+	store := &fakeStore{
+		peers:     []db.PeersAwaitingTransfersRow{{SourceUsername: "PSXDupe", Open: true}},
+		recordErr: errors.New("the database is unreachable"),
+	}
+	chat := &fakeChat{
+		list: []slskd.Conversation{{Username: "PSXDupe", Unacknowledged: 1}},
+		messages: map[string][]slskd.Message{
+			"PSXDupe": {{ID: 7, Incoming: true, Text: proveIt}},
+		},
+	}
+	service := testService(store, chat, &fakeRetrier{})
+
+	if _, err := service.Answer(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.sent) != 1 {
+		t.Fatalf("sent = %#v", chat.sent)
+	}
+	if len(chat.acknowledged["PSXDupe"]) != 1 || chat.acknowledged["PSXDupe"][0] != 7 {
+		t.Fatalf("acknowledged = %#v, want the answered message marked read", chat.acknowledged)
+	}
+}
+
 // The bot that takes a word answers with a note, and that note counts a queue
 // that is a different number every time. Shown as a question, it put a reply box
 // on the page after every word that worked.
@@ -433,6 +460,7 @@ type fakeStore struct {
 	seen      bool
 	replies   int64
 	recorded  []db.RecordPeerChallengeParams
+	recordErr error
 	forgotten []string
 }
 
@@ -459,6 +487,9 @@ func (store *fakeStore) PeerRepliesSince(context.Context, pgtype.Timestamptz) (i
 func (store *fakeStore) RecordPeerChallenge(
 	_ context.Context, params db.RecordPeerChallengeParams,
 ) (db.PeerChallenge, error) {
+	if store.recordErr != nil {
+		return db.PeerChallenge{}, store.recordErr
+	}
 	store.recorded = append(store.recorded, params)
 	return db.PeerChallenge{Username: params.Username, Challenge: params.Challenge}, nil
 }
