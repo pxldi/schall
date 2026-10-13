@@ -309,6 +309,11 @@ func (sweep *TranscodeSweep) shrink(
 	}
 
 	removalID, err := sweep.recordShrink(ctx, file, placement, destination, written)
+	if errors.Is(err, errShrinkTargetMoved) {
+		// Left unchecked: a row that moved is reached again at its new path.
+		_ = os.Remove(destination)
+		return skipped
+	}
 	if err != nil {
 		sweep.logger.Error().Err(err).Str("path", file.path).
 			Msg("record that a library file was shrunk")
@@ -341,6 +346,10 @@ func (sweep *TranscodeSweep) markChecked(ctx context.Context, fileID uuid.UUID) 
 	}
 }
 
+// errShrinkTargetMoved reports a row that was removed, moved or went missing
+// while its smaller copy was being encoded.
+var errShrinkTargetMoved = errors.New("the library file changed while its smaller copy was being encoded")
+
 // recordShrink records the original bytes for retry together with moving the
 // library row onto the smaller copy, in one transaction. The
 // row keeps its identifier: everything that names a file by that id — a
@@ -361,6 +370,22 @@ func (sweep *TranscodeSweep) recordShrink(
 		return uuid.Nil, err
 	}
 	defer func() { _ = transaction.Rollback(ctx) }()
+
+	// The encode ran for minutes without holding the row. Keep one, the
+	// removals sweep or a move may have let go of it or put it elsewhere in
+	// that time, and a removal recorded against it then would delete bytes the
+	// library no longer accounts for.
+	var currentPath string
+	var missing bool
+	err = transaction.QueryRow(ctx, `
+		SELECT path, missing_at IS NOT NULL FROM library_files WHERE id = $1 FOR UPDATE
+	`, file.id).Scan(&currentPath, &missing)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (currentPath != file.path || missing)) {
+		return uuid.Nil, errShrinkTargetMoved
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("lock the library row for %s: %w", file.path, err)
+	}
 
 	var removalID uuid.UUID
 	if err := transaction.QueryRow(ctx, `
@@ -389,7 +414,7 @@ func (sweep *TranscodeSweep) recordShrink(
 	// than guessed at, so their own sweeps measure the file that is really
 	// there; nothing here reopens the identity this file was already proven
 	// against, and nothing here is read as evidence of anything.
-	if _, err := transaction.Exec(ctx, `
+	moved, err := transaction.Exec(ctx, `
 		UPDATE library_files
 		SET path = $2, size_bytes = $3, modified_at = $10, duration_ms = $4,
 		    transcoded_from_format = $5, original_size_bytes = $6,
@@ -406,8 +431,12 @@ func (sweep *TranscodeSweep) recordShrink(
 		placement.FromFormat, placement.OriginalSizeBytes,
 		written.BitRateKbps, written.SampleRateHz, written.Channels,
 		databaseTime(info.ModTime()),
-	); err != nil {
+	)
+	if err != nil {
 		return uuid.Nil, fmt.Errorf("move the library row for %s onto its smaller copy: %w", file.path, err)
+	}
+	if moved.RowsAffected() != 1 {
+		return uuid.Nil, errShrinkTargetMoved
 	}
 
 	if err := transaction.Commit(ctx); err != nil {

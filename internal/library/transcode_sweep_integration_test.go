@@ -340,3 +340,44 @@ func TestAScanFindsAShrunkFileUnchanged(t *testing.T) {
 		t.Fatalf("resolution_status after a scan = %q, want the shrunk file still resolved", status)
 	}
 }
+
+// The encode takes minutes and nothing holds the row meanwhile. A row that
+// was removed in that time (Keep one, the removals sweep) is music the library
+// let go of: the sweep must not record a removal against it, and must not leave
+// its smaller copy on disc for the next scan to index as new music.
+func TestTheSweepDropsItsCopyWhenTheRowWentDuringTheEncode(t *testing.T) {
+	needsFfmpeg(t)
+	pool := dbtest.Setup(t)
+	rootID, root := libraryRoot(t, pool)
+
+	original := filepath.Join(root, "released.wav")
+	sineFile(t, original, 0.5)
+	fileID := resolvedFile(t, pool, rootID, original, true)
+
+	var destination string
+	sweep := newTranscodeSweep(pool, "")
+	sweep.place = func(source, target, stagingPrefix string) error {
+		destination = target
+		if err := filecopy.Place(source, target, stagingPrefix); err != nil {
+			return err
+		}
+		_, err := pool.Exec(context.Background(), `DELETE FROM library_files WHERE id = $1`, fileID)
+		return err
+	}
+	if _, err := sweep.Sweep(context.Background(), queueTranscodeSweep(t, pool)); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	if count := removalsFor(t, pool, fileID); count != 0 {
+		t.Fatalf("removal records = %d, want none for a row that was already gone", count)
+	}
+	if destination == "" {
+		t.Fatal("the sweep never placed a smaller copy")
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("the smaller copy of a removed file is still on disc: %v", err)
+	}
+	if _, err := os.Stat(original); err != nil {
+		t.Fatalf("the sweep touched the original of a row it no longer held: %v", err)
+	}
+}
