@@ -430,6 +430,22 @@ describe('two cards, one player', () => {
     expect(within(first.container).getByRole('button', { name: 'Play Copy 1' })).toBeTruthy();
   });
 
+  // Review reuses one card when it steps from one filed question to the next,
+  // so the card is handed another copy while the first is still sounding.
+  it('stops the copy it was playing when it is handed another one', async () => {
+    const props = { heading: 'In your library', copy: copy({ id: 'copy-1' }), selected: true, onselect: () => {} };
+    const card = render(CopyCard, { props });
+    const audio = card.container.querySelector('audio')!;
+    await fireEvent.click(screen.getByRole('button', { name: 'Play In your library' }));
+    await fireEvent.play(audio);
+    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
+
+    await card.rerender({ ...props, copy: copy({ id: 'copy-2' }) });
+
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    expect(listening.sounding).toBe('');
+  });
+
   it('pauses and clears a card when it is unmounted', async () => {
     const card = render(CopyCard, {
       props: { heading: 'Copy 1', copy: copy(), wantedMs: 281_000, selected: false, onselect: () => {} }
