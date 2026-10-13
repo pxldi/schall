@@ -327,6 +327,75 @@ func TestAScanFailsOnAMusicFolderThatIsNotThere(t *testing.T) {
 	}
 }
 
+// lockedFolder indexes one file in a folder of its own, then takes away the
+// right to list that folder, the way lost+found or a folder another user owns
+// looks to the scan.
+func lockedFolder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, rootPath string) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a folder whatever its mode")
+	}
+	locked := filepath.Join(rootPath, "lost+found")
+	if err := os.Mkdir(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := writeAudio(t, locked, "01.mp3")
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	return path
+}
+
+// One folder the scan may not read is no reason to stop reading the others.
+func TestAnUnreadableFolderDoesNotStopTheScan(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	lockedFolder(t, ctx, pool, rootPath)
+	added := writeAudio(t, rootPath, "02.mp3")
+
+	result, err := NewScanner(pool).Scan(ctx)
+	if err != nil {
+		t.Fatalf("scan with one unreadable folder failed: %v", err)
+	}
+	if result.Errors == 0 {
+		t.Fatalf("scan = %#v, want the unreadable folder counted as an error", result)
+	}
+	var indexed bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM library_files WHERE path = $1)`, added).Scan(&indexed); err != nil {
+		t.Fatal(err)
+	}
+	if !indexed {
+		t.Fatal("a file beside the unreadable folder was not indexed")
+	}
+}
+
+// A folder the scan could not list says nothing about the files in it. They
+// stay present rather than being marked missing.
+func TestFilesInAnUnreadableFolderAreNotMarkedMissing(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	hidden := lockedFolder(t, ctx, pool, rootPath)
+
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatalf("scan with one unreadable folder failed: %v", err)
+	}
+	var missing bool
+	if err := pool.QueryRow(ctx,
+		`SELECT missing_at IS NOT NULL FROM library_files WHERE path = $1`, hidden).Scan(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if missing {
+		t.Fatal("a file in a folder the scan could not read was marked missing")
+	}
+}
+
 // A file removed while the scan is still walking cannot be read, and the scan
 // says so rather than recording a row for bytes that are gone. The job retries,
 // and the next walk simply does not see it.
