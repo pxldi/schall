@@ -133,3 +133,31 @@ describe('the labels list', () => {
     );
   });
 });
+
+describe('the safety-net poll', () => {
+  async function listReadsOver(list: LabelList) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answering(list);
+    opened();
+    await screen.findByText(list.items[0].name);
+    const reads = () =>
+      vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith('/api/v1/labels'))
+        .length;
+    const before = reads();
+    await vi.advanceTimersByTimeAsync(31_000);
+    const after = reads();
+    vi.useRealTimers();
+    return after - before;
+  }
+
+  it('asks again while a refresh is running', async () => {
+    const list = { items: [label({ refreshStatus: 'running' })], total: 1, followedCount: 1 };
+    expect(await listReadsOver(list)).toBeGreaterThan(0);
+  });
+
+  // 'pending' means no refresh job exists, which can stay true for good.
+  it('stays quiet for a label no refresh was ever queued for', async () => {
+    const list = { items: [label({ refreshStatus: 'pending' })], total: 1, followedCount: 1 };
+    expect(await listReadsOver(list)).toBe(0);
+  });
+});

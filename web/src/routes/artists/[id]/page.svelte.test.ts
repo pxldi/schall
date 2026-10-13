@@ -885,3 +885,32 @@ describe('the releases fail to load', () => {
     expect(screen.queryByText('No releases yet')).toBeNull();
   });
 });
+
+describe('the safety-net poll', () => {
+  async function artistReadsOver(artist: ArtistDetail) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answering(artist);
+    opened();
+    await screen.findByRole('heading', { level: 1, name: 'Talk Talk' });
+    const reads = () =>
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) => String(input).endsWith(`/api/v1/artists/${artistID}`))
+        .length;
+    const before = reads();
+    await vi.advanceTimersByTimeAsync(31_000);
+    const after = reads();
+    vi.useRealTimers();
+    return after - before;
+  }
+
+  it('asks again while a refresh is queued', async () => {
+    expect(await artistReadsOver(detail({ refreshStatus: 'queued' }))).toBeGreaterThan(0);
+  });
+
+  // 'pending' is what the server says when no refresh job exists at all, which
+  // for an artist who is only held stays true for good.
+  it('stays quiet for an artist no refresh was ever queued for', async () => {
+    expect(await artistReadsOver(detail({ followed: false, refreshStatus: 'pending' }))).toBe(0);
+  });
+});

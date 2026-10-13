@@ -87,11 +87,10 @@
     queryKey: ['artists', artistID],
     queryFn: () => api.artist(artistID),
     // The refresh announces itself over the event stream; this is the fallback
-    // for a stream that never arrived.
+    // for a stream that never arrived. 'pending' is not on the list: it means
+    // no refresh job exists, which for a held artist is for good.
     refetchInterval: (query) =>
-      ['pending', 'queued', 'running'].includes(query.state.data?.refreshStatus ?? '')
-        ? 15_000
-        : false
+      ['queued', 'running'].includes(query.state.data?.refreshStatus ?? '') ? 15_000 : false
   });
 
   // The popular list is drawn only once the artist and the releases are in,
@@ -134,7 +133,7 @@
         }),
       placeholderData: keepPreviousData,
       refetchInterval: () =>
-        ['pending', 'queued', 'running'].includes($artist.data?.refreshStatus ?? '') ? 15_000 : false
+        ['queued', 'running'].includes($artist.data?.refreshStatus ?? '') ? 15_000 : false
     })
   );
   const releases = createQuery(toStore(() => releaseOptions));

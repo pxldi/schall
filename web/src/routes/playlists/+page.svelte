@@ -56,6 +56,12 @@
     if (view === 'weekly') weeklyOpened = true;
   });
 
+  // Only Spotify and file lists are ever imported. The others never get an
+  // import date, so counting them as waiting would poll for good.
+  function awaitingImport(item: Playlist) {
+    return (item.source === 'spotify' || item.source === 'file') && !item.importedAt;
+  }
+
   const playlists = createQuery({
     queryKey: ['playlists'],
     queryFn: api.playlists,
@@ -64,7 +70,7 @@
     refetchInterval: (query) =>
       isAuthError(query.state.error)
         ? false
-        : (query.state.data?.items ?? []).some((item) => !item.importedAt)
+        : (query.state.data?.items ?? []).some(awaitingImport)
           ? 15_000
           : false
   });

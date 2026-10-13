@@ -52,10 +52,10 @@
     queryFn: () => api.labels(),
     // The safety net for a refresh the event stream missed: only while one is
     // actually in flight, the same rule every other list on this installation
-    // follows.
+    // follows. 'pending' means no refresh job exists, so it is not in flight.
     refetchInterval: (query) =>
       (query.state.data?.items ?? []).some((item) =>
-        ['pending', 'queued', 'running'].includes(item.refreshStatus)
+        ['queued', 'running'].includes(item.refreshStatus)
       )
         ? 15_000
         : false
