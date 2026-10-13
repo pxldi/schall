@@ -541,3 +541,99 @@ func TestAPassStopsWhenTheUploadSearchIsRateLimiting(t *testing.T) {
 		t.Error("a refused minute was written down as the want having no upload")
 	}
 }
+
+type fakeLinks struct {
+	linked Linked
+	err    error
+	asked  []uuid.UUID
+}
+
+func (links *fakeLinks) Find(_ context.Context, recordingID uuid.UUID, _ int, _ string) (Linked, error) {
+	links.asked = append(links.asked, recordingID)
+	return links.linked, links.err
+}
+
+func linkedWant() db.AnchorDueRow {
+	one := want("")
+	one.RecordingID = uuid.New()
+	return one
+}
+
+func TestAPreviewMusicBrainzLinksIsKeptAsTheWantsAnchor(t *testing.T) {
+	one := linkedWant()
+	store := newStore(one)
+	distributor, prints := workingParts()
+	links := &fakeLinks{linked: Linked{
+		Audio: []byte("audio"), Reference: "https://www.deezer.com/track/1", Label: "Deezer track",
+	}}
+
+	service := newServiceFinding(store, distributor, &fakeFinder{available: true}, prints).WithLinks(links)
+	if _, err := service.Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	if len(store.recorded) != 1 {
+		t.Fatalf("recorded %d anchors, wanted 1", len(store.recorded))
+	}
+	anchor := store.recorded[0]
+	if anchor.Source != identity.AnchorSourceLinked || anchor.Reference != "https://www.deezer.com/track/1" {
+		t.Errorf("kept %q/%q", anchor.Source, anchor.Reference)
+	}
+	if len(links.asked) != 1 || links.asked[0] != one.RecordingID {
+		t.Errorf("asked about %v, want the want's recording", links.asked)
+	}
+}
+
+func TestAWantWithNothingLinkedGoesOnToTheUploads(t *testing.T) {
+	one := linkedWant()
+	store := newStore(one)
+	distributor, prints := workingParts()
+	finder := &fakeFinder{available: true}
+
+	service := newServiceFinding(store, distributor, finder, prints).
+		WithLinks(&fakeLinks{err: ErrNothingLinked})
+	if _, err := service.Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	if len(finder.asked) != 1 {
+		t.Fatalf("searched %d times, want once", len(finder.asked))
+	}
+	if store.absent[one.ID] != noISRCToAskBy+" "+noLinkedPreview+" "+noUploadMatched {
+		t.Errorf("recorded %q", store.absent[one.ID])
+	}
+}
+
+func TestALinkedPageThatCouldNotBeReadIsAskedAgain(t *testing.T) {
+	one := linkedWant()
+	store := newStore(one)
+	distributor, prints := workingParts()
+	finder := &fakeFinder{available: true}
+
+	service := newServiceFinding(store, distributor, finder, prints).
+		WithLinks(&fakeLinks{err: errors.New("connection reset")})
+	if _, err := service.Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	if _, deferred := store.deferred[one.ID]; !deferred {
+		t.Fatal("a page that could not be read was not asked about again")
+	}
+	if _, absent := store.absent[one.ID]; absent || len(finder.asked) != 0 {
+		t.Error("a page that could not be read was taken as nothing linked")
+	}
+}
+
+func TestAWantWithNoRecordingIsNotAskedAboutLinks(t *testing.T) {
+	store := newStore(want(""))
+	distributor, prints := workingParts()
+	links := &fakeLinks{err: ErrNothingLinked}
+
+	service := newServiceFinding(store, distributor, &fakeFinder{available: true}, prints).WithLinks(links)
+	if _, err := service.Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if len(links.asked) != 0 {
+		t.Fatalf("asked about links for a want with no recording")
+	}
+}

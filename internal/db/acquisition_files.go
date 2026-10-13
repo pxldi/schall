@@ -1827,7 +1827,7 @@ const wantHoldsAnUnansweredCopy = `
 const anotherCopyCannotSettleIt = `
 	(acquisition_targets.anchor_fingerprint IS NULL
 	 OR (COALESCE(acquisition_targets.anchor_source, '')
-	         NOT IN ('deezer', 'youtube-topic', 'source')
+	         NOT IN ('deezer', 'youtube-topic', 'source', 'musicbrainz-link')
 	     AND (SELECT count(*) >= 5
 	                 OR count(DISTINCT held.size_bytes) FILTER (WHERE held.size_bytes > 0)
 	                    + count(*) FILTER (WHERE COALESCE(held.size_bytes, 0) = 0) >= 3

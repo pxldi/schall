@@ -515,7 +515,7 @@ func (api *API) writeDownloadRequests(response http.ResponseWriter, request *htt
 		params.Limit = int32(value)
 	}
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed",
 				[]string{"offset must be zero or greater"})

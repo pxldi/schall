@@ -7,7 +7,7 @@
 -- Each rule replaces one old sentence, or one fmt-built shape of one, wherever
 -- it stands in a column: a copy's summary is a verdict sentence followed by
 -- the grader's, and an anchor reason can be two sentences joined. Rules run in
--- order. Migration 00114 rewrote the want sentences internal/acquisition
+-- order. Migration 00116 rewrote the want sentences internal/acquisition
 -- shares with internal/downloads. Release import reasons
 -- (internal/downloads/match.go) keep the text they were written with.
 -- +goose StatementBegin
@@ -112,7 +112,9 @@ BEGIN
             (81, true, '^Resolved by hand to (.+)\.$', 'You matched it to \1.'),
             (82, true, '^Filed as (.+), the recording a wishlist entry''s copy was proven to be\.$', 'Filed as \1, proven by a wishlist copy.'),
             (83, false, 'Recorded by hand as owned music with no external identity.', 'You marked this as your own music, not on MusicBrainz.'),
-            (84, false, 'The decision that identified this file was taken back, so what this file is has to be answered again.', 'The match this rested on was undone. Needs matching again.')
+            (84, false, 'The decision that identified this file was taken back, so what this file is has to be answered again.', 'The match this rested on was undone. Needs matching again.'),
+            (85, false, 'MusicBrainz links this recording to no page with a preview that fits it.', 'No linked preview fits.'),
+            (86, false, 'A page MusicBrainz links this recording to could not be read: ', 'Couldn''t read a linked page: ')
         ) AS rules (position, is_regex, old_text, new_text) ORDER BY position LOOP
             IF rule.is_regex THEN
                 EXECUTE format(

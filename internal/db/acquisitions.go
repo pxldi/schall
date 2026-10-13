@@ -654,7 +654,7 @@ func (q *Queries) NextAcquisitionTargetDue(ctx context.Context) (pgtype.Timestam
 // (ADR 0024, 0034), and the excerpt fetched from the address a person keyed the
 // want to (ADR 0038). A want MusicBrainz has no recording for is searched only
 // when its anchor is one of these (ADR 0037).
-const AdmittingAnchorSources = `('deezer', 'youtube-topic', 'source')`
+const AdmittingAnchorSources = `('deezer', 'youtube-topic', 'source', 'musicbrainz-link')`
 
 // anchorAdmits is the SQL condition for a want whose stored anchor can admit
 // a copy. table names the acquisition_targets row, with its trailing dot.
@@ -1838,6 +1838,9 @@ type AnchorDueRow struct {
 	// (ADR 0029 §2).
 	DurationMS int
 	Attempts   int32
+	// RecordingID is the MusicBrainz recording the want names, whose links can
+	// lead to a preview. uuid.Nil where the want names none.
+	RecordingID uuid.UUID
 }
 
 // DueAnchors returns the wants whose turn it is to have a preview fetched,
@@ -1851,7 +1854,8 @@ func (q *Queries) DueAnchors(
 ) ([]AnchorDueRow, error) {
 	rows, err := q.db.Query(ctx, `
 		SELECT id, coalesce(entry_isrc, ''), entry_artist, entry_title,
-		       coalesce(entry_duration_ms, 0), anchor_attempts
+		       coalesce(entry_duration_ms, 0), anchor_attempts,
+		       coalesce(musicbrainz_recording_id, '00000000-0000-0000-0000-000000000000'::uuid)
 		FROM acquisition_targets
 		WHERE anchor_fingerprint IS NULL
 		  AND anchor_next_attempt_at IS NOT NULL
@@ -1872,6 +1876,7 @@ func (q *Queries) DueAnchors(
 		var row AnchorDueRow
 		if err := rows.Scan(
 			&row.ID, &row.ISRC, &row.Artist, &row.Title, &row.DurationMS, &row.Attempts,
+			&row.RecordingID,
 		); err != nil {
 			return nil, err
 		}

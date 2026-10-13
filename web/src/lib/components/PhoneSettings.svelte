@@ -150,7 +150,7 @@
                the wrap) and the dates wrap onto the next. `sm` and up are the
                original single row. -->
           <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line-thin py-2">
-            <span class="min-w-0 grow shrink basis-full truncate text-body text-ink sm:basis-0">
+            <span class="min-w-0 grow shrink basis-full truncate text-body text-ink @xl:basis-0">
               {phone.name}
             </span>
             <span class="shrink-0 text-meta text-ink-3">added {calendarDate(phone.createdAt)}</span>
@@ -161,7 +161,7 @@
               variant="ghost"
               size="sm"
               tall
-              class="ml-auto sm:ml-0"
+              class="ml-auto @xl:ml-0"
               disabled={$remove.isPending}
               onclick={() => $remove.mutate(phone.id)}
             >

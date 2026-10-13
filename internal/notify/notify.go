@@ -315,7 +315,8 @@ func firstLine(body string) string {
 		trimmed = trimmed[:index]
 	}
 	if len(trimmed) > 200 {
-		trimmed = trimmed[:200]
+		// Half a multi-byte character would make Postgres refuse the record.
+		trimmed = strings.ToValidUTF8(trimmed[:200], "")
 	}
 	if trimmed == "" {
 		return "the endpoint gave no reason"

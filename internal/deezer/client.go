@@ -78,6 +78,11 @@ type Track struct {
 	// never stored, which is why the anchor kept on a want is the fingerprint
 	// of the audio rather than the address it came from.
 	PreviewURL string
+	// ISRC, Disk and Position are filled by TrackByID and AlbumTracks, which
+	// read a track at a place MusicBrainz links to rather than by its code.
+	ISRC     string
+	Disk     int
+	Position int
 }
 
 // Options configures a Client. The zero value is usable.
@@ -245,4 +250,111 @@ func normalizeISRC(isrc string) (string, error) {
 		return "", fmt.Errorf("%w: %q is %d characters, not 12", ErrNotAnISRC, isrc, len(code))
 	}
 	return code, nil
+}
+
+// TrackByID reads one track by Deezer's own identifier, the number in a
+// deezer.com/track address.
+func (client *Client) TrackByID(ctx context.Context, id int64) (Track, error) {
+	var payload trackItem
+	if err := client.get(ctx, fmt.Sprintf("/track/%d", id), &payload); err != nil {
+		return Track{}, err
+	}
+	if payload.ID == 0 {
+		return Track{}, ErrNoTrack
+	}
+	return payload.track(), nil
+}
+
+// AlbumTracks lists one album's tracks by Deezer's identifier for the album,
+// the number in a deezer.com/album address, in the album's order.
+func (client *Client) AlbumTracks(ctx context.Context, id int64) ([]Track, error) {
+	var payload struct {
+		Data  []trackItem `json:"data"`
+		Total int         `json:"total"`
+	}
+	if err := client.get(ctx, fmt.Sprintf("/album/%d/tracks?limit=500", id), &payload); err != nil {
+		return nil, err
+	}
+	if len(payload.Data) == 0 {
+		return nil, ErrNoTrack
+	}
+	// An album longer than one page would be read short, and a position read off
+	// a short list can name the wrong track.
+	if payload.Total > len(payload.Data) {
+		return nil, fmt.Errorf("Deezer listed %d of the album's %d tracks", len(payload.Data), payload.Total)
+	}
+	tracks := make([]Track, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		tracks = append(tracks, item.track())
+	}
+	return tracks, nil
+}
+
+type trackItem struct {
+	ID            int64  `json:"id"`
+	Title         string `json:"title"`
+	Duration      int    `json:"duration"`
+	Preview       string `json:"preview"`
+	ISRC          string `json:"isrc"`
+	DiskNumber    int    `json:"disk_number"`
+	TrackPosition int    `json:"track_position"`
+}
+
+func (item trackItem) track() Track {
+	return Track{
+		ID: item.ID, Title: strings.TrimSpace(item.Title), DurationSeconds: item.Duration,
+		PreviewURL: strings.TrimSpace(item.Preview), ISRC: strings.TrimSpace(item.ISRC),
+		Disk: item.DiskNumber, Position: item.TrackPosition,
+	}
+}
+
+// get reads one answer from the API into destination. Deezer reports a missing
+// entity and an exceeded quota inside a body sent with HTTP 200, so the body is
+// read for its error before it is believed.
+func (client *Client) get(ctx context.Context, path string, destination any) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("could not reach Deezer: %w", err)
+	}
+	defer response.Body.Close()
+	switch {
+	case response.StatusCode == http.StatusTooManyRequests:
+		return ErrRateLimited
+	case response.StatusCode == http.StatusNotFound:
+		return ErrNoTrack
+	case response.StatusCode < 200 || response.StatusCode >= 300:
+		return fmt.Errorf("Deezer returned HTTP %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBody))
+	if err != nil {
+		return fmt.Errorf("could not read Deezer's answer: %w", err)
+	}
+	var refused struct {
+		Error *struct {
+			Message string `json:"message"`
+			Code    int    `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refused); err != nil {
+		return fmt.Errorf("could not read Deezer's answer: %w", err)
+	}
+	if refused.Error != nil {
+		switch refused.Error.Code {
+		case dataExceptionCode:
+			return ErrNoTrack
+		case quotaCode:
+			return ErrRateLimited
+		default:
+			return fmt.Errorf("Deezer refused: %s", strings.TrimSpace(refused.Error.Message))
+		}
+	}
+	if err := json.Unmarshal(body, destination); err != nil {
+		return fmt.Errorf("could not read Deezer's answer: %w", err)
+	}
+	return nil
 }

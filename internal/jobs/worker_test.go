@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -3491,6 +3492,18 @@ func TestALongFailureIsTruncatedToWhatTheColumnHolds(t *testing.T) {
 	message := truncateError(errors.New(strings.Repeat("a", 3000)))
 	if len(message) != 2000 {
 		t.Fatalf("length = %d, want 2000", len(message))
+	}
+}
+
+// A cut through a multi-byte character is invalid UTF-8, which Postgres
+// refuses, so the failure would never be recorded.
+func TestALongFailureIsCutOnACharacterBoundary(t *testing.T) {
+	message := truncateError(errors.New("x" + strings.Repeat("ä", 1500)))
+	if !utf8.ValidString(message) {
+		t.Fatalf("truncated message is not valid UTF-8")
+	}
+	if len(message) != 1999 {
+		t.Fatalf("length = %d, want 1999", len(message))
 	}
 }
 

@@ -1679,6 +1679,19 @@ func TestRecordingsHeldTwiceRefusesANegativeOffset(t *testing.T) {
 	}
 }
 
+// An offset past what the database column holds would wrap to a negative
+// number on the way in, which Postgres refuses with an error.
+func TestRecordingsHeldTwiceRefusesAnOffsetTooLargeToPage(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewAPI(&fakeStore{}, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop()).
+		ServeHTTP(response, httptest.NewRequest(
+			http.MethodGet, "/api/v1/library/duplicates?offset=3000000000", nil,
+		))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
+	}
+}
+
 // The pairs somebody kept on purpose are the other half of the same list, and
 // asking for them is how the answer is found again to withdraw it.
 func TestRecordingsKeptOnPurposeAreAskedForSeparately(t *testing.T) {
@@ -2000,6 +2013,21 @@ func TestFollowUnknownArtistIsNotFound(t *testing.T) {
 
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusNotFound, response.Body)
+	}
+}
+
+// A lookup that failed says nothing about whether the artist exists, so it is
+// an error rather than a "not found" the interface would believe.
+func TestFollowingWhenTheArtistCannotBeReadIsAnError(t *testing.T) {
+	store := &fakeStore{followErr: pgx.ErrNoRows, getArtistErr: errors.New("connection reset")}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop())
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/artists/"+uuid.New().String()+"/follow", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusInternalServerError, response.Body)
 	}
 }
 
@@ -3308,6 +3336,19 @@ func TestAReleaseWithNoReleaseGroupHasNoEditions(t *testing.T) {
 		"/api/v1/albums/"+uuid.NewString()+"/editions", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", response.Code)
+	}
+}
+
+func TestListingEditionsWhenTheReleaseCannotBeReadIsAnError(t *testing.T) {
+	store := &fakeEditionStore{fakeStore: &fakeStore{err: errors.New("connection reset")}}
+	searcher := &fakeEditionSearcher{fakeArtistSearcher: &fakeArtistSearcher{}}
+	handler := NewAPI(store, fakeDatabase{}, searcher, zerolog.Nop())
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/api/v1/albums/"+uuid.NewString()+"/editions", nil))
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", response.Code)
 	}
 }
 

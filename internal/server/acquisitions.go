@@ -946,7 +946,7 @@ func (api *API) listAcquisitionTargets(response http.ResponseWriter, request *ht
 		params.Limit = int32(value)
 	}
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed",
 				[]string{"offset must be zero or greater"})
@@ -1369,7 +1369,7 @@ func (api *API) reviewQueue(response http.ResponseWriter, request *http.Request)
 		limit = int32(value)
 	}
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed",
 				[]string{"offset must be zero or greater"})

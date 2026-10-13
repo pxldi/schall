@@ -148,6 +148,9 @@ type fakeProvider struct {
 	// firstSearchErr, when set, is returned by the first search only, so a test
 	// can show a refusal that asking again gets past.
 	firstSearchErr error
+	// budget, when set, is the search budget, and a search whose context ends
+	// sooner is refused the way the slskd client refuses it.
+	budget time.Duration
 }
 
 func (provider *fakeProvider) Build(settings sources.Settings) (sources.Provider, error) {
@@ -164,9 +167,17 @@ func (provider *fakeProvider) CheckConnection(context.Context) (sources.Status, 
 	return provider.status, provider.checkErr
 }
 
-func (provider *fakeProvider) SearchBudget() time.Duration { return 30 * time.Second }
+func (provider *fakeProvider) SearchBudget() time.Duration {
+	if provider.budget > 0 {
+		return provider.budget
+	}
+	return 30 * time.Second
+}
 
-func (provider *fakeProvider) Search(_ context.Context, query sources.Query) ([]sources.Candidate, error) {
+func (provider *fakeProvider) Search(ctx context.Context, query sources.Query) ([]sources.Candidate, error) {
+	if deadline, bounded := ctx.Deadline(); provider.budget > 0 && bounded && time.Until(deadline) < provider.budget {
+		return nil, sources.ErrSearchBudgetExhausted
+	}
 	provider.query = query
 	provider.queries = append(provider.queries, query)
 	if provider.firstSearchErr != nil && len(provider.queries) == 1 {
@@ -345,6 +356,25 @@ func TestListAlbumSourcesRanksCandidatesFromTheCatalogueQuery(t *testing.T) {
 	}
 	if payload.Items[0].Reasons[0] != "Lossless FLAC" || payload.Items[0].Files[0].Name != "01.flac" {
 		t.Fatalf("candidate = %#v", payload.Items[0])
+	}
+}
+
+// The slskd client refuses a search whose context cannot outlast its budget of
+// several minutes, so the thirty-second request timeout every other endpoint
+// carries would refuse every search from the release page.
+func TestListAlbumSourcesGivesTheSearchItsWholeBudget(t *testing.T) {
+	store := &fakeSettingsStore{
+		fakeStore:  &fakeStore{album: db.GetAlbumRow{ArtistName: "Portishead", Title: "Dummy", TrackCount: 11}},
+		configured: true, settings: configuredSettings(),
+	}
+	provider := &fakeProvider{budget: 8 * time.Minute}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(), WithSourceProvider(provider))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(
+		http.MethodGet, "/api/v1/albums/"+albumUUID+"/sources", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body = %s", response.Code, response.Body)
 	}
 }
 

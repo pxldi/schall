@@ -910,12 +910,13 @@ func (service *Service) nextUnfoundAttempt(attempts int32) time.Time {
 }
 
 // anchorAdmits reports an anchor source that can admit a copy on its own: a
-// Deezer preview, the artist's Topic upload (ADR 0024, 0034) or the excerpt
-// from the address a person keyed the want to (ADR 0038). A want with no
+// Deezer preview, the artist's Topic upload (ADR 0024, 0034), the excerpt
+// from the address a person keyed the want to (ADR 0038) or the preview behind
+// a page MusicBrainz links the recording to. A want with no
 // recording is searched only on one of these (ADR 0037 §1).
 func anchorAdmits(source string) bool {
 	return source == identity.AnchorSourceDeezer || source == identity.AnchorByNameTopic ||
-		source == identity.AnchorSourceKeyed
+		source == identity.AnchorSourceKeyed || source == identity.AnchorSourceLinked
 }
 
 // nextLook is when a search that found nothing comes back. A want with no

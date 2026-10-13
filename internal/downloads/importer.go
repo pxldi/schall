@@ -880,7 +880,8 @@ func shortID(preferred uuid.NullUUID, fallback uuid.UUID) string {
 func truncateReason(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) > 200 {
-		return value[:200]
+		// Half a multi-byte character would make Postgres refuse the evidence.
+		return strings.ToValidUTF8(value[:200], "")
 	}
 	return value
 }

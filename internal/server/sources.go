@@ -363,6 +363,12 @@ func (api *API) listAlbumSources(response http.ResponseWriter, request *http.Req
 		return
 	}
 
+	// The server's own write timeout would cut the answer off long before the
+	// provider's budget runs out, so this response gets a deadline that fits
+	// every phrase on the ladder. A writer that cannot move it keeps its own.
+	_ = http.NewResponseController(response).SetWriteDeadline(
+		time.Now().Add(time.Duration(len(queryTexts))*(provider.SearchBudget()+rateLimitPause) + time.Minute))
+
 	var candidates []sources.Candidate
 	for _, queryText := range queryTexts {
 		query.Text = queryText

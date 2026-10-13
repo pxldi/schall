@@ -221,6 +221,14 @@ const AnchorByName = "youtube"
 // AnchorByNameTopic is the source for an artist-matching YouTube Topic upload.
 const AnchorByNameTopic = "youtube-topic"
 
+// AnchorSourceLinked is the source for the preview behind a page MusicBrainz
+// links the want's recording to: a Deezer track, an Apple song, a Bandcamp
+// track, or the track at the recording's place on a linked album
+// (internal/anchor/links.go). The link is an editor's key, so a match proves a
+// copy. Other audio does not refuse one, because a linked album can be another
+// edition whose track at that place is a different mix.
+const AnchorSourceLinked = "musicbrainz-link"
+
 // AnchorSourceKeyed is the source for the excerpt fetched from the address a
 // person keyed a want to (ADR 0038 §3). The address defines the want, so other
 // audio refuses a copy as it does for a Deezer preview.
@@ -983,11 +991,12 @@ func ReadAnchor(source string, rate float64) tagmatch.Verdict {
 		}
 		return tagmatch.Agrees
 	case chromaprint.OtherAudio:
-		// Other audio refuses, except where the reference was found by name. That
-		// reference may be another version of the same song, and reading it as a
+		// Other audio refuses, except where the reference was found by name or
+		// through a MusicBrainz link. That reference may be another version of the
+		// same song, and reading it as a
 		// refusal would throw the right copy away against the wrong upload, for
 		// good (ADR 0029 §3).
-		if source == AnchorByName || source == AnchorByNameTopic {
+		if source == AnchorByName || source == AnchorByNameTopic || source == AnchorSourceLinked {
 			return tagmatch.Unknown
 		}
 		return tagmatch.Differs
@@ -1845,6 +1854,9 @@ func anchorLabel(pair comparison) string {
 	}
 	if pair.anchorSource == AnchorByNameTopic {
 		return "audio (matches the artist's Topic upload)"
+	}
+	if pair.anchorSource == AnchorSourceLinked {
+		return "audio (matches the preview MusicBrainz links this recording to)"
 	}
 	if pair.anchor == tagmatch.Differs {
 		return "audio (not the published sample of this recording)"

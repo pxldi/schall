@@ -128,7 +128,7 @@
     return playlist.source === 'weekly' || playlist.source === 'new_releases';
   }
 
-  // The list Stop following was pressed on, while the question is open.
+  // The list Unfollow was pressed on, while the question is open.
   let removing = $state<Playlist | null>(null);
   let removeOpen = $state(false);
   function confirmRemove(playlist: Playlist) {
@@ -270,42 +270,39 @@
                   <OwnedBar owned={playlist.ownedCount} total={playlist.entryCount} width={64} noun="songs" />
                 </span>
 
+                <!-- Below 1024px the three buttons are icons with their name in
+                     the tooltip; with words they ran past the right edge of a
+                     half-screen window. -->
                 <span class="flex items-center justify-end gap-1">
                   {#if playlist.source === 'spotify'}
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon
-                      title="Re-import"
-                      aria-label="Re-import"
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
+                      title="Re-import"
                     >
-                      <Icon name="refresh" size="sm" />
+                      <Icon name="refresh" size="sm" /><span class="max-lg:sr-only">Re-import</span>
                     </Button>
                   {/if}
                   <Button
                     size="sm"
                     variant="ghost"
-                    icon
-                    title="Send to player"
-                    aria-label="Send to player"
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
+                    title="Send to player"
                   >
-                    <Icon name="send" size="sm" />
+                    <Icon name="send" size="sm" /><span class="max-lg:sr-only">Send to player</span>
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon
-                      title="Unfollow"
-                      aria-label="Unfollow"
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
+                      title="Unfollow"
                     >
-                      <Icon name="unfollow" size="sm" />
+                      <Icon name="unfollow" size="sm" /><span class="max-lg:sr-only">Unfollow</span>
                     </Button>
                   {/if}
                 </span>

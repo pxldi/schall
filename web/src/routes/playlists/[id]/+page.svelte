@@ -474,7 +474,7 @@
               <th class="numeric px-4 py-2 font-medium">#</th>
               <th class="px-3 py-2 font-medium">Title</th>
               <th class="hidden px-3 py-2 font-medium md:table-cell">Artist</th>
-              <th class="hidden px-3 py-2 font-medium md:table-cell">Album</th>
+              <th class="hidden px-3 py-2 font-medium xl:table-cell">Album</th>
               <th class="hidden px-3 py-2 text-right font-medium md:table-cell">Length</th>
               <th class="px-4 py-2 font-medium">State</th>
             </tr>
@@ -507,7 +507,7 @@
                 <td class="hidden max-w-48 truncate px-3 py-1.5 text-meta text-ink-2 md:table-cell">
                   {entry.artist}
                 </td>
-                <td class="hidden max-w-48 truncate px-3 py-1.5 text-meta text-ink-3 md:table-cell">
+                <td class="hidden max-w-48 truncate px-3 py-1.5 text-meta text-ink-3 xl:table-cell">
                   {entry.album}
                 </td>
                 <td class="numeric hidden px-3 py-1.5 text-right text-meta text-ink-3 md:table-cell">

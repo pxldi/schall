@@ -208,3 +208,28 @@ func TestSchedulingDoesNotDisturbAWantThatHasBeenAnswered(t *testing.T) {
 		t.Fatalf("scheduling asked again about wants already answered: %v", due)
 	}
 }
+
+// The sweep follows the recording's MusicBrainz links, so it is handed the
+// recording the want names.
+func TestAWantDueAnAnchorCarriesItsRecording(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+
+	recordingID := uuid.New()
+	id, created, err := queries.CreateAcquisitionTarget(ctx, wantParams("Roads", recordingID))
+	if err != nil || !created {
+		t.Fatalf("create a want: %v, %v", created, err)
+	}
+	if err := queries.ScheduleAnchor(ctx, id, time.Now()); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	due, err := queries.DueAnchors(ctx, time.Now(), 10)
+	if err != nil {
+		t.Fatalf("read the wants due an anchor: %v", err)
+	}
+	if len(due) != 1 || due[0].RecordingID != recordingID {
+		t.Fatalf("due = %+v, want the want's recording %s", due, recordingID)
+	}
+}
