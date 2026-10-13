@@ -459,125 +459,102 @@ var recurringJobs = []recurringJob{
 	{
 		kind:  jobs.PollDownloads,
 		label: "Transfer poller",
-		idle: "Nothing is being transferred. The poller runs only while a transfer " +
-			"is moving, and the next one to start queues it again.",
+		idle:  "Nothing transferring. Starts with the next transfer.",
 	},
 	{
 		kind:  jobs.SweepAcquisitionTargets,
-		label: "Acquisition sweep",
-		idle: "No wanted recording is due. The sweep is queued again by the next " +
-			"wishlist entry, and by a scan that settles one.",
+		label: "Wishlist sweep",
+		idle:  "No wishlist song is due. Starts when one is added.",
 	},
 	{
 		kind:  jobs.SweepFollowFeed,
 		label: "Follow feed sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepCoverArt,
 		label: "Cover art sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepLyrics,
 		label: "Lyrics sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepAudioSpectrum,
 		label: "Audio measurement",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepPreviewAnchors,
 		label: "Preview sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.TagLibrary,
 		label: "Tag write sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepGenres,
 		label: "Genre backfill",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepDuplicates,
 		label: "Duplicate sweep",
-		idle: "Not scheduled. This sweep queues its own replacement after it runs, " +
-			"so nothing waiting means no duplicate pass is in progress.",
+		idle:  "Not scheduled. No duplicate pass is running.",
 	},
 	{
 		kind:  jobs.SweepLoudness,
 		label: "Loudness measurement",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepRecommendations,
 		label: "Recommendation sweep",
-		idle: "Not scheduled. This sweep runs only with an enabled ListenBrainz " +
-			"account and queues its own replacement, so nothing waiting means the " +
-			"account is disabled or no pass is running.",
+		idle:  "Not scheduled. Needs ListenBrainz turned on.",
 	},
 	{
 		kind:  jobs.SweepOwnRecommendations,
 		label: "Schall recommendation sweep",
-		idle: "Not scheduled. Startup and a listens sync queue this sweep once a " +
-			"copied listen names a recording, and it then queues its own " +
-			"replacement, so nothing waiting means no listen names one yet.",
+		idle:  "Not scheduled. Starts once a synced listen names a song.",
 	},
 	{
 		kind:  jobs.SyncListens,
 		label: "Listening history sync",
-		idle: "Not scheduled. This sync runs only with an enabled ListenBrainz " +
-			"account and queues its own replacement every fifteen minutes, so " +
-			"nothing waiting means the account is disabled.",
+		idle:  "Not scheduled. Needs ListenBrainz turned on.",
 	},
 	{
 		kind:  jobs.SweepCopyFingerprints,
 		label: "Copy fingerprint sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepLibraryWitnesses,
-		label: "Library witness sweep",
-		idle:  "Not scheduled. This sweep queues one full-length fingerprint job per library file and asks for its replacement while files remain.",
+		label: "Library fingerprint sweep",
+		idle:  "Not scheduled. Runs while library files still need a fingerprint.",
 	},
 	{
 		kind:  jobs.SweepUpgradeCandidates,
 		label: "Upgrade sweep",
-		idle: "Not scheduled. This sweep queues its own replacement and one is " +
-			"queued at startup, so nothing waiting means no worker has run it yet.",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
 		kind:  jobs.SweepTranscode,
 		label: "Transcode sweep",
-		idle: "Not scheduled. This pass starts when a transcode scan is requested " +
-			"and queues another pass only while files remain.",
+		idle:  "Not scheduled. Starts when you run a transcode scan.",
 	},
 	{
 		kind:  jobs.RefreshWeeklyPlaylist,
 		label: "Weekly playlist refresh",
-		idle: "Not scheduled. The refresh queues its own replacement after each " +
-			"run, so nothing waiting means the weekly playlist is disabled or has " +
-			"not been enabled.",
+		idle:  "Not scheduled. The weekly playlist is off.",
 	},
 	{
 		kind:  jobs.RefreshNewReleasesPlaylist,
 		label: "New releases refresh",
-		idle: "Not scheduled. This refresh is queued after a feed pass or library " +
-			"scan changes the list, so nothing waiting means neither has asked for it.",
+		idle:  "Not scheduled. Starts when new releases change.",
 	},
 }
 
@@ -682,8 +659,7 @@ func (api *API) retryJob(response http.ResponseWriter, request *http.Request) {
 		return
 	case errors.Is(err, db.ErrJobWasStopped):
 		api.problem(response, http.StatusConflict, "this job was stopped rather than tried",
-			[]string{"The work it belonged to was called off, so there is nothing " +
-				"here that failed and nothing to run again."})
+			[]string{"It was cancelled, so there's nothing to retry."})
 		return
 	case err != nil:
 		api.internalError(response, request, err)
@@ -794,12 +770,12 @@ func (api *API) cancelJob(response http.ResponseWriter, request *http.Request) {
 // pressed it would use.
 func cancelJobDetail(cancelled bool, status string) string {
 	if cancelled {
-		return "Cancelled. It will not run."
+		return "Cancelled. It won't run."
 	}
 	if status == "running" {
-		return "Already running. Nothing was changed."
+		return "Already running."
 	}
-	return "Already finished. Nothing was changed."
+	return "Already finished."
 }
 
 // retriedCauseResponse is what became of a press on "Retry all". Requeued is
@@ -832,7 +808,7 @@ func (api *API) retryFailedCause(response http.ResponseWriter, request *http.Req
 	}
 	if err := decodeJSON(response, request, &input); err != nil {
 		api.problem(response, http.StatusBadRequest, "the request could not be read",
-			[]string{"Name the cause to retry, as the failed list gave it."})
+			[]string{"Send the cause shown in the failed list."})
 		return
 	}
 	cause := strings.TrimSpace(input.Cause)
@@ -904,7 +880,7 @@ func (api *API) cancelQueuedJobsByKind(response http.ResponseWriter, request *ht
 	}
 	if err := decodeJSON(response, request, &input); err != nil {
 		api.problem(response, http.StatusBadRequest, "the request could not be read",
-			[]string{"Name the kind to cancel, as the queue gave it."})
+			[]string{"Send the kind shown in the queue."})
 		return
 	}
 	kind := strings.TrimSpace(input.Kind)
@@ -937,14 +913,13 @@ func (api *API) cancelQueuedJobsByKind(response http.ResponseWriter, request *ht
 func cancelKindDetail(cancelled int64, refused bool) string {
 	switch {
 	case refused:
-		return "That kind runs on its own schedule and cannot be bulk-cancelled. " +
-			"Cancel it from its own row instead."
+		return "This runs on a schedule. Cancel it from its own row."
 	case cancelled == 0:
-		return "Nothing of that kind was queued. Nothing was changed."
+		return "Nothing of that kind is queued."
 	case cancelled == 1:
-		return "One job was cancelled."
+		return "1 job cancelled."
 	default:
-		return fmt.Sprintf("%d jobs were cancelled.", cancelled)
+		return fmt.Sprintf("%d jobs cancelled.", cancelled)
 	}
 }
 
@@ -954,16 +929,16 @@ func cancelKindDetail(cancelled int64, refused bool) string {
 func causeRetryDetail(asked int, requeued int64) string {
 	switch {
 	case asked == 0:
-		return "Nothing is failing for that reason now. Nothing was changed."
+		return "Nothing is failing for that reason now."
 	case requeued == 0:
-		return "Those jobs are already on their way. Nothing was changed."
+		return "Already queued again."
 	case requeued == 1:
-		return "One job was queued again, with all of its attempts back."
+		return "1 job queued again."
 	case int64(asked) == requeued:
-		return fmt.Sprintf("%d jobs were queued again, with all of their attempts back.", requeued)
+		return fmt.Sprintf("%d jobs queued again.", requeued)
 	default:
 		return fmt.Sprintf(
-			"%d jobs were queued again, with all of their attempts back. The other %d were already on their way.",
+			"%d jobs queued again. %d were already queued.",
 			requeued, int64(asked)-requeued)
 	}
 }
@@ -972,20 +947,20 @@ func causeRetryDetail(asked int, requeued int64) string {
 // would use.
 func retryDetail(requeued bool, status string) string {
 	if requeued {
-		return "Queued again, with all of its attempts back."
+		return "Queued again."
 	}
 	switch status {
 	case "running":
-		return "Already running. Nothing was changed."
+		return "Already running."
 	case "queued":
-		return "Already queued. Nothing was changed."
+		return "Already queued."
 	case "failed":
 		// A job that was running when the press arrived and failed in the moment
 		// between the two questions. Nothing was requeued, and saying it had
 		// finished would be the one sentence here that is not true.
-		return "It has failed since. Nothing was changed; retry it again."
+		return "Failed again. Retry it."
 	default:
-		return "Already finished. Nothing was changed."
+		return "Already finished."
 	}
 }
 

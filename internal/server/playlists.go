@@ -590,7 +590,7 @@ func (api *API) wantPlaylistEntry(response http.ResponseWriter, request *http.Re
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, playlists.ErrEntryNotFound):
 		api.problem(response, http.StatusNotFound, "playlist entry not found", nil)
 	case err != nil:
-		api.problem(response, http.StatusInternalServerError, "want playlist entry", nil)
+		api.problem(response, http.StatusInternalServerError, "add the song to the wishlist", nil)
 	default:
 		api.writeJSON(response, http.StatusOK, map[string]any{"status": "wanted"})
 	}
@@ -644,7 +644,7 @@ func (api *API) readPlaylistFile(
 ) (filename string, content []byte, listName string, ok bool) {
 	if request.ContentLength > maxPlaylistFileBytes {
 		api.problem(response, http.StatusRequestEntityTooLarge, "this file is too large",
-			[]string{"A playlist file may be up to 5 MB."})
+			[]string{"Playlist files can be up to 5 MB."})
 		return "", nil, "", false
 	}
 	request.Body = http.MaxBytesReader(response, request.Body, maxPlaylistFileBytes)
@@ -652,7 +652,7 @@ func (api *API) readPlaylistFile(
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			api.problem(response, http.StatusRequestEntityTooLarge, "this file is too large",
-				[]string{"A playlist file may be up to 5 MB."})
+				[]string{"Playlist files can be up to 5 MB."})
 			return "", nil, "", false
 		}
 		api.problem(response, http.StatusBadRequest,
@@ -671,7 +671,7 @@ func (api *API) readPlaylistFile(
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			api.problem(response, http.StatusRequestEntityTooLarge, "this file is too large",
-				[]string{"A playlist file may be up to 5 MB."})
+				[]string{"Playlist files can be up to 5 MB."})
 			return "", nil, "", false
 		}
 		api.problem(response, http.StatusBadRequest, "read the playlist file", []string{err.Error()})
@@ -686,14 +686,14 @@ func (api *API) refusePlaylistFile(response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, playlists.ErrTooManyRows):
 		api.problem(response, http.StatusUnprocessableEntity, "this playlist is too long",
-			[]string{fmt.Sprintf("A playlist file may hold up to %d songs. Split it and import each part.",
+			[]string{fmt.Sprintf("Up to %d songs per file. Split it and import each part.",
 				playlists.MaxFileRows)})
 	case errors.Is(err, playlists.ErrEmptyFile):
 		api.problem(response, http.StatusUnprocessableEntity, "this file holds no songs",
-			[]string{"Every row was empty. Check the file and choose it again."})
+			[]string{"Every row is empty. Check the file."})
 	case errors.Is(err, playlists.ErrUnreadableFile):
 		api.problem(response, http.StatusUnprocessableEntity, "this file cannot be read as a playlist",
-			[]string{"Import a CSV with named columns, a two-column artist and title list, or an M3U.",
+			[]string{"Use a CSV with named columns, an artist and title list, or an M3U.",
 				err.Error()})
 	default:
 		api.problem(response, http.StatusInternalServerError, "import the playlist file", nil)

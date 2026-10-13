@@ -73,7 +73,7 @@ func (api *API) sourceKeysAvailable(response http.ResponseWriter) bool {
 	if api.sourceKeys == nil {
 		api.problem(response, http.StatusServiceUnavailable,
 			"Schall cannot read track addresses",
-			[]string{"This installation is not set up to read SoundCloud, YouTube or Bandcamp addresses."})
+			[]string{"SoundCloud, YouTube and Bandcamp links aren't set up on this server."})
 		return false
 	}
 	return true
@@ -88,29 +88,29 @@ func (api *API) sourceKeyProblem(response http.ResponseWriter, err error) bool {
 			[]string{"Paste the link to one track on SoundCloud, YouTube or Bandcamp."})
 	case errors.Is(err, tracksource.ErrGone):
 		api.problem(response, http.StatusNotFound, "The service no longer has that track",
-			[]string{"Open the link to check it still plays."})
+			[]string{"Open the link and check it still plays."})
 	case errors.Is(err, tracksource.ErrRateLimited):
 		api.problem(response, http.StatusServiceUnavailable, "The service is refusing requests",
 			[]string{"Try again in a few minutes."})
 	case errors.Is(err, tracksource.ErrUnavailable), errors.Is(err, acquisition.ErrNoTrackSources),
 		errors.Is(err, chromaprint.ErrNoFpcalc):
 		api.problem(response, http.StatusServiceUnavailable, "Schall cannot read track addresses",
-			[]string{"yt-dlp and fpcalc have to be installed to key a want to an address."})
+			[]string{"Install yt-dlp and fpcalc to link a song to an address."})
 	case errors.Is(err, acquisition.ErrExcerptUnreadable):
 		api.problem(response, http.StatusUnprocessableEntity, "The audio at that link could not be read",
-			[]string{"Nothing was keyed. Try another link to the same track."})
+			[]string{"Nothing changed. Try another link to the same song."})
 	case errors.Is(err, acquisition.ErrAddressChanged):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Look the link up again and check the track before you confirm."})
+			[]string{"Look up the link again and check the song."})
 	case errors.Is(err, db.ErrAlreadyKeyed):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"An address a person confirmed is permanent."})
+			[]string{"A confirmed link can't be changed."})
 	case errors.Is(err, db.ErrNotKeyable):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Only an unresolved want, or one asking which version it is, takes an address."})
+			[]string{"Only an unmatched song, or one waiting on a version choice, takes a link."})
 	case errors.Is(err, db.ErrNotKeyed):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Key the want to an address first."})
+			[]string{"Link the song to an address first."})
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusNotFound, "acquisition target not found", nil)
 	default:

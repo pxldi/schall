@@ -216,7 +216,7 @@ func (api *API) rescanNavidrome(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	if api.playback == nil {
-		api.problem(response, http.StatusServiceUnavailable, "the player cannot be told", nil)
+		api.problem(response, http.StatusServiceUnavailable, "telling Navidrome isn't set up", nil)
 		return
 	}
 	row, err := api.players.NavidromeSettings(request.Context())
@@ -235,7 +235,7 @@ func (api *API) rescanNavidrome(response http.ResponseWriter, request *http.Requ
 
 	if err := api.playback.NoticeLibraryChange(request.Context()); err != nil {
 		api.logger.Warn().Err(err).Msg("tell the player the library changed")
-		api.problem(response, http.StatusBadGateway, "the player could not be told", []string{err.Error()})
+		api.problem(response, http.StatusBadGateway, "Navidrome didn't answer", []string{err.Error()})
 		return
 	}
 

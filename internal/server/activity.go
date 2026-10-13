@@ -29,7 +29,7 @@ func WithActivity(reader ActivityReader) Option {
 func (api *API) listActivity(response http.ResponseWriter, request *http.Request) {
 	if api.activity == nil {
 		api.problem(response, http.StatusServiceUnavailable, "the activity feed is unavailable",
-			[]string{"This installation cannot read what has been happening."})
+			[]string{"Activity isn't set up on this server."})
 		return
 	}
 	events, err := api.activity.Since(request.Context(), time.Now().Add(-activity.Window))
