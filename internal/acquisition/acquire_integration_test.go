@@ -1862,6 +1862,46 @@ func TestAFolderFoundForOneWantIsReadForTheWantsSharingItsRelease(t *testing.T) 
 
 // One folder, one person, one question. Ten wants that all chose the same peer
 // and asked it ten times over is what "too many files" was the peer's answer to.
+// Not being able to read what was already tried is Schall's failure. Recording
+// it as nobody sharing the music would spend an attempt on a fact nobody learnt.
+func TestAWantWhoseTriedCopiesCannotBeReadSpendsNoAttempt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	fetcher := &fakeFetcher{pool: pool}
+	service := NewService(&unreadableTriesStore{Store: db.New(pool)}, zerolog.Nop()).
+		WithHunter(&fakeHunter{candidates: offering(sources.File{
+			Path: `Music\Portishead\Dummy\05 Glory Box.flac`, Name: "05 Glory Box.flac",
+			Extension: "flac", SizeBytes: 25_000_000, DurationSeconds: 301,
+		})}).
+		WithFetcher(fetcher).
+		WithListener(&fakeListener{configured: true})
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if err := service.hunt(ctx, target, nil); err == nil {
+		t.Fatal("hunt() reported success though what was tried could not be read")
+	}
+
+	after, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Attempts != 0 {
+		t.Fatalf("attempts = %d, want none spent", after.Attempts)
+	}
+	if len(fetcher.started) != 0 {
+		t.Fatalf("started %v, want nothing fetched", fetcher.started)
+	}
+}
+
+type unreadableTriesStore struct{ Store }
+
+func (*unreadableTriesStore) AcquisitionTargetFiles(
+	context.Context, uuid.UUID,
+) ([]db.AcquisitionTargetFileRow, error) {
+	return nil, errors.New("connection reset")
+}
+
 func TestTwoWantsSharingAFolderAreAskedForInOneRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

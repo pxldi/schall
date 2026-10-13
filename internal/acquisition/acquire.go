@@ -355,8 +355,13 @@ func (service *Service) hunt(
 			harvestPreferences = stored.StoredPreferences(ctx)
 		}
 	}
-	offer, found, heldBack, belowFloor := service.choose(
+	// A read that failed is Schall's failure, so it spends no attempt the way
+	// "nobody is sharing it" would.
+	offer, found, heldBack, belowFloor, err := service.choose(
 		ctx, target, candidates, wanted, openAtPeers, preferences)
+	if err != nil {
+		return err
+	}
 	if !found {
 		// A copy passed over only because its peer is busy is not an absence, so
 		// the two are answered differently: the want stands back without spending
@@ -630,8 +635,11 @@ func (service *Service) chooseFrom(
 	taken sources.Offer,
 	preferences sources.Preferences,
 ) (sources.Offer, bool) {
-	verdicts, ok := service.verdictsFor(ctx, sibling.ID)
-	if !ok {
+	verdicts, err := service.verdictsFor(ctx, sibling.ID)
+	if err != nil {
+		service.logger.Error().Err(err).
+			Str("acquisition_target_id", sibling.ID.String()).
+			Msg("read what has already been tried for a want sharing a release")
 		return sources.Offer{}, false
 	}
 	// A file taken along for a neighbouring want is held to the same floor as
@@ -676,10 +684,10 @@ func (service *Service) choose(
 	wanted sources.QueryTrack,
 	open map[db.Peer]int,
 	preferences sources.Preferences,
-) (sources.Offer, bool, bool, []sources.Refused) {
-	verdicts, ok := service.verdictsFor(ctx, target.ID)
-	if !ok {
-		return sources.Offer{}, false, false, nil
+) (sources.Offer, bool, bool, []sources.Refused, error) {
+	verdicts, err := service.verdictsFor(ctx, target.ID)
+	if err != nil {
+		return sources.Offer{}, false, false, nil, err
 	}
 	// The floor is held only against files this pass would otherwise fetch.
 	// A file nothing disclosed fits is not a copy the floor turned away, and
@@ -690,14 +698,14 @@ func (service *Service) choose(
 	if offer, found := verdicts.pick(service.now(), offers, func(offer sources.Offer) bool {
 		return open[peerOf(offer)] < peerFileBudget
 	}); found {
-		return offer, true, false, belowFloor
+		return offer, true, false, belowFloor, nil
 	}
 	// Nothing was worth fetching. Whether a busy peer is why is the difference
 	// between waiting one's turn and nobody having the music, so it is asked
 	// rather than assumed: the same pick again, with the budget set aside.
 	_, elsewhere := verdicts.pick(service.now(), offers,
 		func(sources.Offer) bool { return true })
-	return sources.Offer{}, false, elsewhere, belowFloor
+	return sources.Offer{}, false, elsewhere, belowFloor, nil
 }
 
 // acceptableOffers takes the files under the user's bitrate floor out of the
@@ -787,13 +795,10 @@ type offerVerdicts struct {
 
 func (service *Service) verdictsFor(
 	ctx context.Context, targetID uuid.UUID,
-) (offerVerdicts, bool) {
+) (offerVerdicts, error) {
 	judged, err := service.store.AcquisitionTargetFiles(ctx, targetID)
 	if err != nil {
-		service.logger.Error().Err(err).
-			Str("acquisition_target_id", targetID.String()).
-			Msg("read what has already been tried for a want")
-		return offerVerdicts{}, false
+		return offerVerdicts{}, fmt.Errorf("read what was tried for want %s: %w", targetID, err)
 	}
 	verdicts := offerVerdicts{
 		settled:     make(map[string]bool, len(judged)),
@@ -817,7 +822,7 @@ func (service *Service) verdictsFor(
 		}
 		verdicts.settled[key] = true
 	}
-	return verdicts, true
+	return verdicts, nil
 }
 
 // restFor is how long one copy that did not arrive waits before it is worth
