@@ -625,6 +625,23 @@ describe('a source search', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
 
     const loading = await screen.findByRole('status', { name: 'Loading source results' });
-    expect(loading.firstElementChild?.textContent).toContain('Searching peers for');
+    // The server chooses the first phrase, so before it answers the line names
+    // the release rather than an empty pair of quotes.
+    expect(loading.firstElementChild?.textContent).toContain('Searching peers for Talk Talk – Spirit of Eden');
+  });
+
+  it('counts one track in the singular', async () => {
+    answering({
+      sources: {
+        query: 'talk talk spirit of eden',
+        expectedTrackCount: 2,
+        items: [candidate({ trackCount: 1 })]
+      }
+    });
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    expect(await screen.findByText('1 track')).toBeTruthy();
   });
 });

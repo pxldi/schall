@@ -835,7 +835,15 @@
       {/if}
     </section>
 
-    <section class="mt-2">
+    <!-- While sources are open the section is at least a screen tall, so the
+         page under it keeps its length when a short answer replaces the
+         placeholders and the browser has nothing to clamp. The space is the
+         page's, not the bordered box's. -->
+    <section
+      bind:this={sourcesPanel}
+      class="mt-2 scroll-mt-[calc(var(--topbar-height)+1.5rem)]"
+      style={sourcesOpen ? 'min-height: calc(100dvh - var(--topbar-height, 0px) - 1.5rem)' : undefined}
+    >
       <!-- The heading names what is under it, so it waits until there is
            something: alone, it read as a section that failed to load. -->
       {#if duplicateQuestion || openRequests.length || sourcesOpen || $downloads.isError}
@@ -911,13 +919,9 @@
 
       {#if sourcesOpen}
         <div
-          bind:this={sourcesPanel}
-          class="mt-5 scroll-mt-[calc(var(--topbar-height)+1rem)] rounded-panel border border-line-thin p-5"
-          style="min-height: max(20rem, calc(100dvh - var(--topbar-height, 0px) - 2rem))"
+          class="mt-5 rounded-panel border border-line-thin p-5"
+          style={sourcesLoading ? 'min-height: 20rem' : undefined}
         >
-          <!-- At least a screen tall in every state, so the page under the
-               panel it was scrolled to keeps its length when a short answer
-               replaces the placeholders and the browser has nothing to clamp. -->
           <form class="flex flex-wrap gap-3" onsubmit={(event) => { event.preventDefault(); findSources(sourceQuery); }}>
             <input
               bind:value={sourceQuery}
@@ -933,7 +937,9 @@
               <!-- First, where it is read: under forty placeholders it was cut
                    off by the panel and the search looked idle. -->
               <p class="flex items-center gap-2 text-body text-ink-3">
-                <Icon name="busy" size="md" class="animate-spin" /> Searching peers for “{sourceQuery}”…
+                <Icon name="busy" size="md" class="animate-spin" /> Searching peers for {sourceQuery
+                  ? `“${sourceQuery}”`
+                  : `${$release.data?.artistName ?? ''} – ${$release.data?.title ?? ''}`}…
               </p>
               {#each Array(4) as _, placeholderIndex (placeholderIndex)}
                 <Skeleton shape="block" class="h-24" />
@@ -977,7 +983,7 @@
                       <span class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ink-3">
                         <span class="flex items-center gap-1"><Icon name="peer" size="sm" /> {candidate.username}</span>
                         <span>{quality(candidate)}</span>
-                        <span>{candidate.trackCount} tracks</span>
+                        <span>{candidate.trackCount === 1 ? '1 track' : `${candidate.trackCount} tracks`}</span>
                         <span>{formatBytes(candidate.totalSizeBytes)}</span>
                         <span class={candidate.match.complete ? 'text-ok' : ''}>
                           {candidate.match.summary}
