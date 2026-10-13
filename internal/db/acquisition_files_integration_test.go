@@ -1228,6 +1228,89 @@ func TestAWantWhoseAnswerIsStillImportingTakesNoSecondAnswer(t *testing.T) {
 	}
 }
 
+// Two people confirming sibling copies at the same moment get one answer between
+// them. Each guard reads before the other has committed, so the want's row is
+// what serialises them.
+func TestTwoSiblingCopiesAcceptedAtOnceGiveTheWantOneAnswer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	holdOneCopy(ctx, t, queries, targetID, requestID)
+	holdASecondCopy(ctx, t, queries, targetID, requestID)
+	copies, err := queries.AcquisitionTargetFiles(ctx, targetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Holding the request row stops both accepts after whatever they read first,
+	// so both are in flight together on every run rather than on an unlucky one.
+	holding, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = holding.Rollback(ctx) }()
+	if _, err := holding.Exec(ctx, `
+		SELECT 1 FROM download_requests WHERE id = $1 FOR UPDATE
+	`, requestID); err != nil {
+		t.Fatal(err)
+	}
+
+	answers := make(chan error, 2)
+	for _, copied := range copies[:2] {
+		go func() {
+			_, err := New(pool).AcceptHeldCopy(ctx, copied.ID, "that is the one")
+			answers <- err
+		}()
+	}
+	waitForLockWaiters(ctx, t, pool, 2)
+	if err := holding.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	accepted, refused := 0, 0
+	for range 2 {
+		err := <-answers
+		switch {
+		case err == nil:
+			accepted++
+		case errors.Is(err, ErrNotWaitingForADecision):
+			refused++
+		default:
+			t.Fatalf("AcceptHeldCopy() error = %v", err)
+		}
+	}
+	if accepted != 1 || refused != 1 {
+		t.Fatalf("accepted %d and refused %d, want one answer for the want", accepted, refused)
+	}
+}
+
+// waitForLockWaiters returns once the given number of connections are waiting on
+// a row lock in this database. It asks on a connection of its own, because the
+// waiters may hold every connection the pool has.
+func waitForLockWaiters(ctx context.Context, t *testing.T, pool *pgxpool.Pool, want int) {
+	t.Helper()
+	conn, err := pgx.ConnectConfig(ctx, pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	for attempt := 0; attempt < 200; attempt++ {
+		var waiting int
+		if err := conn.QueryRow(ctx, `
+			SELECT count(*) FROM pg_stat_activity
+			WHERE datname = current_database() AND wait_event_type = 'Lock'
+		`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting >= want {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("fewer than %d connections ever waited on a lock", want)
+}
+
 // A failed import is not an answer. The question comes back rather than being
 // buried by a decision that never produced any music.
 func TestAWantWhoseAnswerFailedToImportComesBackToTheQueue(t *testing.T) {

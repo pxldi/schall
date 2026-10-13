@@ -1188,6 +1188,16 @@ func (q *Queries) AcceptHeldCopy(
 ) (uuid.UUID, error) {
 	var requestID uuid.UUID
 	err := q.inTransaction(ctx, "accepting a held copy", func(tx pgx.Tx) error {
+		// The one-answer guard below reads sibling copies, and two accepts of
+		// different siblings touch different rows. Locking the want first makes the
+		// second accept wait and then see the first one's answer.
+		if _, err := tx.Exec(ctx, `
+			SELECT 1 FROM acquisition_targets
+			WHERE id = (SELECT acquisition_target_id FROM acquisition_target_files WHERE id = $1)
+			FOR UPDATE
+		`, copyID); err != nil {
+			return err
+		}
 		if err := tx.QueryRow(ctx, `
 			UPDATE acquisition_target_files
 			SET verdict = 'accepted', decided_by = 'user', summary = $2,
@@ -1290,6 +1300,13 @@ func (q *Queries) RefuseHeldCopies(
 	nextAttemptAt time.Time,
 ) error {
 	return q.inTransaction(ctx, "refusing the copies held for a want", func(tx pgx.Tx) error {
+		// The want is locked before its copies, in the order AcceptHeldCopy takes
+		// them, so an accept and a refusal of the same want wait rather than deadlock.
+		if _, err := tx.Exec(ctx, `
+			SELECT 1 FROM acquisition_targets WHERE id = $1 FOR UPDATE
+		`, targetID); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `
 			UPDATE acquisition_target_files
 			SET verdict = 'discarded_audio', decided_by = 'user', summary = $2,
