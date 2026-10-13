@@ -598,7 +598,7 @@ func TestASecondFileNamingTheSameRecordingIsADuplicate(t *testing.T) {
 // be the first file's recording the way a shared musicbrainz_recording_id
 // would be, and reconcile has no sample or AcoustID cluster on hand to tell
 // the two apart, so this stays a question rather than becoming a duplicate.
-func TestASecondFileNamingADifferentRecordingStaysAQuestion(t *testing.T) {
+func TestASecondFileSharingOnlyTheISRCStaysAQuestion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	pool := dbtest.Setup(t)
@@ -618,13 +618,12 @@ func TestASecondFileNamingADifferentRecordingStaysAQuestion(t *testing.T) {
 	}
 	assertMapping(t, ctx, pool, first, trackID, "resolved_identity", false)
 
-	// The second file carries the shared ISRC as a plain tag and resolves, on
-	// its own audio, to a different recording entirely.
-	other := uuid.New()
+	// The second file carries the shared ISRC as a plain tag and nothing else.
+	// A proven identity naming another recording would contradict the track and
+	// void the pair outright.
 	second := seedFile(t, ctx, pool, fileFixture{
 		path: "/music/88GLAM 2.5/Racks.mp3", isrc: ptr("usum71819697"),
 	})
-	insertIdentity(t, ctx, pool, second, other)
 	if err := service.ReconcileFile(ctx, second); err != nil {
 		t.Fatal(err)
 	}
@@ -1885,4 +1884,207 @@ func TestTagsStillConcludeWhenTheIdentifiersDifferOnlyByAMerge(t *testing.T) {
 	}
 
 	assertMapping(t, ctx, pool, fileID, trackID, "resolved_identity", false)
+}
+
+// seedContradiction is two catalogue tracks for two recordings and a file whose
+// tag names the first while its audio was proven to be the second.
+func seedContradiction(
+	t *testing.T, ctx context.Context, pool *pgxpool.Pool,
+) (taggedTrack, provenTrack, fileID uuid.UUID) {
+	t.Helper()
+	tagged, proven := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Kanye West", "Graduation")
+	taggedTrack = seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Homecoming", number: ptr(int32(12)), recordingID: &tagged,
+	})
+	_, bootlegID := seedRelease(t, ctx, pool, "Kanye West", "Graduation Reworked")
+	provenTrack = seedTrack(t, ctx, pool, trackFixture{
+		albumID: bootlegID, title: "Homecoming (Rework)", number: ptr(int32(12)), recordingID: &proven,
+	})
+	fileID = seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Graduation Reworked/12.mp3", recordingID: &tagged,
+	})
+	insertIdentity(t, ctx, pool, fileID, proven)
+	return taggedTrack, provenTrack, fileID
+}
+
+// A tag naming one recording and audio proven to be another contradict each
+// other, so neither may link the file.
+func TestATagContradictedByTheProvenIdentityLinksNothing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	_, _, fileID := seedContradiction(t, ctx, pool)
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus(t, ctx, pool, fileID, "ambiguous", 2)
+	assertNoMapping(t, ctx, pool, fileID)
+}
+
+// The contradicted file is put to a person, with both tracks and what named
+// each as the evidence.
+func TestATagContradictedByTheProvenIdentityIsShownInReview(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	taggedTrack, provenTrack, fileID := seedContradiction(t, ctx, pool)
+	service := NewService(pool, zerolog.Nop())
+	if err := service.ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := db.New(pool).ListLibraryFiles(ctx, db.ListLibraryFilesParams{
+		Limit: 20, Unidentified: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != fileID {
+		t.Fatalf("review lists %d files, want the contradicted file alone", len(page.Items))
+	}
+
+	candidates, err := service.Candidates(ctx, fileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[uuid.UUID]string{}
+	for _, candidate := range candidates {
+		methods[candidate.TrackID] = candidate.Method
+	}
+	if len(methods) != 2 ||
+		methods[taggedTrack] != "musicbrainz_recording_id" ||
+		methods[provenTrack] != "resolved_identity" {
+		t.Fatalf("candidates = %v, want the tagged track by its tag and the proven track by the identity", methods)
+	}
+}
+
+// A file whose tag says X but whose audio is proven Z cannot take X, so it does
+// not stand between X and the file proven to be X.
+func TestAFileProvenToBeAnotherRecordingIsNoContenderForItsTag(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	recording, other := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Kanye West", "Late Registration")
+	trackID := seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Diamonds From Sierra Leone", number: ptr(int32(2)),
+		recordingID: &recording,
+	})
+	studio := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Late Registration/02.flac", recordingID: &recording,
+	})
+	insertIdentity(t, ctx, pool, studio, recording)
+	live := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Live/Diamonds.mp3", recordingID: &recording,
+	})
+	insertIdentity(t, ctx, pool, live, other)
+
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, studio); err != nil {
+		t.Fatal(err)
+	}
+	assertMapping(t, ctx, pool, studio, trackID, "musicbrainz_recording_id", false)
+}
+
+// A file that held a track by its tag loses it once its audio is proven to be
+// another recording, and the cascade hands the track to the file proven to be
+// it.
+func TestATagLinkVoidedByTheIdentityPassesToTheProvenFile(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	recording, other := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Kanye West", "Late Registration")
+	trackID := seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Diamonds From Sierra Leone", number: ptr(int32(2)),
+		recordingID: &recording,
+	})
+	_, liveID := seedRelease(t, ctx, pool, "Kanye West", "Late Orchestration")
+	seedTrack(t, ctx, pool, trackFixture{
+		albumID: liveID, title: "Diamonds From Sierra Leone (Live)", number: ptr(int32(5)),
+		recordingID: &other,
+	})
+
+	// The live file holds the studio track by its tag, the state a reconcile
+	// left behind before its audio was proven.
+	live := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Live/Diamonds.mp3", recordingID: &recording,
+	})
+	service := NewService(pool, zerolog.Nop())
+	if err := service.ReconcileFile(ctx, live); err != nil {
+		t.Fatal(err)
+	}
+	assertMapping(t, ctx, pool, live, trackID, "musicbrainz_recording_id", false)
+	insertIdentity(t, ctx, pool, live, other)
+
+	studio := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Late Registration/02.flac", recordingID: &recording,
+	})
+	insertIdentity(t, ctx, pool, studio, recording)
+
+	peers, err := service.Peers(ctx, live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 1 || peers[0] != studio {
+		t.Fatalf("peers of the live file = %v, want the studio file", peers)
+	}
+
+	if err := service.ReconcileFile(ctx, live); err != nil {
+		t.Fatal(err)
+	}
+	assertNoMapping(t, ctx, pool, live)
+	assertMapping(t, ctx, pool, studio, trackID, "musicbrainz_recording_id", false)
+}
+
+// An ISRC is shared by recordings MusicBrainz never merged, so a track whose
+// recording the file's own tag contradicts is not taken by the ISRC.
+func TestAnISRCDoesNotLinkATrackTheRecordingIDContradicts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	tagged, other := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Burial", "Untrue")
+	seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Archangel", number: ptr(int32(2)),
+		recordingID: &other, isrc: ptr("GBBPW0700012"),
+	})
+	fileID := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Untrue/02.flac", recordingID: &tagged, isrc: ptr("gbbpw0700012"),
+	})
+
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+	assertUnmatched(t, ctx, pool, fileID)
+}
+
+// The same holds for a recording the file's audio was proven to be: an ISRC
+// does not link a track the proven identity contradicts.
+func TestAnISRCDoesNotLinkATrackTheProvenIdentityContradicts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	recording, proven := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "88GLAM", "88GLAM2")
+	seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Racks", number: ptr(int32(1)),
+		recordingID: &recording, isrc: ptr("USUM71819697"),
+	})
+	fileID := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/88GLAM 2.5/Racks.mp3", isrc: ptr("usum71819697"),
+	})
+	insertIdentity(t, ctx, pool, fileID, proven)
+
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+	assertUnmatched(t, ctx, pool, fileID)
 }
