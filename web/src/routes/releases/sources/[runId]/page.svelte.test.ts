@@ -316,7 +316,7 @@ describe('a run holding one of each ending', () => {
     ).toBeTruthy();
     expect(screen.getByText('MP3 at 128 kbps is below the 320 kbps you asked for')).toBeTruthy();
     const link = screen.getByText('Change your minimum bit rate');
-    expect(link.getAttribute('href')).toBe('/settings#bitrate-floor');
+    expect(link.getAttribute('href')).toBe('/settings/library#bitrate-floor');
   });
 
   // Two rules can turn copies away, and they send the reader to different
@@ -352,6 +352,6 @@ describe('a run holding one of each ending', () => {
 
     await screen.findByText('2 copies outside your format settings');
     const link = screen.getByText('Change the formats you accept');
-    expect(link.getAttribute('href')).toBe('/settings');
+    expect(link.getAttribute('href')).toBe('/settings/library');
   });
 });
