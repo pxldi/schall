@@ -53,10 +53,19 @@ const invalidations: Record<string, string[][]> = {
     ['library-tags'],
     ...queue
   ],
-  catalogue: [['artists'], ['releases'], ['dashboard'], ['global-search'], ...queue],
+  // A label refresh is announced here too, so the labels are on it.
+  catalogue: [['artists'], ['releases'], ['labels'], ['dashboard'], ['global-search'], ...queue],
   // An import, a sync with the player or a refresh of a generated list ending.
-  // These are rare, and an import is one somebody asked for.
-  playlists: [['playlists'], ['spotify-settings'], ['global-search'], ...queue],
+  // These are rare, and an import is one somebody asked for. Settings reads the
+  // two generated lists under keys of their own.
+  playlists: [
+    ['playlists'],
+    ['weekly'],
+    ['new-releases'],
+    ['spotify-settings'],
+    ['global-search'],
+    ...queue
+  ],
   // A want settling changes what is waiting in the review queue and the list of
   // wants still being looked for, which is why one topic reaches both. The
   // playlist pages are left alone: with 22 downloads running they re-read every
