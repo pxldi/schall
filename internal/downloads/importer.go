@@ -815,7 +815,9 @@ func (importer *Importer) verifyAcoustically(
 			}
 		}
 		verdict.Agrees = &agrees
-		if agrees {
+		// A person's decision is permanent. The answer stays on the evidence for
+		// the review page, but it cannot pause a file somebody already judged.
+		if agrees || file.evidence.Decision != nil {
 			continue
 		}
 		// The audio was recognised and is not this recording. That is the file

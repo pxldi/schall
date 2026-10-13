@@ -212,3 +212,29 @@ func TestImporterAsksNothingWhenAcousticCheckingIsOff(t *testing.T) {
 		t.Fatalf("review = %q, want validation unchanged while the check is off", store.review)
 	}
 }
+
+// A person who decided what a file is has the last word on it, so audio that
+// AcoustID recognises as another recording no longer pauses the import. Before,
+// the decided folder went back to review on every validation.
+func TestADecidedFileIsImportedWhenItsAudioIsADifferentRecording(t *testing.T) {
+	store, importer, _, requestID := oneFileRelease(t)
+	expected := uuid.New()
+	store.row.Tracks[0].MusicBrainzRecordingID = &expected
+	store.row.Decisions = map[string]db.ImportDecision{
+		"01.flac": {
+			FileName: "01.flac", TrackID: store.row.Tracks[0].ID, TrackTitle: "First",
+			Fingerprint: observedTags(importer.inspect(""), 1).Fingerprint(),
+		},
+	}
+	importer.WithAcousticIdentifier(&fakeIdentifier{
+		configured: true,
+		clusters:   []acoustid.Cluster{cluster(0.95, uuid.New())},
+	})
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.review != "" || store.destination == "" {
+		t.Fatalf("review = %q, destination = %q", store.review, store.destination)
+	}
+}
