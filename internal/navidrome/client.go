@@ -33,6 +33,10 @@ const (
 
 	apiPrefix       = "/rest"
 	maxResponseBody = 1 << 20
+	// maxPlaylistBody bounds the playlist calls. getPlaylist lists every song
+	// with a few hundred bytes of fields each, and createPlaylist answers with
+	// the same, so a playlist of a few thousand songs is several megabytes.
+	maxPlaylistBody = 64 << 20
 
 	// protocolVersion is the Subsonic revision this client speaks. It is sent
 	// on every request and the server refuses anything it is too old for, so it
@@ -174,7 +178,7 @@ func (client *Client) call(
 	if err != nil {
 		return subsonicResponse{}, fmt.Errorf("create navidrome request: %w", err)
 	}
-	return client.send(request)
+	return client.send(request, responseLimit(method))
 }
 
 // post performs one Subsonic request with its parameters in a form-encoded
@@ -205,7 +209,16 @@ func (client *Client) post(
 		return subsonicResponse{}, fmt.Errorf("create navidrome request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return client.send(request)
+	return client.send(request, responseLimit(method))
+}
+
+// responseLimit is how much of an answer to this method is read.
+func responseLimit(method string) int64 {
+	switch method {
+	case "getPlaylist", "getPlaylists", "createPlaylist", "updatePlaylist":
+		return maxPlaylistBody
+	}
+	return maxResponseBody
 }
 
 func (client *Client) endpoint(method string) (*url.URL, error) {
@@ -220,7 +233,7 @@ func (client *Client) endpoint(method string) (*url.URL, error) {
 // envelope. A refusal arrives as HTTP 200 with a status of "failed" and an
 // error object, so the body decides the outcome and the status code only
 // reports whether the server answered at all.
-func (client *Client) send(request *http.Request) (subsonicResponse, error) {
+func (client *Client) send(request *http.Request, limit int64) (subsonicResponse, error) {
 	request.Header.Set("Accept", "application/json")
 
 	response, err := client.httpClient.Do(request)
@@ -237,7 +250,7 @@ func (client *Client) send(request *http.Request) (subsonicResponse, error) {
 	var envelope struct {
 		Response subsonicResponse `json:"subsonic-response"`
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, maxResponseBody)).Decode(&envelope); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, limit)).Decode(&envelope); err != nil {
 		return subsonicResponse{}, fmt.Errorf("decode navidrome response: %w", err)
 	}
 	if envelope.Response.Error != nil {

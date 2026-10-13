@@ -146,6 +146,34 @@ func TestAPlaylistCarriesItsEntriesInTheOrderTheServerListedThem(t *testing.T) {
 	}
 }
 
+// A Subsonic entry carries a few hundred bytes of song fields, so a playlist of
+// a few thousand songs is several megabytes of answer. It is read whole.
+func TestALongPlaylistIsReadWhole(t *testing.T) {
+	const songs = 5000
+	var body strings.Builder
+	body.WriteString(`{"subsonic-response":{"status":"ok","version":"1.16.1","playlist":` +
+		`{"id":"pl-1","name":"Everything","owner":"leo","songCount":5000,"entry":[`)
+	padding := strings.Repeat("x", 400)
+	for index := range songs {
+		if index > 0 {
+			body.WriteString(",")
+		}
+		body.WriteString(`{"id":"song","title":"` + padding + `","path":"/music/a.flac"}`)
+	}
+	body.WriteString(`]}}}`)
+	server, _ := recording(t, body.String())
+
+	playlist, err := namedClient(t, server.URL, SyncClientName).
+		Playlist(context.Background(), "pl-1")
+
+	if err != nil {
+		t.Fatalf("read playlist: %v", err)
+	}
+	if len(playlist.Entries) != songs {
+		t.Errorf("entries = %d, want %d", len(playlist.Entries), songs)
+	}
+}
+
 // A playlist Schall has created and not yet pushed anything into comes back
 // with no entries at all, and that is an empty playlist rather than a failure.
 func TestAnEmptyPlaylistHasNoEntriesRatherThanAnError(t *testing.T) {
