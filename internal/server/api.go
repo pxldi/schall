@@ -1232,7 +1232,7 @@ func (api *API) listLibraryFiles(response http.ResponseWriter, request *http.Req
 	}
 	offset := int32(0)
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed", []string{"offset must be zero or greater"})
 			return
@@ -1583,7 +1583,7 @@ func (api *API) listRecordingsHeldTwice(response http.ResponseWriter, request *h
 	}
 	offset := int32(0)
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed", []string{"offset must be zero or greater"})
 			return
@@ -1887,7 +1887,7 @@ func (api *API) listArtists(response http.ResponseWriter, request *http.Request)
 	}
 	offset := int32(0)
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed", []string{"offset must be zero or greater"})
 			return
@@ -2232,11 +2232,15 @@ func (api *API) followArtist(response http.ResponseWriter, request *http.Request
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No row means the artist is gone or was already followed. Either way
 		// there is nothing to promote, and the caller is told which.
-		if _, lookupErr := api.store.GetArtist(request.Context(), artistID); lookupErr == nil {
+		_, lookupErr := api.store.GetArtist(request.Context(), artistID)
+		switch {
+		case lookupErr == nil:
 			api.problem(response, http.StatusConflict, "artist is already followed", nil)
-			return
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			api.problem(response, http.StatusNotFound, "artist not found", nil)
+		default:
+			api.internalError(response, request, lookupErr)
 		}
-		api.problem(response, http.StatusNotFound, "artist not found", nil)
 		return
 	}
 	if err != nil {
@@ -2291,11 +2295,15 @@ func (api *API) unfollowArtist(response http.ResponseWriter, request *http.Reque
 		// No row means the artist is gone or was never followed. An artist
 		// Schall merely holds has no intent to withdraw, and saying so is more
 		// useful than reporting success for a change nobody made.
-		if _, lookupErr := api.store.GetArtist(request.Context(), artistID); lookupErr == nil {
+		_, lookupErr := api.store.GetArtist(request.Context(), artistID)
+		switch {
+		case lookupErr == nil:
 			api.problem(response, http.StatusConflict, "artist is not followed", nil)
-			return
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			api.problem(response, http.StatusNotFound, "artist not found", nil)
+		default:
+			api.internalError(response, request, lookupErr)
 		}
-		api.problem(response, http.StatusNotFound, "artist not found", nil)
 		return
 	}
 	if err != nil {
@@ -2475,7 +2483,7 @@ func (api *API) listAlbums(response http.ResponseWriter, request *http.Request) 
 		params.Limit = int32(value)
 	}
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed", []string{"offset must be zero or greater"})
 			return
@@ -2700,12 +2708,12 @@ func (api *API) listAlbumEditions(response http.ResponseWriter, request *http.Re
 		return
 	}
 	album, err := api.store.GetAlbum(request.Context(), albumID)
-	if errors.Is(err, pgx.ErrNoRows) || !album.MusicbrainzReleaseGroupID.Valid {
-		api.problem(response, http.StatusNotFound, "release not found", nil)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		api.internalError(response, request, err)
 		return
 	}
-	if err != nil {
-		api.internalError(response, request, err)
+	if err != nil || !album.MusicbrainzReleaseGroupID.Valid {
+		api.problem(response, http.StatusNotFound, "release not found", nil)
 		return
 	}
 	items, err := api.editionList.ListReleaseEditions(request.Context(), album.MusicbrainzReleaseGroupID.UUID)
@@ -2750,12 +2758,12 @@ func (api *API) selectAlbumEdition(response http.ResponseWriter, request *http.R
 		return
 	}
 	album, err := api.store.GetAlbum(request.Context(), albumID)
-	if errors.Is(err, pgx.ErrNoRows) || !album.MusicbrainzReleaseGroupID.Valid {
-		api.problem(response, http.StatusNotFound, "release not found", nil)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		api.internalError(response, request, err)
 		return
 	}
-	if err != nil {
-		api.internalError(response, request, err)
+	if err != nil || !album.MusicbrainzReleaseGroupID.Valid {
+		api.problem(response, http.StatusNotFound, "release not found", nil)
 		return
 	}
 	editions, err := api.editions.ListReleaseEditions(request.Context(), album.MusicbrainzReleaseGroupID.UUID)
