@@ -53,7 +53,9 @@
   // The page is printed from its own sleeve (ADR Duoton): one cover, large,
   // in the inks stored with it, or read from the picture on a server that
   // stores none. A release with no picture prints generated art from its id in
-  // the house inks, the same art the sleeve frame draws.
+  // the house inks, the same art the sleeve frame draws. It is as tall as a
+  // playlist's print: at 24rem the title started 240px down, under an empty
+  // stretch of picture.
   usePagePrint(() =>
     $release.data
       ? {
@@ -61,7 +63,7 @@
             { src: coverMissing ? null : coverSrc, seed: releaseID, inks: $release.data.inks }
           ],
           mode: 'single',
-          height: 24
+          height: 20
         }
       : undefined
   );
@@ -588,7 +590,7 @@
           <Button
             variant="outline"
             icon
-            title="Remove: stop wanting it, and delete what Schall downloaded in 30 days"
+            title="Remove"
             aria-label="Remove"
             disabled={$removeRelease.isPending}
             onclick={() => $removeRelease.mutate()}
