@@ -103,6 +103,9 @@ type fakeFetcher struct {
 	cancelled []uuid.UUID
 	err       error
 	pool      *pgxpool.Pool
+	// during runs inside the provider call, for whatever settles a request
+	// while the provider takes its time to refuse it.
+	during func(requestIDs []uuid.UUID)
 }
 
 func (fetcher *fakeFetcher) StartTogether(_ context.Context, requestIDs []uuid.UUID) error {
@@ -110,6 +113,9 @@ func (fetcher *fakeFetcher) StartTogether(_ context.Context, requestIDs []uuid.U
 	defer fetcher.mutex.Unlock()
 	fetcher.batches = append(fetcher.batches, append([]uuid.UUID{}, requestIDs...))
 	fetcher.started = append(fetcher.started, requestIDs...)
+	if fetcher.during != nil {
+		fetcher.during(requestIDs)
+	}
 	return fetcher.err
 }
 
@@ -1196,6 +1202,57 @@ func TestACopyTheProviderWouldNotStartIsNotAJudgement(t *testing.T) {
 	}
 	if waiting.Status != "pending" {
 		t.Fatalf("status = %s, want it still wanted", waiting.Status)
+	}
+}
+
+// slskd can take its time to refuse a start, and the poller can read the
+// transfer slskd recorded as failed and settle the request meanwhile. There is
+// then nothing left to withdraw, which is not an error, and the want still
+// carries on.
+func TestACopyThatSettledWhileItsStartWasRefusedIsNotAnError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter := &fakeHunter{candidates: offering(sources.File{
+		Path: `Music\Glory Box.flac`, Name: "Glory Box.flac", DurationSeconds: 301,
+	})}
+	fetcher := &fakeFetcher{
+		err: errors.New("slskd returned HTTP 500"),
+		during: func(requestIDs []uuid.UUID) {
+			if _, err := pool.Exec(ctx, `
+				UPDATE download_requests SET status = 'failed', updated_at = now()
+				WHERE id = ANY($1)
+			`, requestIDs); err != nil {
+				t.Error(err)
+			}
+		},
+	}
+	fetcher.pool = pool
+	var logged strings.Builder
+	service := NewService(db.New(pool), zerolog.New(&logged)).
+		WithHunter(hunter).
+		WithFetcher(fetcher).
+		WithListener(&fakeListener{configured: true})
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if strings.Contains(logged.String(), `"level":"error"`) {
+		t.Errorf("logged %s, want no error for a request that had already settled", logged.String())
+	}
+	recorded := offers(ctx, t, pool, target.ID)
+	if len(recorded) != 1 || recorded[0].Verdict != db.AcquiredFileUndelivered {
+		t.Fatalf("offers = %+v, want a transport fact rather than a verdict", recorded)
+	}
+	waiting, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waiting.Status != "pending" || !waiting.NextAttemptAt.Valid {
+		t.Fatalf("status = %s next = %v, want it looked for again later",
+			waiting.Status, waiting.NextAttemptAt)
 	}
 }
 

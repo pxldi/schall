@@ -965,7 +965,15 @@ func (service *Service) abandonFetch(
 		Str("acquisition_target_id", target.ID.String()).
 		Str("download_request_id", requestID.String()).
 		Msg("a chosen copy could not be started")
-	if _, err := service.store.CancelDownloadRequest(ctx, requestID); err != nil {
+	_, err := service.store.CancelDownloadRequest(ctx, requestID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// slskd can take up to 30 seconds to refuse, and the poller can read
+		// the failed transfer and settle the request meanwhile. Nothing is left
+		// open to withdraw.
+		service.logger.Debug().Str("download_request_id", requestID.String()).
+			Msg("a copy that could not be started had already settled")
+	case err != nil:
 		service.logger.Error().Err(err).Str("download_request_id", requestID.String()).
 			Msg("withdraw a copy that could not be started")
 	}
