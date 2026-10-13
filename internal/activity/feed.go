@@ -189,10 +189,12 @@ func collapse(events []Event) []Event {
 			collapsed[last].Since = event.At
 			continue
 		}
-		collapsed = append(collapsed, event)
+		// The cap is checked when a new row would start, so the last row it
+		// allows still takes in the rest of its run.
 		if len(collapsed) == Limit {
 			break
 		}
+		collapsed = append(collapsed, event)
 	}
 	return collapsed
 }
