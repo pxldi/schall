@@ -2127,3 +2127,36 @@ func TestMarkAlbumGenresAskedStopsTheBackfillCountingTheRelease(t *testing.T) {
 		t.Fatalf("waiting = %d, want nobody left to ask about", result.WaitingCount)
 	}
 }
+
+// The first claim writes when a job started, and a later claim after a restart
+// reads the same moment back.
+func TestAJobKeepsWhenItFirstStartedAcrossARestart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedJobs(ctx, t, pool, JudgeCopiesAgain)
+	repository := NewRepository(pool)
+
+	job, err := repository.Claim(ctx, Judging())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	first, err := repository.StartedFirstAt(ctx, job)
+	if err != nil {
+		t.Fatalf("StartedFirstAt() error = %v", err)
+	}
+	if err := repository.RecoverInterrupted(ctx); err != nil {
+		t.Fatalf("RecoverInterrupted() error = %v", err)
+	}
+	again, err := repository.Claim(ctx, Judging())
+	if err != nil {
+		t.Fatalf("second Claim() error = %v", err)
+	}
+	second, err := repository.StartedFirstAt(ctx, again)
+	if err != nil {
+		t.Fatalf("second StartedFirstAt() error = %v", err)
+	}
+	if !second.Equal(first) {
+		t.Fatalf("after a restart the job started at %s, want %s", second, first)
+	}
+}

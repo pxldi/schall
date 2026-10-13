@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/db"
@@ -204,7 +205,7 @@ func TestANewlyAnchoredWantsCopiesAreJudgedAgain(t *testing.T) {
 		},
 	})
 
-	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID)
+	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID, time.Time{})
 	if err != nil {
 		t.Fatalf("JudgeWantCopies() error = %v", err)
 	}
@@ -233,7 +234,7 @@ func TestACopyWithNoBytesIsMeasuredFromItsStoredFingerprint(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID)
+	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID, time.Time{})
 	if err != nil {
 		t.Fatalf("JudgeWantCopies() error = %v", err)
 	}
@@ -276,7 +277,7 @@ func TestACopyWithNoBytesIsMeasuredFromItsStoredFingerprintByNameStaysAQuestion(
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID)
+	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID, time.Time{})
 	if err != nil {
 		t.Fatalf("JudgeWantCopies() error = %v", err)
 	}
@@ -316,7 +317,7 @@ func TestACopyWithNoBytesIsNotRefusedByAnUpload(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID)
+	err := importer.JudgeWantCopies(context.Background(), store.targetRow.AcquisitionTargetID, time.Time{})
 	if err != nil {
 		t.Fatalf("JudgeWantCopies() error = %v", err)
 	}
@@ -345,7 +346,7 @@ func TestANewlyAnchoredWantIsAskedToLookAgain(t *testing.T) {
 	})
 
 	targetID := store.targetRow.AcquisitionTargetID
-	if err := importer.JudgeWantCopies(context.Background(), targetID); err != nil {
+	if err := importer.JudgeWantCopies(context.Background(), targetID, time.Time{}); err != nil {
 		t.Fatalf("JudgeWantCopies() error = %v", err)
 	}
 	if len(store.rearmed) != 1 || store.rearmed[0] != targetID {
@@ -368,7 +369,7 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil)
+	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{})
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}
@@ -376,7 +377,7 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 		t.Fatalf("first part = %+v, more = %v, want %d wants and one left",
 			first, more, judgeAgainWants)
 	}
-	second, _, more, err := importer.judgeAgainPart(context.Background(), next)
+	second, _, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{})
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}

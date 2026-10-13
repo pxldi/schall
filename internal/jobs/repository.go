@@ -703,9 +703,28 @@ func (repository *Repository) QueueSpectrumSweep(ctx context.Context, runAfter t
 }
 
 func (repository *Repository) QueueJudgeCopiesAgainAfter(
-	ctx context.Context, runAfter time.Time, after uuid.UUID,
+	ctx context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
 ) error {
-	return db.New(repository.pool).QueueJudgeCopiesAgainAfter(ctx, runAfter, after)
+	return db.New(repository.pool).QueueJudgeCopiesAgainAfter(ctx, runAfter, after, since)
+}
+
+// StartedFirstAt answers when a job was first started. The first claim writes
+// the moment into the payload and every later claim reads it back, so a job a
+// restart put back on the queue keeps the moment of its first attempt.
+func (repository *Repository) StartedFirstAt(ctx context.Context, job Job) (time.Time, error) {
+	var since time.Time
+	err := repository.pool.QueryRow(ctx, `
+		UPDATE jobs
+		SET payload = jsonb_set(
+		        coalesce(payload, '{}'::jsonb), '{since}',
+		        coalesce(payload->'since', to_jsonb(now())))
+		WHERE id = $1
+		RETURNING (payload->>'since')::timestamptz
+	`, job.ID).Scan(&since)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("read when job %s first started: %w", job.ID, err)
+	}
+	return since, nil
 }
 
 func (repository *Repository) QueueAskAcoustIDAgain(ctx context.Context, runAfter time.Time) error {

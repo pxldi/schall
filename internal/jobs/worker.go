@@ -579,7 +579,10 @@ type Queue interface {
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
 	QueueAskAcoustIDAgain(context.Context, time.Time) error
-	QueueJudgeCopiesAgainAfter(context.Context, time.Time, uuid.UUID) error
+	QueueJudgeCopiesAgainAfter(context.Context, time.Time, uuid.UUID, time.Time) error
+	// StartedFirstAt answers when a job was first started, across the restarts
+	// that put it back on the queue.
+	StartedFirstAt(context.Context, Job) (time.Time, error)
 	QueueUpgradeSweep(context.Context, time.Time, json.RawMessage) error
 	QueueNavidromePlaylistSweep(context.Context, time.Time) error
 	QueueGenreSweep(context.Context, time.Time) error
@@ -635,7 +638,9 @@ type DownloadImporter interface {
 	// through validation a second time, where the rules that decided them have
 	// since changed. It answers the last want it took and whether any are left.
 	// What it did is reported to the log by the pass itself.
-	JudgeAgain(context.Context, uuid.UUID) (uuid.UUID, bool, error)
+	// Copies decided at or after the moment given are skipped: the pass already
+	// judged them before a restart cut it off.
+	JudgeAgain(context.Context, uuid.UUID, time.Time) (uuid.UUID, bool, error)
 	// JudgeCreditRefusalsAgain does the same for the copies refused on the
 	// artist tag alone, which is a different set and a different rule change
 	// (ADR 0030).
@@ -647,7 +652,7 @@ type DownloadImporter interface {
 	// copies whose bytes are still there go back through validation; the ones
 	// whose bytes have gone are measured from the fingerprint kept on them, and
 	// keep the verdict they have.
-	JudgeWantCopies(context.Context, uuid.UUID) error
+	JudgeWantCopies(context.Context, uuid.UUID, time.Time) error
 	// FingerprintHeldCopies measures the audio of the held copies that have no
 	// fingerprint on record, and reports whether more are waiting. It decides
 	// nothing: the number is what lets the review queue show the copies that are
@@ -2116,7 +2121,12 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 			return
 		}
 	}
-	next, more, err := worker.importer.JudgeAgain(ctx, position.After)
+	since, err := worker.queue.StartedFirstAt(ctx, job)
+	if err != nil {
+		worker.finishFailed(ctx, job, err, true)
+		return
+	}
+	next, more, err := worker.importer.JudgeAgain(ctx, position.After, since)
 	if err != nil {
 		worker.finishFailed(ctx, job, fmt.Errorf("judge copies again: %w", err), true)
 		return
@@ -2128,14 +2138,14 @@ func (worker *Worker) processJudgeAgain(ctx context.Context, job Job) {
 	if !more {
 		return
 	}
-	if err := worker.queue.QueueJudgeCopiesAgainAfter(ctx, worker.now(), next); err != nil {
+	if err := worker.queue.QueueJudgeCopiesAgainAfter(ctx, worker.now(), next, since); err != nil {
 		worker.logger.Error().Err(err).Msg("queue the next part of judging copies again")
 	}
 }
 
 // judgeAgainPosition is the last want a part of a judge-again pass finished.
-// A restart runs the part that was cut short again from the same place, so
-// only that part's wants are judged twice.
+// A restart runs the part that was cut short again from the same place, and
+// the copies that part already judged are skipped by when they were decided.
 type judgeAgainPosition struct {
 	After uuid.UUID `json:"after"`
 }
@@ -2229,7 +2239,12 @@ func (worker *Worker) processWantJudging(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, errors.New("this job names no want"), false)
 		return
 	}
-	if err := worker.importer.JudgeWantCopies(ctx, named.AcquisitionTargetID); err != nil {
+	since, err := worker.queue.StartedFirstAt(ctx, job)
+	if err != nil {
+		worker.finishFailed(ctx, job, err, true)
+		return
+	}
+	if err := worker.importer.JudgeWantCopies(ctx, named.AcquisitionTargetID, since); err != nil {
 		worker.finishFailed(ctx, job,
 			fmt.Errorf("judge the copies of want %s: %w", named.AcquisitionTargetID, err), true)
 		return

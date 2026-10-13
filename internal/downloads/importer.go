@@ -49,7 +49,7 @@ type ImportStore interface {
 	// The three a second pass over copies already decided about needs. See
 	// JudgeAgain: it offers copies, checks the want was not answered in the
 	// meantime, and puts one request back where validation claims from.
-	CopiesToJudgeAgainAfter(context.Context, uuid.UUID) ([]db.JudgeAgainRow, error)
+	CopiesToJudgeAgainAfter(context.Context, uuid.UUID, time.Time) ([]db.JudgeAgainRow, error)
 	CopiesRefusedOnCreditAlone(context.Context) ([]db.JudgeAgainRow, error)
 	CopiesAcoustIDDidNotKnow(context.Context) ([]db.JudgeAgainRow, error)
 	WantHasAcceptedCopy(context.Context, uuid.UUID) (bool, error)
@@ -57,7 +57,7 @@ type ImportStore interface {
 	// The two a pass over one newly anchored want needs. See JudgeWantCopies: it
 	// offers that want's copies alone, and writes what a copy whose bytes have
 	// gone measured to against the anchor. The second touches no verdict.
-	CopiesToJudgeAgainForWant(context.Context, uuid.UUID) ([]db.JudgeAgainRow, error)
+	CopiesToJudgeAgainForWant(context.Context, uuid.UUID, time.Time) ([]db.JudgeAgainRow, error)
 	RecordCopyAnchorReading(
 		ctx context.Context, copyID uuid.UUID, anchor db.ImportAnchor, summary string,
 	) error

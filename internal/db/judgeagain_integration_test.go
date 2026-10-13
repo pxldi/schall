@@ -283,16 +283,42 @@ func TestTheNextPartOffersOnlyWantsAfterTheLastOne(t *testing.T) {
 	settledCopy(ctx, t, pool, targetID, requestID,
 		AcquiredFileDiscardedAudio, namedOtherMusic)
 
-	before, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil)
+	before, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
 	}
-	after, err := queries.CopiesToJudgeAgainAfter(ctx, targetID)
+	after, err := queries.CopiesToJudgeAgainAfter(ctx, targetID, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
 	}
 	if len(before) != 1 || len(after) != 0 {
 		t.Fatalf("from the start = %d, after the want = %d, want 1 and 0", len(before), len(after))
+	}
+}
+
+// A copy decided after the pass first started is not offered again. A restart
+// in the middle of a part would otherwise judge the copies it already judged.
+func TestACopyDecidedSinceThePassStartedIsNotOfferedAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	anchored(ctx, t, queries, targetID)
+	started := time.Now().Add(-time.Minute)
+	settledCopy(ctx, t, pool, targetID, requestID,
+		AcquiredFileDiscardedAudio, namedOtherMusic)
+
+	since, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil, started)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
+	}
+	forWant, err := queries.CopiesToJudgeAgainForWant(ctx, targetID, started)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainForWant() error = %v", err)
+	}
+	if len(since) != 0 || len(forWant) != 0 {
+		t.Fatalf("offered = %d and %d, want nothing decided since the pass started",
+			len(since), len(forWant))
 	}
 }
 
@@ -304,7 +330,7 @@ func TestTheNextPartIsQueuedWithItsPlace(t *testing.T) {
 	queries := New(pool)
 	last := uuid.New()
 
-	if err := queries.QueueJudgeCopiesAgainAfter(ctx, time.Now(), last); err != nil {
+	if err := queries.QueueJudgeCopiesAgainAfter(ctx, time.Now(), last, time.Now()); err != nil {
 		t.Fatalf("QueueJudgeCopiesAgainAfter() error = %v", err)
 	}
 

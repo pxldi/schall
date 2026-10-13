@@ -150,7 +150,7 @@ func (store *fakeImportStore) UserAcceptedCopy(
 // put back into validation, in order, because that order is what stops a want
 // taking two copies.
 func (store *fakeImportStore) CopiesToJudgeAgainAfter(
-	_ context.Context, after uuid.UUID,
+	_ context.Context, after uuid.UUID, _ time.Time,
 ) ([]db.JudgeAgainRow, error) {
 	offered := make([]db.JudgeAgainRow, 0, len(store.judgeAgain))
 	for _, row := range store.judgeAgain {
@@ -183,7 +183,7 @@ func (store *fakeImportStore) CopiesRefusedOnCreditAlone(
 // want here the way the query filters them, and anchorReadings records what a
 // copy with no bytes left was measured to be.
 func (store *fakeImportStore) CopiesToJudgeAgainForWant(
-	_ context.Context, targetID uuid.UUID,
+	_ context.Context, targetID uuid.UUID, _ time.Time,
 ) ([]db.JudgeAgainRow, error) {
 	if store.judgeAgainErr != nil {
 		return nil, store.judgeAgainErr

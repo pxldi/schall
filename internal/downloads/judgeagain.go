@@ -3,6 +3,7 @@ package downloads
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/chromaprint"
@@ -57,8 +58,13 @@ type JudgedAgain struct {
 // first wants again and never reach the rest. The caller carries the place
 // instead. The pass ends after the last want, and a want whose copies all stay
 // questions is not tried again until somebody asks for another pass.
-func (importer *Importer) JudgeAgain(ctx context.Context, after uuid.UUID) (uuid.UUID, bool, error) {
-	_, next, more, err := importer.judgeAgainPart(ctx, after)
+//
+// since is when the pass first started. A copy decided at or after it was
+// judged by this pass before a restart, and is not judged twice.
+func (importer *Importer) JudgeAgain(
+	ctx context.Context, after uuid.UUID, since time.Time,
+) (uuid.UUID, bool, error) {
+	_, next, more, err := importer.judgeAgainPart(ctx, after, since)
 	return next, more, err
 }
 
@@ -104,7 +110,7 @@ func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
 	var total JudgedAgain
 	after := uuid.Nil
 	for {
-		part, next, more, err := importer.judgeAgainPart(ctx, after)
+		part, next, more, err := importer.judgeAgainPart(ctx, after, time.Time{})
 		total.Offered += part.Offered
 		total.Judged += part.Judged
 		total.Missing += part.Missing
@@ -119,9 +125,9 @@ func (importer *Importer) judgeAgain(ctx context.Context) (JudgedAgain, error) {
 // judgeAgainPart judges the copies of the next judgeAgainWants wants after the
 // one given. It answers the last want it took and whether any want is left.
 func (importer *Importer) judgeAgainPart(
-	ctx context.Context, after uuid.UUID,
+	ctx context.Context, after uuid.UUID, since time.Time,
 ) (JudgedAgain, uuid.UUID, bool, error) {
-	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, after)
+	copies, err := importer.store.CopiesToJudgeAgainAfter(ctx, after, since)
 	if err != nil {
 		return JudgedAgain{}, after, false, err
 	}
@@ -256,8 +262,13 @@ func (importer *Importer) releaseFromJudging(ctx context.Context, copied db.Judg
 // is the same call it got when it arrived. A copy whose bytes have gone is
 // measured from the fingerprint stored on it, and only the measurement is
 // written: there is no file to import, so there is no admission to record.
-func (importer *Importer) JudgeWantCopies(ctx context.Context, targetID uuid.UUID) error {
-	copies, err := importer.store.CopiesToJudgeAgainForWant(ctx, targetID)
+//
+// since is when the job first started; copies decided from then on were judged
+// before a restart and are not judged twice.
+func (importer *Importer) JudgeWantCopies(
+	ctx context.Context, targetID uuid.UUID, since time.Time,
+) error {
+	copies, err := importer.store.CopiesToJudgeAgainForWant(ctx, targetID, since)
 	if err != nil {
 		return err
 	}
