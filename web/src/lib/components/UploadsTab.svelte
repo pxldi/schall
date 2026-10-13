@@ -155,7 +155,7 @@
       case 'validating':
         return { role: 'busy', text: 'Validating' };
       case 'queued':
-        return { role: 'busy', text: 'Waiting to be read' };
+        return { role: 'busy', text: 'Queued' };
       case 'failed':
         return { role: 'fail', text: 'Refused' };
       default:
@@ -166,7 +166,7 @@
   function detail(upload: Upload) {
     if (upload.detail) return upload.detail;
     if (upload.importPath) return upload.importPath;
-    if (upload.status === 'staged') return 'waiting for the import to be picked up';
+    if (upload.status === 'staged') return 'waiting to import';
     return upload.files.join(' · ');
   }
 
@@ -266,8 +266,7 @@
        always been named. -->
   {#if !unconfigured && chosen.length !== 1}
     <p class="text-meta text-ink-3">
-      A SoundCloud edit lands unmatched. Open it in Library from its row and choose "This is a
-      SoundCloud track".
+      SoundCloud edits land unmatched. Name one in Library with "This is a SoundCloud track".
     </p>
   {/if}
 
@@ -335,7 +334,7 @@
                 Look up
               </Button>
               {#if unresolvedSoundCloudAddress}
-                <span class="text-meta text-ink-3">Look up the address before uploading</span>
+                <span class="text-meta text-ink-3">Look up the link first</span>
               {/if}
             </div>
           {/if}
@@ -344,7 +343,7 @@
 
       {#if tooLarge}
         {@render Problem(
-          `One upload may carry up to ${formatBytes(maxBytes ?? 0)}. Send the release in more than one go.`
+          `Max ${formatBytes(maxBytes ?? 0)} per upload. Send the release in parts.`
         )}
       {/if}
 
@@ -465,8 +464,8 @@
                   variant="ghost"
                   icon
                   size="xs"
-                  title="Discard the staged files"
-                  aria-label="Discard the staged files"
+                  title="Discard files"
+                  aria-label="Discard files"
                   disabled={$discard.isPending || busyStatuses.includes(upload.status)}
                   onclick={() => $discard.mutate(upload.id)}
                 >

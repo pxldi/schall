@@ -600,7 +600,7 @@ func isDue(lease db.LibraryFileLeaseRow, now time.Time) bool {
 // arriving as data rather than as a special case further down.
 func (service *Service) readStars(ctx context.Context, due []db.LibraryFileLeaseRow) map[string]SignalRead {
 	if service.stars == nil {
-		return unreadableAll(due, "no player is connected, so nothing can say you kept a song")
+		return unreadableAll(due, "no player connected")
 	}
 	songs := make([]Song, 0, len(due))
 	for _, lease := range due {
@@ -653,7 +653,7 @@ func (service *Service) settle(
 
 	star, answered := stars[lease.LibraryPath]
 	if !answered {
-		star = SignalRead{Reading: Unreadable, Detail: "the player did not answer about this song"}
+		star = SignalRead{Reading: Unreadable, Detail: "player didn't answer"}
 	}
 	if err := service.store.RecordLibraryFileKeepRead(ctx, db.RecordLibraryFileKeepReadParams{
 		LeaseID: lease.ID,
@@ -713,9 +713,9 @@ func (service *Service) depart(
 	tally *counts,
 ) error {
 	if settings.Mode == ModeReport || service.remover == nil {
-		reason := "nobody kept this song, and removals are switched off"
+		reason := "not kept; removals are off"
 		if service.remover == nil {
-			reason = "nobody kept this song, and nothing here can remove a file"
+			reason = "not kept; Schall can't remove files here"
 		}
 		if err := service.store.ExtendLibraryFileLease(
 			ctx, lease.ID, service.now().Add(trialWeek), reason,
@@ -790,7 +790,7 @@ func (service *Service) remove(
 	}
 	tally.removed++
 
-	summary := fmt.Sprintf("obtained for the weekly playlist and removed on %s, unkept",
+	summary := fmt.Sprintf("From the weekly playlist. Removed %s, not kept.",
 		service.now().UTC().Format("2 January 2006"))
 	if err := service.store.SettleWeeklyTargetNotWanted(ctx, lease.AcquisitionTargetID, summary); err != nil &&
 		!errors.Is(err, pgx.ErrNoRows) {
@@ -1070,7 +1070,7 @@ func (service *Service) chooseFromSuggestions(
 			MusicBrainzRecordingID:    uuid.NullUUID{UUID: candidate.MusicBrainzRecordingID, Valid: true},
 			MusicBrainzReleaseGroupID: uuid.NullUUID{UUID: candidate.MusicBrainzReleaseGroupID, Valid: true},
 			ResolutionMethod:          pgtype.Text{String: "manual", Valid: true},
-			Summary:                   "wanted for the weekly playlist",
+			Summary:                   "For the weekly playlist",
 		})
 		if err != nil {
 			return fmt.Errorf("ask for %s: %w", candidate.RecordingTitle, err)
@@ -1153,7 +1153,7 @@ func (service *Service) fillLengths(ctx context.Context, playlistID uuid.UUID) {
 // refresh is not blocked forever by a row nobody will ever finish.
 func (service *Service) CloseAbandonedRuns(ctx context.Context) error {
 	closed, err := service.store.AbandonRunningWeeklyPlaylistRuns(
-		ctx, "Schall stopped in the middle of this refresh",
+		ctx, "Schall restarted mid-refresh",
 	)
 	if err != nil {
 		return err

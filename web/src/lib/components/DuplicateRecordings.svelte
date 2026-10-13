@@ -231,7 +231,7 @@
   }
 
   function name(recording: DuplicateRecording) {
-    return [recording.title, recording.artist].filter(Boolean).join(' · ') || 'Unnamed recording';
+    return [recording.title, recording.artist].filter(Boolean).join(' · ') || 'Untitled song';
   }
 
   // What a copy is, in the order somebody compares them by.
@@ -311,8 +311,8 @@
          here, and what happens when nothing separates two copies, are the
          mechanism: the rows themselves say which case each group is. -->
     <p class="max-w-[64ch] text-meta leading-5 text-ink-2">
-      These recordings are on disc more than once. Schall offers to delete a copy only
-      where it can prove that copy is the worse one.
+      These songs are on disk more than once. Schall only offers to delete a copy it can
+      prove is worse.
     </p>
 
     {#if stranded.length > 0}
@@ -323,8 +323,8 @@
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="min-w-0 flex-1 text-meta text-ink-2">
             {stranded.length}
-            {stranded.length === 1 ? 'file was' : 'files were'} removed from the library and could
-            not be deleted. They are still on disc.
+            {stranded.length === 1 ? 'file' : 'files'} left the library but couldn't be deleted.
+            Still on disk.
           </span>
           <Button
             variant="outline"
@@ -353,8 +353,8 @@
       <div class="flex flex-wrap items-center gap-2.5 rounded-row border border-line-thin bg-surface-thin px-3 py-2.5">
         <span class="min-w-0 flex-1 text-meta text-ink-2">
           {spare.length}
-          {spare.length === 1 ? 'copy on this page is' : 'copies on this page are'} a worse
-          version of one you already have. Deleting cannot be undone.
+          {spare.length === 1 ? 'copy on this page is' : 'copies on this page are'} worse than one
+          you have. Deleting can't be undone.
         </span>
         <Button
           variant={confirming === 'all' ? 'danger' : 'outline'}
@@ -370,7 +370,7 @@
 
     <Settle pending={shown.isPending}>
       {#snippet placeholder()}
-        <SkeletonRows count={6} label="Loading recordings held twice" />
+        <SkeletonRows count={6} label="Loading duplicates" />
       {/snippet}
     <div class="flex flex-col">
       {#each recordings as recording (recording.recordingId)}
@@ -496,7 +496,7 @@
         {#if !shown.isError}
           <EmptyPanel
             role={view === 'kept' ? 'idle' : 'ok'}
-            heading={view === 'kept' ? 'Nothing kept on purpose yet' : 'No recording is on disc twice'}
+            heading={view === 'kept' ? 'Nothing kept on purpose yet' : 'No song on disk twice'}
           />
         {/if}
       {/each}

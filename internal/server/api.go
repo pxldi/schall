@@ -1474,7 +1474,7 @@ func (api *API) libraryFileAudio(response http.ResponseWriter, request *http.Req
 	}
 	if api.previews == nil {
 		api.problem(response, http.StatusServiceUnavailable, "audio preview is unavailable",
-			[]string{"This installation was started without a transcoder."})
+			[]string{"Schall has no transcoder set up."})
 		return
 	}
 	fileID, err := uuid.Parse(chi.URLParam(request, "fileID"))
@@ -1493,7 +1493,7 @@ func (api *API) libraryFileAudio(response http.ResponseWriter, request *http.Req
 	}
 	if _, err := os.Stat(file.Path); err != nil {
 		api.problem(response, http.StatusNotFound, "the file is no longer there",
-			[]string{"The library records it at " + file.Path + ". Scan the library to catch up."})
+			[]string{"Expected at " + file.Path + ". Scan the library."})
 		return
 	}
 	api.servePlayable(response, request, file.Path)
@@ -1513,7 +1513,7 @@ func (api *API) removeLibraryFile(response http.ResponseWriter, request *http.Re
 	}
 	if api.remover == nil {
 		api.problem(response, http.StatusServiceUnavailable, "deleting files is unavailable",
-			[]string{"This installation cannot remove files from the library."})
+			[]string{"Deleting files isn't set up on this server."})
 		return
 	}
 	path, err := api.remover.Remove(request.Context(), fileID)
@@ -1658,7 +1658,7 @@ func (api *API) keepOneCopy(response http.ResponseWriter, request *http.Request)
 	}
 	if api.remover == nil {
 		api.problem(response, http.StatusServiceUnavailable, "deleting files is unavailable",
-			[]string{"This installation cannot remove files from the library."})
+			[]string{"Deleting files isn't set up on this server."})
 		return
 	}
 	var input struct {
@@ -1700,7 +1700,7 @@ func (api *API) keepOneCopy(response http.ResponseWriter, request *http.Request)
 			return
 		case errors.Is(err, library.ErrNotACopy):
 			api.problem(response, http.StatusConflict, "that file is not a copy of this recording",
-				[]string{"The list has changed since it was read. Reload the page."})
+				[]string{"The list changed. Reload the page."})
 			return
 		case errors.Is(err, library.ErrCopiesChanged):
 			api.problem(response, http.StatusConflict, "the copies changed",
@@ -1708,11 +1708,11 @@ func (api *API) keepOneCopy(response http.ResponseWriter, request *http.Request)
 			return
 		case errors.Is(err, library.ErrOnlyOtherMusicLeft):
 			api.problem(response, http.StatusConflict, "every other copy is also other music",
-				[]string{"Nothing was deleted. Those copies stay whichever one you keep."})
+				[]string{"Nothing was deleted. The other copies are different songs."})
 			return
 		case errors.Is(err, library.ErrKeeperMissing):
 			api.problem(response, http.StatusConflict, "the copy to keep is not on disc",
-				[]string{"Nothing was deleted. Scan the library to catch up."})
+				[]string{"Nothing was deleted. Scan the library."})
 			return
 		case err != nil:
 			api.internalError(response, request, err)
@@ -1734,7 +1734,7 @@ func (api *API) keepOneCopy(response http.ResponseWriter, request *http.Request)
 			Str("kept_file_id", kept.Kept.String()).
 			Int("removed", len(kept.RemovedPaths)).
 			Int("still_on_disc", len(kept.StillOnDisc))
-		stopped = "Not every copy could be deleted. Reload the page and try the rest again."
+		stopped = "Some copies weren't deleted. Reload the page and try again."
 	}
 	logEntry.Msg("one copy of a recording was kept and the rest deleted on request")
 	api.events.Publish(events.TopicLibrary)
@@ -1760,7 +1760,7 @@ func (api *API) keepOneCopy(response http.ResponseWriter, request *http.Request)
 func (api *API) retryRemovals(response http.ResponseWriter, request *http.Request) {
 	if api.remover == nil {
 		api.problem(response, http.StatusServiceUnavailable, "deleting files is unavailable",
-			[]string{"This installation cannot remove files from the library."})
+			[]string{"Deleting files isn't set up on this server."})
 		return
 	}
 	deleted := api.remover.RetryUnlinks(request.Context())
@@ -2931,7 +2931,7 @@ func (api *API) setAlbumCover(response http.ResponseWriter, request *http.Reques
 	}
 	if api.covers == nil {
 		api.problem(response, http.StatusServiceUnavailable, "covers are not available",
-			[]string{"This installation cannot store covers. Nothing was changed."})
+			[]string{"Covers aren't set up on this server."})
 		return
 	}
 	if _, err := api.store.GetAlbum(request.Context(), albumID); err != nil {
@@ -2992,7 +2992,7 @@ func (api *API) uploadedCover(
 			return coverart.Artwork{}, false
 		}
 		api.problem(response, http.StatusBadRequest, "no image was sent",
-			[]string{"The request carried no image. Choose a file and try again."})
+			[]string{"Choose an image file."})
 		return coverart.Artwork{}, false
 	}
 	defer func() { _ = file.Close() }()
@@ -3030,17 +3030,17 @@ func (api *API) fetchedCover(
 	}
 	if err := decodeJSON(response, request, &input); err != nil {
 		api.problem(response, http.StatusBadRequest, "no image was sent",
-			[]string{"The request carried no image. Choose a file or paste an address."})
+			[]string{"Choose a file or paste a link."})
 		return coverart.Artwork{}, false
 	}
 	if strings.TrimSpace(input.URL) == "" {
 		api.problem(response, http.StatusBadRequest, "no image was sent",
-			[]string{"The request carried no image. Choose a file or paste an address."})
+			[]string{"Choose a file or paste a link."})
 		return coverart.Artwork{}, false
 	}
 	if api.coverPictures == nil {
 		api.problem(response, http.StatusServiceUnavailable, "addresses are not available",
-			[]string{"This installation cannot fetch an address. Choose a file instead."})
+			[]string{"Links aren't set up on this server. Choose a file."})
 		return coverart.Artwork{}, false
 	}
 
@@ -3050,7 +3050,7 @@ func (api *API) fetchedCover(
 		return artwork, true
 	case errors.Is(err, coverart.ErrNotAnAddress):
 		api.problem(response, http.StatusBadRequest, "that is not a web address",
-			[]string{"Schall needs an address that starts with http:// or https://."})
+			[]string{"Use a link that starts with http:// or https://."})
 	case errors.Is(err, coverart.ErrPictureTooLarge):
 		api.coverTooLarge(response)
 	// An address Schall refuses to reach is answered exactly as an address with
@@ -3061,11 +3061,11 @@ func (api *API) fetchedCover(
 		errors.Is(err, coverart.ErrNoArtwork),
 		errors.Is(err, coverart.ErrAddressRefused):
 		api.problem(response, http.StatusBadRequest, "that address has no image",
-			[]string{"Nothing at that address is an image Schall can read. Check the address, or choose a file."})
+			[]string{"No readable image there. Check the link or choose a file."})
 	default:
 		api.logger.Warn().Err(err).Msg("fetch a cover from an address")
 		api.problem(response, http.StatusBadGateway, "that address did not answer",
-			[]string{"Schall could not reach that address. Try again, or choose a file."})
+			[]string{"Couldn't reach that link. Try again or choose a file."})
 	}
 	return coverart.Artwork{}, false
 }
@@ -3077,7 +3077,7 @@ func (api *API) coverTooLarge(response http.ResponseWriter) {
 
 func (api *API) notAPicture(response http.ResponseWriter) {
 	api.problem(response, http.StatusBadRequest, "that file is not an image",
-		[]string{"Schall could not read that file as an image. Choose a JPEG, PNG, GIF or WebP."})
+		[]string{"Choose a JPEG, PNG, GIF or WebP."})
 }
 
 // tooLarge reports whether a read stopped because the request was over the
@@ -3104,7 +3104,7 @@ func (api *API) removeAlbumCover(response http.ResponseWriter, request *http.Req
 	}
 	if api.covers == nil {
 		api.problem(response, http.StatusServiceUnavailable, "covers are not available",
-			[]string{"This installation cannot store covers. Nothing was changed."})
+			[]string{"Covers aren't set up on this server."})
 		return
 	}
 	removed, err := api.covers.DeleteUserReleaseCoverArt(request.Context(), albumID)
@@ -3488,7 +3488,7 @@ func (api *API) logRequests(next http.Handler) http.Handler {
 func (api *API) keepOneOfEachCopy(response http.ResponseWriter, request *http.Request) {
 	if api.remover == nil {
 		api.problem(response, http.StatusServiceUnavailable, "deleting files is unavailable",
-			[]string{"This installation cannot remove files from the library."})
+			[]string{"Deleting files isn't set up on this server."})
 		return
 	}
 	swept, err := api.remover.KeepOneOfEach(request.Context(), library.DuplicateScreenRemovalActor)

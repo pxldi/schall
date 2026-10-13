@@ -168,7 +168,7 @@ describe('ReleaseEditions', () => {
     expect(screen.getByText(/Picked automatically: chosen by hand/)).toBeTruthy();
     // The words a reader gets rather than the sentinel the server sent, and the
     // sentinel one press away underneath it.
-    expect(screen.getByText('Schall could not read the editions of this release.')).toBeTruthy();
+    expect(screen.getByText("Couldn't load the editions.")).toBeTruthy();
     expect(screen.getByText('What the server said')).toBeTruthy();
   });
 

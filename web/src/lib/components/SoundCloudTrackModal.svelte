@@ -215,9 +215,9 @@
             <details class="mt-3">
               <summary class="cursor-pointer text-meta text-ink-3">What this changes</summary>
               <p class="mt-2 text-meta leading-relaxed text-ink-3">
-                The file takes these names and this artwork, and moves to the
-                folder they spell. Schall stops looking for a matching recording,
-                and the file cannot fill a want. You can change it later.
+                The file gets these names and this artwork, and moves to a folder
+                named after them. Schall stops matching it and won't use it for your
+                wishlist. You can change this later.
               </p>
             </details>
           {/if}

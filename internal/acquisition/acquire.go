@@ -384,13 +384,13 @@ func (service *Service) hunt(
 		// by a list.
 		if turnedAway, why := belowTheFloor(refused, belowFloor); turnedAway {
 			return service.settleBelowFloor(ctx, target, preferences,
-				fmt.Sprintf("%s Every copy offered for %q was under it: %s.",
+				fmt.Sprintf("%s Searched %q: %s.",
 					belowBitRateFloorDetail, text, why), append(refused, belowFloor...))
 		}
 		if len(candidates) == 0 && len(refused) > 0 {
 			return service.settleAttempt(ctx, target, "none",
 				refusedByPreferenceSummary,
-				fmt.Sprintf("%s Every copy offered for %q was in a format your preferences refuse: %s.",
+				fmt.Sprintf("%s Searched %q: %s.",
 					refusedByPreferenceDetail, text, refused[0].Reason))
 		}
 		if target.BelowFloorSince.Valid &&
@@ -919,7 +919,7 @@ func (service *Service) record(
 		Extension:           want.offer.File.Extension,
 		Score:               want.offer.Score,
 		Reasons:             []string{want.offer.Summary()},
-		Summary:             "Being fetched. " + want.offer.Summary() + ".",
+		Summary:             "Downloading. " + want.offer.Summary() + ".",
 	})
 }
 
@@ -966,7 +966,7 @@ func (service *Service) abandonFetch(
 		FileName:            offer.File.Name,
 		SizeBytes:           offer.File.SizeBytes,
 		Verdict:             db.AcquiredFileUndelivered,
-		Summary:             "The transfer could not be started: " + cause.Error(),
+		Summary:             "Download didn't start: " + cause.Error(),
 	}); err != nil {
 		return err
 	}
@@ -1262,7 +1262,7 @@ func (service *Service) settleBelowFloor(
 		}
 	}
 	parkedSummary := fmt.Sprintf(
-		"Only copies below your %d kbps minimum were found. Looked at again weekly.", floor)
+		"Only copies under %d kbps. Retrying weekly.", floor)
 	err := service.store.RequeueBelowFloor(ctx, target.ID, belowBitRateFloorSummary,
 		parkedSummary, detail, service.nextLook(target),
 		service.now().Add(7*24*time.Hour))
@@ -1304,48 +1304,48 @@ func (service *Service) settleAttempt(
 
 // The sentences a want being looked for explains itself with.
 const (
-	nothingOfferedSummary = "No peer is sharing a copy yet. It will be looked for again."
+	nothingOfferedSummary = "Nobody shares it yet. Retrying later."
 	// A want stuck on this is stuck for as long as the installation is, so the
 	// sentence names the control rather than only the trouble: without it the
 	// row says "waiting" for ever and there is nothing on any screen to act on
 	// (issue #381). The key and the switch are named together because either one
 	// missing stops the same thing, and the want cannot tell which it is.
-	unlistenableSummary  = "Add an AcoustID key in Settings — nothing here can prove a copy is this recording."
-	unlistenableDetail   = "Identifying files by their audio is switched off, and nothing else may admit a file a stranger sent."
-	unsearchableSummary  = "There is nothing in this entry that could be searched for."
-	unsearchableDetail   = "Every word of the entry was punctuation a source search cannot use."
-	fetchingSummary      = "A copy is on its way. What it turns out to be decides what happens next."
-	sweepThrottledDetail = "the download source is rate limiting requests: it refused another wishlist entry in the same pass"
+	unlistenableSummary  = "Can't check audio. Add an AcoustID key in Settings."
+	unlistenableDetail   = "Audio identification is off."
+	unsearchableSummary  = "Nothing to search for"
+	unsearchableDetail   = "Title and artist are only punctuation."
+	fetchingSummary      = "Downloading a copy"
+	sweepThrottledDetail = "download source is rate limiting searches"
 	// Said of a want that was never asked about, so it claims only what the
 	// pass knows: another want heard this, and nothing was learned about any
 	// of them.
-	sweepUnavailableDetail = "the download source cannot search at the moment: it refused another wishlist entry in the same pass"
+	sweepUnavailableDetail = "download source can't search right now"
 	// Said of a want whose search was made and then never went out. It names the
 	// half hour, because a want told "shortly" that comes back in thirty minutes
 	// reads as something broken. It is never passed to another want: the search
 	// queue that held this one back says nothing about anybody else's.
-	nobodyAskedSummary = "The download source never sent this search out. It will be looked for again in half an hour."
+	nobodyAskedSummary = "Search never went out. Retrying in 30 min."
 	// Said of a want standing back because the download source was signed out of
 	// Soulseek while another want in the pass searched. Unlike nobodyAskedSummary
 	// this is passed to every want in the pass, because being signed out is a fact
 	// about the source, not about one search.
-	loggedOutSummary     = "The download source is not logged in to Soulseek. It will be looked for again in half an hour."
-	sweepLoggedOutDetail = "the download source is not logged in to Soulseek: it refused another wishlist entry in the same pass"
+	loggedOutSummary     = "Not logged in to Soulseek. Retrying in 30 min."
+	sweepLoggedOutDetail = "download source not logged in to Soulseek"
 	// Said of a want standing back because Soulseek has stopped answering this
 	// account's searches at all. It names the half hour for nobodyAskedSummary's
 	// reason, and it is passed to every want in the pass: the network answering
 	// nobody is a fact about the account, not about one search.
-	silencedSummary     = "Soulseek has stopped answering this account's searches. It will be looked for again in half an hour."
-	sweepSilencedDetail = "the download source's searches are going unanswered: it refused another wishlist entry in the same pass"
+	silencedSummary     = "Soulseek isn't answering searches. Retrying in 30 min."
+	sweepSilencedDetail = "Soulseek isn't answering this account's searches"
 
 	// Said of a want whose search peers answered, where the download source had
 	// not stored their replies before the wait for it ran out. It reads nothing
 	// like "nobody is sharing this", because peers did answer.
-	repliesUnreadSummary = "Peers answered, but the download source had not stored their replies. It will be looked for again shortly."
+	repliesUnreadSummary = "Replies arrived too late to read. Retrying soon."
 	// Said of a want asked in words the download source had just been asked and
 	// will not repeat this soon. It claims nothing about the source, which is
 	// searching perfectly well for every other want in the pass.
-	phraseHeldSummary = "This search was made moments ago. It will be made again shortly."
+	phraseHeldSummary = "Same search just ran. Retrying soon."
 	// Said of a want everybody offering it is too busy to send to. It reads
 	// nothing like "nobody is sharing this", because the two are opposites: the
 	// music is plainly there, and the queue in front of it is the only thing
@@ -1354,23 +1354,23 @@ const (
 	// stored format preference refuses. It names the preference because the
 	// preference is the only thing that can change the answer, and because
 	// "nobody is sharing this" would send somebody looking at the network.
-	refusedByPreferenceSummary = "Copies are on offer, but none in a format you accept. Change your format preferences to take one."
-	refusedByPreferenceDetail  = "no copy on offer met the stored format preferences."
+	refusedByPreferenceSummary = "No copy in a format you accept. Change format preferences."
+	refusedByPreferenceDetail  = "No copy in a format you accept."
 	// Said of a want peers are sharing copies of, every one of which is under
 	// the bitrate the user set as their lowest. It names the floor for the same
 	// reason: the floor is the one thing that can change the answer, and the
 	// want keeps waiting on the ladder rather than lowering it by itself.
-	belowBitRateFloorSummary = "Copies are on offer, but all below your minimum bit rate. Lower it in Settings to take one."
-	belowBitRateFloorDetail  = "every copy on offer was below the minimum bit rate you set."
-	peerBusySummary          = "Every peer sharing a copy is already sending as much as it will take at once. They will be asked again shortly."
-	peerBusyDetail           = "every peer offering this recording already has as many files open with Schall as it will accept"
+	belowBitRateFloorSummary = "All copies below your bit rate floor. Lower it in Settings."
+	belowBitRateFloorDetail  = "All copies below your bit rate floor."
+	peerBusySummary          = "Everyone sharing it is busy. Retrying soon."
+	peerBusyDetail           = "every peer with a copy is at its upload limit"
 	// Said of a want whose copy sat in a peer's queue past queuePatience without
 	// a position or a byte ever arriving. It names what happened rather than
 	// leaving "a copy is on its way" standing for days over a request nothing
 	// is coming of.
-	queueExpiredSummary = "The peer that accepted this download never sent it. Schall will look elsewhere."
-	queueExpiredDetail  = "the peer had accepted the download and reported nothing for over two hours: no queue position, no bytes"
+	queueExpiredSummary = "Peer never sent it. Trying elsewhere."
+	queueExpiredDetail  = "peer accepted, then sent nothing for 2 hours"
 	// The sentence the offer itself is recorded with, so a look back at what was
 	// tried says why this one is resting rather than repeating "being fetched".
-	queueExpiredFileSummary = "The peer accepted this download and never sent it."
+	queueExpiredFileSummary = "Peer accepted but never sent it"
 )

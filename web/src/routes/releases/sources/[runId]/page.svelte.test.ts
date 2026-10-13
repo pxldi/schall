@@ -135,7 +135,7 @@ describe('a run whose request fails and then works', () => {
     opened();
 
     expect(await screen.findByText('Laughing Stock')).toBeTruthy();
-    expect(screen.queryByText('The server did not answer')).toBeNull();
+    expect(screen.queryByText("The server didn't answer")).toBeNull();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 });
@@ -145,7 +145,7 @@ describe('a run the server does not have', () => {
     answering(missing);
     opened();
 
-    expect(await screen.findByText('This search is not on the server')).toBeTruthy();
+    expect(await screen.findByText('Search not found')).toBeTruthy();
     const library = screen.getByRole('link', { name: 'Open Library' });
     expect(library.getAttribute('href')).toBe('/library?status=missing');
   });
@@ -154,7 +154,7 @@ describe('a run the server does not have', () => {
     answering(missing);
     opened();
 
-    await screen.findByText('This search is not on the server');
+    await screen.findByText('Search not found');
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(asked).toBe(1);
   });
@@ -165,7 +165,7 @@ describe('a server that cannot be reached', () => {
     answering(unreachable);
     opened();
 
-    await screen.findByText('The server did not answer');
+    await screen.findByText("The server didn't answer");
     expect(asked).toBe(3);
   });
 
@@ -175,7 +175,7 @@ describe('a server that cannot be reached', () => {
       answering(unreachable);
       opened();
 
-      await screen.findByText('The server did not answer');
+      await screen.findByText("The server didn't answer");
       // Nothing to press: the note asks again on its own schedule.
       expect(screen.getByText('Trying again.')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
@@ -194,7 +194,7 @@ describe('a server that answers with a failure', () => {
     answering(refused);
     opened();
 
-    expect(await screen.findByText('The search could not be read')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load this search")).toBeTruthy();
     // The whole of what the server said, title and detail together, because
     // that is what a bug report has to quote. It used to be the detail alone:
     // the disclosure now reads the same words every other failure discloses.
@@ -234,10 +234,10 @@ describe('a run already on screen when the asking stops', () => {
     await client.invalidateQueries({ queryKey: ['source-search', runId] });
 
     expect(
-      await screen.findByText('The server stopped answering. What is below is the last answer it gave.')
+      await screen.findByText('The server stopped answering. Showing the last results.')
     ).toBeTruthy();
     expect(screen.getByText('Laughing Stock')).toBeTruthy();
-    expect(screen.queryByText('The server did not answer')).toBeNull();
+    expect(screen.queryByText("The server didn't answer")).toBeNull();
   });
 });
 
@@ -310,9 +310,9 @@ describe('a run holding one of each ending', () => {
     opened();
 
     await screen.findByText('2 copies below your minimum bit rate');
-    expect(screen.queryByText('No peer was sharing this while the search ran.')).toBeNull();
+    expect(screen.queryByText('Nobody was sharing it.')).toBeNull();
     expect(
-      screen.getByText('Copies were on offer, but none matched your format settings.')
+      screen.getByText('Copies found, none match your format settings.')
     ).toBeTruthy();
     expect(screen.getByText('MP3 at 128 kbps is below the 320 kbps you asked for')).toBeTruthy();
     const link = screen.getByText('Change your minimum bit rate');

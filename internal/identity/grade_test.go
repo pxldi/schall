@@ -199,7 +199,7 @@ func TestNothingFoundIsOwnedMusicWithoutAnIdentity(t *testing.T) {
 	if outcome.Status != StatusLocalOnly || outcome.Identity != nil {
 		t.Fatalf("status = %q identity = %v", outcome.Status, outcome.Identity)
 	}
-	if !strings.Contains(outcome.Summary, "owned music") {
+	if !strings.Contains(outcome.Summary, "your own music") {
 		t.Errorf("summary = %q, want it to say the file is still owned", outcome.Summary)
 	}
 }
@@ -209,7 +209,7 @@ func TestAFileWithNothingToAskAboutIsNotGuessedAt(t *testing.T) {
 	if outcome.Status != StatusLocalOnly {
 		t.Fatalf("status = %q", outcome.Status)
 	}
-	if !strings.Contains(outcome.Summary, "no identifier and no title") {
+	if !strings.Contains(outcome.Summary, "No IDs or title") {
 		t.Errorf("summary = %q", outcome.Summary)
 	}
 }
@@ -432,10 +432,10 @@ func TestAnEntryNothingMatchesIsNotDescribedAsOwnedMusic(t *testing.T) {
 	if outcome.Status != StatusLocalOnly {
 		t.Fatalf("status = %q", outcome.Status)
 	}
-	if strings.Contains(outcome.Summary, "owned music") {
+	if strings.Contains(outcome.Summary, "your own music") {
 		t.Fatalf("summary = %q, want nothing about owning it", outcome.Summary)
 	}
-	if !strings.Contains(outcome.Summary, "entry") {
+	if !strings.Contains(outcome.Summary, "this song") {
 		t.Fatalf("summary = %q, want it to name what could not be resolved", outcome.Summary)
 	}
 }
@@ -910,7 +910,7 @@ func TestTheReleaseNamesOneOfTheRecordingsThatFit(t *testing.T) {
 		t.Fatalf("recording = %s, want the one on the release the entry names (%s)",
 			outcome.Identity.RecordingID, firstID)
 	}
-	if !strings.Contains(outcome.Summary, "release this entry names") {
+	if !strings.Contains(outcome.Summary, "picked by its release") {
 		t.Errorf("summary = %q, want it to say what chose between them", outcome.Summary)
 	}
 	// The stored decision has to be readable as the reason it was made: the ISRC
@@ -1004,7 +1004,7 @@ func TestACandidateSaysWhatStopsItRatherThanThatItIsNotEnough(t *testing.T) {
 	if len(outcome.Candidates) < 1 {
 		t.Fatal("no candidates to read")
 	}
-	if !strings.Contains(outcome.Candidates[0].Summary, "same ISRC on another recording") {
+	if !strings.Contains(outcome.Candidates[0].Summary, "another song has the same ISRC") {
 		t.Errorf("summary = %q, want it to name the ISRC both recordings carry",
 			outcome.Candidates[0].Summary)
 	}
@@ -1060,43 +1060,25 @@ func TestARivalWithNoReleasesListedIsNotRuledOutByTheAlbum(t *testing.T) {
 // a reader nothing, and the interface used to print exactly that with the
 // hyphens taken out, so the sentence every name turns into is fixed here.
 func TestEveryMethodReadsAsASentence(t *testing.T) {
-	const fallback = "Schall settled this automatically from the evidence it had."
+	const fallback = "Matched automatically."
 	cases := map[string]string{
-		"recording-id": "The file's tags carry this recording's MusicBrainz identifier.",
-		"isrc": "The file's tags carry this recording's ISRC, the code a record " +
-			"label gives a track.",
-		"fingerprint": "Schall listened to the audio and it matches this recording.",
-		"fingerprint-and-identifier": "Schall listened to the audio and it matches this " +
-			"recording. The file's tags name the same one.",
-		"published-sample": "Schall compared the audio with the sample this recording's " +
-			"distributor publishes, and it is the same music.",
-		"published-sample-and-release": "Schall compared the audio with the sample this " +
-			"recording's distributor publishes, and it is the same music. More than one " +
-			"recording fit, and the file's album tag names this one.",
-		"library-witness": "Schall compared the audio with a file already in your library " +
-			"that is proven to be this recording, and it is the same music.",
-		"library-witness-and-release": "Schall compared the audio with a file already in " +
-			"your library that is proven to be this recording, and it is the same music. " +
-			"More than one recording fit, and the file's album tag names this one.",
-		"cd-checksum": "Bit for bit this song's CD track, by AccurateRip.",
-		"cd-checksum-and-release": "Bit for bit this song's CD track, by AccurateRip. More " +
-			"than one recording fit, and the file's album tag names this one.",
-		"title-artist-duration": "The title, artist and length in the file's tags all " +
-			"match this recording.",
-		"manual": "Somebody chose this recording by hand.",
-		"recording-id-and-release": "The file's tags carry this recording's MusicBrainz " +
-			"identifier. More than one recording fit, and the file's album tag names this one.",
-		"isrc-and-release": "The file's tags carry this recording's ISRC, the code a record " +
-			"label gives a track. More than one recording fit, and the file's album tag " +
-			"names this one.",
-		"fingerprint-and-release": "Schall listened to the audio and it matches this " +
-			"recording. More than one recording fit, and the file's album tag names this one.",
-		"fingerprint-and-identifier-and-release": "Schall listened to the audio and it " +
-			"matches this recording. The file's tags name the same one. More than one " +
-			"recording fit, and the file's album tag names this one.",
-		"title-artist-duration-and-release": "The title, artist and length in the file's " +
-			"tags all match this recording. More than one recording fit, and the file's " +
-			"album tag names this one.",
+		"recording-id":                           "Tagged with this song's MusicBrainz ID.",
+		"isrc":                                   "Tagged with this song's ISRC.",
+		"fingerprint":                            "AcoustID matched the audio to this song.",
+		"fingerprint-and-identifier":             "AcoustID matched the audio, and its ID tag agrees.",
+		"published-sample":                       "The audio matches this song's sample.",
+		"published-sample-and-release":           "The audio matches this song's sample. Several fit; the album tag picked this one.",
+		"library-witness":                        "Same audio as a proven file in your library.",
+		"library-witness-and-release":            "Same audio as a proven file in your library. Several fit; the album tag picked this one.",
+		"title-artist-duration":                  "Title, artist and length match.",
+		"manual":                                 "Chosen by hand.",
+		"recording-id-and-release":               "Tagged with this song's MusicBrainz ID. Several fit; the album tag picked this one.",
+		"isrc-and-release":                       "Tagged with this song's ISRC. Several fit; the album tag picked this one.",
+		"fingerprint-and-release":                "AcoustID matched the audio to this song. Several fit; the album tag picked this one.",
+		"fingerprint-and-identifier-and-release": "AcoustID matched the audio, and its ID tag agrees. Several fit; the album tag picked this one.",
+		"title-artist-duration-and-release":      "Title, artist and length match. Several fit; the album tag picked this one.",
+		"cd-checksum":                            "Bit for bit this song's CD track, by AccurateRip.",
+		"cd-checksum-and-release":                "Bit for bit this song's CD track, by AccurateRip. Several fit; the album tag picked this one.",
 	}
 	for method, want := range cases {
 		if got := MethodSentence(method); got != want {
@@ -1132,7 +1114,7 @@ func TestEveryMethodReadsAsASentence(t *testing.T) {
 // seeded collection carries. It reads as a sentence too, because the point is
 // that no name reaches the screen.
 func TestAnUnknownMethodStillReadsAsASentence(t *testing.T) {
-	const fallback = "Schall settled this automatically from the evidence it had."
+	const fallback = "Matched automatically."
 	for _, method := range []string{
 		"", "musicbrainz_recording_id", "no_candidate", "position-and-title", "-and-release",
 	} {

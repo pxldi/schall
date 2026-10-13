@@ -285,7 +285,7 @@ func bearerToken(request *http.Request) (string, bool) {
 
 func (api *API) unauthorized(response http.ResponseWriter) {
 	api.problem(response, http.StatusUnauthorized, "not signed in",
-		[]string{"Sign in through the browser, or send a token minted in Settings → Phone."})
+		[]string{"Sign in in the browser, or use a token from Settings → Phone."})
 }
 
 // mintToken makes one app token: the prefix, then 32 random bytes in
@@ -331,7 +331,7 @@ type mintedPhoneResponse struct {
 func (api *API) listPhones(response http.ResponseWriter, request *http.Request) {
 	if api.tokens == nil {
 		api.problem(response, http.StatusServiceUnavailable, "phones are unavailable",
-			[]string{"This installation cannot mint tokens for a phone."})
+			[]string{"Phone tokens aren't set up on this server."})
 		return
 	}
 	rows, err := api.tokens.ListAppTokens(request.Context())
@@ -355,7 +355,7 @@ func (api *API) listPhones(response http.ResponseWriter, request *http.Request) 
 func (api *API) addPhone(response http.ResponseWriter, request *http.Request) {
 	if api.tokens == nil {
 		api.problem(response, http.StatusServiceUnavailable, "phones are unavailable",
-			[]string{"This installation cannot mint tokens for a phone."})
+			[]string{"Phone tokens aren't set up on this server."})
 		return
 	}
 	actor := ActorOf(request.Context())
@@ -410,7 +410,7 @@ func (api *API) addPhone(response http.ResponseWriter, request *http.Request) {
 func (api *API) removePhone(response http.ResponseWriter, request *http.Request) {
 	if api.tokens == nil {
 		api.problem(response, http.StatusServiceUnavailable, "phones are unavailable",
-			[]string{"This installation cannot mint tokens for a phone."})
+			[]string{"Phone tokens aren't set up on this server."})
 		return
 	}
 	actor := ActorOf(request.Context())

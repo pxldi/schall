@@ -241,7 +241,7 @@
                   <ErrorNote
                     error={$labelSearch.error}
                     retry={() => $labelSearch.refetch()}
-                    action="Type the name again to search once more."
+                    action="Type the name again."
                     bare
                   />
                 </div>

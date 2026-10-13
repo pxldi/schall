@@ -675,9 +675,8 @@ func (api *API) wantedTrack(
 	}
 	if !track.MusicbrainzRecordingID.Valid {
 		api.problem(response, http.StatusUnprocessableEntity,
-			"this track cannot be asked for",
-			[]string{"The catalogue holds no MusicBrainz recording for this track, " +
-				"so there is nothing a wishlist entry could be keyed on."})
+			"this song can't be added",
+			[]string{"MusicBrainz has no recording for this song yet."})
 		return db.GetTrackForWantingRow{}, false
 	}
 	return track, true
@@ -718,7 +717,7 @@ func (api *API) wantOneTrack(response http.ResponseWriter, request *http.Request
 		}
 		if !kept {
 			api.problem(response, http.StatusConflict,
-				"this track is already in your library", nil)
+				"this song is already in your library", nil)
 			return
 		}
 		target, err := api.wants.Target(request.Context(), targetID)
@@ -765,9 +764,8 @@ func (api *API) dismissTrack(response http.ResponseWriter, request *http.Request
 	}
 	if track.Owned || track.HeldElsewhere {
 		api.problem(response, http.StatusConflict,
-			"this track is already in your library",
-			[]string{"Nothing is being pursued for it, and dismissing owned music " +
-				"would say something about the file rather than the search."})
+			"this song is already in your library",
+			[]string{"Remove the file from the library instead."})
 		return
 	}
 	target, _, err := api.wants.Create(request.Context(), trackEntry(track))
@@ -1008,10 +1006,10 @@ func (api *API) waitingOnTheAudioCheck(
 		return ""
 	}
 	if strings.TrimSpace(row.AcoustIDAPIKey) == "" {
-		return "Wishlist tracks are waiting: add an AcoustID key in Settings to search for them."
+		return "Wishlist songs are waiting. Add an AcoustID key in Settings."
 	}
 	if !row.AcoustIDEnabled {
-		return "Wishlist tracks are waiting: turn on Verify imports by audio in Settings to search for them."
+		return "Wishlist songs are waiting. Turn on Verify imports by audio in Settings."
 	}
 	return ""
 }
@@ -1084,7 +1082,7 @@ func (api *API) pursueAcquisitionTargetAgain(response http.ResponseWriter, reque
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusConflict,
-			"this target was not one you had stopped pursuing", nil)
+			"this song was never removed from the wishlist", nil)
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1102,7 +1100,7 @@ func (api *API) takeBestAvailableAcquisitionTarget(response http.ResponseWriter,
 	target, err := api.wants.TakeBestAvailable(request.Context(), targetID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		api.problem(response, http.StatusConflict, "this target is not pending", nil)
+		api.problem(response, http.StatusConflict, "this song isn't waiting for a copy", nil)
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1119,7 +1117,7 @@ func (api *API) keepAcquisitionTargetFloor(response http.ResponseWriter, request
 	target, err := api.wants.KeepFloor(request.Context(), targetID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		api.problem(response, http.StatusConflict, "this target has no active floor waiver", nil)
+		api.problem(response, http.StatusConflict, "this song already uses the bit rate floor", nil)
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1144,8 +1142,7 @@ func (api *API) rejectAcquisitionTargetResolution(
 	switch {
 	case errors.Is(err, db.ErrNothingToReject):
 		api.problem(response, http.StatusConflict, "this wishlist entry has no resolution to reject",
-			[]string{"Nothing has been resolved for this entry, or the answer was " +
-				"withdrawn already. There is nothing to remember and nothing to re-open."})
+			[]string{"There's no match to undo. Reload the page."})
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1182,7 +1179,7 @@ func (api *API) chooseAcquisitionTargetResolution(
 	if err != nil {
 		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
 			[]string{"recordingId must be the MusicBrainz recording id of one of the " +
-				"answers offered for this wishlist entry"})
+				"songs offered"})
 		return
 	}
 
@@ -1190,11 +1187,10 @@ func (api *API) chooseAcquisitionTargetResolution(
 	switch {
 	case errors.Is(err, db.ErrNotOfferedForReview):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Only the recordings this wishlist entry offered can answer it. If none of " +
-				"them is right, this wishlist entry is not wanted rather than answered wrongly."})
+			[]string{"Pick one of the songs offered. If none is right, remove it from the wishlist."})
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusConflict, "this wishlist entry is not waiting on an answer",
-			[]string{"Something already answered it, and an answer is never re-asked."})
+			[]string{"It was already decided. Reload the page."})
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1268,8 +1264,7 @@ func waitingFor(item db.AcquisitionReviewItem, kind string) string {
 // unanswerable registration question says about itself. It is written by
 // downloads and matched here rather than shared, because the sentence belongs to
 // the package that decides and this only reads it back.
-const unaskedRegistrationSummary = "The audio was identified as another recording, " +
-	"and MusicBrainz could not be asked"
+const unaskedRegistrationSummary = "Sounds like another MusicBrainz song. MusicBrainz unreachable"
 
 // copyGroupResponse is one set of copies that sound alike.
 //
@@ -1496,7 +1491,7 @@ func (api *API) acceptReviewCopy(response http.ResponseWriter, request *http.Req
 	switch {
 	case errors.Is(err, db.ErrNotWaitingForADecision):
 		api.problem(response, http.StatusConflict, "this copy is not waiting for a decision",
-			[]string{"Something already answered it, and an answer is never re-asked."})
+			[]string{"It was already decided. Reload the page."})
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1516,7 +1511,7 @@ func (api *API) refuseReviewCopies(response http.ResponseWriter, request *http.R
 	switch {
 	case errors.Is(err, db.ErrNotWaitingForADecision):
 		api.problem(response, http.StatusConflict, "this wishlist entry has no copies waiting for a decision",
-			[]string{"Nothing is held for it, so there is nothing to refuse."})
+			[]string{"No copies are waiting for this song. Reload the page."})
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1604,24 +1599,19 @@ func (api *API) takeBackAnswer(response http.ResponseWriter, request *http.Reque
 	switch {
 	case errors.Is(err, db.ErrCopyIsInTheLibrary):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"This copy is already in your library. Undoing the decision would " +
-				"leave it there with nothing pointing at it. Remove the file from the " +
-				"library instead."})
+			[]string{"This copy is already in your library. Remove the file from the library instead."})
 	case errors.Is(err, db.ErrWantAnsweredAnotherWay):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"This wishlist entry has already been answered another way since. " +
-				"Nothing was changed."})
+			[]string{"This song was decided another way since. Nothing changed."})
 	case errors.Is(err, db.ErrRecordingWantedElsewhere):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Another wishlist entry is already looking for this recording. " +
-				"Nothing was changed."})
+			[]string{"This song is already on the wishlist. Nothing changed."})
 	case errors.Is(err, db.ErrEntryResolvedAgain):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"This entry has already been resolved again. Nothing was changed."})
+			[]string{"This song was matched again since. Nothing changed."})
 	case errors.Is(err, db.ErrSchallDecidedThis):
 		api.problem(response, http.StatusConflict, err.Error(),
-			[]string{"Schall read the audio and decided this, so there is no answer of " +
-				"yours to take back. Answer the question it raised instead."})
+			[]string{"Schall decided this from the audio. Answer it in Review instead."})
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusNotFound, "that answer is not on record", nil)
 	case err != nil:
@@ -1646,7 +1636,7 @@ func (api *API) reviewCopyAudio(response http.ResponseWriter, request *http.Requ
 	}
 	if api.previews == nil || api.inboxPath == "" {
 		api.problem(response, http.StatusServiceUnavailable, "audio preview is unavailable",
-			[]string{"Schall was started without a download inbox, so there is nothing to play from."})
+			[]string{"No download inbox is set up."})
 		return
 	}
 	fetched, ok := api.playableCopy(response, request)
@@ -1711,7 +1701,7 @@ func (api *API) playableCopy(
 	}
 	if !playable {
 		api.problem(response, http.StatusConflict, "this copy is not waiting for a decision",
-			[]string{"Only a copy nothing could decide about is played here."})
+			[]string{"Only undecided copies play here."})
 		return db.AcquisitionTargetFileRow{}, false
 	}
 	return fetched, true
@@ -1737,7 +1727,7 @@ func (api *API) reviewCopyWaveform(response http.ResponseWriter, request *http.R
 	}
 	if len(peaks) == 0 {
 		api.problem(response, http.StatusNotFound, "no waveform for this copy",
-			[]string{"Nothing could read this copy's audio, so there is no shape to draw."})
+			[]string{"Schall couldn't read this copy's audio."})
 		return
 	}
 	values := make([]int, len(peaks))
@@ -1808,11 +1798,11 @@ func (api *API) acceptWantFile(response http.ResponseWriter, request *http.Reque
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusNotFound, "acquisition target not found", nil)
 	case errors.Is(err, acquisition.ErrWantIsNotStopped):
-		api.problem(response, http.StatusConflict, "this wishlist entry is not waiting on a library file",
-			[]string{"It has already been answered or is being looked at again."})
+		api.problem(response, http.StatusConflict, "this song isn't waiting on a library file",
+			[]string{"It was already decided or is being checked again. Reload the page."})
 	case errors.Is(err, acquisition.ErrNoFiler):
-		api.problem(response, http.StatusServiceUnavailable, "recording what a file is is unavailable",
-			[]string{"Schall was started without the identity service."})
+		api.problem(response, http.StatusServiceUnavailable, "matching files is unavailable",
+			[]string{"Schall started without the identity service."})
 	case err != nil:
 		api.internalError(response, request, err)
 	default:
@@ -1833,8 +1823,7 @@ func (api *API) servePlayable(response http.ResponseWriter, request *http.Reques
 	switch {
 	case errors.Is(err, preview.ErrUnavailable):
 		api.problem(response, http.StatusServiceUnavailable, "audio preview is unavailable",
-			[]string{"ffmpeg could not be found, so files cannot be played. " +
-				"Everything else about this question still decides it."})
+			[]string{"ffmpeg isn't installed, so files can't play."})
 		return
 	case err != nil:
 		api.internalError(response, request, err)

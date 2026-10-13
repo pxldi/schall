@@ -388,12 +388,12 @@
   // track by hand.
   const reviewLabels: Record<ImportReview['kind'], string> = {
     paused: 'Paused for review',
-    revalidated: 'Validation retried',
+    revalidated: 'Checked again',
     imported: 'Imported',
     resolved: 'File matched by hand',
     withdrawn: 'Hand match withdrawn',
-    source_removed: 'Provider copy removed',
-    source_retained: 'Provider copy kept',
+    source_removed: 'Source files removed',
+    source_retained: 'Source files kept',
     discarded: 'Copy discarded'
   };
 
@@ -871,19 +871,19 @@
 
             {#if sourceQuestion && sourceQuestion.requestId === item.id}
               <div class="mx-3 mb-2 rounded-row border border-line-thin bg-decide/14 px-3 py-2.5">
-                <p class="text-body font-semibold text-decide">The peer's folder has changed</p>
+                <p class="text-body font-semibold text-decide">The peer's folder changed</p>
                 {#if sourceQuestion.offer.missing.length}
                   <p class="mt-1.5 text-meta leading-relaxed text-ink-2">
-                    No longer offered: {sourceQuestion.offer.missing.join(', ')}
+                    No longer shared: {sourceQuestion.offer.missing.join(', ')}
                   </p>
                 {/if}
                 {#if sourceQuestion.offer.changed.length}
                   <p class="mt-1.5 text-meta leading-relaxed text-ink-2">
-                    Offered at a different size: {sourceQuestion.offer.changed.join(', ')}
+                    Size changed: {sourceQuestion.offer.changed.join(', ')}
                   </p>
                 {/if}
                 <p class="mt-1.5 text-meta text-ink-3">
-                  Starting anyway takes the files that are still there; the rest will fail.
+                  Start anyway to get what's left. The rest will fail.
                 </p>
                 <div class="mt-2.5 flex gap-2">
                   <Button
@@ -917,7 +917,7 @@
                   Peer {question.username} wrote: &ldquo;{clipped(question.message)}&rdquo;
                 </p>
                 <p class="mt-1.5 text-meta text-ink-3">
-                  Schall could not read this. If it asks for something, type it and press Send.
+                  Schall can't answer this. If it asks for something, type it and press Send.
                 </p>
                 <form
                   class="mt-2.5 flex gap-2"
@@ -991,7 +991,7 @@
                            the button does not say. -->
                       {#if unsettled}
                         <p class="text-meta text-decide/70">
-                          {unsettled === 1 ? '1 file is' : `${unsettled} files are`} waiting on a decision.
+                          {unsettled === 1 ? '1 file needs' : `${unsettled} files need`} a decision.
                         </p>
                       {/if}
                     {:else if item.acquisitionTargetId}
@@ -1002,7 +1002,7 @@
                            same: the file is still in the download folder, so it
                            costs a re-read rather than another transfer. -->
                       <p class="mt-1.5 text-meta text-decide/70">
-                        Schall fetched this copy for a recording you want.
+                        Downloaded for a song on your wishlist.
                       </p>
                       <div class="mt-2.5 flex flex-wrap items-center gap-2">
                         <Button
@@ -1021,8 +1021,7 @@
                            a failure rather than a question, and it belongs here
                            beside the other retries. -->
                       <p class="mt-1.5 text-meta text-decide/70">
-                        It stopped before it could compare any files, so there is nothing to
-                        decide.
+                        Stopped before checking any files. Nothing to decide.
                       </p>
                       <div class="mt-2.5">{@render ValidateAgain(item)}</div>
                     {/if}
@@ -1081,7 +1080,7 @@
                         {#if file.transfer.attempt > 1}
                           <span
                             class="numeric shrink-0 text-ink-4"
-                            title="This file has been asked for {file.transfer.attempt} times"
+                            title="Requested {file.transfer.attempt} times"
                           >
                             attempt {file.transfer.attempt}
                           </span>
@@ -1115,7 +1114,7 @@
                             <li class="truncate">
                               Attempt {attempt.attempt}
                               {attemptOutcome(attempt.outcome)}{attempt.detail
-                                ? ` — ${attempt.detail}`
+                                ? `: ${attempt.detail}`
                                 : ''}
                             </li>
                           {/each}

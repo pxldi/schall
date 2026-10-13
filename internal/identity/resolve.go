@@ -201,17 +201,17 @@ func (resolver *Resolver) Resolve(
 		// different question with a different answer.
 		outcome.Status = StatusConflict
 		outcome.Summary = fmt.Sprintf(
-			"The MusicBrainz recording ID this %s carries is not known to MusicBrainz. %s",
-			evidence.subject(), unknownIdentifierAdvice(outcome.Candidates))
+			"MusicBrainz doesn't know this %s's recording ID. %s",
+			noun(evidence.subject()), unknownIdentifierAdvice(outcome.Candidates))
 	}
 	return outcome, nil
 }
 
 func unknownIdentifierAdvice(candidates []Candidate) string {
 	if len(candidates) == 0 {
-		return "Nothing else identifies it either."
+		return "No other match."
 	}
-	return fmt.Sprintf("The closest recording found instead is %q by %s.",
+	return fmt.Sprintf("Closest match is %q by %s.",
 		candidates[0].TrackTitle, credited(candidates[0].ArtistName))
 }
 
@@ -573,15 +573,13 @@ func singledOutOfCluster(
 		return ""
 	}
 	if pair.recording == tagmatch.Agrees {
-		return "AcoustID named this recording and another MusicBrainz row for the same " +
-			"audio, and the file's own MusicBrainz recording ID names this one."
+		return "AcoustID named this song and a duplicate. The file's MusicBrainz ID picks this one."
 	}
 	if pair.isrc == tagmatch.Agrees && !check.unavailable && check.lookedUp &&
 		!slices.ContainsFunc(check.others, func(other musicbrainz.Recording) bool {
 			return compareISRC(evidence.ISRC, other.ISRCs) == tagmatch.Agrees
 		}) {
-		return "AcoustID named this recording and another MusicBrainz row for the same " +
-			"audio, and the file's own ISRC belongs to this one alone."
+		return "AcoustID named this song and a duplicate. The file's ISRC picks this one."
 	}
 	// The upload found under this recording's name reproduces the copy, and the
 	// file's title, artist and length are this recording's and not the other
@@ -592,9 +590,8 @@ func singledOutOfCluster(
 		!slices.ContainsFunc(check.others, func(other musicbrainz.Recording) bool {
 			return tagsFit(evidence, other)
 		}) {
-		return "AcoustID named this recording and another MusicBrainz row for the same " +
-			"audio. The upload found under this recording's name sounds the same, and the " +
-			"file's title, artist and length fit this row and not the other."
+		return "AcoustID named this song and a duplicate. The upload found by name sounds " +
+			"the same, and the tags fit only this one."
 	}
 	// The copy's measured length rules every other row out. The cluster says the
 	// audio is one of its rows, and a length more than the tolerance away from a
@@ -603,8 +600,7 @@ func singledOutOfCluster(
 	// something else keeps the copy a question.
 	if pair.duration == tagmatch.Agrees && pair.title != tagmatch.Differs &&
 		lengthRulesOutEveryOtherRow(evidence, check) {
-		return "AcoustID named this recording and another MusicBrainz row for the same " +
-			"audio, and the copy's length fits this row and none of the others."
+		return "AcoustID named this song and a duplicate. Only this one's length fits."
 	}
 	return ""
 }
@@ -634,8 +630,7 @@ func vouchedForBesideTheOtherRow(pair comparison) string {
 	if pair.contradicted() || !pair.anchorReproduced || !tagsAgree(pair) {
 		return ""
 	}
-	return "The upload found under this recording's name sounds the same, and the " +
-		"file's title, artist and length agree."
+	return "The upload found by name sounds the same, and the tags agree."
 }
 
 // tagsAgree reports the file's title, artist and length all agreeing with the

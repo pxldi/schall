@@ -178,7 +178,7 @@ func TestAFileIsLeftAloneWhenItsNewNameIsAlreadyTaken(t *testing.T) {
 	if placed[0].Name == placed[1].Name {
 		t.Fatalf("both files are called %q", placed[0].Name)
 	}
-	if !strings.Contains(placed[1].Note, "name of another file") {
+	if !strings.Contains(placed[1].Note, "clash with another file's name") {
 		t.Fatalf("note = %q", placed[1].Note)
 	}
 }
@@ -230,7 +230,7 @@ func TestAFileThatWouldNotShrinkIsLeftAlone(t *testing.T) {
 	if placed[0].Transcoded() {
 		t.Fatal("a copy was kept that is bigger than the file it was made from")
 	}
-	if !strings.Contains(placed[0].Note, "no smaller") {
+	if !strings.Contains(placed[0].Note, "isn't smaller") {
 		t.Fatalf("note = %q", placed[0].Note)
 	}
 }

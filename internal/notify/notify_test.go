@@ -128,7 +128,7 @@ func TestOneMessageIsSentWhenAQuestionAppears(t *testing.T) {
 	if record.count() != 1 {
 		t.Fatalf("sent %d messages", record.count())
 	}
-	if !strings.Contains(record.bodies[0], "1 copy nobody could identify") {
+	if !strings.Contains(record.bodies[0], "1 copy to check") {
 		t.Fatalf("body = %q", record.bodies[0])
 	}
 	if record.titles[0] != "Schall needs a decision" {
@@ -170,7 +170,7 @@ func TestAPassThatHeldTenCopiesSendsOneMessage(t *testing.T) {
 	if record.count() != 1 {
 		t.Fatalf("sent %d messages for one pass", record.count())
 	}
-	if !strings.Contains(record.bodies[0], "10 copies nobody could identify") {
+	if !strings.Contains(record.bodies[0], "10 copies to check") {
 		t.Fatalf("body = %q", record.bodies[0])
 	}
 }
@@ -229,7 +229,7 @@ func TestAPausedImportIsNamedInTheMessage(t *testing.T) {
 	store.waiting = db.WaitingQuestionsRow{PausedImports: 1}
 	notifier.Check(context.Background())
 
-	if record.count() != 1 || !strings.Contains(record.bodies[0], "1 import waiting for a decision") {
+	if record.count() != 1 || !strings.Contains(record.bodies[0], "1 import to check") {
 		t.Fatalf("bodies = %v", record.bodies)
 	}
 }

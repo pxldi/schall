@@ -149,8 +149,8 @@
   }
 
   const piles = $derived([
-    { value: 'looking', name: 'Being looked for', count: $looking.data?.total },
-    { value: 'stopped', name: 'Not wanted', count: $stopped.data?.total }
+    { value: 'looking', name: 'Searching', count: $looking.data?.total },
+    { value: 'stopped', name: 'Removed', count: $stopped.data?.total }
   ]);
 
   function show(next: Pile) {
@@ -193,21 +193,21 @@
       case 'searching':
         return { role: 'busy', text: 'Searching' };
       case 'not_wanted':
-        return { role: 'idle', text: 'Not wanted' };
+        return { role: 'idle', text: 'Removed' };
       case 'acquired':
         return { role: 'ok', text: 'In your library' };
       default:
-        return { role: 'busy', text: 'Looking' };
+        return { role: 'busy', text: 'Looking for a copy' };
     }
   }
 
   const origins: Record<string, string> = {
-    manual: 'asked for by hand',
+    manual: 'added by you',
     playlist: 'from a playlist',
     follow_feed: 'from an artist you follow',
     label_feed: 'from a label you follow',
     recommendation: 'from a suggestion',
-    upgrade: 'an automatic quality upgrade'
+    upgrade: 'quality upgrade'
   };
 
   // The last path segment, for naming the file an upgrade want exists to
@@ -239,13 +239,13 @@
     const parts = [
       want.origin === 'upgrade' && want.upgradeOfPath
         ? `upgrade of ${fileName(want.upgradeOfPath)}`
-        : (origins[want.origin] ?? 'asked for by hand')
+        : (origins[want.origin] ?? 'added by you')
     ];
     if (want.album) parts.push(want.album);
     if (want.externalUrl) parts.push('keyed');
-    else if (want.status === 'unresolved') parts.push('waiting to be matched to a recording');
-    else if (want.attempts === 0) parts.push('no copy looked at yet');
-    else parts.push(want.attempts === 1 ? 'one copy looked at' : `${want.attempts} copies looked at`);
+    else if (want.status === 'unresolved') parts.push('not matched yet');
+    else if (want.attempts === 0) parts.push('no copies checked yet');
+    else parts.push(want.attempts === 1 ? '1 copy checked' : `${want.attempts} copies checked`);
     if (want.minimumBitrate) parts.push(`${want.minimumBitrate} kbit/s`);
     return parts.join(' · ');
   }
@@ -253,7 +253,7 @@
   // The chip repeats the mark, so it is only drawn when it says more than the
   // state almost every row on the wishlist is in.
   function chipWorthShowing(mark: { text: string }) {
-    return mark.text !== 'Looking';
+    return mark.text !== 'Looking for a copy';
   }
 
   // When something last happened, and when the next thing will. A want with
@@ -264,8 +264,8 @@
     const main = want.lastAttemptAt
       ? `tried ${sinceTime(want.lastAttemptAt)}`
       : want.nextAttemptAt
-        ? `next look ${relativeTime(want.nextAttemptAt)}`
-        : 'not looked for yet';
+        ? `next try ${relativeTime(want.nextAttemptAt)}`
+        : 'not searched yet';
     const search =
       want.status === 'unresolved' && want.nextSearchAt
         ? `next search ${relativeTime(want.nextSearchAt)}`
@@ -282,8 +282,8 @@
   };
 
   const emptyHeadings: Record<Pile, string> = {
-    looking: 'Nothing is being looked for',
-    stopped: 'Nothing is marked not wanted'
+    looking: 'Wishlist is empty',
+    stopped: 'Nothing removed'
   };
 </script>
 
@@ -292,7 +292,7 @@
     options={piles}
     value={pile}
     onchange={(value) => show(value as Pile)}
-    label="Filter by what is happening to the want"
+    label="Filter the wishlist"
     pending={$looking.isPending || $stopped.isPending}
   />
 
@@ -410,7 +410,7 @@
                   disabled={$resume.isPending}
                   onclick={() => $resume.mutate(want.id)}
                 >
-                  Look again
+                  Add back
                 </Button>
               {:else}
                 <Button
@@ -419,7 +419,7 @@
                   disabled={$stop.isPending}
                   onclick={() => $stop.mutate(want.id)}
                 >
-                  <Icon name="dismiss" size="sm" /> Don't want
+                  <Icon name="dismiss" size="sm" /> Remove
                 </Button>
               {/if}
             </span>
@@ -460,10 +460,10 @@
       {#if asked}
         Clear the filter to see the whole list.
       {:else if pile === 'looking'}
-        The wishlist fills from a playlist, a followed artist, a suggestion, or the Want it button
-        on a release.
+        Songs come from playlists, followed artists, suggestions and the Want it button on a
+        release.
       {:else}
-        A want you no longer want waits here, and can be taken back.
+        Songs you remove land here. You can add them back.
       {/if}
     </EmptyPanel>
   {/if}

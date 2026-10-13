@@ -12,8 +12,7 @@ import (
 )
 
 // duplicateSummary is what a set-aside copy says about itself.
-const duplicateSummary = "Sounds the same as a better copy kept for this want. " +
-	"Set aside, and its file is removed from the download folder."
+const duplicateSummary = "Same audio as a better copy. File removed from downloads."
 
 // SetAsideDuplicates keeps the best held copy of each piece of audio a want
 // holds and sets the others aside, for every want holding more than one.

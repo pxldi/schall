@@ -221,7 +221,7 @@
           heading="No labels followed"
           role="idle"
         >
-          <p class="text-body text-ink-3">Follow a label to track everything it publishes.</p>
+          <p class="text-body text-ink-3">Follow a label to track its releases.</p>
         </EmptyPanel>
       {:else if filtered.length === 0}
         <EmptyPanel

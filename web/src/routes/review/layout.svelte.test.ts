@@ -266,7 +266,7 @@ describe('the three kinds Review holds', () => {
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', "Don't want", 'None of these', 'Accept copy']);
+    expect(labels).toEqual(['Skip', 'Remove', 'None of these', 'Accept copy']);
   });
 
   it('does not make Accept copy the main action when the chosen copy has a field that differs', async () => {
@@ -284,11 +284,11 @@ describe('the three kinds Review holds', () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
-    const footer = screen.getByRole('button', { name: 'Use recording' }).closest('footer')!;
+    const footer = screen.getByRole('button', { name: 'Use version' }).closest('footer')!;
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', "Don't want", 'Use recording']);
+    expect(labels).toEqual(['Skip', 'Remove', 'Use version']);
   });
 
   it('shows a folder question with Check again before Skip', async () => {
@@ -312,7 +312,7 @@ describe('the three kinds Review holds', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const card = screen.getByText('Wishlist entry').parentElement!.parentElement!;
+    const card = screen.getByText('On your wishlist').parentElement!.parentElement!;
     expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
@@ -367,7 +367,7 @@ describe('a stopped want', () => {
     const labels = within(footer)
       .getAllByRole('button')
       .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', "Don't want", 'Accept copy']);
+    expect(labels).toEqual(['Skip', 'Remove', 'Accept copy']);
   });
 
   it('shows the file it is filed as', async () => {
@@ -424,7 +424,7 @@ describe('the rail', () => {
     expect(screen.getByRole('button', { name: 'Folder 0' })).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Version 1' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Use recording' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Use version' })).toBeTruthy());
   });
 });
 
@@ -495,7 +495,7 @@ describe('a queue longer than one page', () => {
     );
     await open('Evensong');
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.getAllByText('Evensong').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Accept copy' })).toBeTruthy();
   });
@@ -550,7 +550,7 @@ describe('the queue reads failing', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(Review, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.getByText('Trying again.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
@@ -563,7 +563,7 @@ describe('the queue reads failing', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(Review, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('No sign-in on this connection.')).toBeTruthy();
+    expect(await screen.findByText('Not signed in.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 });

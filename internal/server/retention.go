@@ -144,7 +144,7 @@ func (api *API) saveImportSettings(response http.ResponseWriter, request *http.R
 	key := strings.TrimSpace(input.AcoustIDAPIKey)
 	if input.AcoustIDEnabled && key == "" && strings.TrimSpace(stored.AcoustIDAPIKey) == "" {
 		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
-			[]string{"an AcoustID API key is required to verify imports acoustically"})
+			[]string{"Add an AcoustID key to verify imports by audio."})
 		return
 	}
 

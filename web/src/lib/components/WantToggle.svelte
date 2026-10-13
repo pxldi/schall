@@ -91,7 +91,7 @@
   // so the button is not also marked pressed: a reader heard "Want Teardrop,
   // pressed" over a tooltip saying "Remove Teardrop".
   const hint = $derived(
-    shown ? (title ? `Remove ${title}` : 'Remove') : title ? `Want ${title}` : 'Want'
+    shown ? (title ? `Remove ${title}` : 'Remove') : title ? `Add ${title} to wishlist` : 'Add to wishlist'
   );
 </script>
 

@@ -128,7 +128,7 @@ function openedLibrary() {
  * checkbox on the library screen by its own label text. */
 async function duplicatesSwitch() {
   const checkbox = (await screen.findByRole('checkbox', {
-    name: /delete proven duplicates automatically|leave every duplicate for you to decide/
+    name: /delete proven duplicates|decide each one myself/
   })) as HTMLInputElement;
   await vi.waitFor(() => expect(checkbox.disabled).toBe(false));
   return checkbox;
@@ -211,7 +211,7 @@ describe('the Formats card', () => {
     const summary = await screen.findByText('How a bit rate is read');
     expect(summary.closest('details')?.open).toBe(false);
     expect(
-      screen.getByText(/does not say its bit rate does not meet a floor/)
+      screen.getByText(/no stated bit rate fails any minimum/)
     ).toBeTruthy();
   });
 });
@@ -280,7 +280,7 @@ describe('the library screen while its reads are out', () => {
     expect(await screen.findByLabelText('Loading formats')).toBeTruthy();
     expect(screen.queryByText('Lossless first, then lossy by bitrate.')).toBeNull();
     expect(screen.queryByText(/LOADING-/)).toBeNull();
-    expect(screen.queryByText(/no files are matched to a track yet/)).toBeNull();
+    expect(screen.queryByText(/no matched files yet/)).toBeNull();
   });
 });
 
@@ -539,21 +539,21 @@ describe('the Navidrome card', () => {
   it('tells the player now and updates the line', async () => {
     openedSources();
 
-    const button = await screen.findByRole('button', { name: /Tell it now/ });
-    expect(await screen.findByText(/told about new music never/)).toBeTruthy();
+    const button = await screen.findByRole('button', { name: /Rescan now/ });
+    expect(await screen.findByText(/never notified/)).toBeTruthy();
 
     await fireEvent.click(button);
 
     await vi.waitFor(() => expect(rescanned).toBe(1));
     await vi.waitFor(() =>
-      expect(screen.queryByText(/told about new music never/)).toBeNull()
+      expect(screen.queryByText(/never notified/)).toBeNull()
     );
   });
 
   it('posts to the rescan endpoint', async () => {
     openedSources();
 
-    await fireEvent.click(await screen.findByRole('button', { name: /Tell it now/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: /Rescan now/ }));
 
     await vi.waitFor(() => expect(rescanned).toBe(1));
   });
@@ -565,7 +565,7 @@ describe('the Navidrome card', () => {
     openedSources();
 
     const button = (await screen.findByRole('button', {
-      name: /Tell it now/
+      name: /Rescan now/
     })) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });
@@ -577,7 +577,7 @@ describe('the Navidrome card', () => {
     openedSources();
 
     const button = (await screen.findByRole('button', {
-      name: /Tell it now/
+      name: /Rescan now/
     })) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });
@@ -724,17 +724,17 @@ describe('the Duplicate resolution card', () => {
     if (!card) throw new Error('the switch is not on a form');
     await fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('The setting was not saved.')).toBeTruthy();
+    expect(await screen.findByText('Setting not saved.')).toBeTruthy();
   });
 
   it('renders without a live toggle when the setting is unavailable on the server', async () => {
     duplicatesGetStatus = 503;
     openedLibrary();
 
-    await screen.findByText('This setting is not available on this server.');
+    await screen.findByText('Not available on this server.');
     expect(
       screen.queryByRole('checkbox', {
-        name: /delete proven duplicates automatically|leave every duplicate for you to decide/
+        name: /delete proven duplicates|decide each one myself/
       })
     ).toBeNull();
   });

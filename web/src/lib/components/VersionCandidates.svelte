@@ -42,19 +42,19 @@
 {#if candidates.length === 0}
   <!-- A header row of columns with nothing under it read as a list that failed
        to draw. -->
-  <EmptyPanel role="idle" level={3} heading="No recordings to choose">
-    <p class="text-body text-ink-2">MusicBrainz found no recording for this entry.</p>
+  <EmptyPanel role="idle" level={3} heading="No versions to choose">
+    <p class="text-body text-ink-2">MusicBrainz has no match for this song.</p>
   </EmptyPanel>
 {:else}
 <div class="overflow-x-auto">
-  <div class="flex min-w-[40rem] flex-col gap-2 sm:min-w-0" role="radiogroup" aria-label="Recordings this could be">
+  <div class="flex min-w-[40rem] flex-col gap-2 sm:min-w-0" role="radiogroup" aria-label="Versions this could be">
     <div class={`grid ${COLUMNS} gap-x-4 px-[18px] text-dense-micro uppercase text-ink-3`}>
       <span></span>
       <span></span>
       <span>Recording</span>
       <span>Release</span>
       <span>Length</span>
-      <span>Fits the entry</span>
+      <span>Matches</span>
     </div>
 
     {#each candidates as candidate, index (candidate.recordingId)}

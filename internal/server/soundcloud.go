@@ -109,7 +109,7 @@ func (api *API) soundCloudAvailable(response http.ResponseWriter) bool {
 	if api.soundcloud == nil {
 		api.problem(response, http.StatusServiceUnavailable,
 			"Schall cannot reach SoundCloud",
-			[]string{"This installation is not set up to read SoundCloud track pages."})
+			[]string{"SoundCloud isn't set up on this server."})
 		return false
 	}
 	return true
@@ -127,7 +127,7 @@ func (api *API) soundCloudProblem(response http.ResponseWriter, err error) bool 
 	case errors.Is(err, soundcloud.ErrTrackGone):
 		api.problem(response, http.StatusNotFound,
 			"SoundCloud no longer has that track",
-			[]string{"Check the link, or open it on SoundCloud to see whether it moved."})
+			[]string{"Check the link. The track may have moved."})
 		return true
 	case errors.Is(err, soundcloud.ErrFileNotFound):
 		api.problem(response, http.StatusNotFound,
@@ -137,7 +137,7 @@ func (api *API) soundCloudProblem(response http.ResponseWriter, err error) bool 
 	case errors.Is(err, soundcloud.ErrFileAlreadyMatched):
 		api.problem(response, http.StatusConflict,
 			"A scan already matched this file",
-			[]string{"Check the match on the file's page before naming it from SoundCloud."})
+			[]string{"Check the match on the file's page first."})
 		return true
 	}
 	return false

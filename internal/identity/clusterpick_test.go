@@ -69,7 +69,7 @@ func TestARecordingIDPicksTheWantOutOfTheCluster(t *testing.T) {
 	if verification.Identity.Method != "fingerprint-and-identifier" {
 		t.Errorf("method = %q, want fingerprint-and-identifier", verification.Identity.Method)
 	}
-	if !strings.Contains(verification.Summary, "recording ID names this one") {
+	if !strings.Contains(verification.Summary, "MusicBrainz ID picks this one") {
 		t.Errorf("summary = %q, want it to say the ID picked the row", verification.Summary)
 	}
 }
@@ -217,7 +217,7 @@ func TestTheCopysLengthRulesTheOtherRowOut(t *testing.T) {
 	if !verification.Proven() || !verification.Audio {
 		t.Fatalf("not proven by audio: %q", verification.Summary)
 	}
-	if !strings.Contains(verification.Summary, "length fits this row and none of the others") {
+	if !strings.Contains(verification.Summary, "Only this one's length fits") {
 		t.Errorf("summary = %q, want it to say the length ruled the other row out", verification.Summary)
 	}
 }

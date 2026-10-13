@@ -182,7 +182,7 @@ func (api *API) removed(response http.ResponseWriter, request *http.Request, err
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusNotFound, "acquisition target not found", nil)
 	case errors.Is(err, removals.ErrNothingToRemove):
-		api.problem(response, http.StatusConflict, "this want was merged into another one", nil)
+		api.problem(response, http.StatusConflict, "this song was merged into another one", nil)
 	default:
 		api.internalError(response, request, err)
 	}

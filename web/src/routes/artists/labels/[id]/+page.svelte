@@ -99,7 +99,7 @@
         <BackLink fallback="/artists/labels" label="Labels" />
       {/snippet}
       {#snippet sub()}
-        <span>Schall has no label at this address. The link may be old, or the label was removed.</span>
+        <span>No label here. The link may be old.</span>
       {/snippet}
     </Hero>
   {:else}
@@ -133,8 +133,8 @@
         <EmptyPanel role="idle" heading={label?.lastRefreshedAt ? 'No releases' : 'Not fetched yet'}>
           <p class="text-body text-ink-2">
             {label?.lastRefreshedAt
-              ? 'MusicBrainz lists nothing published by this label.'
-              : 'Schall has not read this label from MusicBrainz yet.'}
+              ? 'MusicBrainz lists no releases for this label.'
+              : 'Not read from MusicBrainz yet.'}
           </p>
         </EmptyPanel>
       {:else}

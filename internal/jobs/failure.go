@@ -225,12 +225,11 @@ func askedToWait(err error) bool {
 func unknownHost(host string) Failure {
 	known := serviceAt(host)
 	return Failure{
-		Cause:   CauseUnknownHost,
-		Service: known.name,
-		Key:     string(CauseUnknownHost) + ":" + known.key,
-		Title:   fmt.Sprintf("Schall could not reach %s.", known.name),
-		Detail: known.does + " The name of that server could not be turned into " +
-			"an address from this machine, so no request was sent.",
+		Cause:       CauseUnknownHost,
+		Service:     known.name,
+		Key:         string(CauseUnknownHost) + ":" + known.key,
+		Title:       fmt.Sprintf("Couldn't reach %s.", known.name),
+		Detail:      known.does + " Its server name didn't resolve here, so nothing was sent.",
 		Unreachable: true,
 	}
 }
@@ -238,12 +237,11 @@ func unknownHost(host string) Failure {
 func refused(address string) Failure {
 	known := serviceAt(address)
 	return Failure{
-		Cause:   CauseRefused,
-		Service: known.name,
-		Key:     string(CauseRefused) + ":" + known.key,
-		Title:   fmt.Sprintf("Schall could not reach %s.", known.name),
-		Detail: known.does + " The address answered by refusing the connection, " +
-			"which is what an address with nothing listening on it does.",
+		Cause:       CauseRefused,
+		Service:     known.name,
+		Key:         string(CauseRefused) + ":" + known.key,
+		Title:       fmt.Sprintf("Couldn't reach %s.", known.name),
+		Detail:      known.does + " The connection was refused. Nothing may be running at that address.",
 		Unreachable: true,
 	}
 }
@@ -251,12 +249,11 @@ func refused(address string) Failure {
 func timedOut(host string) Failure {
 	known := serviceAt(host)
 	return Failure{
-		Cause:   CauseTimedOut,
-		Service: known.name,
-		Key:     string(CauseTimedOut) + ":" + known.key,
-		Title:   fmt.Sprintf("%s did not answer in time.", sentenceStart(known.name)),
-		Detail: known.does + " The request was sent and no answer had arrived by " +
-			"the time Schall stopped waiting for one.",
+		Cause:       CauseTimedOut,
+		Service:     known.name,
+		Key:         string(CauseTimedOut) + ":" + known.key,
+		Title:       fmt.Sprintf("%s didn't answer in time.", sentenceStart(known.name)),
+		Detail:      known.does + " No answer came before Schall stopped waiting.",
 		Unreachable: true,
 	}
 }
@@ -273,12 +270,11 @@ func timedOut(host string) Failure {
 func dropped(host string) Failure {
 	known := serviceAt(host)
 	return Failure{
-		Cause:   CauseDropped,
-		Service: known.name,
-		Key:     string(CauseDropped) + ":" + known.key,
-		Title:   fmt.Sprintf("%s dropped the connection.", sentenceStart(known.name)),
-		Detail: known.does + " The request was sent and the connection closed " +
-			"before any answer arrived.",
+		Cause:       CauseDropped,
+		Service:     known.name,
+		Key:         string(CauseDropped) + ":" + known.key,
+		Title:       fmt.Sprintf("%s dropped the connection.", sentenceStart(known.name)),
+		Detail:      known.does + " The connection closed before an answer came.",
 		Unreachable: true,
 	}
 }
@@ -294,15 +290,14 @@ func answeredWith(name string, status int) Failure {
 			Service: known.name,
 			Status:  status,
 			Key:     fmt.Sprintf("%s:%s:%d", CauseUnanswered, known.key, status),
-			Title:   fmt.Sprintf("%s could not answer (HTTP %d).", sentenceStart(known.name), status),
-			Detail: known.does + fmt.Sprintf(" It answered %d, which is a fault on its "+
-				"side rather than anything wrong with what Schall asked for.", status),
+			Title:   fmt.Sprintf("%s had an error (HTTP %d).", sentenceStart(known.name), status),
+			Detail:  known.does + fmt.Sprintf(" It answered %d, an error on its side.", status),
 		}
 	}
 	permanent := status != 408 && status != 429
-	detail := known.does + fmt.Sprintf(" It answered %d, which means %s.", status, meaningOf(status))
+	detail := known.does + fmt.Sprintf(" It answered %d: %s.", status, meaningOf(status))
 	if permanent {
-		detail += " Another attempt is met by the same answer until something is corrected."
+		detail += " Retrying gets the same answer until it's fixed."
 	}
 	return Failure{
 		Cause:     CauseRejected,
@@ -321,29 +316,28 @@ func answeredWith(name string, status int) Failure {
 func meaningOf(status int) string {
 	switch status {
 	case 400:
-		return "the service did not understand the request"
+		return "it didn't understand the request"
 	case 401:
-		return "Schall is not signed in to it"
+		return "Schall isn't signed in"
 	case 403:
-		return "the account Schall uses is not allowed to do this"
+		return "Schall's account isn't allowed to do this"
 	case 404:
-		return "what Schall asked for is not there"
+		return "it doesn't have what Schall asked for"
 	case 408:
-		return "the service stopped waiting for the request to arrive"
+		return "it stopped waiting for the request"
 	case 429:
-		return "Schall is asking more often than the service allows"
+		return "Schall is asking too often"
 	default:
-		return "the service refused the request"
+		return "it refused the request"
 	}
 }
 
 func somethingElse() Failure {
 	return Failure{
-		Cause: CauseOther,
-		Key:   otherKey,
-		Title: "Something else stopped this work.",
-		Detail: "Schall could not put these failures into one class. What each job " +
-			"recorded is below, word for word, with nothing taken out.",
+		Cause:  CauseOther,
+		Key:    otherKey,
+		Title:  "Other failures.",
+		Detail: "These don't share one cause. Each job's error is below, word for word.",
 	}
 }
 
@@ -414,8 +408,7 @@ func serviceAt(endpoint string) service {
 		return service{
 			key:  "unnamed",
 			name: "the service it needed",
-			does: "Schall was talking to another program or website, and the recorded " +
-				"failure does not say which.",
+			does: "Schall was talking to another service, but the error doesn't say which.",
 		}
 	}
 	bare := host

@@ -655,44 +655,39 @@ func MethodSentence(method string) string {
 	singledOut := ""
 	base, cut := strings.CutSuffix(method, singledOutByRelease)
 	if cut {
-		singledOut = " More than one recording fit, and the file's album tag names this one."
+		singledOut = " Several fit; the album tag picked this one."
 	}
 	if trimmed, cut := strings.CutSuffix(base, "-and-"+singledOutByExplicitEdition); cut {
 		base = trimmed
-		singledOut = " More than one recording fit, and MusicBrainz marks the other one " +
-			"as the clean edition of this."
+		singledOut = " Several fit; the other is the clean version."
 	}
 	sentence := ""
 	switch base {
 	case "recording-id":
-		sentence = "The file's tags carry this recording's MusicBrainz identifier."
+		sentence = "Tagged with this song's MusicBrainz ID."
 	case "isrc":
-		sentence = "The file's tags carry this recording's ISRC, the code a record label gives a track."
+		sentence = "Tagged with this song's ISRC."
 	case "fingerprint":
-		sentence = "Schall listened to the audio and it matches this recording."
+		sentence = "AcoustID matched the audio to this song."
 	case "published-sample":
-		sentence = "Schall compared the audio with the sample this recording's " +
-			"distributor publishes, and it is the same music."
+		sentence = "The audio matches this song's sample."
 	case "library-witness":
-		sentence = "Schall compared the audio with a file already in your library " +
-			"that is proven to be this recording, and it is the same music."
+		sentence = "Same audio as a proven file in your library."
 	case "cd-checksum":
 		sentence = "Bit for bit this song's CD track, by AccurateRip."
 	case "fingerprint-and-identifier":
-		sentence = "Schall listened to the audio and it matches this recording. " +
-			"The file's tags name the same one."
+		sentence = "AcoustID matched the audio, and its ID tag agrees."
 	case "title-artist-duration":
-		sentence = "The title, artist and length in the file's tags all match this recording."
+		sentence = "Title, artist and length match."
 	case MethodSameRegistration:
-		sentence = "Schall proved this file is this recording. Your library had " +
-			"filed it under a second MusicBrainz entry for the same track."
+		sentence = "Proven to be this song. Your library had it under a duplicate MusicBrainz entry."
 	case "manual":
-		sentence = "Somebody chose this recording by hand."
+		sentence = "Chosen by hand."
 	case "source_url":
-		sentence = "Somebody gave the address of the track this file holds."
+		sentence = "Matched by a link you gave."
 	}
 	if sentence == "" {
-		return "Schall settled this automatically from the evidence it had."
+		return "Matched automatically."
 	}
 	return sentence + singledOut
 }
@@ -744,21 +739,21 @@ func (level grade) confidence() float32 {
 func (level grade) summary() string {
 	switch level {
 	case byFingerprint:
-		return "identified by its audio"
+		return "matched by audio"
 	case byFingerprintAndIdentifier:
-		return "identified by its audio together with its own identifier"
+		return "matched by audio and its ID"
 	case bySample:
-		return "identified by the sample its distributor publishes"
+		return "matched by the published sample"
 	case byLibraryWitness:
-		return "identified by a file your library already holds"
+		return "matched by a file in your library"
 	case byCDChecksum:
 		return "matches a CD rip in AccurateRip"
 	case byRecordingID:
-		return "identified by MusicBrainz recording ID"
+		return "matched by MusicBrainz ID"
 	case byISRC:
-		return "identified by ISRC"
+		return "matched by ISRC"
 	case byTitleArtistDuration:
-		return "identified by artist, title, and duration together"
+		return "matched by artist, title and length"
 	}
 	return ""
 }
@@ -1449,8 +1444,8 @@ func sameRegistrationSentence(rows []musicbrainz.Recording) string {
 	for _, row := range rows {
 		named = append(named, fmt.Sprintf("%q by %s", row.Title, credited(row.ArtistCredit)))
 	}
-	return fmt.Sprintf("AcoustID identified the audio as %s, which MusicBrainz holds "+
-		"as another row of this same registered track.", joinWords(named))
+	return fmt.Sprintf("AcoustID names %s, a duplicate MusicBrainz entry for this song.",
+		joinWords(named))
 }
 
 // explicitEditionSentence says which row the audio named and that MusicBrainz
@@ -1465,17 +1460,15 @@ func explicitEditionSentence(rows []musicbrainz.Recording) string {
 	for _, row := range rows {
 		named = append(named, fmt.Sprintf("%q by %s", row.Title, credited(row.ArtistCredit)))
 	}
-	return fmt.Sprintf("AcoustID identified the audio as %s. MusicBrainz marks the "+
-		"recording this wants as the clean edition of that track, and Schall keeps "+
-		"the explicit one.", joinWords(named))
+	return fmt.Sprintf("AcoustID names %s. MusicBrainz lists this song as its clean version.",
+		joinWords(named))
 }
 
 // registrationUncheckedSentence is what is said instead when MusicBrainz could
 // not be asked. A check that did not run has answered nothing, and it must read
 // as nothing rather than as the audio naming other music.
-const registrationUncheckedSentence = "AcoustID identified the audio as another " +
-	"MusicBrainz recording, and MusicBrainz could not be asked whether that row " +
-	"holds this same registered track."
+const registrationUncheckedSentence = "AcoustID names another MusicBrainz song. " +
+	"MusicBrainz didn't say if it's the same."
 
 func compareRelease(observed string, releases []musicbrainz.RecordingRelease) tagmatch.Verdict {
 	if strings.TrimSpace(observed) == "" || len(releases) == 0 {
@@ -1599,11 +1592,11 @@ func sharedIdentifier(entry graded, conclusive []graded) string {
 	if entry.pair.isrc == tagmatch.Agrees {
 		for _, other := range conclusive {
 			if other.recording.ID != entry.recording.ID && other.pair.isrc == tagmatch.Agrees {
-				return "MusicBrainz has the same ISRC on another recording, so it does not name this one alone"
+				return "another song has the same ISRC"
 			}
 		}
 	}
-	return "another recording fits this entry exactly as well"
+	return "another song fits just as well"
 }
 
 // decide concludes what a file is from everything the providers returned.
@@ -1688,8 +1681,7 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 		return Outcome{
 			Status: StatusNeedsReview, Candidates: candidates,
 			Summary: fmt.Sprintf(
-				"%d recordings fit this %s equally well; the evidence does not choose between them.",
-				len(conclusive), evidence.subject()),
+				"%d songs fit equally well. Pick one.", len(conclusive)),
 		}
 	case identified:
 		return Outcome{
@@ -1705,14 +1697,13 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 		return Outcome{
 			Status: StatusLocalOnly,
 			Summary: fmt.Sprintf(
-				"The %s carries no identifier and no title to search for, so nothing can be asked about it.%s",
-				evidence.subject(), ownedAllTheSame(evidence)),
+				"No IDs or title to search by.%s", ownedAllTheSame(evidence)),
 		}
 	}
 	return Outcome{
 		Status: StatusLocalOnly,
-		Summary: fmt.Sprintf("No recording MusicBrainz knows of matches this %s.%s",
-			evidence.subject(), ownedAllTheSame(evidence)),
+		Summary: fmt.Sprintf("No MusicBrainz match for this %s.%s",
+			noun(evidence.subject()), ownedAllTheSame(evidence)),
 	}
 }
 
@@ -1723,7 +1714,7 @@ func ownedAllTheSame(evidence Evidence) string {
 	if evidence.subject() != SubjectFile {
 		return ""
 	}
-	return " It is owned music all the same."
+	return " Kept as your own music."
 }
 
 // resolvedOutcome records an identity.
@@ -1744,11 +1735,11 @@ func resolvedOutcome(
 	// The recording first, then how it was identified. Written the other way round
 	// the sentence said "identified" twice — "Identified as X by Y, identified by
 	// ISRC" — and the two "by"s read as if the ISRC were another performer.
-	summary := fmt.Sprintf("%q by %s — %s.",
+	summary := fmt.Sprintf("%q by %s, %s.",
 		candidate.TrackTitle, credited(candidate.ArtistName), level.summary())
 	if singledOutBy != "" {
 		method += "-and-" + singledOutBy
-		summary = fmt.Sprintf("%q by %s — %s, %s",
+		summary = fmt.Sprintf("%q by %s, %s, %s",
 			candidate.TrackTitle, credited(candidate.ArtistName), level.summary(),
 			singledOutSentence(singledOutBy, evidence.subject()))
 	}
@@ -1769,11 +1760,9 @@ func resolvedOutcome(
 // that fit equally well, saying which rule took it.
 func singledOutSentence(singledOutBy, subject string) string {
 	if singledOutBy == singledOutByExplicitEdition {
-		return "then taken over the clean edition MusicBrainz holds of it."
+		return "picked over the clean version."
 	}
-	return fmt.Sprintf(
-		"then singled out from the recordings that fit equally by the %s this %s names.",
-		singledOutBy, subject)
+	return fmt.Sprintf("picked by its %s.", singledOutBy)
 }
 
 // describe turns one provider recording into the shape Schall stores, choosing
@@ -1819,41 +1808,39 @@ func candidateSentence(
 ) string {
 	switch {
 	case len(disagreements) > 0 && len(agreements) > 0:
-		return fmt.Sprintf("Its %s agree, but its %s %s.",
+		return fmt.Sprintf("Matches on %s, but its %s %s.",
 			joinWords(agreements), joinWords(disagreements), doVerb(disagreements))
 	case len(disagreements) > 0:
 		return fmt.Sprintf("Its %s %s.", joinWords(disagreements), doVerb(disagreements))
 	case len(agreements) > 0 && shared != "":
-		return fmt.Sprintf("Its %s agree, but %s.", joinWords(agreements), shared)
+		return fmt.Sprintf("Matches on %s, but %s.", joinWords(agreements), shared)
 	case len(agreements) > 0 && !pair.contradicted():
-		return fmt.Sprintf("Its %s agree, which is not enough to identify it on its own.",
-			joinWords(agreements))
+		return fmt.Sprintf("Matches on %s, not enough to be sure.", joinWords(agreements))
 	}
-	return fmt.Sprintf(
-		"Nothing about this recording contradicts the %s, and nothing identifies it either.", subject)
+	return "No evidence for or against."
 }
 
 func conflictSentence(subject string, candidates []Candidate) string {
 	if len(candidates) == 0 {
-		return fmt.Sprintf("The %s's own identifiers disagree with what the provider knows.", subject)
+		return fmt.Sprintf("The %s's IDs disagree with MusicBrainz.", noun(subject))
 	}
 	closest := candidates[0]
 	if len(closest.Differs) > 0 {
-		return fmt.Sprintf("The %s's identifiers name %q by %s, but its %s %s.",
-			subject, closest.TrackTitle, credited(closest.ArtistName),
+		return fmt.Sprintf("The %s's IDs name %q by %s, but its %s %s.",
+			noun(subject), closest.TrackTitle, credited(closest.ArtistName),
 			joinWords(closest.Differs), doVerb(closest.Differs))
 	}
-	return fmt.Sprintf("The %s's identifiers name %q by %s, but the evidence does not settle it.",
-		subject, closest.TrackTitle, credited(closest.ArtistName))
+	return fmt.Sprintf("The %s's IDs name %q by %s, but it isn't confirmed.",
+		noun(subject), closest.TrackTitle, credited(closest.ArtistName))
 }
 
 func reviewSentence(subject string, candidates []Candidate) string {
 	closest := candidates[0]
 	if len(candidates) > 1 {
-		return fmt.Sprintf("%d recordings could be this %s; the closest is %q by %s.",
-			len(candidates), subject, closest.TrackTitle, credited(closest.ArtistName))
+		return fmt.Sprintf("%d possible matches. Closest is %q by %s.",
+			len(candidates), closest.TrackTitle, credited(closest.ArtistName))
 	}
-	return fmt.Sprintf("The closest recording is %q by %s, but the evidence does not identify it conclusively.",
+	return fmt.Sprintf("Closest match is %q by %s. Not confirmed.",
 		closest.TrackTitle, credited(closest.ArtistName))
 }
 
@@ -1967,6 +1954,15 @@ func credited(name string) string {
 		return "an unnamed artist"
 	}
 	return name
+}
+
+// noun is the word a sentence uses for its subject. An entry is a song on the
+// wishlist to the person reading it.
+func noun(subject string) string {
+	if subject == SubjectEntry {
+		return "song"
+	}
+	return subject
 }
 
 func doVerb(items []string) string {

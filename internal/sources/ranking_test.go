@@ -54,7 +54,7 @@ func TestRankExplainsEveryCandidate(t *testing.T) {
 		Query{ExpectedTrackCount: 10})
 
 	reasons := strings.Join(ranked[0].Reasons, " | ")
-	for _, want := range []string{"Lossless FLAC", "All 10 catalogue tracks present", "Free upload slot"} {
+	for _, want := range []string{"Lossless FLAC", "All 10 tracks present", "Free upload slot"} {
 		if !strings.Contains(reasons, want) {
 			t.Fatalf("reasons %q do not explain %q", reasons, want)
 		}
@@ -88,7 +88,7 @@ func TestRankGradesOversuppliedFolders(t *testing.T) {
 			t.Fatalf("rank %d = %s, want %s (order %v)", index, ranked[index].Username, username, usernames(ranked))
 		}
 	}
-	if reasons := strings.Join(ranked[3].Reasons, " | "); !strings.Contains(reasons, "likely a different edition") {
+	if reasons := strings.Join(ranked[3].Reasons, " | "); !strings.Contains(reasons, "probably another edition") {
 		t.Fatalf("reasons %q do not explain the heavy oversupply", reasons)
 	}
 }
@@ -190,7 +190,7 @@ func TestRankAdmitsWhenNobodyDisclosedTheBitrate(t *testing.T) {
 	if ranked[0].Username != "disclosed" {
 		t.Fatalf("order = %v, want the folder that said what it is first", usernames(ranked))
 	}
-	if reasons := strings.Join(ranked[1].Reasons, " | "); !strings.Contains(reasons, "unknown bitrate") {
+	if reasons := strings.Join(ranked[1].Reasons, " | "); !strings.Contains(reasons, "bit rate unknown") {
 		t.Fatalf("reasons %q do not admit the bitrate is unknown", reasons)
 	}
 }
@@ -203,7 +203,7 @@ func TestRankAdmitsWhenTheFormatCouldNotBeWorkedOut(t *testing.T) {
 
 	ranked := Rank([]Candidate{unknown}, Query{ExpectedTrackCount: 1})
 
-	if reasons := strings.Join(ranked[0].Reasons, " | "); !strings.Contains(reasons, "could not be determined") {
+	if reasons := strings.Join(ranked[0].Reasons, " | "); !strings.Contains(reasons, "Unknown audio format") {
 		t.Fatalf("reasons %q do not admit the format is unknown", reasons)
 	}
 }
@@ -251,7 +251,7 @@ func TestRankPenalisesAFolderThatMixesFormats(t *testing.T) {
 	if ranked[0].Username != "consistent" {
 		t.Fatalf("order = %v, want the folder of one format first", usernames(ranked))
 	}
-	if reasons := strings.Join(ranked[1].Reasons, " | "); !strings.Contains(reasons, "mixes several audio formats") {
+	if reasons := strings.Join(ranked[1].Reasons, " | "); !strings.Contains(reasons, "Mixed audio formats") {
 		t.Fatalf("reasons %q do not explain the mixture", reasons)
 	}
 }

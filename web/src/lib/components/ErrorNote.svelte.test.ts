@@ -19,8 +19,8 @@ describe('ErrorNote', () => {
       error: new ApiError('slskd is not configured', 409, { title: 'slskd is not configured' })
     });
 
-    expect(screen.getByText('Schall has no download source, so nothing can be fetched.')).toBeTruthy();
-    expect(screen.getByText('Add the slskd address and key under Settings → Connections.')).toBeTruthy();
+    expect(screen.getByText('No download source set up.')).toBeTruthy();
+    expect(screen.getByText('Add slskd under Settings → Connections.')).toBeTruthy();
   });
 
   it('keeps the server’s own words behind a disclosure', () => {
@@ -43,7 +43,7 @@ describe('ErrorNote', () => {
       })
     });
 
-    expect(screen.getByText('Schall could not finish that.')).toBeTruthy();
+    expect(screen.getByText("Schall couldn't finish that.")).toBeTruthy();
     expect(screen.getByText('What the server said').closest('details')?.textContent).toContain(
       'a reason nobody anticipated'
     );
@@ -64,7 +64,7 @@ describe('ErrorNote', () => {
     const retry = vi.fn();
     render(ErrorNote, { error: new ApiError('The server did not answer.', 0), retry });
 
-    expect(screen.getByText('Nothing answered. Schall may be restarting.')).toBeTruthy();
+    expect(screen.getByText("Schall didn't answer. It may be restarting.")).toBeTruthy();
     expect(screen.getByText('Trying again.')).toBeTruthy();
 
     await vi.advanceTimersByTimeAsync(4000);
@@ -91,7 +91,7 @@ describe('ErrorNote', () => {
 
     await vi.advanceTimersByTimeAsync(120_000);
     expect(retry).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('Reload the page to ask again.')).toBeTruthy();
+    expect(screen.getByText('Reload the page to try again.')).toBeTruthy();
   });
 
   it('says where to sign in on a 401, naming no reload', () => {
@@ -99,9 +99,9 @@ describe('ErrorNote', () => {
       error: new ApiError('unauthorized', 401, { title: 'unauthorized' })
     });
 
-    expect(screen.getByText('No sign-in on this connection.')).toBeTruthy();
+    expect(screen.getByText('Not signed in.')).toBeTruthy();
     expect(
-      screen.getByText('Open Schall at its usual address and sign in there.')
+      screen.getByText('Open Schall at its usual address and sign in.')
     ).toBeTruthy();
   });
 

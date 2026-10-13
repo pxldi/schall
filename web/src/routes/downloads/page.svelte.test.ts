@@ -421,7 +421,7 @@ describe('a raw failure kept behind the row', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Show requested files' }));
 
-    expect(await screen.findByText('The peer did not start sending.')).toBeTruthy();
+    expect(await screen.findByText("The peer didn't start sending.")).toBeTruthy();
 
     const disclosure = screen.getByText('What the server said').closest('details');
     expect(disclosure).toBeTruthy();
@@ -445,7 +445,7 @@ describe('a raw failure kept behind the row', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Show requested files' }));
 
-    expect(await screen.findByText('This file can no longer be read as audio.')).toBeTruthy();
+    expect(await screen.findByText("This file isn't readable audio anymore.")).toBeTruthy();
 
     const disclosure = screen.getByText('What the server said').closest('details');
     expect(disclosure).toBeTruthy();
@@ -484,7 +484,7 @@ describe('a raw failure kept behind the row', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Show requested files' }));
 
     expect(
-      await screen.findByText('The downloaded copy has gone from the volume.')
+      await screen.findByText('The downloaded copy is gone.')
     ).toBeTruthy();
 
     const disclosure = screen.getByText('What the server said').closest('details');
@@ -537,7 +537,7 @@ describe('a peer that asked something', () => {
       )
     ).toBeTruthy();
     expect(
-      screen.getByText('Schall could not read this. If it asks for something, type it and press Send.')
+      screen.getByText("Schall can't answer this. If it asks for something, type it and press Send.")
     ).toBeTruthy();
   });
 

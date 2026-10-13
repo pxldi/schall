@@ -378,7 +378,7 @@ describe('what a review answer sends', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    expect(await press("Don't want")).toEqual({
+    expect(await press('Remove')).toEqual({
       method: 'POST',
       url: `/api/v1/acquisition-targets/${TARGET}/not-wanted`,
       body: null
@@ -389,7 +389,7 @@ describe('what a review answer sends', () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
-    expect(await press('Use recording')).toEqual({
+    expect(await press('Use version')).toEqual({
       method: 'POST',
       url: `/api/v1/acquisition-targets/${TARGET}/resolution`,
       body: JSON.stringify({ recordingId: RECORDING })

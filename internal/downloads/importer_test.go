@@ -496,7 +496,7 @@ func TestImporterPausesConflictingTagsForReview(t *testing.T) {
 	if err := importer.Import(context.Background(), requestID); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(store.review, "is not conclusively any track of this edition") ||
+	if !strings.Contains(store.review, "isn't clearly any track here") ||
 		!strings.Contains(store.review, "album") {
 		t.Fatalf("review = %q", store.review)
 	}
@@ -624,7 +624,7 @@ func TestImporterReportsEveryDisagreementAsEvidence(t *testing.T) {
 	// say so, and review is told which track it came closest to and why that
 	// was not enough.
 	problems := strings.Join(evidence.Files[1].Problems, " | ")
-	if !strings.Contains(problems, "is not conclusively any track of this edition") ||
+	if !strings.Contains(problems, "isn't clearly any track here") ||
 		!strings.Contains(problems, "title") || !strings.Contains(problems, "duration") {
 		t.Fatalf("second file problems = %q", problems)
 	}

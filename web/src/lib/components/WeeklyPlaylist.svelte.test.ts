@@ -286,7 +286,7 @@ describe('WeeklyPlaylist', () => {
     expect(await screen.findByText('Star in your player')).toBeTruthy();
     expect(screen.getByText('nothing found')).toBeTruthy();
     expect(screen.getByText('Keep in Schall')).toBeTruthy();
-    expect(screen.getByText('could not be read')).toBeTruthy();
+    expect(screen.getByText("couldn't read")).toBeTruthy();
     expect(screen.getByText('the keep store did not answer')).toBeTruthy();
   });
 
@@ -358,9 +358,9 @@ describe('WeeklyPlaylist', () => {
     // The first sentence is the one the error map writes for this refusal; the
     // second is this screen's own, because it can name the button that was just
     // pressed. The server's own words stay, behind the disclosure.
-    expect(await screen.findByText('This song is not on this week’s playlist.')).toBeTruthy();
+    expect(await screen.findByText("This song isn't on this week’s playlist.")).toBeTruthy();
     expect(
-      screen.getByText('Nothing has been deleted, so press Keep again.')
+      screen.getByText('Nothing deleted. Press Keep again.')
     ).toBeTruthy();
     expect(screen.getByText('this song is not on the weekly playlist')).toBeTruthy();
   });

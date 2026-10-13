@@ -225,7 +225,7 @@
     variant="outline"
     disabled={!playlist || $pairing.isFetching}
     onclick={checkPlayer}
-    title="Ask the player which of these files it holds"
+    title="Check which files the player has"
   >
     {#if $pairing.isFetching}
       <Icon name="busy" size="sm" class="animate-spin" />
@@ -254,7 +254,7 @@
   <Button
     disabled={!playlist || $sendToPlayer.isPending}
     onclick={() => $sendToPlayer.mutate()}
-    title="Push what is owned to Navidrome"
+    title="Send owned songs to Navidrome"
   >
     {#if $sendToPlayer.isPending}
       <Icon name="busy" size="sm" class="animate-spin" />
@@ -399,8 +399,7 @@
             <div class="flex flex-col gap-1 px-4 pb-3">
               {#if pairingData.checked < pairingData.acquiredCount}
                 <span class="numeric text-meta text-ink-3">
-                  {pairingData.checked} of {pairingData.acquiredCount} asked before the check ran out
-                  of time
+                  {pairingData.checked} of {pairingData.acquiredCount} checked before time ran out
                 </span>
               {/if}
               {#if unpaired.length === 0}
@@ -443,7 +442,7 @@
            the list holds nothing. -->
       {#if playlist && !playlist.importedAt && (playlist.source === 'spotify' || playlist.source === 'file')}
         <EmptyPanel role="busy" heading="Importing playlist" level={3}>
-          <p class="text-body text-ink-3">The songs appear here when the import finishes.</p>
+          <p class="text-body text-ink-3">Songs appear when the import finishes.</p>
         </EmptyPanel>
       {:else}
         <EmptyPanel role="idle" heading="No songs in this playlist" level={3} />
@@ -531,7 +530,7 @@
                     >
                       <Icon name={state.icon} size="md" />
                     </a>
-                  {:else if state.label === 'no want'}
+                  {:else if state.label === 'not on wishlist'}
                     <!-- The + on the hovered or focused row only, the way a
                          player offers it. Once the want exists the row shows
                          its state instead, so there is nothing to take back
@@ -561,7 +560,7 @@
                           href={reviewHref(entry)}
                           class="text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink"
                         >
-                          Answer in Review
+                          Decide in Review
                         </a>
                       {/if}
                       {#if seed}

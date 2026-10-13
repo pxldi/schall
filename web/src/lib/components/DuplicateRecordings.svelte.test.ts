@@ -125,7 +125,7 @@ describe('DuplicateRecordings, files the disc kept', () => {
     expect(await screen.findByText('/music/singles/Teardrop.mp3')).toBeTruthy();
     expect(screen.getByText('permission denied')).toBeTruthy();
     expect(
-      screen.getByText(/1 file was removed from the library and could not be deleted/)
+      screen.getByText(/1 file left the library but couldn't be deleted/)
     ).toBeTruthy();
   });
 
@@ -256,7 +256,7 @@ describe('DuplicateRecordings, playing a copy', () => {
 });
 
 describe('the duplicates request failing', () => {
-  it('shows the failure and not "No recording is on disc twice"', async () => {
+  it('shows the failure and not "No song on disk twice"', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(
@@ -266,7 +266,7 @@ describe('the duplicates request failing', () => {
     );
     opened();
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
-    expect(screen.queryByText('No recording is on disc twice')).toBeNull();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
+    expect(screen.queryByText('No song on disk twice')).toBeNull();
   });
 });

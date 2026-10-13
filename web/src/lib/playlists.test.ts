@@ -29,7 +29,7 @@ describe('entryState', () => {
   it('says acquired only while a proven copy has not reached the library', () => {
     const state = entryState(entry({ targetStatus: 'acquired' }));
 
-    expect(state.label).toBe('acquired');
+    expect(state.label).toBe('importing');
   });
 
   it('carries the want sentence for an entry that is still unanswered', () => {
@@ -74,7 +74,7 @@ describe('entryState', () => {
   it('says nothing under an entry that never made a want', () => {
     const state = entryState(entry());
 
-    expect(state.label).toBe('no want');
+    expect(state.label).toBe('not on wishlist');
     expect(state.note).toBe('');
   });
 });
@@ -109,7 +109,7 @@ describe('ownedOf', () => {
       })
     );
 
-    expect(state.note).toBe('A copy is waiting for your answer.');
+    expect(state.note).toBe('Copy arrived. Listen to decide.');
   });
 
   it('reads a want holding an unanswered copy as needing review', () => {

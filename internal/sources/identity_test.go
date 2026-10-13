@@ -186,15 +186,15 @@ func TestMatchSummaryNamesOnlyTheCountsThatAreNotZero(t *testing.T) {
 		match Match
 		want  string
 	}{
-		{"nothing was checked", Match{}, "Not checked against the catalogue"},
+		{"nothing was checked", Match{}, "Not checked"},
 		{"one track confirmed", Match{Expected: 1, Confirmed: 1},
-			"Track confirmed by name and length"},
+			"Name and length match"},
 		{"every track confirmed", Match{Expected: 3, Confirmed: 3},
-			"All 3 tracks confirmed by name and length"},
+			"All 3 tracks match by name and length"},
 		{"nothing matched at all", Match{Expected: 3, Absent: 3},
-			"Nothing here matches the 3 tracks"},
+			"No match for the 3 tracks"},
 		{"nothing matched one track", Match{Expected: 1, Absent: 1},
-			"Nothing here matches the 1 track"},
+			"No match for the 1 track"},
 		{"some confirmed, some missing", Match{Expected: 3, Confirmed: 2, Absent: 1},
 			"2 of 3 confirmed, 1 missing"},
 		{"some confirmed, some partial", Match{Expected: 3, Confirmed: 1, Partial: 2},
@@ -219,15 +219,15 @@ func TestOfferSummarySaysWhatThePeerDisclosedAndNoMore(t *testing.T) {
 		want  string
 	}{
 		{"both fit", Offer{Confirmed: true, Named: true},
-			"Named and timed like the wanted recording"},
+			"Name and length match"},
 		{"one of the two fits", Offer{Partial: true},
-			"Either the name or the length fits, not both"},
+			"Name or length matches, not both"},
 		{"the name fits and the length contradicts it", Offer{Named: true, LengthDiffers: true},
-			"Named like the wanted recording, but the peer says it runs to another length"},
+			"Name matches, length differs"},
 		{"only the length was disclosed and it contradicts", Offer{LengthDiffers: true},
-			"The peer says it runs to another length"},
+			"Length differs"},
 		{"neither fits", Offer{},
-			"Nothing the peer disclosed fits; it has not been heard either"},
+			"No match by name or length"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			if got := testCase.offer.Summary(); got != testCase.want {

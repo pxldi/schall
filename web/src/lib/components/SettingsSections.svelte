@@ -122,10 +122,10 @@
     const cause = (error ?? '').toLowerCase();
     if (cause.includes('no such file')) return { detail: 'folder not found', role: 'fail' };
     if (cause.includes('permission denied')) {
-      return { detail: 'Schall may not read it', role: 'fail' };
+      return { detail: 'no permission to read', role: 'fail' };
     }
     if (cause.includes('not a directory')) return { detail: 'not a folder', role: 'fail' };
-    return { detail: 'could not be measured', role: 'idle' };
+    return { detail: "couldn't measure", role: 'idle' };
   }
 
   // One line per disc. A disc that could not be measured says so and shows no
@@ -274,11 +274,12 @@
     fail: 'text-fail'
   };
 
-  function checkedAt(value: string | null | undefined) {
+  function ago(verb: string, value: string | null | undefined) {
     // Relative, like every other time in the product. The absolute form read
     // "checked 8/3/2026, 4:33:20 PM" — second-level precision on a fact whose
     // whole meaning is "recently or not".
-    return relativeTime(value) || 'never';
+    const when = relativeTime(value);
+    return when ? `${verb} ${when}` : `never ${verb}`;
   }
 
   // What a refused file move says to the person who asked for it.
@@ -299,21 +300,21 @@
   function explainMove(said: string): string {
     const text = said.toLocaleLowerCase();
     if (text.includes('duplicate key') || text.includes('23505')) {
-      return 'Another file is already recorded at that path. Rename or remove it, then plan again.';
+      return 'Another file is at that path. Rename or remove it, then plan again.';
     }
     if (text.includes('permission denied') || text.includes('read-only')) {
-      return 'The folder cannot be written to. Mount it writable, then plan again.';
+      return 'The folder is read-only. Mount it writable, then plan again.';
     }
     if (text.includes('no space left') || text.includes('enospc')) {
       return 'The disk is full. Free some space, then plan again.';
     }
     if (text.includes('no such file') || text.includes('enoent')) {
-      return 'The file is no longer where the library last saw it. Scan the library, then plan again.';
+      return 'The file has moved or gone. Scan the library, then plan again.';
     }
     if (text.includes('exists')) {
-      return 'Something is already at that path. Rename or remove it, then plan again.';
+      return 'That path is taken. Rename or remove what is there, then plan again.';
     }
-    return 'The file was left where it was.';
+    return 'File not moved.';
   }
 
   // --- Status ---
@@ -424,10 +425,10 @@
               ? 'Connected'
               : 'Untested',
       detail: $settings.isError
-        ? 'could not be read'
+        ? "couldn't read"
         : !$settings.data?.configured
           ? 'not linked'
-          : `checked ${checkedAt($settings.data?.lastCheckedAt)}`
+          : ago('checked', $settings.data?.lastCheckedAt)
     },
     {
       name: 'Navidrome',
@@ -453,10 +454,10 @@
       // whether it was last told about new music — the whole reason this
       // section exists.
       detail: $navidrome.isError
-        ? 'could not be read'
+        ? "couldn't read"
         : !$navidrome.data?.configured
           ? 'not linked'
-          : `told about new music ${checkedAt($navidrome.data?.lastNotifiedAt)}`
+          : ago('notified', $navidrome.data?.lastNotifiedAt)
     },
     {
       name: 'ListenBrainz',
@@ -479,10 +480,10 @@
               ? 'Connected'
               : 'Not checked',
       detail: $listenbrainz.isError
-        ? 'could not be read'
+        ? "couldn't read"
         : !$listenbrainz.data?.configured
           ? 'not linked'
-          : `checked ${checkedAt($listenbrainz.data?.lastCheckedAt)}`
+          : ago('checked', $listenbrainz.data?.lastCheckedAt)
     }
   ]);
 
@@ -1104,7 +1105,7 @@
     if ($layoutRun.isError) return { role: 'idle', label: 'Unavailable' };
     if (!run) return { role: 'idle', label: 'Never migrated' };
     if (run.active) return { role: 'idle', label: 'Planned' };
-    if (run.failed > 0) return { role: 'fail', label: `${run.failed} refused` };
+    if (run.failed > 0) return { role: 'fail', label: `${run.failed} failed` };
     return { role: 'ok', label: 'Migrated' };
   });
 
@@ -1202,11 +1203,11 @@
       case 'connected':
         return null; // the connected chip already says it
       case 'denied':
-        return 'Spotify reported the authorization was denied.';
+        return 'Spotify access was denied.';
       case 'state-mismatch':
-        return 'The authorization came back with an unexpected state; try connecting again.';
+        return "Spotify's reply didn't match. Connect again.";
       case 'failed':
-        return 'The authorization could not be completed; check the credentials and try again.';
+        return "Couldn't connect Spotify. Check the client ID and secret, then try again.";
     }
     return null;
   });
@@ -1355,7 +1356,7 @@
           if ($storage.isError) $storage.refetch();
           if ($dashboard.isError) $dashboard.refetch();
         }}
-        fallback="The library could not be read."
+        fallback="Couldn't load the library."
       />
     {/if}
 
@@ -1417,7 +1418,7 @@
         placeholder="http://slskd:5030"
         class="field w-full"
       />
-      {@render SourceHint('where slskd is listening', 'slskd-api-url')}
+      {@render SourceHint("slskd's address", 'slskd-api-url')}
 
       {@render SourceLabel('API key', 'slskd-api-key')}
       <input
@@ -1457,7 +1458,7 @@
         />
         {enabled ? 'searching enabled' : 'searching off'}
       </label>
-      {@render SourceHint('off stops all source searches')}
+      {@render SourceHint('off stops all searches')}
 
       <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -1487,7 +1488,7 @@
           bare
           error={$settings.error}
           retry={() => $settings.refetch()}
-          fallback="Settings could not be read. Retry before saving."
+          fallback="Couldn't load settings. Retry before saving."
         />
       </StatusBadge>
     {:else if connection.role === 'fail' || $save.isError || $test.isError}
@@ -1495,7 +1496,7 @@
         <ErrorNote
           bare
           error={$save.error ?? $test.error ?? $settings.data?.connectionError}
-          fallback="The slskd settings could not be saved or checked."
+          fallback="Couldn't save or check slskd."
         />
       </StatusBadge>
     {:else if connection.role === 'ok' && $settings.data?.connectionDetail}
@@ -1503,8 +1504,8 @@
     {:else if connection.role === 'idle'}
       <span class="text-meta text-ink-3">
         {$settings.data?.configured
-          ? 'save and test to confirm slskd is reachable'
-          : 'add the address and API key to search for sources'}
+          ? 'press Test to check the connection'
+          : 'add the address and API key'}
       </span>
     {/if}
   </section>
@@ -1532,7 +1533,7 @@
         placeholder="http://navidrome:4533"
         class="field w-full"
       />
-      {@render SourceHint('where Navidrome is listening', 'navidrome-url')}
+      {@render SourceHint("Navidrome's address", 'navidrome-url')}
 
       {@render SourceLabel('Username', 'navidrome-username')}
       <input
@@ -1544,7 +1545,7 @@
         disabled={!$navidrome.isSuccess}
         class="field w-full"
       />
-      {@render SourceHint('an account allowed to start a scan', 'navidrome-username')}
+      {@render SourceHint('must be allowed to start a scan', 'navidrome-username')}
 
       {@render SourceLabel('Password', 'navidrome-password')}
       <input
@@ -1566,9 +1567,9 @@
           disabled={!$navidrome.isSuccess}
           class="check cursor-pointer"
         />
-        {navidromeEnabled ? 'told about new music' : 'not told'}
+        {navidromeEnabled ? 'notify of new music' : 'off'}
       </label>
-      {@render SourceHint('off stops telling Navidrome anything')}
+      {@render SourceHint('off stops all contact')}
 
       <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -1590,7 +1591,7 @@
           onclick={() => $rescanNavidrome.mutate()}
         >
           {#if $rescanNavidrome.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
-          Tell it now
+          Rescan now
         </Button>
         <SettingsSaveButton
           variant="primary"
@@ -1608,7 +1609,7 @@
           bare
           error={$navidrome.error}
           retry={() => $navidrome.refetch()}
-          fallback="Settings could not be read. Retry before saving."
+          fallback="Couldn't load settings. Retry before saving."
         />
       </StatusBadge>
     {:else if navidromeConnection.role === 'fail' || $saveNavidrome.isError || $testNavidrome.isError || $rescanNavidrome.isError}
@@ -1619,7 +1620,7 @@
             $testNavidrome.error ??
             $rescanNavidrome.error ??
             $navidrome.data?.connectionError}
-          fallback="The Navidrome settings could not be saved or checked."
+          fallback="Couldn't save or check Navidrome."
         />
       </StatusBadge>
     {:else if navidromeConnection.role === 'ok' && $navidrome.data?.connectionDetail}
@@ -1627,8 +1628,8 @@
     {:else if navidromeConnection.role === 'idle'}
       <span class="text-meta text-ink-3">
         {$navidrome.data?.configured
-          ? 'save and test to confirm Navidrome is reachable'
-          : 'add the address and an account to have Navidrome told about new music'}
+          ? 'press Test to check the connection'
+          : 'add the address and an account'}
       </span>
     {/if}
   </section>
@@ -1639,7 +1640,7 @@
     <div class="flex flex-wrap items-center gap-2.5">
       <h2 class="font-display text-lead font-bold text-ink">Formats</h2>
       <span class="text-meta font-medium text-ink-3">
-        what to prefer, and what never to fetch
+        preferred and blocked formats
       </span>
     </div>
 
@@ -1647,7 +1648,7 @@
       <ErrorNote
         error={$preferences.error}
         retry={() => $preferences.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
@@ -1657,7 +1658,7 @@
         $savePreferences.mutate();
       }}
     >
-      {@render Label('Prefer', 'best first — anything not listed keeps its usual place below')}
+      {@render Label('Prefer', 'best first; unlisted formats follow')}
       <!-- An order, drawn as one. The list used to be a column of rows carrying
            three word buttons each, which read as a form to fill in rather than
            as a ranking; the ranking is the whole content of this setting. Chips
@@ -1682,7 +1683,7 @@
                 <button
                   type="button"
                   class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
-                  aria-label="Prefer {format.toUpperCase()} sooner"
+                  aria-label="Move {format.toUpperCase()} up"
                   disabled={!$preferences.isSuccess || position === 0}
                   onclick={() => moveFormat(position, position - 1)}
                 >
@@ -1691,7 +1692,7 @@
                 <button
                   type="button"
                   class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
-                  aria-label="Prefer {format.toUpperCase()} later"
+                  aria-label="Move {format.toUpperCase()} down"
                   disabled={!$preferences.isSuccess || position === preferred.length - 1}
                   onclick={() => moveFormat(position, position + 1)}
                 >
@@ -1700,7 +1701,7 @@
                 <button
                   type="button"
                   class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-fail"
-                  aria-label="Stop preferring {format.toUpperCase()}"
+                  aria-label="Remove {format.toUpperCase()}"
                   disabled={!$preferences.isSuccess}
                   onclick={() => (preferred = preferred.filter((named) => named !== format))}
                 >
@@ -1714,7 +1715,7 @@
           <Select.Root type="single" items={addableChoices} bind:value={addFormat}>
             <Select.Trigger
               class="w-40"
-              aria-label="A format to prefer"
+              aria-label="Format to add"
               disabled={!$preferences.isSuccess}
             >
               {addableChoices.find((choice) => choice.value === addFormat)?.label}
@@ -1740,7 +1741,7 @@
         </div>
       </div>
 
-      {@render Label('Never fetch', 'a copy in one of these is passed over, not ranked low')}
+      {@render Label('Never fetch', 'copies in these are skipped')}
       <!-- A grid of columns, not a wrapped line. The names are three, four and
            five characters long, so a wrapped line put every box at a different
            distance from the left and the fourteen of them read as a paragraph
@@ -1777,7 +1778,7 @@
         </div>
       </Settle>
 
-      {@render Label('Lowest bitrate', '0 is no floor — lossless is never measured by it', 'bitrate-floor')}
+      {@render Label('Lowest bitrate', '0 for none; lossless is exempt', 'bitrate-floor')}
       <div class="flex items-center gap-2">
         <input
           id="bitrate-floor"
@@ -1796,7 +1797,7 @@
       <!-- One number cannot say what people want: 320 is the top of MP3 and out
            of reach for Opus. A format with its own number is held to that one
            and to nothing else. -->
-      {@render Label('Per format', 'a number here replaces the one above')}
+      {@render Label('Per format', 'overrides the lowest bitrate')}
       <div class="flex flex-col gap-2">
         <Settle pending={$preferences.isPending}>
           {#snippet placeholder()}
@@ -1833,14 +1834,12 @@
             How a bit rate is read
           </summary>
           <div class="reveal mt-1 flex flex-col gap-1.5 text-meta leading-[1.5] text-ink-3">
+            <span>A variable bit rate counts as its average.</span>
             <span>
-              A variable bit rate counts as the average the peer reports for the whole file.
+              A copy with no stated bit rate fails any minimum. Search results show how many were
+              skipped.
             </span>
-            <span>
-              A copy that does not say its bit rate does not meet a floor. Search results say how
-              many were turned away, so you can lower a number that is too high.
-            </span>
-            <span>This decides what is fetched. What is stored is set under Import.</span>
+            <span>This sets what is downloaded. Transcode sets what is stored.</span>
           </div>
         </details>
       </div>
@@ -1873,15 +1872,12 @@
       <ErrorNote
         error={$upgrades.error}
         retry={() => $upgrades.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
     <span class="text-meta leading-snug text-ink-2">
-      Some files in your library were obtained before the bit rate floor above was set, or
-      before it was raised. Schall can look for a better copy of each one and replace it, the
-      same way it replaces a copy for any other want — nothing is deleted until a better copy is
-      verified.
+      Find better copies of files below the lowest bitrate.
     </span>
 
     <FormGrid
@@ -1901,7 +1897,7 @@
         {upgradesEnabled ? 'look for better copies' : 'leave files as they are'}
       </label>
 
-      {@render Label('Below the floor', 'files that qualify right now')}
+      {@render Label('Below the minimum', 'files that qualify now')}
       <span class="text-meta text-ink-3">
         {#if $upgrades.isError}
           Unavailable
@@ -1938,8 +1934,8 @@
         <ErrorNote
           bare
           error={$saveUpgrades.error}
-          fallback="The setting was not saved."
-          action="Nothing was changed. Press Save again."
+          fallback="Setting not saved."
+          action="Press Save again."
         />
       </StatusBadge>
     {:else if $scanForUpgrades.isError}
@@ -1947,12 +1943,12 @@
         <ErrorNote
           bare
           error={$scanForUpgrades.error}
-          fallback="The scan could not be started."
-          action="Press Scan now again."
+          fallback="Couldn't start the scan."
+          action="Try again."
         />
       </StatusBadge>
     {:else}
-      <span class="text-meta text-ink-4">a replacement is proven the same way any copy is, before it replaces anything</span>
+      <span class="text-meta text-ink-4">a file is replaced only once the new copy is verified</span>
     {/if}
   </Card>
 {/snippet}
@@ -1963,7 +1959,7 @@
       <h2 class="font-display text-lead font-bold text-ink">Notifications</h2>
       <Chip role={notificationConnection.role}>{notificationConnection.label}</Chip>
       <span class="ml-auto text-meta font-medium text-ink-3">
-        last sent {checkedAt($notifications.data?.lastCheckedAt)}
+        {ago('sent', $notifications.data?.lastCheckedAt)}
       </span>
       <Button
         variant="outline"
@@ -1972,7 +1968,7 @@
         onclick={() => $testNotification.mutate()}
       >
         {#if $testNotification.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
-        Send a test
+        Send test
       </Button>
     </div>
 
@@ -2015,7 +2011,7 @@
         class="field w-full"
       />
 
-      {@render Label('Token', 'optional — for a topic that is not public', 'notify-token')}
+      {@render Label('Token', 'only for a private topic', 'notify-token')}
       <div class="flex flex-col gap-1.5">
         <input
           id="notify-token"
@@ -2026,7 +2022,7 @@
           disabled={notifyClearToken || !$notifications.isSuccess}
           placeholder={$notifications.data?.tokenSet
             ? 'stored'
-            : 'a public topic needs none'}
+            : 'optional'}
           class="field w-full"
         />
         {#if $notifications.data?.tokenSet}
@@ -2043,12 +2039,12 @@
               }}
               class="check cursor-pointer"
             />
-            forget the stored token
+            clear stored token
           </label>
         {/if}
       </div>
 
-      {@render Label('Enabled', 'off sends nothing anywhere')}
+      {@render Label('Enabled', 'off sends nothing')}
       <label class="flex w-fit cursor-pointer items-center gap-2 text-meta font-medium text-ink-3">
         <input
           type="checkbox"
@@ -2056,7 +2052,7 @@
           disabled={!$notifications.isSuccess}
           class="check cursor-pointer"
         />
-        {notifyEnabled ? 'told when the queue has a question' : 'not told'}
+        {notifyEnabled ? 'notify me' : 'off'}
       </label>
 
       <span class="hidden @xl:block"></span>
@@ -2076,7 +2072,7 @@
           bare
           error={$notifications.error}
           retry={() => $notifications.refetch()}
-          fallback="Settings could not be read. Retry before saving."
+          fallback="Couldn't load settings. Retry before saving."
         />
       </StatusBadge>
     {:else if notificationConnection.role === 'fail' || $saveNotifications.isError || $testNotification.isError}
@@ -2084,14 +2080,14 @@
         <ErrorNote
           bare
           error={$saveNotifications.error ?? $testNotification.error ?? $notifications.data?.connectionError}
-          fallback="The message could not be sent."
+          fallback="Couldn't send the notification."
         />
       </StatusBadge>
     {:else if notificationConnection.role === 'idle'}
       <span class="text-meta text-ink-3">
         {$notifications.data?.endpoint
-          ? 'switch it on to be told when the queue has a question'
-          : 'enter the address to be told at'}
+          ? 'tick Enabled to get notified'
+          : 'add an address to get notified'}
       </span>
     {/if}
 
@@ -2099,7 +2095,7 @@
          import that stopped and asked. Both are where the machinery is waiting on
          a person; everything else Schall does is on a screen already. -->
     <span class="text-meta text-ink-4">
-      sent when a copy or an import is waiting for you — never for anything else
+      sent only when a copy or an import needs your decision
     </span>
   </Card>
 {/snippet}
@@ -2125,7 +2121,7 @@
         disabled={!$listenbrainz.isSuccess}
         class="field w-full"
       />
-      {@render SourceHint('the account your listens are scrobbled to', 'listenbrainz-username')}
+      {@render SourceHint('the account your listens go to', 'listenbrainz-username')}
 
       {@render SourceLabel('User token', 'listenbrainz-token')}
       <div class="flex flex-col gap-1.5">
@@ -2138,7 +2134,7 @@
           disabled={listenbrainzClearToken || !$listenbrainz.isSuccess}
           placeholder={$listenbrainz.data?.userTokenSet
             ? 'stored'
-            : 'nothing Schall asks for needs one'}
+            : 'optional'}
           class="field w-full"
         />
         {#if $listenbrainz.data?.userTokenSet}
@@ -2158,11 +2154,11 @@
               }}
               class="check cursor-pointer"
             />
-            forget the stored token
+            clear stored token
           </label>
         {/if}
       </div>
-      {@render SourceHint('optional — it only raises the rate limit', 'listenbrainz-token')}
+      {@render SourceHint('optional; raises the rate limit', 'listenbrainz-token')}
 
       {@render SourceLabel('Enabled', '')}
       <label class="flex w-fit cursor-pointer items-center gap-2 text-meta font-medium text-ink-3">
@@ -2172,9 +2168,9 @@
           disabled={!$listenbrainz.isSuccess}
           class="check cursor-pointer"
         />
-        {listenbrainzEnabled ? 'asked for recommendations' : 'not asked'}
+        {listenbrainzEnabled ? 'get recommendations' : 'off'}
       </label>
-      {@render SourceHint('off stops asking ListenBrainz anything')}
+      {@render SourceHint('off stops all contact')}
 
       <span class="hidden @xl:block"></span>
       <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -2204,7 +2200,7 @@
           bare
           error={$listenbrainz.error}
           retry={() => $listenbrainz.refetch()}
-          fallback="Settings could not be read. Retry before saving."
+          fallback="Couldn't load settings. Retry before saving."
         />
       </StatusBadge>
     {:else if listenbrainzConnection.role === 'fail' || $saveListenBrainz.isError || $testListenBrainz.isError}
@@ -2212,7 +2208,7 @@
         <ErrorNote
           bare
           error={$saveListenBrainz.error ?? $testListenBrainz.error ?? $listenbrainz.data?.connectionError}
-          fallback="The ListenBrainz settings could not be saved or checked."
+          fallback="Couldn't save or check ListenBrainz."
         />
       </StatusBadge>
     {:else if listenbrainzConnection.role === 'ok' && $listenbrainz.data?.connectionDetail}
@@ -2220,15 +2216,15 @@
     {:else if listenbrainzConnection.role === 'idle'}
       <span class="text-meta text-ink-3">
         {$listenbrainz.data?.configured
-          ? 'save and test to confirm ListenBrainz knows the account'
-          : 'name the account your listens are scrobbled to'}
+          ? 'press Test to check the account'
+          : 'add your ListenBrainz username'}
       </span>
     {/if}
 
     <!-- Schall only ever reads this account. A dismissal is Schall's own record
          of what the user does not want to be shown, and is never published to
          ListenBrainz under their name. -->
-    <span class="text-meta text-ink-4">read-only — Schall never writes to ListenBrainz</span>
+    <span class="text-meta text-ink-4">read-only; Schall never writes to ListenBrainz</span>
   </section>
 {/snippet}
 
@@ -2242,7 +2238,7 @@
       <ErrorNote
         error={$weekly.error}
         retry={() => $weekly.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
@@ -2250,7 +2246,7 @@
          only form on this page that can end with a file leaving the disc, so it
          says so above the field rather than under it. -->
     <span class="text-meta leading-snug text-ink-2">
-      Schall fetches songs for you each week and deletes the ones you do not keep.
+      Fetches new songs each week and deletes the ones you don't keep.
     </span>
 
     <FormGrid
@@ -2282,12 +2278,12 @@
         class="field w-20"
       />
 
-      {@render Label('Library share', 'percentage from your collection, 0 to 100', 'weekly-library-share')}
+      {@render Label('Library share', '% from your library; never deleted', 'weekly-library-share')}
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2">
           <input
             id="weekly-library-share"
-            aria-describedby="weekly-library-share-hint weekly-library-share-note"
+            aria-describedby="weekly-library-share-hint"
             bind:value={weeklyLibraryShare}
             type="number"
             min="0"
@@ -2297,9 +2293,6 @@
           />
           <span class="text-meta text-ink-3">%</span>
         </div>
-        <span id="weekly-library-share-note" class="text-meta leading-snug text-ink-3">
-          Library songs are never removed by a refresh.
-        </span>
       </div>
 
       {@render Label('One per artist', 'avoid repeats in a week')}
@@ -2313,10 +2306,10 @@
         only one song per artist
       </label>
 
-      {@render Label('Unkept songs', 'what a refresh does with them')}
+      {@render Label('Unkept songs', 'what happens to them each week')}
       <div class="flex flex-col">
-        {@render WeeklyChoice('report', 'Report only', 'names what would go, deletes nothing')}
-        {@render WeeklyChoice('remove', 'Remove', 'deletes an unkept trial song from the disc — never anything else in the library')}
+        {@render WeeklyChoice('report', 'Report only', 'list them, delete nothing')}
+        {@render WeeklyChoice('remove', 'Remove', 'delete them from disk; library songs stay')}
       </div>
 
       <span class="hidden @xl:block"></span>
@@ -2335,13 +2328,13 @@
         <ErrorNote
           bare
           error={$saveWeekly.error}
-          fallback="The weekly playlist was not saved."
+          fallback="Weekly playlist not saved."
           action="Nothing was deleted. Press Save again."
         />
       </StatusBadge>
     {:else}
       <span class="text-meta text-ink-4">
-        a song you star in your player, or press Keep on, is never deleted
+        starred or kept songs are never deleted
       </span>
     {/if}
   </Card>
@@ -2357,13 +2350,12 @@
       <ErrorNote
         error={$newReleases.error}
         retry={() => $newReleases.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
     <span class="text-meta leading-snug text-ink-2">
-      A playlist of what the artists and labels you follow released lately, and the
-      library already holds. Nothing here is ever deleted.
+      Recent releases you have from artists and labels you follow. Deletes nothing.
     </span>
 
     <FormGrid
@@ -2383,7 +2375,7 @@
         {newReleasesEnabled ? 'keep the playlist filled' : 'no playlist'}
       </label>
 
-      {@render Label('Window', 'how many days back a release stays on it', 'new-releases-window')}
+      {@render Label('Window', 'days a release stays on it', 'new-releases-window')}
       <input
         id="new-releases-window"
         aria-describedby="new-releases-window-hint"
@@ -2411,13 +2403,13 @@
         <ErrorNote
           bare
           error={$saveNewReleases.error}
-          fallback="The new-releases playlist was not saved."
+          fallback="New releases playlist not saved."
           action="Press Save again."
         />
       </StatusBadge>
     {:else}
       <span class="text-meta text-ink-4">
-        a track removed from it in your player stays out
+        tracks you remove in your player stay out
       </span>
     {/if}
   </Card>
@@ -2463,7 +2455,7 @@
         <span class="text-meta font-medium text-ink-3">as {$spotify.data.accountName}</span>
       {/if}
       <span class="ml-auto text-meta font-medium text-ink-3">
-        checked {checkedAt($spotify.data?.lastCheckedAt)}
+        {ago('checked', $spotify.data?.lastCheckedAt)}
       </span>
     </div>
 
@@ -2534,7 +2526,7 @@
           bare
           error={$spotify.error}
           retry={() => $spotify.refetch()}
-          fallback="Settings could not be read. Retry before saving."
+          fallback="Couldn't load settings. Retry before saving."
         />
       </StatusBadge>
     {:else if spotifyConnection.role === 'fail' || $saveSpotify.isError || $connectSpotify.isError}
@@ -2542,14 +2534,14 @@
         <ErrorNote
           bare
           error={$saveSpotify.error ?? $connectSpotify.error ?? $spotify.data?.connectionError}
-          fallback="The Spotify settings could not be saved, or the account not connected."
+          fallback="Couldn't save Spotify or connect the account."
         />
       </StatusBadge>
     {:else if spotifyConnection.role === 'idle'}
       <span class="text-meta text-ink-3">
         {$spotify.data?.configured
-          ? 'connect the account whose playlists Schall may read'
-          : 'enter the client credentials, then connect the account'}
+          ? 'connect the account to read its playlists'
+          : 'add the client ID and secret, then connect'}
       </span>
     {/if}
 
@@ -2559,7 +2551,7 @@
            browser, and one word 324px wide made the whole page scroll sideways
            on a phone. -->
       <span class="text-meta leading-relaxed text-ink-4">
-        register this redirect URI on the Spotify app:
+        add this redirect URI to your Spotify app:
         <span class="numeric break-all">{$spotify.data.redirectUri}</span>
       </span>
     {/if}
@@ -2599,10 +2591,10 @@
     </div>
 
     <div class="flex flex-col">
-      {@render Choice('keep', "Keep the provider's copy", 'an import takes nothing away', true)}
+      {@render Choice('keep', 'Keep downloads', 'imports leave the downloaded files in place', true)}
       {@render Choice(
         'delete',
-        'Remove it after a confirmed import',
+        'Delete after import',
         'deletes the downloaded files once the import is confirmed',
         canDeleteSources
       )}
@@ -2612,21 +2604,21 @@
       <ErrorNote
         error={$imports.error}
         retry={() => $imports.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
       <!-- Why the second option is greyed out. The server's sentence names the
          folder and the reason it refused; this adds the one thing that changes
          it. The path is on the line below, so it is not said twice. -->
     {:else if !canDeleteSources}
       <span class="text-meta text-ink-3">
-        {$imports.data?.inboxDetail ?? 'the completed-download folder is not writable'}. Mount it
-        writable to use this option.
+        {$imports.data?.inboxDetail ?? 'the download folder is read-only'}. Mount it writable to
+        use this.
       </span>
     {/if}
 
     {#if $imports.data?.inboxPath}
       <span class="text-meta text-ink-4">
-        completed downloads are read from
+        downloads are read from
         <span class="numeric break-all">{$imports.data.inboxPath}</span>
       </span>
     {/if}
@@ -2643,18 +2635,17 @@
       <ErrorNote
         error={$duplicates.error}
         retry={() => $duplicates.refetch()}
-        fallback="The setting could not be read."
+        fallback="Couldn't load this setting."
       />
     {/if}
 
     {#if duplicatesUnavailable}
       <span class="text-meta leading-snug text-ink-2">
-        This setting is not available on this server.
+        Not available on this server.
       </span>
     {:else}
       <span class="text-meta leading-snug text-ink-2">
-        Schall deletes a duplicate copy without asking you each time. It does this only where
-        the copies are proven the same audio, or one copy is proven better than the rest.
+        Deletes extra copies when they are proven identical, or one is proven better.
       </span>
 
       <details class="group">
@@ -2666,15 +2657,11 @@
         </summary>
         <div class="reveal mt-1 flex flex-col gap-1.5 text-meta leading-[1.5] text-ink-3">
           <span>
-            Same audio means the same container, bit rate, sample rate and channel count, with
-            lengths within the five seconds matching already allows.
+            Same audio: same format, bit rate, sample rate and channels, and lengths within 5
+            seconds.
           </span>
-          <span>
-            Anything Schall cannot prove stays on the duplicates screen for you to decide.
-          </span>
-          <span>
-            Every deletion is recorded the same way a press on that screen is.
-          </span>
+          <span>Anything unproven stays on the Duplicates screen for you.</span>
+          <span>Each deletion is recorded like one you make there.</span>
         </div>
       </details>
 
@@ -2684,7 +2671,7 @@
           $saveDuplicates.mutate();
         }}
       >
-        {@render Label('Enabled', 'off leaves every duplicate for you to decide')}
+        {@render Label('Enabled', 'off leaves them to you')}
         <label class="flex w-fit cursor-pointer items-center gap-2 text-meta font-medium text-ink-3">
           <input
             type="checkbox"
@@ -2692,7 +2679,7 @@
             disabled={!$duplicates.isSuccess || $saveDuplicates.isPending}
             class="check cursor-pointer"
           />
-          {duplicatesEnabled ? 'delete proven duplicates automatically' : 'leave every duplicate for you to decide'}
+          {duplicatesEnabled ? 'delete proven duplicates' : 'decide each one myself'}
         </label>
 
         <span class="hidden @xl:block"></span>
@@ -2711,8 +2698,8 @@
           <ErrorNote
             bare
             error={$saveDuplicates.error}
-            fallback="The setting was not saved."
-            action="Nothing changed. Press Save again."
+            fallback="Setting not saved."
+            action="Press Save again."
           />
         </StatusBadge>
       {/if}
@@ -2752,7 +2739,7 @@
       <ErrorNote
         error={$imports.error}
         retry={() => $imports.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
@@ -2780,7 +2767,7 @@
     </div>
 
     <span id="acoustid-api-key-hint" class="text-meta text-ink-3">
-      a key from acoustid.org, and fpcalc on the server
+      needs a key from acoustid.org and fpcalc on the server
     </span>
 
     <!-- What is stopped while this is off, said where it can be turned on. A
@@ -2790,8 +2777,8 @@
          #381). -->
     {#if !acoustidEnabled || !acoustidKeySet}
       <span class="text-meta text-ink-3">
-        Wanted tracks are not searched for while this is off.
-        {acoustidKeySet ? 'Tick enabled to start looking.' : 'Save a key and tick enabled to start looking.'}
+        Wishlist searches are paused while this is off.
+        {acoustidKeySet ? 'Tick enabled to start.' : 'Save a key and tick enabled.'}
       </span>
     {/if}
   </Card>
@@ -2835,7 +2822,7 @@
       <ErrorNote
         error={$layout.error}
         retry={() => $layout.refetch()}
-        fallback="Settings could not be read. Retry before saving."
+        fallback="Couldn't load settings. Retry before saving."
       />
     {/if}
 
@@ -2847,7 +2834,7 @@
     >
       {@render Label(
         'Folder template',
-        'where Schall files the music it keeps',
+        'folder and file names for your music',
         'library-layout-template'
       )}
       <input
@@ -2875,7 +2862,7 @@
 
     {#if $layout.data?.example}
       <span class="text-meta text-ink-3">
-        files a release at <span class="numeric">{$layout.data.example}</span>
+        example: <span class="numeric">{$layout.data.example}</span>
       </span>
     {/if}
 
@@ -2884,8 +2871,8 @@
         <ErrorNote
           bare
           error={$saveLayout.error}
-          fallback="The template was not saved."
-          action="Nothing has been moved. Press Save again."
+          fallback="Template not saved."
+          action="Nothing was moved. Press Save again."
         />
       </StatusBadge>
     {/if}
@@ -2951,20 +2938,20 @@
       {/snippet}
     {#if run}
       <span class="numeric text-meta text-ink-3">
-        {run.planned} to move · {run.moved} moved · {run.failed} refused
+        {run.planned} to move · {run.moved} moved · {run.failed} failed
       </span>
 
       {#if run.plan}
         <span class="numeric text-meta leading-relaxed text-ink-3">
-          {run.plan.inPlace} already in place · {run.plan.colliding} refused for a collision ·
-          {run.plan.unfiled} left where they are
+          {run.plan.inPlace} already in place · {run.plan.colliding} blocked by another file ·
+          {run.plan.unfiled} stay put
         </span>
         {#if run.plan.unfiled > 0}
           <!-- &#123;id&#125; is the release identifier the template asks for, and
                Schall has one only for a file it matched to a release. -->
           <span class="text-meta leading-relaxed text-ink-3">
-            &#123;id&#125; has no value for those. Drop it from the template to move the ones
-            with an artist and an album.
+            &#123;id&#125; is empty for these. Remove it from the template to move those with an
+            artist and album.
           </span>
         {/if}
       {/if}
@@ -3005,7 +2992,7 @@
       <ErrorNote
         error={$layoutRun.error}
         retry={() => $layoutRun.refetch()}
-        fallback="The migration state could not be read."
+        fallback="Couldn't load the migration."
       />
     {:else}
       <!-- The chip already reads "Never migrated"; what is worth saying here is
@@ -3020,8 +3007,8 @@
         <ErrorNote
           bare
           error={said}
-          fallback="The layout was not changed."
-          action="Nothing has been moved. Press the control again."
+          fallback="Layout not changed."
+          action="Nothing was moved. Try again."
         />
       </StatusBadge>
     {/if}
@@ -3051,14 +3038,14 @@
       <ErrorNote
         error={$tags.error}
         retry={() => $tags.refetch()}
-        fallback="The tag pass could not be read."
+        fallback="Couldn't load tag status."
       />
     {/if}
 
     <!-- What Schall already does on import is how the feature works. What this
          button does is what the reader is here for. -->
     <span class="text-meta text-ink-3">
-      Writes the artist, album and date Schall matched into the files you already had.
+      Writes the matched artist, album and date into your existing files.
     </span>
 
     <!-- Nothing is said about the count until it is read: "no files are
@@ -3070,9 +3057,9 @@
       {#if $tags.isError}
         Unavailable
       {:else if ($tags.data?.eligible ?? 0) === 0}
-        no files are matched to a track yet
+        no matched files yet
       {:else}
-        {($tags.data?.eligible ?? 0).toLocaleString()} files are matched to a track and would be written
+        {($tags.data?.eligible ?? 0).toLocaleString()} matched files to write
       {/if}
     </span>
     {/if}
@@ -3080,8 +3067,8 @@
     {#if $tags.data && $tags.data.status !== 'idle'}
       <span class="numeric text-meta text-ink-3">
         {$tags.data.written.toLocaleString()} written · {$tags.data.unchanged.toLocaleString()}
-        already correct · {$tags.data.skipped.toLocaleString()} left alone ·
-        {$tags.data.failed.toLocaleString()} could not be written
+        already correct · {$tags.data.skipped.toLocaleString()} skipped ·
+        {$tags.data.failed.toLocaleString()} failed
       </span>
     {/if}
 
@@ -3093,21 +3080,21 @@
 
     {#if ($tags.data?.skippedAmbiguous ?? 0) > 0}
       <span class="text-meta text-ink-3">
-        {($tags.data?.skippedAmbiguous ?? 0).toLocaleString()} files are on more than one release
-        and nothing says which one they came from, so they were left as they are.
+        {($tags.data?.skippedAmbiguous ?? 0).toLocaleString()} files skipped: on several releases,
+        source unknown.
       </span>
     {/if}
 
     {#if ($tags.data?.skippedUnproved ?? 0) > 0}
       <span class="text-meta text-ink-3">
-        {($tags.data?.skippedUnproved ?? 0).toLocaleString()} files have too little in the catalogue
-        to describe — no title, or no artist — so they were left as they are.
+        {($tags.data?.skippedUnproved ?? 0).toLocaleString()} files skipped: no title or artist in
+        the catalogue.
       </span>
     {/if}
 
     {#if ($tags.data?.failed ?? 0) > 0}
       <span class="text-meta text-ink-3">
-        Files that could not be written are named in the server log.
+        Failed files are listed in the server log.
       </span>
     {/if}
 
@@ -3116,7 +3103,7 @@
         <ErrorNote
           bare
           error={$writeTags.error ?? $tags.data?.error}
-          fallback="The tags were not written."
+          fallback="Tags not written."
         />
       </StatusBadge>
     {/if}

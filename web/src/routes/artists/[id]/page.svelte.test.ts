@@ -307,7 +307,7 @@ describe('wanting everything missing', () => {
     );
     opened();
 
-    expect(await screen.findByRole('button', { name: 'Want 2 missing' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Add 2 missing' })).toBeTruthy();
   });
 
   it('shows no want button when nothing is missing', async () => {
@@ -329,7 +329,7 @@ describe('wanting everything missing', () => {
     answeringWithActions(detail(), seen);
     opened();
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want 2 missing' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add 2 missing' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual({
@@ -344,8 +344,8 @@ describe('wanting everything missing', () => {
     answering(detail({ wantMissing: true }));
     opened();
 
-    expect(await screen.findByText('Wanting missing')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Want 2 missing' })).toBeNull();
+    expect(await screen.findByText('Missing on wishlist')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add 2 missing' })).toBeNull();
   });
 
   it('clears the standing want when Stop is pressed', async () => {
@@ -353,7 +353,7 @@ describe('wanting everything missing', () => {
     answeringWithActions(detail({ wantMissing: true }), seen);
     opened();
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual({
@@ -602,7 +602,7 @@ describe('wanting a release from its tile', () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'GNX')], seen);
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want GNX' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add GNX to wishlist' }));
 
     await waitFor(() =>
       expect(seen).toContainEqual(
@@ -629,7 +629,7 @@ describe('wanting a release from its tile', () => {
     opened();
     await fireEvent.click(await screen.findByRole('button', { name: 'Remove GNX' }));
 
-    expect(await screen.findByText(/^1 file deleted on .+\. Want it again to keep it\.$/)).toBeTruthy();
+    expect(await screen.findByText(/^1 file deleted on .+\. Add again to keep\.$/)).toBeTruthy();
   });
 
   it('counts a release the library holds whole as wanted', async () => {
@@ -664,7 +664,7 @@ describe('wanting a release from its tile', () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'GNX', leaving)], seen);
     opened();
-    const toggle = await screen.findByRole('button', { name: 'Want GNX' });
+    const toggle = await screen.findByRole('button', { name: 'Add GNX to wishlist' });
     await fireEvent.click(toggle);
 
     await waitFor(() =>
@@ -754,7 +754,7 @@ describe('the popular tracks', () => {
     const seen: Write[] = [];
     answeringReleases([releaseRow('r1', 'DAMN.')], seen, { items: [track()] });
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add HUMBLE. to wishlist' }));
 
     await waitFor(() => expect(seen[0]?.pathname).toBe('/api/v1/acquisition-targets'));
     expect(JSON.parse(seen[0].body ?? '{}').recordingId).toBe(
@@ -768,7 +768,7 @@ describe('the popular tracks', () => {
       items: [track({ trackId: 't1', albumId: 'r1' })]
     });
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Want HUMBLE.' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add HUMBLE. to wishlist' }));
 
     await waitFor(() => expect(seen[0]?.pathname).toBe('/api/v1/tracks/t1/wanted'));
   });
@@ -842,7 +842,7 @@ describe('the popular tracks', () => {
       ]
     });
     opened();
-    const toggle = await screen.findByRole('button', { name: 'Want HUMBLE.' });
+    const toggle = await screen.findByRole('button', { name: 'Add HUMBLE. to wishlist' });
     await fireEvent.click(toggle);
 
     await waitFor(() =>
@@ -881,7 +881,7 @@ describe('the releases fail to load', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(ArtistPage, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
-    expect(screen.queryByText('Nothing scanned yet')).toBeNull();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
+    expect(screen.queryByText('No releases yet')).toBeNull();
   });
 });

@@ -140,7 +140,7 @@ func (service *Service) Plan(ctx context.Context, requests []Request) ([]Placeme
 		name := replaceExtension(request.Name, policy.Target)
 		if _, clash := taken[strings.ToLower(name)]; clash {
 			placements[candidate.index].Note = fmt.Sprintf(
-				"Re-encoding %q would have taken the name of another file in this import, so it was imported as it arrived.",
+				"Kept as it arrived. Re-encoding %q would clash with another file's name.",
 				request.Name)
 			continue
 		}
@@ -152,7 +152,7 @@ func (service *Service) Plan(ctx context.Context, requests []Request) ([]Placeme
 		info, err := os.Stat(encoded)
 		if err != nil {
 			placements[candidate.index].Note =
-				"The smaller copy could not be read back, so the file was imported as it arrived."
+				"Kept as it arrived. Couldn't read the smaller copy back."
 			continue
 		}
 		// A copy that is not smaller is the whole reason for the setting
@@ -161,7 +161,7 @@ func (service *Service) Plan(ctx context.Context, requests []Request) ([]Placeme
 		// tiny and a fixed rate is not.
 		if info.Size() >= request.SizeBytes {
 			placements[candidate.index].Note = fmt.Sprintf(
-				"%q would be no smaller in %s, so it was imported as it arrived.",
+				"Kept as it arrived. %q isn't smaller in %s.",
 				request.Name, strings.ToUpper(policy.Target))
 			continue
 		}
@@ -224,17 +224,17 @@ func (service *Service) encode(
 	if err := service.encoder.Encode(ctx, policy, request.Source, destination); err != nil {
 		service.logger.Warn().Err(err).Str("file", request.Name).
 			Msg("a smaller copy could not be made; the file was imported as it arrived")
-		return "A smaller copy could not be made, so the file was imported as it arrived."
+		return "Kept as it arrived. Couldn't make a smaller copy."
 	}
 	written, err := tagging.ReadProperties(destination)
 	if err != nil || !written.Known() {
-		return "The smaller copy is not audio anything can read, so the file was imported as it arrived."
+		return "Kept as it arrived. The smaller copy isn't readable audio."
 	}
 	if difference(written.DurationMS, source.DurationMS) > ToleranceMS {
 		service.logger.Warn().Str("file", request.Name).
 			Int("source_ms", source.DurationMS).Int("encoded_ms", written.DurationMS).
 			Msg("a smaller copy came out the wrong length; the file was imported as it arrived")
-		return "The smaller copy is not the same length as the file, so the file was imported as it arrived."
+		return "Kept as it arrived. The smaller copy had the wrong length."
 	}
 	return ""
 }

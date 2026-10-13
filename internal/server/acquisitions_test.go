@@ -2974,10 +2974,10 @@ func TestEveryRefusalToTakeAnAnswerBackSaysWhatToDoInstead(t *testing.T) {
 		says string
 	}{
 		{db.ErrCopyIsInTheLibrary, "Remove the file from the library instead."},
-		{db.ErrWantAnsweredAnotherWay, "This wishlist entry has already been answered another way since."},
-		{db.ErrRecordingWantedElsewhere, "Another wishlist entry is already looking for this recording."},
-		{db.ErrEntryResolvedAgain, "This entry has already been resolved again."},
-		{db.ErrSchallDecidedThis, "Answer the question it raised instead."},
+		{db.ErrWantAnsweredAnotherWay, "This song was decided another way since."},
+		{db.ErrRecordingWantedElsewhere, "This song is already on the wishlist."},
+		{db.ErrEntryResolvedAgain, "This song was matched again since."},
+		{db.ErrSchallDecidedThis, "Answer it in Review instead."},
 	} {
 		handler := acquisitionHandler(&fakeAcquisitionTargets{takeBackErr: refusal.err})
 
@@ -3159,8 +3159,7 @@ func TestTheReviewQueueSaysAWantIsWaitingOnMusicBrainz(t *testing.T) {
 		copies: []db.AcquisitionTargetFileRow{{
 			ID: uuid.New(), Provider: "slskd", SourceUsername: "peer",
 			FileName: "03.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall",
-			Summary: unaskedRegistrationSummary +
-				" whether that is this track entered twice. Kept as a question.",
+			Summary: unaskedRegistrationSummary + ".",
 		}},
 	}
 	handler := acquisitionHandler(targets)
@@ -3197,8 +3196,7 @@ func TestAWantThatHasStoppedWaitingSaysSoInTheQueue(t *testing.T) {
 		copies: []db.AcquisitionTargetFileRow{{
 			ID: uuid.New(), Provider: "slskd", SourceUsername: "peer",
 			FileName: "03.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall",
-			Summary: unaskedRegistrationSummary +
-				" whether that is this track entered twice. Kept as a question.",
+			Summary: unaskedRegistrationSummary + ".",
 		}},
 	}
 	handler := acquisitionHandler(targets)

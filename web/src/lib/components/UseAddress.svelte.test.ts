@@ -39,10 +39,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Use address', () => {
+describe('Use link', () => {
   it('puts the cursor in the address field when it opens', async () => {
     opened();
-    await fireEvent.click(screen.getByRole('button', { name: 'Use address' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Use link' }));
 
     const input = await screen.findByRole('textbox', {
       name: 'Track link on SoundCloud, YouTube or Bandcamp'
@@ -52,7 +52,7 @@ describe('Use address', () => {
 
   it('says which links it takes', async () => {
     opened();
-    await fireEvent.click(screen.getByRole('button', { name: 'Use address' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Use link' }));
 
     const input = await screen.findByRole('textbox', {
       name: 'Track link on SoundCloud, YouTube or Bandcamp'
@@ -67,7 +67,7 @@ describe('Use address', () => {
     );
 
     opened();
-    await fireEvent.click(screen.getByText('Use address'));
+    await fireEvent.click(screen.getByText('Use link'));
     const input = await screen.findByRole('textbox', { name: 'Track link on SoundCloud, YouTube or Bandcamp' });
     await fireEvent.input(input, {
       target: { value: address }
@@ -75,7 +75,7 @@ describe('Use address', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
 
     expect(await screen.findByText('Source song · Source artist')).toBeTruthy();
-    expect(screen.getByText('3:07 · length differs by more than 5 seconds')).toBeTruthy();
+    expect(screen.getByText('3:07 · over 5s off')).toBeTruthy();
   });
 
   it('sends the confirmed address and external ID to the target', async () => {
@@ -89,14 +89,14 @@ describe('Use address', () => {
     );
 
     opened();
-    await fireEvent.click(screen.getByText('Use address'));
+    await fireEvent.click(screen.getByText('Use link'));
     const input = await screen.findByRole('textbox', { name: 'Track link on SoundCloud, YouTube or Bandcamp' });
     await fireEvent.input(input, {
       target: { value: address }
     });
     await fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
     await screen.findByText('Source song · Source artist');
-    const useButtons = screen.getAllByRole('button', { name: 'Use address' });
+    const useButtons = screen.getAllByRole('button', { name: 'Use link' });
     await fireEvent.click(useButtons[useButtons.length - 1]);
 
     await waitFor(() => expect(sent).toHaveLength(2));

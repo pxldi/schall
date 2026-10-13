@@ -239,7 +239,7 @@ describe('an empty list', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Missing' }));
 
-    expect(await screen.findByText('Every file is where the library left it')).toBeTruthy();
+    expect(await screen.findByText('No missing files')).toBeTruthy();
   });
 
   // "Already held" is about a decision; the reader who pressed it almost always
@@ -257,7 +257,7 @@ describe('an empty list', () => {
     await screen.findByRole('button', { name: 'Already held' });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Already held' }));
-    expect(await screen.findByText(/2 recordings more than once/)).toBeTruthy();
+    expect(await screen.findByText(/2 songs are held twice/)).toBeTruthy();
     const pointer = await screen.findByRole('button', { name: 'Open Held twice' });
     await fireEvent.click(pointer);
 
@@ -271,9 +271,9 @@ describe('an empty list', () => {
     await screen.findByRole('button', { name: 'Already held' });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Already held' }));
-    await screen.findByText('No file is blocked by a decision');
+    await screen.findByText('No files already held');
 
-    expect(screen.queryByRole('button', { name: /more than once/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open Held twice' })).toBeNull();
   });
 });
 
@@ -299,7 +299,7 @@ describe('the file list request failing', () => {
     );
     opened();
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.queryByText('No audio files found')).toBeNull();
     expect(screen.queryByText('Add a music folder below, then scan it.')).toBeNull();
   });
@@ -450,7 +450,7 @@ describe('the format column', () => {
     opened();
 
     const tag = await screen.findByText('ambiguous');
-    expect(tag.getAttribute('title')).toBe('More than one catalogue track fits this file');
+    expect(tag.getAttribute('title')).toBe('Fits more than one track');
   });
 });
 

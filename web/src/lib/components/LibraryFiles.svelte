@@ -258,47 +258,46 @@
   } => {
     if (fileSearch) {
       return {
-        heading: 'Nothing matched that search',
-        detail: `No file's path or tags contain ${fileSearch}.`
+        heading: 'No matches',
+        detail: `No file path or tag contains ${fileSearch}.`
       };
     }
     if (setAsideOnly) {
-      return { heading: 'No files are set aside', detail: '' };
+      return { heading: 'No set-aside files', detail: '' };
     }
     if (resolution && !status) {
-      return { heading: 'No file is in that identity state', detail: '' };
+      return { heading: 'No files in that state', detail: '' };
     }
     switch (status) {
       case 'duplicate': {
         const held = $heldTwice.data?.total ?? 0;
         const base =
-          'This is for a file whose every candidate track somebody has already ' +
-          'matched by hand, so nothing can be asked about it.';
+          'Files whose every possible track you already matched by hand.';
         return {
-          heading: 'No file is blocked by a decision',
+          heading: 'No files already held',
           detail:
             held > 0
-              ? `${base} The library holds ${held} ${held === 1 ? 'recording' : 'recordings'} more than once.`
+              ? `${base} ${held} ${held === 1 ? 'song is' : 'songs are'} held twice.`
               : base,
           elsewhere: held > 0 && onheldtwice ? { label: 'Open Held twice' } : undefined
         };
       }
       case 'missing':
         return {
-          heading: 'Every file is where the library left it',
-          detail: 'A file here would be one the last scan did not find on disk.'
+          heading: 'No missing files',
+          detail: ''
         };
       case 'unreadable':
         return {
-          heading: 'Every file could be read',
-          detail: 'A file here would be one on disk that the scanner could not open.'
+          heading: 'No unreadable files',
+          detail: ''
         };
       case 'matched':
-        return { heading: 'No file is matched to a catalogue track', detail: '' };
+        return { heading: 'No matched files', detail: '' };
       case 'unmatched':
-        return { heading: 'Every file is matched or being asked about', detail: '' };
+        return { heading: 'No unmatched files', detail: '' };
       case 'ambiguous':
-        return { heading: 'No file is waiting on a matching decision', detail: '' };
+        return { heading: 'No ambiguous files', detail: '' };
       default:
         return {
           heading: 'No audio files found',
@@ -556,7 +555,7 @@
     <ErrorNote error={$roots.error} retry={() => $roots.refetch()} />
   {/if}
   {#if $summary.data?.scanStatus === 'failed'}
-    {@render Problem($summary.data.scanError ?? 'The last library scan failed.')}
+    {@render Problem($summary.data.scanError ?? 'Last scan failed.')}
   {/if}
 
   {#if showFolders}
@@ -578,7 +577,7 @@
         </Button>
       </form>
       <span class="text-meta leading-relaxed text-ink-3">
-        must exist in the container, inside an allowed root
+        a path inside the container, under an allowed root
       </span>
       {#if $addRoot.isError}<ErrorNote error={$addRoot.error} />{/if}
 
@@ -861,7 +860,8 @@
                           variant="ghost"
                           size="sm"
                           icon
-                          title="What is this file?"
+                          title="Identify"
+                          aria-label="Identify"
                           onclick={() => showIdentity(file.id)}
                         >
                           <Icon name="fingerprint" size={13} />
@@ -877,7 +877,8 @@
                           variant="ghost"
                           size="sm"
                           icon
-                          title="This is a SoundCloud track"
+                          title="Name from SoundCloud"
+                          aria-label="Name from SoundCloud"
                           onclick={() => nameFromSoundCloud(file)}
                         >
                           <Icon name="link" size={13} />
@@ -889,6 +890,7 @@
                           icon
                           href={file.identityUrl}
                           title="Open on SoundCloud"
+                          aria-label="Open on SoundCloud"
                         >
                           <Icon name="external" size={13} />
                         </Button>
@@ -957,7 +959,7 @@
            does not also appear. -->
       <EmptyPanel
         role={scanning ? 'busy' : 'idle'}
-        heading={scanning ? 'Scanning for audio files' : empty.heading}
+        heading={scanning ? 'Scanning' : empty.heading}
       >
         {#if !scanning && empty.detail}
           <p class="text-meta leading-relaxed text-ink-3">{empty.detail}</p>

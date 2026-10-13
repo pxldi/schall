@@ -147,15 +147,15 @@ func validateNotificationSettings(input notificationSettingsRequest) []string {
 		address, err := url.Parse(input.Endpoint)
 		switch {
 		case err != nil:
-			problems = append(problems, "The address is not a web address.")
+			problems = append(problems, "That's not a web address.")
 		case address.Scheme != "http" && address.Scheme != "https":
 			problems = append(problems, "The address must start with http:// or https://.")
 		case address.Host == "":
-			problems = append(problems, "The address has no server in it.")
+			problems = append(problems, "The address has no server.")
 		}
 	}
 	if input.Token != "" && input.ClearToken {
-		problems = append(problems, "A token cannot be set and removed in one save.")
+		problems = append(problems, "Set or remove the token, not both.")
 	}
 	return problems
 }
@@ -172,17 +172,17 @@ func (api *API) testNotification(response http.ResponseWriter, request *http.Req
 	}
 	if api.notifier == nil {
 		api.problem(response, http.StatusServiceUnavailable, "notifications are unavailable",
-			[]string{"This installation cannot send them."})
+			[]string{"Notifications aren't set up on this server."})
 		return
 	}
 	err := api.notifier.Send(request.Context(), notify.Message{
 		Title: "Schall is connected",
-		Body:  "This is the test message. Real ones arrive when the review queue has a question.",
+		Body:  "Schall test message. Real ones arrive when Review needs you.",
 	})
 	switch {
 	case errors.Is(err, notify.ErrNotConfigured):
 		api.problem(response, http.StatusUnprocessableEntity, "there is nowhere to send to",
-			[]string{"Enter the address and save it, then test again."})
+			[]string{"Enter the address and save, then test again."})
 		return
 	case err != nil:
 		// The address is the user's, the server at the end of it is the user's,

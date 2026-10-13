@@ -673,7 +673,7 @@
     <div class="-my-1 -mr-1.5 flex items-center gap-1.5">
       <span class="flex items-center gap-1.5 text-meta text-ink-3">
         <Icon name="want" size={14} />
-        Wishlist entry
+        On your wishlist
       </span>
       <Button
         class="ml-auto"
@@ -714,7 +714,7 @@
 <div class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6">
   {#if pageError}
     <div class="py-10">
-      <ErrorNote error={pageError} fallback="The review queue could not be read." retry={retryQueue} />
+      <ErrorNote error={pageError} fallback="Couldn't load the review queue." retry={retryQueue} />
     </div>
   {:else}
   <Settle
@@ -815,7 +815,7 @@
         <!-- A read that failed after questions arrived keeps them on screen:
              the note sits where the next page would have been announced. -->
         <div class="border-t border-line-thin px-4 py-2.5">
-          <ErrorNote bare error={loadError} fallback="The rest of the queue did not load." retry={retryQueue} />
+          <ErrorNote bare error={loadError} fallback="Couldn't load the rest of the queue." retry={retryQueue} />
         </div>
       {/if}
 
@@ -1071,9 +1071,10 @@
             <Button
               variant="outline"
               disabled={deciding}
+              title="Remove from wishlist"
               onclick={() => $notWanted.mutate(current.want!.target.id)}
             >
-              Don't want
+              Remove
             </Button>
           {/if}
           {#if current.kind === 'downloaded' && !filed && current.want}
@@ -1097,7 +1098,7 @@
             >
           {:else if current.kind === 'version'}
             <Button disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
-              Use recording
+              Use version
             </Button>
           {/if}
         {/if}

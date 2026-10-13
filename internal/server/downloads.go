@@ -575,7 +575,7 @@ func (api *API) duplicateConflict(response http.ResponseWriter, evidence db.Dupl
 		"status": http.StatusConflict,
 		"details": []string{
 			evidence.Summary,
-			"Confirm to download it anyway, or resolve the files in the Library view first.",
+			"Download anyway, or sort out the files in Library first.",
 		},
 		"duplicates": evidence,
 	})
@@ -604,7 +604,7 @@ func (api *API) sourceChangeConflict(response http.ResponseWriter, offer downloa
 		details = append(details, "Offered at a different size: "+strings.Join(offer.Changed, ", "))
 	}
 	details = append(details,
-		"Start it anyway to take what is still there, or search the release again for another source.")
+		"Start anyway to get what's left, or search again.")
 
 	api.writeJSON(response, http.StatusConflict, map[string]any{
 		"title":   "the peer no longer offers this folder as it was recorded",
@@ -779,7 +779,7 @@ func (api *API) retryDownload(response http.ResponseWriter, request *http.Reques
 	case errors.Is(err, pgx.ErrNoRows):
 		api.problem(response, http.StatusConflict,
 			"no failed download request with that ID can be retried",
-			[]string{"Only a request whose transfers settled with a failure can be retried."})
+			[]string{"Only failed downloads can be retried."})
 		return
 	case errors.Is(err, db.ErrNothingToRetry):
 		api.problem(response, http.StatusConflict, "there is nothing to retry", []string{err.Error()})
@@ -789,9 +789,7 @@ func (api *API) retryDownload(response http.ResponseWriter, request *http.Reques
 		return
 	case errors.Is(err, db.ErrWantHasAnotherCopy):
 		api.problem(response, http.StatusConflict, "this wishlist entry is already following another copy",
-			[]string{"A wanted recording is pursued one copy at a time. " +
-				"This one only failed to arrive, which rules nothing out, so it stays " +
-				"in the running and will be asked for again."})
+			[]string{"Schall fetches one copy at a time. This one will be tried again later."})
 		return
 	case errors.Is(err, db.ErrNoRemotePath):
 		api.problem(response, http.StatusUnprocessableEntity, "this request cannot be retried",
@@ -986,8 +984,7 @@ func (api *API) resolveImportTrack(response http.ResponseWriter, request *http.R
 	case !file.Resolvable:
 		api.problem(response, http.StatusUnprocessableEntity, "this file cannot be resolved by hand",
 			append([]string{
-				"Only a disagreement about which track a file is can be decided. " +
-					"A file that is missing, damaged, or unreadable has to be downloaded again.",
+				"Only a track mix-up can be fixed by hand. Download missing or damaged files again.",
 			}, file.Problems...))
 		return
 	}
@@ -1149,7 +1146,7 @@ func (api *API) replyToPeer(response http.ResponseWriter, request *http.Request)
 	switch err := api.challenges.Reply(request.Context(), username, message); {
 	case errors.Is(err, peerchallenge.ErrNoQuestion):
 		api.problem(response, http.StatusConflict, "this peer has not asked anything",
-			[]string{"The question was answered already. Reload the page."})
+			[]string{"Already answered. Reload the page."})
 		return
 	case errors.Is(err, sources.ErrNotConfigured):
 		api.problem(response, http.StatusServiceUnavailable, "no download source is configured",

@@ -128,7 +128,7 @@
     return playlist.source === 'weekly' || playlist.source === 'new_releases';
   }
 
-  // The list Stop following was pressed on, while the question is open.
+  // The list Unfollow was pressed on, while the question is open.
   let removing = $state<Playlist | null>(null);
   let removeOpen = $state(false);
   function confirmRemove(playlist: Playlist) {
@@ -141,9 +141,9 @@
 
 <ConfirmDialog
   bind:open={removeOpen}
-  title={`Stop following “${removing?.name ?? ''}”?`}
-  description="Schall stops tracking its songs. Songs already wanted stay wanted."
-  action="Stop following"
+  title={`Unfollow “${removing?.name ?? ''}”?`}
+  description="Songs already on your wishlist stay there."
+  action="Unfollow"
   keep="Keep following"
   onconfirm={() => removing && $remove.mutate(removing.id)}
 />
@@ -300,9 +300,9 @@
                       variant="ghost"
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
-                      title="Stop following"
+                      title="Unfollow"
                     >
-                      <Icon name="unfollow" size="sm" /><span class="max-lg:sr-only">Stop following</span>
+                      <Icon name="unfollow" size="sm" /><span class="max-lg:sr-only">Unfollow</span>
                     </Button>
                   {/if}
                 </span>

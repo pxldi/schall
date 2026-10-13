@@ -98,15 +98,15 @@ func score(candidate Candidate, query Query, preferences Preferences) (float64, 
 			speed = 1
 		}
 		total += speed * speedWeight
-		reasons = append(reasons, fmt.Sprintf("Peer uploads at %s", formatSpeed(candidate.UploadSpeed)))
+		reasons = append(reasons, fmt.Sprintf("Uploads at %s", formatSpeed(candidate.UploadSpeed)))
 	} else {
-		reasons = append(reasons, "Peer upload speed is unknown")
+		reasons = append(reasons, "Upload speed unknown")
 	}
 
 	if consistentFormat(candidate) {
 		total += consistencyWeight
 	} else {
-		reasons = append(reasons, "Folder mixes several audio formats")
+		reasons = append(reasons, "Mixed audio formats")
 	}
 
 	return round(total), reasons
@@ -118,13 +118,13 @@ func scoreFormat(candidate Candidate) (float64, string) {
 		return 1, fmt.Sprintf("Lossless %s", strings.ToUpper(format))
 	}
 	if format == "" {
-		return 0.25, "Audio format could not be determined"
+		return 0.25, "Unknown audio format"
 	}
 	bitRate := candidate.AverageBitRate
 	label := strings.ToUpper(format)
 	switch {
 	case bitRate == 0:
-		return 0.25, fmt.Sprintf("%s at an unknown bitrate", label)
+		return 0.25, fmt.Sprintf("%s, bit rate unknown", label)
 	case bitRate >= 320:
 		return 0.75, fmt.Sprintf("%s at %d kbps", label, bitRate)
 	case bitRate >= 256:
@@ -132,7 +132,7 @@ func scoreFormat(candidate Candidate) (float64, string) {
 	case bitRate >= 192:
 		return 0.35, fmt.Sprintf("%s at %d kbps", label, bitRate)
 	default:
-		return 0.10, fmt.Sprintf("Low bitrate %s at %d kbps", label, bitRate)
+		return 0.10, fmt.Sprintf("Low bit rate %s at %d kbps", label, bitRate)
 	}
 }
 
@@ -144,18 +144,18 @@ func scoreCompleteness(candidate Candidate, query Query) (float64, string) {
 	}
 	switch difference := found - expected; {
 	case difference == 0:
-		return 1, fmt.Sprintf("All %d catalogue tracks present", expected)
+		return 1, fmt.Sprintf("All %d tracks present", expected)
 	// Oversupply is graded rather than flat. A folder with a couple of extra
 	// files is usually the release plus bonus tracks, while one holding half
 	// again as many is usually a different edition, a box set, or a whole
 	// discography, and acquiring it means sorting it out by hand afterwards.
 	case difference > 0 && difference <= 2:
-		return 0.75, fmt.Sprintf("%s offered, a little more than the %d-track release",
+		return 0.75, fmt.Sprintf("%s offered, a few more than the %d-track release",
 			pluralTracks(found), expected)
 	case difference > 0 && found*2 <= expected*3:
 		return 0.55, fmt.Sprintf("%s offered for a %d-track release", pluralTracks(found), expected)
 	case difference > 0:
-		return 0.3, fmt.Sprintf("%s offered for a %d-track release, likely a different edition",
+		return 0.3, fmt.Sprintf("%s offered for a %d-track release, probably another edition",
 			pluralTracks(found), expected)
 	case difference >= -2:
 		return 0.4, fmt.Sprintf("Missing %s of %d", pluralTracks(-difference), expected)
@@ -169,7 +169,7 @@ func scoreAvailability(candidate Candidate) (float64, string) {
 		return 1, "Free upload slot"
 	}
 	if candidate.QueueLength <= 0 {
-		return 0.6, "No free slot, but the queue is empty"
+		return 0.6, "No free slot, empty queue"
 	}
 	// Queues grow long quickly on Soulseek; decay rather than disqualify.
 	return 1 / (1 + float64(candidate.QueueLength)/5),

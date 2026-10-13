@@ -1925,14 +1925,14 @@ func (q *Queries) RearmWantNowAnchored(
 // of them claims an outcome: what happens next is what the sweep is about to
 // work out.
 const (
-	RearmedByADecisionSummary = "You decided what that file is. This wishlist entry is being looked at again."
-	RearmedByADeletionSummary = "The copy in your library was deleted. This recording is being looked for again."
-	RearmedByARefilingSummary = "Your library files that copy under this recording now. This wishlist entry is being looked at again."
-	RearmedByAnAnchorSummary  = "There is a sample of this recording to compare copies against now. This wishlist entry is being looked at again."
+	RearmedByADecisionSummary = "You decided what the file is. Checking again."
+	RearmedByADeletionSummary = "Your copy was deleted. Looking for it again."
+	RearmedByARefilingSummary = "Library now files the copy as this song. Checking again."
+	RearmedByAnAnchorSummary  = "Sample found. Checking copies again."
 	// What a want is told when the library answered what the file it holds is,
 	// by itself rather than because somebody said so. It is the fact the want
 	// stopped waiting for.
-	RearmedByAResolutionSummary = "Your library has said what that file is. This wishlist entry is being looked at again."
+	RearmedByAResolutionSummary = "Library identified the file. Checking again."
 )
 
 // RecordFileRemoved writes down that this file is gone, on every copy that
@@ -2100,7 +2100,7 @@ func (q *Queries) DeferAcquisitionTarget(
 // request now. It is load-bearing rather than decoration: the acquisition loop
 // reads it back to tell this copy from one that genuinely failed to arrive, and
 // rests it for minutes rather than for a day. Change it in one place only.
-const DeferredByPeerSummary = "The peer is already sending as much as it will take at once, so this copy was not sent. Nothing about the music was learned."
+const DeferredByPeerSummary = "Peer busy. Copy not sent."
 
 // DeferAcquiredFetch records a copy a peer declined for load rather than
 // refused. The verdict is the same 'undelivered' any transfer that did not
@@ -2151,7 +2151,7 @@ func (q *Queries) ReleaseStaleFetches(ctx context.Context, targetID uuid.UUID) e
 	_, err := q.db.Exec(ctx, `
 		UPDATE acquisition_target_files files
 		SET verdict = 'undelivered',
-		    summary = 'The transfer settled without the copy arriving.',
+		    summary = 'Download ended without the file.',
 		    decided_at = now(), updated_at = now()
 		FROM download_requests requests
 		WHERE files.download_request_id = requests.id
@@ -2574,9 +2574,9 @@ func completeSourceCopy(
 	provesTheKey := keyedTo == "" || keyedTo == key.ExternalID
 	proof := append([]string{}, accepted.evidence.Agrees...)
 	if anchor := accepted.evidence.Anchor; anchor != nil {
-		proof = append(proof, fmt.Sprintf("anchor: %s %s", anchor.Source, anchor.Reference))
+		proof = append(proof, fmt.Sprintf("sample: %s %s", anchor.Source, anchor.Reference))
 		if anchor.Measured {
-			proof = append(proof, fmt.Sprintf("bit error rate against the anchor: %.4f", anchor.Rate))
+			proof = append(proof, fmt.Sprintf("bit error rate vs sample: %.4f", anchor.Rate))
 		}
 	}
 	encoded, err := json.Marshal(proof)
@@ -3291,9 +3291,9 @@ func (q *Queries) CopiesToJudgeAgainForWant(
 // the two rows are one track entered twice. The sentence itself belongs to
 // downloads; this is the prefix the queries that look for those copies match on,
 // written once so the three of them cannot drift apart. Migration 00089 carries
-// a fourth copy of it, and an applied migration is never edited.
-const unaskedRegistrationSummary = "The audio was identified as another recording, " +
-	"and MusicBrainz could not be asked"
+// a fourth copy of the old wording, and an applied migration is never edited;
+// 00115 rewrote the stored rows to this one.
+const unaskedRegistrationSummary = "Sounds like another MusicBrainz song. MusicBrainz unreachable"
 
 // libraryCanSpeakForTheWant is "the library holds a file proven to be the
 // recording this want names", in the terms SettledWitnesses reads it: an
