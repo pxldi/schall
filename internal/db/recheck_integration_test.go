@@ -337,7 +337,9 @@ func TestASettledLibraryWitnessOffersAWantsCopiesAgain(t *testing.T) {
 	defer cancel()
 	pool := dbtest.Setup(t)
 	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
-	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, `{}`)
+	// Already looked up in AccurateRip, so only the witness can offer it.
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
+		`{"disc": {"silence": "No rip matches."}}`)
 
 	offered, err := queries.CopiesToJudgeAgainForWant(ctx, targetID, time.Time{})
 	if err != nil {
@@ -365,7 +367,9 @@ func TestTheWholeCollectionPassIgnoresASettledWitness(t *testing.T) {
 	defer cancel()
 	pool := dbtest.Setup(t)
 	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
-	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, `{}`)
+	// Already looked up in AccurateRip, so only the witness can offer it.
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
+		`{"disc": {"silence": "No rip matches."}}`)
 	settledWitnessFor(ctx, t, pool, recordingOf(ctx, t, pool, targetID))
 
 	offered, err := queries.CopiesToJudgeAgain(ctx)

@@ -66,8 +66,11 @@ type AcquiredFileEvidence struct {
 	// holds and has already proven. It is the third witness computed from the
 	// sound, and the only one that needs nobody outside the machine.
 	Witness *ImportWitness `json:"witness,omitempty"`
-	Agrees  []string       `json:"agrees"`
-	Differs []string       `json:"differs"`
+	// Disc is this copy looked up in AccurateRip under the CDs MusicBrainz
+	// lists its recording on. Like Witness it admits and never refuses.
+	Disc    *ImportDisc `json:"disc,omitempty"`
+	Agrees  []string    `json:"agrees"`
+	Differs []string    `json:"differs"`
 	// Method names what proved it and is empty when nothing did; Confidence is
 	// what that method is worth. Both are taken from the grader rather than
 	// decided here, so the identity the library file is given later says exactly
@@ -3360,6 +3363,13 @@ func (q *Queries) copiesToJudgeAgain(
 		       OR (copies.verdict = 'held' AND jsonb_array_length(coalesce(
 		              copies.evidence->'acoustic'->'clusters'->0->'recordingIds',
 		              '[]'::jsonb)) > 1)
+		       -- A held lossless copy nobody has looked up in AccurateRip, or
+		       -- one whose lookup could not reach it.
+		       OR (copies.verdict = 'held'
+		           AND targets.musicbrainz_recording_id IS NOT NULL
+		           AND lower(copies.file_name) ~ '\.(flac|wav|aiff?|wv|ape)$'
+		           AND (copies.evidence->'disc' IS NULL
+		                OR coalesce(copies.evidence->'disc'->>'unavailable', '') <> ''))
 		       OR ($1::uuid IS NOT NULL AND`+libraryCanSpeakForTheWant+`))
 		  AND requests.status = 'completed'
 		  AND requests.import_status <> 'validating'

@@ -1077,6 +1077,8 @@ func TestEveryMethodReadsAsASentence(t *testing.T) {
 		"fingerprint-and-release":                "AcoustID matched the audio to this song. Several fit; the album tag picked this one.",
 		"fingerprint-and-identifier-and-release": "AcoustID matched the audio, and its ID tag agrees. Several fit; the album tag picked this one.",
 		"title-artist-duration-and-release":      "Title, artist and length match. Several fit; the album tag picked this one.",
+		"cd-checksum":                            "Bit for bit this song's CD track, by AccurateRip.",
+		"cd-checksum-and-release":                "Bit for bit this song's CD track, by AccurateRip. Several fit; the album tag picked this one.",
 	}
 	for method, want := range cases {
 		if got := MethodSentence(method); got != want {

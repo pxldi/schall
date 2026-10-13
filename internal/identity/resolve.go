@@ -961,7 +961,7 @@ func (resolver *Resolver) Verify(
 	verification := Verification{
 		Agrees: agrees, Differs: differs,
 		Audio: level == byFingerprint || level == byFingerprintAndIdentifier ||
-			level == bySample || level == byLibraryWitness,
+			level == bySample || level == byLibraryWitness || level == byCDChecksum,
 		AudioSaysOtherwise:  pair.acoustic == tagmatch.Differs,
 		AnchorSaysOtherwise: pair.anchor == tagmatch.Differs,
 		AnchorAgrees:        pair.anchorReproduced,

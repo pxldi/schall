@@ -7,7 +7,7 @@
 -- Each rule replaces one old sentence, or one fmt-built shape of one, wherever
 -- it stands in a column: a copy's summary is a verdict sentence followed by
 -- the grader's, and an anchor reason can be two sentences joined. Rules run in
--- order. Migration 00116 rewrote the want sentences internal/acquisition
+-- order. Migration 00117 rewrote the want sentences internal/acquisition
 -- shares with internal/downloads. Release import reasons
 -- (internal/downloads/match.go) keep the text they were written with.
 -- +goose StatementBegin

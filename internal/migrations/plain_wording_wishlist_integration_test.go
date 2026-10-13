@@ -14,7 +14,7 @@ import (
 
 const plainWordingSchema = "schall_plain_wording_wishlist_check"
 
-// plainWordingBefore applies every migration before 00116 in a schema of its
+// plainWordingBefore applies every migration before 00117 in a schema of its
 // own and returns that schema's name.
 func plainWordingBefore(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (string, string) {
 	t.Helper()
@@ -34,7 +34,7 @@ func plainWordingBefore(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (
 		separator = "&"
 	}
 	scopedURL := databaseURL + separator + "search_path=" + schema + ",public"
-	if err := migrations.UpTo(ctx, scopedURL, 115); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 116); err != nil {
 		t.Fatalf("apply the migrations before the one under test: %v", err)
 	}
 	return schema, scopedURL
@@ -63,7 +63,7 @@ func plainWordingSummary(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 }
 
 // The acquisition loop compares a stranded want's summary and a copy's
-// deferred or never-sent summary exactly. Rows written before 00116 carry the
+// deferred or never-sent summary exactly. Rows written before 00117 carry the
 // old sentence, and would stop matching unless the migration moves them too.
 func TestTheMigrationRewordsTheSummariesTheLoopComparesExactly(t *testing.T) {
 	ctx := context.Background()
@@ -96,7 +96,7 @@ func TestTheMigrationRewordsTheSummariesTheLoopComparesExactly(t *testing.T) {
 		copyIDs[id] = want
 	}
 
-	if err := migrations.UpTo(ctx, scopedURL, 116); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 117); err != nil {
 		t.Fatalf("apply the migration under test: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestTheMigrationRewordsABuiltSummaryAroundItsNames(t *testing.T) {
 	floor := plainWordingWant(ctx, t, pool, schema,
 		"Only copies below your 320 kbps minimum were found. Looked at again weekly.")
 
-	if err := migrations.UpTo(ctx, scopedURL, 116); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 117); err != nil {
 		t.Fatalf("apply the migration under test: %v", err)
 	}
 

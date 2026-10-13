@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pxldi/schall/internal/accuraterip"
 	"github.com/pxldi/schall/internal/acquisition"
 	"github.com/pxldi/schall/internal/activity"
 	"github.com/pxldi/schall/internal/anchor"
@@ -499,6 +500,12 @@ func run() error {
 			// And the shape of that audio, read once and kept on the copy, for the
 			// card a person reads it on. It is a picture and decides nothing.
 			WithWaveforms(waveform.NewReader(waveform.Options{FFmpegPath: cfg.FFmpegPath})).
+			// What looks a lossless copy up in AccurateRip under the CDs
+			// MusicBrainz lists its recording on. A copy whose checksum is on
+			// file for that track is the track, bit for bit.
+			WithDiscChecker(accuraterip.NewChecker(
+				musicBrainzClient, accuraterip.NewClient(accuraterip.Options{}),
+				accuraterip.NewDecoder(cfg.FFmpegPath))).
 			// What writes a smaller copy of a file that is already proven. Like
 			// the acoustic check it reads its setting on every import, so
 			// turning it on takes effect without a restart; unlike it, it runs

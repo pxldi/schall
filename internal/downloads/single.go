@@ -225,6 +225,7 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 	// would spend a request on a question already answered.
 	importer.measureAgainstLibrary(ctx, row, audio, evidence)
 	importer.measureAgainstAnchor(ctx, row, audio, evidence)
+	importer.measureAgainstDisc(ctx, row, file.source, evidence)
 	importer.measureQuality(ctx, file.source, evidence)
 
 	measuredMS := audio.milliseconds()
@@ -846,6 +847,15 @@ func candidateEvidence(
 			CandidateCoverageSeconds: evidence.Witness.CandidateCoverageSeconds,
 		}
 	}
+	// A CD track the copy's checksum matched, and only a match. The check asked
+	// for the want's own recording, so the match answers for that one.
+	if evidence.Disc != nil && evidence.Disc.Matched {
+		releaseID, _ := uuid.Parse(evidence.Disc.ReleaseID)
+		result.Disc = &identity.DiscComparison{
+			RecordingID: anchoredTo, ReleaseID: releaseID,
+			Track: evidence.Disc.Track, Confidence: evidence.Disc.Confidence,
+		}
+	}
 	return result
 }
 
@@ -1140,6 +1150,7 @@ func (importer *Importer) importOnAnchor(
 	evidence *db.AcquiredFileEvidence, audio copyAudio,
 ) error {
 	importer.measureAgainstAnchor(ctx, row, audio, evidence)
+	importer.measureAgainstDisc(ctx, row, file.source, evidence)
 	importer.measureQuality(ctx, file.source, evidence)
 
 	measuredMS := audio.milliseconds()
