@@ -424,25 +424,24 @@ func (client *Client) ReleaseCatalogue(ctx context.Context, releaseGroupID, sele
 	if selectedReleaseID != uuid.Nil {
 		selected.ID = selectedReleaseID.String()
 	} else {
-		const pageSize = 100
-		candidates := make([]releaseItem, 0)
-		for offset := 0; ; offset += pageSize {
-			var page releaseBrowseResponse
-			_, err := client.getJSON(ctx, "/release", url.Values{
-				"release-group": []string{releaseGroupID.String()},
-				"fmt":           []string{"json"},
-				"limit":         []string{strconv.Itoa(pageSize)},
-				"offset":        []string{strconv.Itoa(offset)},
-			}, &page)
-			if err != nil {
-				return ReleaseCatalogue{}, fmt.Errorf("browse MusicBrainz releases: %w", err)
+		candidates, err := client.browseReleases(ctx, releaseGroupID)
+		if err != nil {
+			return ReleaseCatalogue{}, err
+		}
+		// A browse by a release group MusicBrainz merged into another answers
+		// with no releases, where a lookup follows the merge. So an empty browse
+		// asks where the release group went and reads the releases there.
+		if len(candidates) == 0 {
+			group, groupErr := client.ReleaseGroup(ctx, releaseGroupID)
+			if groupErr != nil && !errors.Is(groupErr, ErrNotFound) {
+				return ReleaseCatalogue{}, groupErr
 			}
-			candidates = append(candidates, page.Releases...)
-			if len(page.Releases) == 0 || offset+len(page.Releases) >= page.Count {
-				break
+			if group.MergedInto != uuid.Nil {
+				if candidates, err = client.browseReleases(ctx, group.MergedInto); err != nil {
+					return ReleaseCatalogue{}, err
+				}
 			}
 		}
-		var err error
 		selected, reason, err = selectRepresentativeRelease(candidates)
 		if err != nil {
 			return ReleaseCatalogue{}, err
@@ -537,6 +536,28 @@ func (client *Client) ReleaseCatalogue(ctx context.Context, releaseGroupID, sele
 	}
 	catalogue.Edition.TrackCount = len(catalogue.Tracks)
 	return catalogue, nil
+}
+
+// browseReleases reads every release MusicBrainz files under one release group.
+func (client *Client) browseReleases(ctx context.Context, releaseGroupID uuid.UUID) ([]releaseItem, error) {
+	const pageSize = 100
+	candidates := make([]releaseItem, 0)
+	for offset := 0; ; offset += pageSize {
+		var page releaseBrowseResponse
+		_, err := client.getJSON(ctx, "/release", url.Values{
+			"release-group": []string{releaseGroupID.String()},
+			"fmt":           []string{"json"},
+			"limit":         []string{strconv.Itoa(pageSize)},
+			"offset":        []string{strconv.Itoa(offset)},
+		}, &page)
+		if err != nil {
+			return nil, fmt.Errorf("browse MusicBrainz releases: %w", err)
+		}
+		candidates = append(candidates, page.Releases...)
+		if len(page.Releases) == 0 || offset+len(page.Releases) >= page.Count {
+			return candidates, nil
+		}
+	}
 }
 
 func selectRepresentativeRelease(candidates []releaseItem) (releaseItem, string, error) {

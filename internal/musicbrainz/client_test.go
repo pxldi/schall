@@ -1241,3 +1241,56 @@ func TestACatalogueTooLargeToReadIsRefusedAfterOneBrowse(t *testing.T) {
 		t.Errorf("browses = %d, want 1", browses)
 	}
 }
+
+// A browse by a release group MusicBrainz merged away answers with no
+// releases, while a lookup answers with the group it was merged into. Six
+// refreshes of one live album failed as "no usable editions" that way.
+func TestReleaseCatalogueReadsTheReleasesOfTheGroupAMergeLeadsTo(t *testing.T) {
+	merged, survivor, releaseID := uuid.New(), uuid.New(), uuid.New()
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/release":
+			if request.URL.Query().Get("release-group") == survivor.String() {
+				_, _ = response.Write([]byte(`{"release-count":1,"releases":[{"id":"` + releaseID.String() +
+					`","title":"Torquay Hotel","status":"Official"}]}`))
+				return
+			}
+			_, _ = response.Write([]byte(`{"release-count":0,"releases":[]}`))
+		case "/release-group/" + merged.String():
+			_, _ = response.Write([]byte(`{"id":"` + survivor.String() + `","title":"Torquay Hotel",` +
+				`"artist-credit":[{"name":"Ye","artist":{"id":"` + uuid.NewString() + `","name":"Ye"}}]}`))
+		case "/release/" + releaseID.String():
+			_, _ = response.Write([]byte(`{"id":"` + releaseID.String() +
+				`","title":"Torquay Hotel","status":"Official","media":[]}`))
+		default:
+			http.NotFound(response, request)
+		}
+	})
+
+	catalogue, err := client.ReleaseCatalogue(context.Background(), merged, uuid.Nil)
+	if err != nil {
+		t.Fatalf("ReleaseCatalogue() error = %v", err)
+	}
+	if catalogue.Edition.ID != releaseID {
+		t.Errorf("edition = %s, want the release filed under the group the merge leads to", catalogue.Edition.ID)
+	}
+}
+
+// A release group that still exists and simply has no releases stays an
+// answer: there is no other group to read them from.
+func TestReleaseCatalogueRefusesAGroupWithNoReleasesThatWasNotMerged(t *testing.T) {
+	groupID := uuid.New()
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release-group/"+groupID.String() {
+			_, _ = response.Write([]byte(`{"id":"` + groupID.String() + `","title":"Amazing",` +
+				`"artist-credit":[{"name":"Ye","artist":{"id":"` + uuid.NewString() + `","name":"Ye"}}]}`))
+			return
+		}
+		_, _ = response.Write([]byte(`{"release-count":0,"releases":[]}`))
+	})
+
+	_, err := client.ReleaseCatalogue(context.Background(), groupID, uuid.Nil)
+	if !errors.Is(err, ErrNoUsableEditions) {
+		t.Errorf("error = %v, want no usable editions", err)
+	}
+}
