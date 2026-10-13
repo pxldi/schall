@@ -35,6 +35,8 @@ type JudgedAgain struct {
 	Judged   int
 	Missing  int
 	Answered int
+	// Deferred is the copies a want's time ran out before, left as they were.
+	Deferred int
 }
 
 // JudgeAgain puts the copies a peer already sent through validation a second
@@ -80,7 +82,14 @@ var judgeCopyLimit = 5 * time.Minute
 
 // slowCopy is how long judging one copy may take before the log names it, so
 // a pass that crawls says which copy and how long.
-const slowCopy = time.Minute
+const slowCopy = 30 * time.Second
+
+// judgeWantLimit is how long a pass spends on one want's copies. Each copy is
+// several decodes and paced requests, so a want held in dozens of copies could
+// hold the pass for most of an hour with no copy slow enough to name. Copies
+// still waiting when it runs out keep the verdict they had, which is a question
+// for a person and never an admission, and the pass moves to the next want.
+var judgeWantLimit = 10 * time.Minute
 
 // judgeAgainWants is how many wants one part of a pass judges. Each copy is a
 // decode and an AcoustID lookup, so 20 wants is a few minutes of work: short
@@ -156,11 +165,16 @@ func (importer *Importer) judgeAgainPart(
 		for end < len(part) && part[end].AcquisitionTargetID == want {
 			end++
 		}
-		result, err := importer.judgeCopies(ctx, part[start:end])
+		copies := part[start:end]
+		importer.logger.Info().
+			Str("acquisition_target_id", want.String()).Int("copies", len(copies)).
+			Msg("judging a want's copies again")
+		result, err := importer.judgeCopiesWithin(ctx, copies, judgeWantLimit)
 		total.Offered += result.Offered
 		total.Judged += result.Judged
 		total.Missing += result.Missing
 		total.Answered += result.Answered
+		total.Deferred += result.Deferred
 		if err != nil {
 			return total, want, more, err
 		}
@@ -208,10 +222,28 @@ func (importer *Importer) judgeCreditRefusalsAgain(ctx context.Context) (JudgedA
 func (importer *Importer) judgeCopies(
 	ctx context.Context, copies []db.JudgeAgainRow,
 ) (JudgedAgain, error) {
+	return importer.judgeCopiesWithin(ctx, copies, 0)
+}
+
+// judgeCopiesWithin is judgeCopies that stops starting copies once limit has
+// passed. Zero means no limit. The copies it did not start are counted as
+// Deferred and left exactly as they are.
+func (importer *Importer) judgeCopiesWithin(
+	ctx context.Context, copies []db.JudgeAgainRow, limit time.Duration,
+) (JudgedAgain, error) {
 	var result JudgedAgain
 	result.Offered = len(copies)
+	started := time.Now()
 
-	for _, copied := range copies {
+	for index, copied := range copies {
+		if limit > 0 && time.Since(started) >= limit {
+			result.Deferred = len(copies) - index
+			importer.logger.Warn().
+				Str("acquisition_target_id", copied.AcquisitionTargetID.String()).
+				Int("left", result.Deferred).Dur("took", time.Since(started)).
+				Msg("a want's copies took too long to judge again; the rest keep their verdict")
+			break
+		}
 		// Asked per copy rather than once per want, because a copy judged a moment
 		// ago may have been the answer. Validation imports what it proves without
 		// asking whether the want was answered since, so this is what stops a want
@@ -254,7 +286,7 @@ func (importer *Importer) judgeCopies(
 	}
 	importer.logger.Info().
 		Str("acquisition_target_id", wantOf(copies)).
-		Int("offered", result.Offered).Int("judged", result.Judged).
+		Int("offered", result.Offered).Int("judged", result.Judged).Int("deferred", result.Deferred).
 		Int("missing", result.Missing).Int("already_answered", result.Answered).
 		Msg("copies already decided about were judged again")
 	return result, nil
