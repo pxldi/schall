@@ -589,6 +589,9 @@ func (service *Service) harvest(
 		return nil
 	}
 	taking := make([]chosen, 0, len(siblings))
+	// Each file goes to one want. Two siblings whose titles fit the same file
+	// would otherwise both be handed it in one batch.
+	takenPaths := map[string]bool{taken.File.Path: true}
 	for _, sibling := range siblings {
 		if len(taking) >= spare {
 			break
@@ -614,10 +617,12 @@ func (service *Service) harvest(
 		if sibling.EntryDurationMS.Valid {
 			wanted.DurationSeconds = int(sibling.EntryDurationMS.Int32) / 1000
 		}
-		offer, found := service.chooseFrom(ctx, sibling, candidates, wanted, taken, preferences)
+		offer, found := service.chooseFrom(
+			ctx, sibling, candidates, wanted, taken, takenPaths, preferences)
 		if !found {
 			continue
 		}
+		takenPaths[offer.File.Path] = true
 		taking = append(taking, chosen{target: sibling, offer: offer})
 	}
 	return taking
@@ -633,6 +638,7 @@ func (service *Service) chooseFrom(
 	candidates []sources.Candidate,
 	wanted sources.QueryTrack,
 	taken sources.Offer,
+	takenPaths map[string]bool,
 	preferences sources.Preferences,
 ) (sources.Offer, bool) {
 	verdicts, err := service.verdictsFor(ctx, sibling.ID)
@@ -650,7 +656,7 @@ func (service *Service) chooseFrom(
 		func(offer sources.Offer) bool {
 			return offer.Named &&
 				offer.Provider == taken.Provider && offer.Username == taken.Username &&
-				offer.Directory == taken.Directory && offer.File.Path != taken.File.Path
+				offer.Directory == taken.Directory && !takenPaths[offer.File.Path]
 		})
 }
 

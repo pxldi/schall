@@ -1862,6 +1862,39 @@ func TestAFolderFoundForOneWantIsReadForTheWantsSharingItsRelease(t *testing.T) 
 
 // One folder, one person, one question. Ten wants that all chose the same peer
 // and asked it ten times over is what "too many files" was the peer's answer to.
+// Two siblings whose titles both fit one file in the folder cannot both take
+// it. One file arrives once, and only one want's audio check can be about it.
+func TestOneFileInAFolderIsTakenForOneSiblingOnly(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter := &fakeHunter{candidates: offering(
+		sources.File{
+			Path: `Music\Portishead\Dummy\01 Mysterons.flac`, Name: "01 Mysterons.flac",
+			Extension: "flac", SizeBytes: 30_000_000, DurationSeconds: 305,
+		},
+		sources.File{
+			Path: `Music\Portishead\Dummy\05 Glory Box.flac`, Name: "05 Glory Box.flac",
+			Extension: "flac", SizeBytes: 25_000_000, DurationSeconds: 301,
+		},
+	)}
+	fetcher := &fakeFetcher{}
+	service := hunting(pool, hunter, fetcher, true)
+
+	releaseGroupID := uuid.New()
+	mysterons := wantOnARelease(ctx, t, service, pool, "Mysterons", 305_000, releaseGroupID)
+	first := wantOnARelease(ctx, t, service, pool, "Glory Box", 301_000, releaseGroupID)
+	second := wantOnARelease(ctx, t, service, pool, "Glory Box", 301_000, releaseGroupID)
+	if err := service.hunt(ctx, mysterons, nil); err != nil {
+		t.Fatalf("hunt() error = %v", err)
+	}
+
+	taken := len(offers(ctx, t, pool, first.ID)) + len(offers(ctx, t, pool, second.ID))
+	if taken != 1 {
+		t.Fatalf("the one Glory Box file was taken %d times, want once", taken)
+	}
+}
+
 // Not being able to read what was already tried is Schall's failure. Recording
 // it as nobody sharing the music would spend an attempt on a fact nobody learnt.
 func TestAWantWhoseTriedCopiesCannotBeReadSpendsNoAttempt(t *testing.T) {
