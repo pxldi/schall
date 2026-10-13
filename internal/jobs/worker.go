@@ -3946,7 +3946,9 @@ func truncateError(err error) string {
 	if len(message) <= maxLength {
 		return message
 	}
-	return message[:maxLength]
+	// Cut on a rune boundary: half a multi-byte character is invalid UTF-8,
+	// and Postgres refuses the whole row, so the failure would go unrecorded.
+	return strings.ToValidUTF8(message[:maxLength], "")
 }
 
 func wait(ctx context.Context, duration time.Duration) bool {

@@ -209,13 +209,13 @@ func (api *API) listRecommendations(response http.ResponseWriter, request *http.
 	asked := 0
 	if raw := strings.TrimSpace(request.URL.Query().Get("offset")); raw != "" {
 		asked++
-		value, err := strconv.Atoi(raw)
+		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed",
 				[]string{"offset must be zero or greater"})
 			return
 		}
-		offset = value
+		offset = int(value)
 	}
 	for name, target := range map[string]**int32{"after": &after, "before": &before} {
 		raw := strings.TrimSpace(request.URL.Query().Get(name))

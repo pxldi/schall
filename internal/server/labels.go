@@ -366,11 +366,15 @@ func (api *API) unfollowLabel(response http.ResponseWriter, request *http.Reques
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No row means the label is gone or was never followed. Saying which is
 		// more useful than reporting success for a change nobody made.
-		if _, lookupErr := api.labels.GetLabel(request.Context(), labelID); lookupErr == nil {
+		_, lookupErr := api.labels.GetLabel(request.Context(), labelID)
+		switch {
+		case lookupErr == nil:
 			api.problem(response, http.StatusConflict, "label is not followed", nil)
-			return
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			api.problem(response, http.StatusNotFound, "label not found", nil)
+		default:
+			api.internalError(response, request, lookupErr)
 		}
-		api.problem(response, http.StatusNotFound, "label not found", nil)
 		return
 	}
 	if err != nil {
