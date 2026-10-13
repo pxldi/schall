@@ -358,6 +358,73 @@ describe('the unidentified filter and inline decisions', () => {
   });
 });
 
+// What a file is, read when its row opens. An answer can arrive after the
+// reader has opened another file, and a manual decision made on the wrong
+// file's candidates would be permanent.
+describe('the identity of a file', () => {
+  const A = 'a0000000-0000-4000-8000-00000000000a';
+  const B = 'b0000000-0000-4000-8000-00000000000b';
+
+  function resolution(fileId: string, trackTitle: string) {
+    return {
+      fileId,
+      status: 'needs_review',
+      matchStatus: 'unmatched',
+      identity: null,
+      candidates: [
+        {
+          recordingId: `${fileId}-recording`,
+          artistName: 'Talk Talk',
+          trackTitle,
+          rank: 1,
+          agrees: [],
+          differs: [],
+          summary: ''
+        }
+      ]
+    };
+  }
+
+  it('shows only the candidates of the file opened last', async () => {
+    answering();
+    listed = [
+      file({ id: A, titleTag: 'Myrrhman', resolutionStatus: 'needs_review' }),
+      file({
+        id: B,
+        titleTag: 'Ascension Day',
+        path: '/music/02 Ascension Day.flac',
+        resolutionStatus: 'needs_review'
+      })
+    ];
+    let releaseA = () => {};
+    const heldA = new Promise<void>((resolve) => (releaseA = resolve));
+    const answer = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const path = new URL(String(input), 'http://localhost').pathname;
+      if (path === `/api/v1/library/files/${A}/identity`) {
+        await heldA;
+        return new Response(JSON.stringify(resolution(A, 'Candidate for A')), { status: 200 });
+      }
+      if (path === `/api/v1/library/files/${B}/identity`) {
+        return new Response(JSON.stringify(resolution(B, 'Candidate for B')), { status: 200 });
+      }
+      return answer(input, init);
+    });
+    opened();
+
+    await screen.findByText('Ascension Day');
+    const [whatIsA, whatIsB] = screen.getAllByRole('button', { name: 'What is this file?' });
+    await fireEvent.click(whatIsA);
+    await fireEvent.click(whatIsB);
+    expect((await screen.findAllByText(/Candidate for B/)).length).toBeGreaterThan(0);
+    releaseA();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(screen.queryAllByText(/Candidate for A/)).toHaveLength(0);
+    expect(screen.getAllByText(/Candidate for B/).length).toBeGreaterThan(0);
+  });
+});
+
 // How the rows are drawn, which is a different question from which rows they
 // are. Nothing below changes a filter, a search or a page: the same file is
 // listed in every one of them and what is asserted is where its parts sit.
