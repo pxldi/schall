@@ -141,9 +141,9 @@
 
 <ConfirmDialog
   bind:open={removeOpen}
-  title={`Stop following “${removing?.name ?? ''}”?`}
-  description="Schall stops tracking its songs. Songs already wanted stay wanted."
-  action="Stop following"
+  title={`Unfollow “${removing?.name ?? ''}”?`}
+  description="Songs already on your wishlist stay there."
+  action="Unfollow"
   keep="Keep following"
   onconfirm={() => removing && $remove.mutate(removing.id)}
 />
@@ -275,28 +275,37 @@
                     <Button
                       size="sm"
                       variant="ghost"
+                      icon
+                      title="Re-import"
+                      aria-label="Re-import"
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
                     >
-                      <Icon name="refresh" size="sm" /> Re-import
+                      <Icon name="refresh" size="sm" />
                     </Button>
                   {/if}
                   <Button
                     size="sm"
                     variant="ghost"
+                    icon
+                    title="Send to player"
+                    aria-label="Send to player"
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
                   >
-                    <Icon name="send" size="sm" /> Send to player
+                    <Icon name="send" size="sm" />
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
                       size="sm"
                       variant="ghost"
+                      icon
+                      title="Unfollow"
+                      aria-label="Unfollow"
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
                     >
-                      <Icon name="unfollow" size="sm" /> Stop following
+                      <Icon name="unfollow" size="sm" />
                     </Button>
                   {/if}
                 </span>

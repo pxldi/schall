@@ -130,7 +130,7 @@
 
 {#if failedCount}
   <div class="px-4 pb-2 sm:px-6">
-    <ErrorNote error={failedCount.error} fallback="The counts did not load." retry={retryCounts} />
+    <ErrorNote error={failedCount.error} fallback="Counts didn't load." retry={retryCounts} />
   </div>
 {/if}
 

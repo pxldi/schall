@@ -27,7 +27,7 @@ test('every suggestion offers a way to want it', async ({ page }) => {
   await page.goto('/playlists?view=recommended');
   await expect(page.getByText(seeded.recommendations.shown[0], { exact: true })).toBeVisible();
 
-  await expect(page.getByRole('button', { name: 'Want it' })).toHaveCount(
+  await expect(page.getByRole('button', { name: 'Add to wishlist' })).toHaveCount(
     seeded.recommendations.shown.length
   );
 });
@@ -46,9 +46,9 @@ test('a suggestion can be refused at the recording, the release or the artist', 
 
   const scopes = page.getByRole('menu', { name: 'Not interested' }).getByRole('menuitem');
   await expect(scopes).toHaveCount(3);
-  await expect(scopes.nth(0)).toContainText('This recording');
-  await expect(scopes.nth(1)).toContainText('Anything from this release');
-  await expect(scopes.nth(2)).toContainText('Anything by this artist');
+  await expect(scopes.nth(0)).toContainText('This song');
+  await expect(scopes.nth(1)).toContainText('This release');
+  await expect(scopes.nth(2)).toContainText('This artist');
 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu', { name: 'Not interested' })).toHaveCount(0);
@@ -87,7 +87,7 @@ test('a stored list with no sweep behind it is not called stale', async ({ page 
   await page.goto('/playlists?view=recommended');
   await expect(page.getByText(seeded.recommendations.shown[0], { exact: true })).toBeVisible();
 
-  await expect(page.getByText('This list stopped refreshing')).toHaveCount(0);
+  await expect(page.getByText('Stopped refreshing')).toHaveCount(0);
 });
 
 // The own engine needs no ListenBrainz account (ADR 0039). The fixture has no
@@ -99,7 +99,7 @@ test('the Schall list is read without a ListenBrainz account', async ({ page }) 
 
   await page.getByRole('button', { name: 'Schall', exact: true }).click();
 
-  await expect(page.getByText('No sweep has run yet')).toBeVisible();
+  await expect(page.getByText('Not built yet')).toBeVisible();
   await expect(page.getByText(seeded.recommendations.shown[0], { exact: true })).toHaveCount(0);
 });
 

@@ -155,7 +155,7 @@
                   <StateIcon
                     icon="delete"
                     label={`Deleted on ${calendarDate(track.removesAt)}`}
-                    note="Want it again to keep it"
+                    note="Add again to keep"
                   />
                 {:else if done}
                   <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />

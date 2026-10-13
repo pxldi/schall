@@ -7,7 +7,7 @@ describe('describeError', () => {
     const notice = describeError(
       new ApiError('slskd is not configured', 409, { title: 'slskd is not configured' })
     );
-    expect(notice.sentence).toBe('Schall has no download source, so nothing can be fetched.');
+    expect(notice.sentence).toBe('No download source set up.');
     expect(notice.action).toContain('Settings → Connections');
   });
 
@@ -19,7 +19,7 @@ describe('describeError', () => {
         title: 'refresh artist 91f2: artist has no MusicBrainz identity'
       })
     );
-    expect(notice.sentence).toContain('no MusicBrainz link for this artist');
+    expect(notice.sentence).toContain('This artist has no MusicBrainz link');
   });
 
   it('finds the sentinel in details, which the message prefers', () => {
@@ -29,18 +29,18 @@ describe('describeError', () => {
         details: ['artist not found']
       })
     );
-    expect(notice.sentence).toBe('This artist is not in the catalogue any more.');
+    expect(notice.sentence).toBe('This artist is gone.');
   });
 
   it('falls back to the status when no sentinel matches', () => {
     const notice = describeError(new ApiError('something nobody wrote a sentence for', 404));
-    expect(notice.sentence).toBe('That is not there any more.');
-    expect(notice.action).toBe('Reload the page to see what is.');
+    expect(notice.sentence).toBe("That's gone.");
+    expect(notice.action).toBe('Reload the page.');
   });
 
   it('says nothing answered when nothing answered', () => {
     const notice = describeError(new ApiError('The server did not answer.', 0));
-    expect(notice.sentence).toBe('Nothing answered. Schall may be restarting.');
+    expect(notice.sentence).toBe("Schall didn't answer. It may be restarting.");
     expect(notice.transient).toBe(true);
   });
 
@@ -55,14 +55,14 @@ describe('describeError', () => {
   it('treats any 5xx as a fault Schall may recover from', () => {
     for (const status of [500, 502, 503, 504, 599]) {
       const notice = describeError(new ApiError('unknown words', status));
-      expect(notice.sentence, `status ${status}`).toBe('Schall could not finish that.');
+      expect(notice.sentence, `status ${status}`).toBe("Schall couldn't finish that.");
       expect(notice.transient, `status ${status}`).toBe(true);
     }
   });
 
   it('still writes words for a total miss', () => {
     const notice = describeError(new Error('something that is not an ApiError at all'));
-    expect(notice.sentence).toBe('Schall could not finish that.');
+    expect(notice.sentence).toBe("Schall couldn't finish that.");
     expect(notice.action).toBe('Try again in a moment.');
     expect(notice.raw).toBe('something that is not an ApiError at all');
   });
@@ -99,7 +99,7 @@ describe('describeError', () => {
     // job records one on the job. Neither is thrown, and both used to be drawn
     // in the words Go wrote them in.
     const notice = describeError('artist identity changed during refresh');
-    expect(notice.sentence).toContain('merged this artist into another one');
+    expect(notice.sentence).toContain('merged this artist into another');
   });
 
   it('draws a refusal as a decision, with the sentence naming what to do', () => {

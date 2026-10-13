@@ -276,7 +276,7 @@ describe('a row whose copy waits for an answer', () => {
     ]);
     opened();
 
-    const link = await screen.findByRole('link', { name: 'Answer in Review' });
+    const link = await screen.findByRole('link', { name: 'Decide in Review' });
     expect(link.getAttribute('href')).toBe('/review?want=t9');
   });
 });
@@ -339,6 +339,6 @@ describe('a refetch that fails', () => {
     await client.refetchQueries();
 
     expect(screen.getByText('Weather Report')).toBeTruthy();
-    expect(screen.queryByText(/could not finish/)).toBeNull();
+    expect(screen.queryByText(/couldn't finish/)).toBeNull();
   });
 });

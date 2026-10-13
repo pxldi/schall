@@ -266,7 +266,7 @@ describe('the duplicates request failing', () => {
     );
     opened();
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.queryByText('No recording is on disc twice')).toBeNull();
   });
 });

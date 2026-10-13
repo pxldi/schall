@@ -231,7 +231,7 @@ describe('Recommendations', () => {
     opened();
 
     expect(await screen.findByText('recommendations broke')).toBeTruthy();
-    expect(screen.queryByText('No listening history read yet')).toBeNull();
+    expect(screen.queryByText('No listens read yet')).toBeNull();
     expect(screen.queryByText('Open settings')).toBeNull();
   });
 
@@ -242,7 +242,7 @@ describe('Recommendations', () => {
     const loading = screen.getByLabelText('Loading recommendations');
     expect(loading.getAttribute('aria-busy')).toBe('true');
     expect(loading.querySelectorAll('[data-placeholder-row]')).toHaveLength(12);
-    expect(screen.getByText('reading your suggestions…')).toBeTruthy();
+    expect(screen.getByText('loading suggestions…')).toBeTruthy();
   });
 
   it('lists what the source suggested', async () => {
@@ -314,7 +314,7 @@ describe('Recommendations', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
     expect(screen.getByText('Clear all ListenBrainz feedback?')).toBeTruthy();
-    expect(screen.getByText(/The next sweep uses source ranking alone/)).toBeTruthy();
+    expect(screen.getByText(/Removes every More like this and Less like this/)).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Clear feedback' }));
 
@@ -452,11 +452,11 @@ describe('Recommendations', () => {
       })
     );
     opened();
-    await screen.findByText('No listening history read yet');
+    await screen.findByText('No listens read yet');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
 
-    expect(await screen.findByText('No sweep has run yet')).toBeTruthy();
+    expect(await screen.findByText('Not built yet')).toBeTruthy();
   });
 
   it('does not send a Schall reader to Settings when the list stopped refreshing', async () => {
@@ -471,12 +471,12 @@ describe('Recommendations', () => {
       })
     );
     opened();
-    await screen.findByText(/This list stopped refreshing/);
+    await screen.findByText(/Stopped refreshing/);
 
     await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
 
     // The line leaves while the Schall list loads and comes back with it.
-    expect(await screen.findByText(/This list stopped refreshing/)).toBeTruthy();
+    expect(await screen.findByText(/Stopped refreshing/)).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
   });
 
@@ -493,12 +493,12 @@ describe('Recommendations', () => {
       })
     );
     opened();
-    await screen.findByText(/This list is shorter than usual/);
+    await screen.findByText(/Shorter than usual/);
 
     await fireEvent.click(screen.getByRole('button', { name: 'Schall' }));
 
-    expect(await screen.findByText(/This list is still growing/)).toBeTruthy();
-    expect(screen.queryByText(/This list is shorter than usual/)).toBeNull();
+    expect(await screen.findByText(/Still growing/)).toBeTruthy();
+    expect(screen.queryByText(/Shorter than usual/)).toBeNull();
   });
 
   it('says how many suggestions were held back and which rule held each one', async () => {
@@ -521,8 +521,8 @@ describe('Recommendations', () => {
 
     expect(
       await screen.findByText(
-        '5 more suggestions are not shown: 2 already in your library, 1 already requested, ' +
-          '1 you stopped looking for, 1 you said no to.'
+        '5 hidden: 2 already in your library, 1 already on wishlist, ' +
+          '1 you removed, 1 you turned down.'
       )
     ).toBeTruthy();
   });
@@ -597,7 +597,7 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await sayingNo(/This recording/);
+    await sayingNo(/This song/);
 
     await vi.waitFor(() =>
       expect(posted).toContainEqual({
@@ -619,7 +619,7 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await sayingNo(/Anything from this release/);
+    await sayingNo(/This release/);
 
     await vi.waitFor(() =>
       expect(posted).toContainEqual({
@@ -637,7 +637,7 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await sayingNo(/Anything by this artist/);
+    await sayingNo(/This artist/);
 
     await vi.waitFor(() =>
       expect(posted).toContainEqual({
@@ -670,7 +670,7 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await sayingNo(/Anything by these artists/);
+    await sayingNo(/These artists/);
 
     await vi.waitFor(() =>
       expect(
@@ -699,9 +699,9 @@ describe('Recommendations', () => {
 
     const scopes = await screen.findAllByRole('menuitem');
     expect(scopes.map((scope) => scope.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
-      'This recording Weather Report',
-      'Anything from this release Long Reach',
-      'Anything by this artist Halyard'
+      'This song Weather Report',
+      'This release Long Reach',
+      'This artist Halyard'
     ]);
   });
 
@@ -713,7 +713,7 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to wishlist' }));
 
     await vi.waitFor(() =>
       expect(posted).toContainEqual({
@@ -738,9 +738,9 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to wishlist' }));
 
-    expect(await screen.findByText(/Weather Report is wanted\./)).toBeTruthy();
+    expect(await screen.findByText(/Weather Report is on your wishlist\./)).toBeTruthy();
   });
 
   // A want already holding a question is not one Schall is still looking for,
@@ -751,9 +751,9 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to wishlist' }));
 
-    expect(await screen.findByText(/waiting for a decision from you on Review/)).toBeTruthy();
+    expect(await screen.findByText(/A copy waits in Review/)).toBeTruthy();
   });
 
   // Asking for a recording that is already wanted answers with the want that
@@ -765,9 +765,9 @@ describe('Recommendations', () => {
     opened();
     await screen.findByText('Weather Report');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to wishlist' }));
 
-    expect(await screen.findByText(/was marked as not wanted earlier/)).toBeTruthy();
+    expect(await screen.findByText(/You removed Weather Report earlier/)).toBeTruthy();
   });
 
   // An installation that has never connected an account has nothing to read,
@@ -788,7 +788,7 @@ describe('Recommendations', () => {
     );
     opened();
 
-    expect(await screen.findByText('No listening history read yet')).toBeTruthy();
+    expect(await screen.findByText('No listens read yet')).toBeTruthy();
   });
 
   // A list emptied by the five rules is not the same as a source with nothing
@@ -813,7 +813,7 @@ describe('Recommendations', () => {
     );
     opened();
 
-    expect(await screen.findByText('Every suggestion is held back')).toBeTruthy();
+    expect(await screen.findByText('All suggestions hidden')).toBeTruthy();
   });
 
   it('says the source had nothing to suggest when nothing was held back either', async () => {
@@ -840,7 +840,7 @@ describe('Recommendations', () => {
     opened();
 
     expect(
-      await screen.findByText(/This list stopped refreshing, and Schall tries again in 25m\./)
+      await screen.findByText(/Stopped refreshing\.\s+Retrying in 25m\./)
     ).toBeTruthy();
     // The line names a control the reader can see, and that control is a link
     // rather than a sentence about one.
@@ -893,7 +893,7 @@ describe('Recommendations', () => {
 
     expect(
       await screen.findByText(
-        /This list is shorter than usual\. The read that built it did not get the whole answer from ListenBrainz/
+        /Shorter than usual\. ListenBrainz sent only part of it/
       )
     ).toBeTruthy();
   });
@@ -922,13 +922,13 @@ describe('Recommendations', () => {
     );
     opened();
 
-    expect(await screen.findByText(/no next read is waiting/)).toBeTruthy();
+    expect(await screen.findByText(/Stopped refreshing/)).toBeTruthy();
     expect(
       await screen.findByText(
-        /This list is shorter than usual\. The read that built it did not get the whole answer from ListenBrainz\./
+        /Shorter than usual\. ListenBrainz sent only part of it\./
       )
     ).toBeTruthy();
-    expect(screen.queryByText(/tries for all of it/)).toBeNull();
+    expect(screen.queryByText(/Retrying on the next update/)).toBeNull();
   });
 
   // The sweep's own sentence about what was missing names a MusicBrainz
@@ -985,7 +985,7 @@ describe('Recommendations', () => {
     );
     opened();
 
-    expect(await screen.findByText('The first read did not finish')).toBeTruthy();
+    expect(await screen.findByText("First update didn't finish")).toBeTruthy();
   });
 
   // Dismissing the last suggestion on the last page empties that page. The
@@ -1004,7 +1004,7 @@ describe('Recommendations', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByText('Suggestion 26');
-    await sayingNo(/This recording/);
+    await sayingNo(/This song/);
 
     expect(await screen.findByText('Suggestion 1')).toBeTruthy();
   });

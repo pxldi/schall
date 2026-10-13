@@ -385,7 +385,7 @@
           {#if waiting}
             <p class="flex items-center gap-2 px-3 py-3.5 text-meta leading-[1.6] text-ink-4">
               <Icon name="busy" size="sm" class="animate-spin" />
-              Searching five categories…
+              Searching…
             </p>
           {:else if failed}
             <!-- A failed query is reported here rather than in a toast: the
@@ -406,8 +406,7 @@
                  with it, so it went the way of every other line of
                  documentation that had wandered onto a screen. -->
             <p class="px-3 py-3.5 text-meta leading-[1.6] text-ink-3">
-              Nothing matches <span class="text-ink">{query}</span> in your library or the artists
-              you follow.
+              Nothing matches <span class="text-ink">{query}</span>.
             </p>
           {:else}
             <div id="palette-results" role="listbox" aria-label="Search results" tabindex="-1">

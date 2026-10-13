@@ -250,7 +250,7 @@ describe('ReleasesBrowser', () => {
     // Read off the whole panel rather than one node: the name sits in a span of
     // its own inside the sentence that carries it.
     await vi.waitFor(() =>
-      expect(container.textContent).toContain('The catalogue holds no releases by Anetha')
+      expect(container.textContent).toContain('No releases by Anetha yet')
     );
   });
 
@@ -285,7 +285,7 @@ describe('ReleasesBrowser', () => {
     const { container } = openedAt('?q=Illegal');
 
     await vi.waitFor(() =>
-      expect(container.textContent).toContain('Nothing here matches that search')
+      expect(container.textContent).toContain('Try a shorter search or a wider view.')
     );
     expect(screen.queryByRole('link', { name: 'Open Files' })).toBeNull();
   });
@@ -493,7 +493,7 @@ describe('deciding about a selection of releases', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
 
-    expect(await screen.findByText('Trying 3 jobs again · 1 had nothing that failed')).toBeTruthy();
+    expect(await screen.findByText('Trying 3 jobs again · 1 had no failures')).toBeTruthy();
   });
 });
 

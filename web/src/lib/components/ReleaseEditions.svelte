@@ -129,7 +129,7 @@
     {#if !linked}
       <EmptyPanel role="idle" level={3} heading="Not on MusicBrainz">
         <p class="text-body text-ink-2">
-          This release is not linked to MusicBrainz, so there are no other pressings to compare.
+          No other pressings: not linked to MusicBrainz.
         </p>
       </EmptyPanel>
     {:else if !blocks.length && error}
@@ -138,7 +138,7 @@
            which on a page of six panels does not say which one. -->
       <ErrorNote
         {error}
-        fallback="The other pressings of this release could not be read."
+        fallback="Couldn't load the pressings."
         retry={retryEditions}
       />
     {:else if !blocks.length}
@@ -211,7 +211,7 @@
             <ErrorNote
               {error}
               bare
-              fallback="The other pressings of this release could not be read."
+              fallback="Couldn't load the pressings."
               retry={retryEditions}
             />
           </div>

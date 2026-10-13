@@ -98,13 +98,13 @@ export function downloadName(request: DownloadRequest) {
 // recording for and therefore cannot ask for at all. A bare "3 wanted" would
 // read as the rest having failed, so every outcome that happened is named.
 export function wantedSummary(result: WantedTracks) {
-  const parts = [result.wanted === 1 ? '1 track wanted' : `${result.wanted} tracks wanted`];
-  if (result.alreadyWanted) parts.push(`${result.alreadyWanted} already wanted`);
+  const parts = [result.wanted === 1 ? '1 song added to wishlist' : `${result.wanted} songs added to wishlist`];
+  if (result.alreadyWanted) parts.push(`${result.alreadyWanted} already on wishlist`);
   if (result.unresolvable) {
     parts.push(
       result.unresolvable === 1
-        ? '1 track has no recording to look for'
-        : `${result.unresolvable} tracks have no recording to look for`
+        ? '1 not on MusicBrainz'
+        : `${result.unresolvable} not on MusicBrainz`
     );
   }
   return parts.join(' · ');
@@ -120,7 +120,7 @@ export function removedSummary(result: RemovedTracks) {
   if (files) {
     const first = result.scheduled.map((file) => file.removesAt).sort()[0];
     parts.push(
-      `${files === 1 ? '1 file' : `${files} files`} deleted on ${calendarDate(first)}. Want it again to keep ${files === 1 ? 'it' : 'them'}`
+      `${files === 1 ? '1 file' : `${files} files`} deleted on ${calendarDate(first)}. Add again to keep`
     );
   }
   if (result.kept) {
@@ -156,7 +156,7 @@ export function fileStanding(file: LibraryFile): { text: string; state: FileStat
   // has said yes.
   if (file.matchStatus === 'duplicate') {
     return {
-      text: file.duplicateKeptAt ? 'Second copy, kept on purpose' : 'Second copy of a track already held',
+      text: file.duplicateKeptAt ? 'Second copy, kept' : 'Second copy',
       state: 'idle'
     };
   }
@@ -165,7 +165,7 @@ export function fileStanding(file: LibraryFile): { text: string; state: FileStat
   // said. What the reader needs from it is that there is more than one answer and
   // that picking between them is theirs.
   if (file.matchStatus === 'ambiguous') {
-    return { text: 'More than one catalogue track fits this file', state: 'decide' };
+    return { text: 'Fits more than one track', state: 'decide' };
   }
   switch (file.resolutionStatus) {
     case 'resolved': {
@@ -175,39 +175,39 @@ export function fileStanding(file: LibraryFile): { text: string; state: FileStat
       const named = [file.identityTitle, file.identityArtist].filter(Boolean).join(' · ');
       return {
         text: named
-          ? `Identified as ${named} — no catalogue track for it`
-          : 'Identified — no catalogue track for it',
+          ? `${named} · no matching track`
+          : 'Identified, no matching track',
         state: 'idle'
       };
     }
     case 'needs_review': {
       const count = file.identityCandidateCount;
-      if (count < 1) return { text: 'Waiting on a decision about what this is', state: 'decide' };
+      if (count < 1) return { text: 'Needs your decision', state: 'decide' };
       return {
-        text: count === 1 ? '1 recording could be this file' : `${count} recordings could be this file`,
+        text: count === 1 ? '1 possible song' : `${count} possible songs`,
         state: 'decide'
       };
     }
     case 'conflict':
-      return { text: 'The evidence disagrees about what this file is', state: 'fail' };
+      return { text: 'Evidence disagrees', state: 'fail' };
     // Said the same way whether the grader concluded it or somebody did: either
     // way there is no recording to place the file by, and the file is owned
     // music regardless.
     case 'local_only':
-      return { text: 'Owned music with no external identity', state: 'idle' };
+      return { text: 'Not on MusicBrainz', state: 'idle' };
     // Named by its page on another service instead of by a recording. Nothing
     // is outstanding: somebody said what this is.
     case 'source': {
       const named = [file.identityTitle, file.identityArtist].filter(Boolean).join(' · ');
       return {
-        text: named ? `From SoundCloud — ${named}` : 'From SoundCloud',
+        text: named ? `From SoundCloud · ${named}` : 'From SoundCloud',
         state: 'ok'
       };
     }
     case 'failed':
-      return { text: 'MusicBrainz could not be reached', state: 'fail' };
+      return { text: 'MusicBrainz unreachable', state: 'fail' };
     default:
-      return { text: 'Waiting to be looked up', state: 'idle' };
+      return { text: 'Not looked up yet', state: 'idle' };
   }
 }
 
@@ -237,7 +237,7 @@ const matchMethodNames: Record<string, string> = {
 };
 
 export function matchMethodName(method: string | undefined): string {
-  if (!method) return 'a rule Schall no longer records';
+  if (!method) return 'an unknown rule';
   return matchMethodNames[method] ?? method.replaceAll('_', ' ');
 }
 

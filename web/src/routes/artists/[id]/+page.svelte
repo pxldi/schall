@@ -512,7 +512,7 @@
           of <b class="numeric font-semibold text-ink">{countedReleases}</b>
           {basis} owned
         {:else if dismissedReleaseCount}
-          everything left was dismissed
+          everything else dismissed
         {:else}
           <span class="numeric text-ink-3">—</span> {basis} owned
         {/if}
@@ -562,14 +562,14 @@
            button is replaced by what it did, and by the one control that
            undoes it. -->
       {#if standing}
-        <Chip role="ok">Wanting missing</Chip>
+        <Chip role="ok">Missing on wishlist</Chip>
         <Button
           variant="ghost"
           size="sm"
           disabled={$wantMissing.isPending}
           onclick={() => $wantMissing.mutate(false)}
         >
-          {$wantMissing.isPending ? 'Stopping…' : 'Stop'}
+          {$wantMissing.isPending ? 'Removing…' : 'Remove'}
         </Button>
       {:else if missingCount > 0}
         <Button size="sm" disabled={$wantMissing.isPending} onclick={() => $wantMissing.mutate(true)}>
@@ -578,7 +578,7 @@
           {:else}
             <Icon name="want" size="sm" />
           {/if}
-          Want {missingCount} missing
+          Add {missingCount} missing
         </Button>
       {/if}
     {/snippet}
@@ -659,7 +659,7 @@
           Unfollow {$artist.data.name}?
         </h2>
         <p class="text-body leading-relaxed text-ink-2">
-          Schall stops looking for their new releases. Nothing you own is touched.
+          Schall stops watching for their new releases. Your files stay.
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <Button disabled={$unfollow.isPending} onclick={() => $unfollow.mutate()}>
@@ -684,14 +684,14 @@
     {#if !$artist.data.followed}
       <div class="flex flex-col gap-1.5 rounded-panel border border-line-regular bg-idle/14 p-4">
         <span class="text-body font-semibold text-ink">
-          {$artist.data.catalogueSummary ?? 'This artist is here because your library has their music.'}
+          {$artist.data.catalogueSummary ?? 'Here because you have their music.'}
         </span>
         <!-- What not following means. It used to say "nothing counts as
              missing", above a Missing count and a Want missing button that
              both still apply: the grid counts against the monitor level
              whether or not anybody follows the artist. -->
         <span class="text-meta text-ink-2">
-          Not followed. Schall won't look for new releases or want anything on its own.
+          Not followed. Schall won't add their new releases.
         </span>
       </div>
     {/if}
@@ -701,7 +701,7 @@
            Go sentence stored on the artist, not something thrown at a request.
            It reads the same way as any other failure, so it goes through the
            same note. -->
-      <ErrorNote error={$artist.data.refreshError ?? 'The metadata refresh failed.'} />
+      <ErrorNote error={$artist.data.refreshError ?? 'Refresh failed.'} />
     {/if}
 
     {#if $releases.isError}
@@ -747,7 +747,7 @@
                     {release}
                     meta={meta(release, section.kind)}
                     state={release.albumType === 'other'
-                      ? `${describe(release).text} · MusicBrainz types it as Other`
+                      ? `${describe(release).text} · listed as Other`
                       : describe(release).text}
                     owned={release.ownedTrackCount}
                     countable={countable(release)}
@@ -779,7 +779,7 @@
           ? 'Building the discography'
           : releaseCount
             ? 'Nothing in this filter'
-            : 'Nothing scanned yet'}
+            : 'No releases yet'}
       >
         {#if !refreshing && releaseCount}
           <p class="text-body leading-relaxed text-ink-2">

@@ -342,7 +342,7 @@ describe('FollowArtistModal, want what is missing', () => {
   it('offers it unchecked', async () => {
     await pickCandidate();
 
-    const box = screen.getByLabelText("Want what's missing") as HTMLInputElement;
+    const box = screen.getByLabelText('Add missing to wishlist') as HTMLInputElement;
     expect(box.checked).toBe(false);
   });
 
@@ -364,7 +364,7 @@ describe('FollowArtistModal, want what is missing', () => {
       .mockResolvedValue({} as never);
     await pickCandidate();
 
-    await fireEvent.click(screen.getByLabelText("Want what's missing"));
+    await fireEvent.click(screen.getByLabelText('Add missing to wishlist'));
     await fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
 
     await waitFor(() => expect(standing).toHaveBeenCalledWith('a1', true));
@@ -377,12 +377,12 @@ describe('FollowArtistModal, want what is missing', () => {
     vi.spyOn(api, 'setArtistWantMissing').mockRejectedValue(new Error('wants are unavailable'));
     await pickCandidate();
 
-    await fireEvent.click(screen.getByLabelText("Want what's missing"));
+    await fireEvent.click(screen.getByLabelText('Add missing to wishlist'));
     await fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
 
     await waitFor(() => expect(screen.getByText('wants are unavailable')).toBeTruthy());
     expect(
-      screen.getByText('The artist is followed. Press Want missing on their page.')
+      screen.getByText('Artist followed. Press Add missing on their page.')
     ).toBeTruthy();
   });
 });

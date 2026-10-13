@@ -278,9 +278,9 @@ describe('the overview', () => {
     await screen.findByText('812');
     // One song is held and one has no catalogue track: neither carries a mark.
     // The third can be wanted.
-    expect(screen.getAllByRole('button', { name: /^Want / })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Add .* to wishlist$/ })).toHaveLength(1);
     expect(screen.queryByLabelText('in your library')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Want All white' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add All white to wishlist' }));
     await waitFor(() => {
       expect(sent.some((call) => call.path === '/api/v1/tracks/t2/wanted' && call.method === 'POST')).toBe(true);
     });
@@ -301,7 +301,7 @@ describe('the overview', () => {
     });
     show();
     await screen.findByText('812');
-    await fireEvent.click(screen.getByRole('button', { name: 'Want All white' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add All white to wishlist' }));
     await waitFor(() => {
       expect(sent.some((call) => call.path === '/api/v1/acquisition-targets/w9/not-wanted' && call.method === 'DELETE')).toBe(
         true
@@ -484,7 +484,7 @@ describe('the overview', () => {
   it('shows only the error on a 401, none of the panels', async () => {
     refusingSignIn();
     show();
-    await screen.findByText('No sign-in on this connection.');
+    await screen.findByText('Not signed in.');
     expect(screen.queryByText('Listens')).toBeNull();
     expect(screen.queryByText('Most played')).toBeNull();
   });

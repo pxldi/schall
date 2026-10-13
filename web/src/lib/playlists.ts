@@ -46,11 +46,11 @@ export function entryState(entry: PlaylistEntry): EntryState {
       label: quiet(progress.needsReview),
       role: 'fail',
       icon: 'listen',
-      note: 'A copy is waiting for your answer.'
+      note: 'Copy arrived. Listen to decide.'
     };
   switch (entry.targetStatus) {
     case 'acquired':
-      return { label: 'acquired', role: 'ok', icon: 'check', note };
+      return { label: quiet(progress.importing), role: 'ok', icon: 'check', note };
     case 'awaiting_review':
       return { label: quiet(progress.needsReview), role: 'fail', icon: 'listen', note };
     case 'searching':
@@ -67,7 +67,7 @@ export function entryState(entry: PlaylistEntry): EntryState {
     case 'superseded':
       return { label: 'merged', role: 'idle', icon: 'link', note };
   }
-  return { label: 'no want', role: 'idle', icon: 'plus', note };
+  return { label: 'not on wishlist', role: 'idle', icon: 'plus', note };
 }
 
 /** Where a row's question is answered: the want's own place in Review. */
@@ -104,7 +104,7 @@ export function playlistOrigin(playlist: Playlist): string[] {
   }
   if (!playlist.ownerName && !playlist.importedAt) return ['Importing playlist…'];
   return [
-    playlist.ownerName ? `by ${playlist.ownerName}` : 'Owner not recorded',
+    playlist.ownerName ? `by ${playlist.ownerName}` : 'Unknown owner',
     playlist.importedAt ? `imported ${calendarDate(playlist.importedAt)}` : 'importing…'
   ];
 }

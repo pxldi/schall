@@ -142,18 +142,17 @@
   // press does not take that decision back: a decision is taken back where it
   // was made, never as a side effect of another screen.
   function wantedMessage(target: AcquisitionTarget) {
-    const title = target.title || 'That recording';
+    const title = target.title || 'That song';
     if (target.status === 'not_wanted') {
-      return `${title} was marked as not wanted earlier, so Schall did not ask for it.
-        Open its release under Library and press Want it.`;
+      return `You removed ${title} earlier. Add it from its release page.`;
     }
     if (target.status === 'acquired') {
       return `${title} is already in your library.`;
     }
     if (target.status === 'awaiting_review') {
-      return `${title} is wanted, and it is waiting for a decision from you on Review.`;
+      return `${title} is on your wishlist. A copy waits in Review.`;
     }
-    return `${title} is wanted.`;
+    return `${title} is on your wishlist.`;
   }
 
   // Wanting a suggestion. It records the same want a release or a playlist
@@ -226,8 +225,8 @@
       failure = null;
       feedbackMessage =
         choice.signal === 'more_like_this'
-          ? 'More like this recorded. It changes the next sweep.'
-          : 'Less like this recorded. It changes the next sweep.';
+          ? 'More like this saved. Used in the next list.'
+          : 'Less like this saved. Used in the next list.';
     },
     onError: (error: Error) => {
       feedbackMessage = '';
@@ -240,7 +239,7 @@
     onSuccess: async () => {
       clearFeedbackOpen = false;
       failure = null;
-      feedbackMessage = 'Feedback cleared. The next sweep uses source ranking alone.';
+      feedbackMessage = 'Feedback cleared.';
       await queryClient.invalidateQueries({ queryKey: ['recommendations'] });
     },
     onError: (error: Error) => {
@@ -255,22 +254,22 @@
     const artists = recommendation.artistIds ?? [];
     return [
       {
-        label: 'This recording',
+        label: 'This song',
         detail: name(recommendation),
         onchoose: () =>
           $dismiss.mutate({ subject: 'recording', ids: [recommendation.recordingId] })
       },
       {
-        label: 'Anything from this release',
-        detail: recommendation.releaseTitle || 'the release it was suggested from',
+        label: 'This release',
+        detail: recommendation.releaseTitle || 'Unknown release',
         onchoose: () =>
           $dismiss.mutate({ subject: 'release_group', ids: [recommendation.releaseGroupId] })
       },
       {
-        label: artists.length > 1 ? 'Anything by these artists' : 'Anything by this artist',
+        label: artists.length > 1 ? 'These artists' : 'This artist',
         // A refused scope keeps its place and says why, rather than leaving the
         // menu a different length on one row.
-        detail: artists.length === 0 ? 'Schall does not know who this is' : artistOf(recommendation),
+        detail: artists.length === 0 ? 'Unknown artist' : artistOf(recommendation),
         disabled: artists.length === 0,
         onchoose: () => $dismiss.mutate({ subject: 'artist', ids: artists })
       }
@@ -370,11 +369,11 @@
   });
 
   function name(recommendation: Recommendation) {
-    return recommendation.recordingTitle || 'Unnamed recording';
+    return recommendation.recordingTitle || 'Untitled song';
   }
 
   function artistOf(recommendation: Recommendation) {
-    return recommendation.artistName || 'the artist it was suggested from';
+    return recommendation.artistName || 'Unknown artist';
   }
 
   function details(recommendation: Recommendation) {
@@ -387,8 +386,8 @@
   const reasons: Record<string, string> = {
     cf_raw: 'people with your listening history play it',
     cf_top: 'near the top of what it suggests for you',
-    similar_artist: 'close to an artist you listen to',
-    similar_recording: 'close to a recording you listen to',
+    similar_artist: 'close to an artist you play',
+    similar_recording: 'close to a song you play',
     top_recording: 'one of your own most played',
     listened: "you played it, you don't have it",
     co_listened: 'played beside music you have',
@@ -406,19 +405,19 @@
     if (!hidden || hidden.total === 0) return '';
     const parts = [
       [hidden.owned, 'already in your library'],
-      [hidden.requested, 'already requested'],
-      [hidden.notWanted, 'you stopped looking for'],
+      [hidden.requested, 'already on wishlist'],
+      [hidden.notWanted, 'you removed'],
       [hidden.followedArtist, 'by artists you follow'],
       [hidden.followedLabel, 'from labels you follow'],
-      [hidden.dismissed, 'you said no to'],
-      [hidden.unkept, 'you had for a week and did not keep'],
-      [hidden.impressionFatigue, 'shown three times without an answer']
+      [hidden.dismissed, 'you turned down'],
+      [hidden.unkept, "you didn't keep"],
+      [hidden.impressionFatigue, 'skipped three times']
     ] as const;
     const said = parts
       .filter(([count]) => count > 0)
       .map(([count, text]) => `${count} ${text}`)
       .join(', ');
-    return `${hidden.total} more ${hidden.total === 1 ? 'suggestion is' : 'suggestions are'} not shown: ${said}.`;
+    return `${hidden.total} hidden: ${said}.`;
   });
 
   const readAt = $derived(snapshot?.fetchedAt ? relativeTime(snapshot.fetchedAt) : '');
@@ -434,13 +433,13 @@
   // The empty panel's heading, one per reason the list can be empty.
   const emptyHeading = $derived(
     !snapshot?.fetched && stalled
-      ? 'The first read did not finish'
+      ? "First update didn't finish"
       : !snapshot?.fetched && own
-        ? 'No sweep has run yet'
+        ? 'Not built yet'
         : !snapshot?.fetched
-          ? 'No listening history read yet'
+          ? 'No listens read yet'
           : hidden && hidden.total > 0
-            ? 'Every suggestion is held back'
+            ? 'All suggestions hidden'
             : 'Nothing suggested yet'
   );
 </script>
@@ -487,26 +486,22 @@
         </summary>
         <p class="reveal mt-1 max-w-[64ch] text-meta leading-5 text-ink-2">
           {#if own}
-            Music you played at least twice that your library does not hold, ranked by how
-            often you played it beside music you have. Schall reads the listens it copied
-            from ListenBrainz.
+            Songs you played at least twice and don't have, ranked by how often you
+            played them beside music you have.
           {:else}
-            Music your library does not hold, suggested from what your ListenBrainz
-            account has listened to.
+            Songs you don't have, suggested by ListenBrainz from your listens.
           {/if}
-          Press <span class="text-ink">Want it</span> and Schall looks
-          for a copy. Press
-          <span class="text-ink">Not interested</span> and choose what is never suggested again: this
-          recording, its release, or its artist. Use <span class="text-ink">More like this</span> or
-          <span class="text-ink">Less like this</span> to adjust the next sweep without hiding a row.
+          <span class="text-ink">Add to wishlist</span> looks for a copy.
+          <span class="text-ink">Not interested</span> hides the song, its release or its artist.
+          <span class="text-ink">More like this</span> and <span class="text-ink">Less like this</span>
+          tune the next list.
         </p>
       </details>
       {#if clearFeedbackOpen}
         <div class="w-full rounded-row border border-fail/40 bg-fail/14 p-3" role="group" aria-label="Clear feedback confirmation">
           <p class="text-body font-medium text-ink">Clear all {sourceName} feedback?</p>
           <p class="mt-1 text-meta leading-5 text-ink-2">
-            This removes every More like this and Less like this pressed on the {sourceName} list.
-            The next sweep uses source ranking alone.
+            Removes every More like this and Less like this pressed on the {sourceName} list.
           </p>
           <div class="mt-3 flex flex-wrap justify-end gap-2">
             <Button variant="ghost" size="sm" tall onclick={() => (clearFeedbackOpen = false)} disabled={$clearFeedback.isPending}>
@@ -530,16 +525,14 @@
     -->
     {#if stalled && snapshot?.fetched}
       <p class="max-w-[64ch] text-meta leading-4 text-ink-3">
-        This list stopped refreshing,
+        Stopped refreshing.
         {#if nextRead}
-          and Schall tries again {nextRead}.
-        {:else}
-          and no next read is waiting.
+          Retrying {nextRead}.
         {/if}
         <!-- The own engine needs no account, so Settings has nothing to fix
              for it. -->
         {#if !own}
-          Check your account under
+          Check your account in
           <a href="/settings" class="text-ink underline underline-offset-2">Settings</a>.
         {/if}
       </p>
@@ -567,12 +560,11 @@
          25 recordings a pass, and it grows until the pool is done. -->
     {#if snapshot?.status === 'partial' && own}
       <p class="max-w-[64ch] text-meta leading-4 text-ink-3">
-        This list is still growing. Schall looks up a few recordings in MusicBrainz at a time.
+        Still growing. Schall looks up a few songs at a time.
       </p>
     {:else if snapshot?.status === 'partial'}
       <p class="max-w-[64ch] text-meta leading-4 text-ink-3">
-        This list is shorter than usual. The read that built it did not get the whole
-        answer from ListenBrainz{stalled ? '' : ', and the next read tries for all of it'}.
+        Shorter than usual. ListenBrainz sent only part of it.{stalled ? '' : ' Retrying on the next update.'}
       </p>
     {/if}
 
@@ -597,7 +589,7 @@
           aria-busy="true"
           aria-label="Loading recommendations"
         >
-          <span class="text-meta text-ink-3">reading your suggestions…</span>
+          <span class="text-meta text-ink-3">loading suggestions…</span>
           <SkeletonRows count={12} class="-mx-5 -mb-5 border-t border-line-thin" />
         </div>
       {/snippet}
@@ -620,29 +612,33 @@
                   variant="outline"
                   size="xs"
                   tall
+                  icon
                   aria-label="More like this"
+                  title="More like this"
                   disabled={$feedback.isPending}
                   onclick={() =>
                     $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'more_like_this', source })}
                 >
-                  More like this
+                  <Icon name="arrow-up" size="sm" />
                 </Button>
                 <Button
                   variant="outline"
                   size="xs"
                   tall
+                  icon
                   aria-label="Less like this"
+                  title="Less like this"
                   disabled={$feedback.isPending}
                   onclick={() =>
                     $feedback.mutate({ recordingId: recommendation.recordingId, signal: 'less_like_this', source })}
                 >
-                  Less like this
+                  <Icon name="arrow-down" size="sm" />
                 </Button>
               </div>
               <WantToggle
                 size="sm"
                 class="shrink-0"
-                label={['Want it', 'Wanted']}
+                label={['Add to wishlist', 'On wishlist']}
                 wanted={leaving.has(recommendation.recordingId)}
                 disabled={$feedback.isPending || leaving.has(recommendation.recordingId)}
                 onwant={() => wantOne(recommendation)}
@@ -684,11 +680,9 @@
             wrong, and so would asking for an account that is already set up.
           -->
           <span class="text-meta leading-5 text-ink-2">
-            There is no list yet.
+            No list yet.
             {#if nextRead}
-              Schall tries again {nextRead}.
-            {:else}
-              No next read is waiting.
+              Retrying {nextRead}.
             {/if}
           </span>
           {#if !own}
@@ -699,29 +693,27 @@
                needs no account of its own, but the listens come from a
                ListenBrainz sync, so Settings is where they start. -->
           <span class="text-meta leading-5 text-ink-2">
-            Schall builds this list from the listens it copies from ListenBrainz.
+            Built from your ListenBrainz listens.
           </span>
           <Button href="/settings" variant="outline" size="sm" class="w-fit">Open settings</Button>
           {:else if !snapshot?.fetched}
           <!-- Where suggestions come from is how the feature works. The reader
                needs the one thing they can do, and Open settings is under it. -->
           <span class="text-meta leading-5 text-ink-2">
-            Add a ListenBrainz account under Settings. The first list arrives within a few
-            minutes.
+            Add a ListenBrainz account in Settings.
           </span>
           <Button href="/settings" variant="outline" size="sm" class="w-fit">Open settings</Button>
           {:else if hidden && hidden.total > 0}
           <span class="text-meta leading-5 text-ink-2">
             {sourceName} had {hidden.total}
-            {hidden.total === 1 ? 'suggestion' : 'suggestions'}, all held back for now. The next
-            sweep {own ? 'builds the list again' : 'asks again'}.
+            {hidden.total === 1 ? 'suggestion' : 'suggestions'}, all hidden.
           </span>
           {:else}
           <span class="text-meta leading-5 text-ink-2">
             {#if own}
-              Schall found nothing to suggest from your listens yet.
+              Nothing to suggest from your listens yet.
             {:else}
-              ListenBrainz had nothing to suggest for this account yet.
+              ListenBrainz has nothing for you yet.
             {/if}
           </span>
           {/if}
