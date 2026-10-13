@@ -122,6 +122,29 @@ type Evidence struct {
 	// may have no fingerprint kept, and a comparison that could not run has
 	// answered nothing.
 	Witness *WitnessComparison
+	// Disc is the audio found to be, bit for bit, a track of a CD whose table
+	// of contents MusicBrainz files under a release. Nil means nobody looked,
+	// which is silence: most copies are not CD rips, and a lookup that found
+	// nothing has answered nothing.
+	Disc *DiscComparison
+}
+
+// DiscComparison is a copy whose AccurateRip checksum is one somebody
+// submitted for the track this recording sits at on a CD.
+//
+// The checksum is a sum over every sample of the track, so a copy reaches it
+// only by holding those samples. MusicBrainz says which recording is at that
+// place on the disc, and the check that produced this already asked every
+// release the disc is filed under and found this recording there on each.
+//
+// Only a match is carried. A copy whose sum is not on file is a download, a
+// remaster or a rip with its drive's offset uncorrected, and is still the
+// recording, so this can admit and never refuse.
+type DiscComparison struct {
+	RecordingID uuid.UUID
+	ReleaseID   uuid.UUID
+	Track       int
+	Confidence  int
 }
 
 // WitnessComparison is how far this audio sits from a file the library already
@@ -402,6 +425,9 @@ type comparison struct {
 	// here it can never void one, because a copy that is a different master of
 	// this recording is still this recording.
 	witness tagmatch.Verdict
+	// disc is what the copy's AccurateRip checksum came to. Like witness it can
+	// prove the pair and never void it.
+	disc tagmatch.Verdict
 	// acousticSingledOut says the leading cluster named this recording beside
 	// other rows, and the file's own identifier picked this one out of them. It
 	// is set only by Verify, which can look the other rows up; see
@@ -533,6 +559,10 @@ const (
 	// identity recorded this way keeps a note of which file admitted it and what
 	// proved that one. Withdraw the older proof and this one goes with it.
 	byLibraryWitness
+	// byCDChecksum is the audio being, sample for sample, the track this
+	// recording sits at on a CD, by the checksum rips of that CD submitted to
+	// AccurateRip. It is the music itself, the same as the two above.
+	byCDChecksum
 	byFingerprintAndIdentifier
 	byFingerprint
 )
@@ -576,6 +606,8 @@ func (level grade) method() string {
 		return "published-sample"
 	case byLibraryWitness:
 		return "library-witness"
+	case byCDChecksum:
+		return "cd-checksum"
 	case byRecordingID:
 		return "recording-id"
 	case byISRC:
@@ -644,6 +676,9 @@ func MethodSentence(method string) string {
 	case "library-witness":
 		sentence = "Schall compared the audio with a file already in your library " +
 			"that is proven to be this recording, and it is the same music."
+	case "cd-checksum":
+		sentence = "The audio is bit for bit this recording's track on a CD, by the " +
+			"checksum people who ripped that CD submitted to AccurateRip."
 	case "fingerprint-and-identifier":
 		sentence = "Schall listened to the audio and it matches this recording. " +
 			"The file's tags name the same one."
@@ -685,7 +720,7 @@ func ProvenForItsWant(method string) bool {
 	}
 	switch base {
 	case "fingerprint", "fingerprint-and-identifier", "published-sample",
-		"library-witness", "manual":
+		"library-witness", "cd-checksum", "manual":
 		return true
 	}
 	return false
@@ -695,7 +730,7 @@ func (level grade) confidence() float32 {
 	switch level {
 	case byFingerprint, byFingerprintAndIdentifier:
 		return 1
-	case bySample, byLibraryWitness:
+	case bySample, byLibraryWitness, byCDChecksum:
 		return 1
 	case byRecordingID:
 		return 1
@@ -717,6 +752,8 @@ func (level grade) summary() string {
 		return "identified by the sample its distributor publishes"
 	case byLibraryWitness:
 		return "identified by a file your library already holds"
+	case byCDChecksum:
+		return "identified as a CD track by its AccurateRip checksum"
 	case byRecordingID:
 		return "identified by MusicBrainz recording ID"
 	case byISRC:
@@ -763,6 +800,9 @@ func gradeOf(pair comparison) grade {
 	// about keeps the name it would have carried without this one.
 	case pair.witness == tagmatch.Agrees:
 		return byLibraryWitness
+	// The audio a fourth time, read after the other three for the same reason.
+	case pair.disc == tagmatch.Agrees:
+		return byCDChecksum
 	// The leading cluster named this recording and another row, so the audio
 	// alone cannot say which, and the file's own identifier, or the upload found
 	// by this recording's name with the tags, names this one and not the other.
@@ -839,7 +879,18 @@ func compareAgainst(
 		pair.anchorSource = evidence.Anchor.Source
 	}
 	pair.witness = compareWitness(evidence.Witness, recording)
+	pair.disc = compareDisc(evidence.Disc, recording)
 	return pair
+}
+
+// compareDisc reads a CD checksum match against the recording in hand. The
+// match names the recording MusicBrainz lists at that place on the disc, so it
+// answers for that recording and no other, the shape compareWitness has.
+func compareDisc(disc *DiscComparison, recording musicbrainz.Recording) tagmatch.Verdict {
+	if disc == nil || disc.RecordingID == uuid.Nil || !recording.Answers(disc.RecordingID) {
+		return tagmatch.Unknown
+	}
+	return tagmatch.Agrees
 }
 
 // compareCredit reads the file's artist tag against the artists the recording

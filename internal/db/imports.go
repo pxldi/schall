@@ -261,6 +261,23 @@ type ImportAnchor struct {
 	Unavailable string `json:"unavailable,omitempty"`
 }
 
+// ImportDisc is one copy looked up in AccurateRip.
+//
+// Matched is set only where the copy's checksum is one submitted for the track
+// the want's recording sits at on a CD, and every release MusicBrainz files
+// that CD under has the recording there. Anything else is Silence, a sentence
+// saying why nothing matched, or Unavailable when a service could not be asked.
+type ImportDisc struct {
+	Matched     bool   `json:"matched,omitempty"`
+	ReleaseID   string `json:"releaseId,omitempty"`
+	Medium      int    `json:"medium,omitempty"`
+	Track       int    `json:"track,omitempty"`
+	DiscID      string `json:"discId,omitempty"`
+	Confidence  int    `json:"confidence,omitempty"`
+	Silence     string `json:"silence,omitempty"`
+	Unavailable string `json:"unavailable,omitempty"`
+}
+
 // ImportWitness is one copy measured against a file the library already holds.
 //
 // The library file is one whose identity is settled: a person decided it, or

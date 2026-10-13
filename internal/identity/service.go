@@ -767,6 +767,8 @@ func provenEvidence(method string) string {
 		return "audio (matches the published sample of this recording)"
 	case "library-witness":
 		return "audio (the same music as a file you already own)"
+	case "cd-checksum":
+		return "audio (bit for bit this recording's track on a CD)"
 	case "fingerprint", "fingerprint-and-identifier":
 		return "audio (identified as this recording)"
 	case "manual":

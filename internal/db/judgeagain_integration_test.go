@@ -562,7 +562,46 @@ func TestACopyMeasuredAgainstTheWantsSampleIsNotOfferedAgain(t *testing.T) {
 			anchored(ctx, t, queries, targetID)
 			settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
 				`{"anchor": {"source": "deezer", "reference": "`+test.reference+
-					`", "rate": 0.3, "measured": true}}`)
+					`", "rate": 0.3, "measured": true}, "disc": {"silence": "No rip matches."}}`)
+
+			offered, err := queries.CopiesToJudgeAgain(ctx)
+			if err != nil {
+				t.Fatalf("CopiesToJudgeAgain() error = %v", err)
+			}
+			if len(offered) != test.offered {
+				t.Fatalf("offered = %d, want %d", len(offered), test.offered)
+			}
+		})
+	}
+}
+
+// A held lossless copy is offered again until it has been looked up in
+// AccurateRip, and again when the lookup could not reach it.
+func TestAHeldLosslessCopyIsOfferedUntilItIsLookedUpInAccurateRip(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		fileName string
+		evidence string
+		offered  int
+	}{
+		{name: "never looked up", fileName: "03.flac", evidence: `{}`, offered: 1},
+		{name: "looked up", fileName: "03.flac",
+			evidence: `{"disc": {"silence": "No rip matches."}}`, offered: 0},
+		{name: "lookup failed", fileName: "03.flac",
+			evidence: `{"disc": {"unavailable": "AccurateRip could not be asked"}}`, offered: 1},
+		{name: "lossy", fileName: "03.mp3", evidence: `{}`, offered: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			pool := dbtest.Setup(t)
+			queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+			settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, test.evidence)
+			if _, err := pool.Exec(ctx, `
+				UPDATE acquisition_target_files SET file_name = $2 WHERE download_request_id = $1
+			`, requestID, test.fileName); err != nil {
+				t.Fatalf("name the copy: %v", err)
+			}
 
 			offered, err := queries.CopiesToJudgeAgain(ctx)
 			if err != nil {
