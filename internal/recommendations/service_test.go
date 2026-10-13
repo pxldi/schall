@@ -591,6 +591,46 @@ func TestSweepStoresTheRawExpandedSourceSnapshot(t *testing.T) {
 	}
 }
 
+// MusicBrainz answers about the recording an asked-for one was merged into, so
+// two records ListenBrainz named apart can come back as one. Their reasons
+// differ in detail, and that is no reason to fail the whole list.
+func TestSweepStoresTwoRecordsMergedIntoOneRecordingOnce(t *testing.T) {
+	firstID := uuid.MustParse("00000000-0000-0000-0000-000000000031")
+	secondID := uuid.MustParse("00000000-0000-0000-0000-000000000032")
+	mergedID := uuid.MustParse("00000000-0000-0000-0000-000000000033")
+	releaseID := uuid.MustParse("10000000-0000-0000-0000-000000000031")
+	artistID := uuid.MustParse("20000000-0000-0000-0000-000000000031")
+	store := &fakeStore{row: configured("listener")}
+	service := newService(t, store, func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/1/cf/recommendation/user/listener/recording":
+			_, _ = response.Write([]byte(`{"payload":{"mbids":[` +
+				`{"recording_mbid":"` + firstID.String() + `","score":0.8,"latest_listened_at":1786320000},` +
+				`{"recording_mbid":"` + secondID.String() + `","score":0.6,"latest_listened_at":1786406400}` +
+				`],"model_id":"model-9","last_updated":1786320000}}`))
+		case "/1/stats/user/listener/recordings":
+			_, _ = response.Write([]byte(`{"payload":{"recordings":[]}}`))
+		default:
+			http.NotFound(response, request)
+		}
+	})
+	merged := expandedRecording(mergedID, releaseID, artistID, "Glory Box")
+	service.WithRecordingProvider(&fakeRecordingProvider{recordings: map[uuid.UUID]musicbrainz.Recording{
+		firstID: merged, secondID: merged,
+	}})
+
+	if _, err := service.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	published := store.published()
+	if len(published) != 1 || published[0].MusicbrainzRecordingID != mergedID {
+		t.Fatalf("published = %#v, want the merged recording once", published)
+	}
+	if !published[0].SourceScore.Valid || published[0].SourceScore.Float64 != 0.8 {
+		t.Fatalf("score = %v, want the stronger of the two", published[0].SourceScore)
+	}
+}
+
 func TestSweepUsesRecordingSeedsWhenTheAccountHasNoCFModelYet(t *testing.T) {
 	seedID := uuid.MustParse("00000000-0000-0000-0000-000000000021")
 	recordingID := uuid.MustParse("00000000-0000-0000-0000-000000000022")

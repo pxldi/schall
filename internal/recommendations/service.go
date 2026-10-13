@@ -548,7 +548,7 @@ func (service *Service) SweepPage(ctx context.Context, position SweepPosition) (
 	if err != nil {
 		return SweepResult{}, err
 	}
-	inputs = append(inputs, run.stored...)
+	inputs = withoutRepeatedContext(append(inputs, run.stored...))
 	if run.partial != "" {
 		partial = append(partial, run.partial)
 		providerFailed = true
@@ -1068,6 +1068,32 @@ func (service *Service) expandCandidates(
 		run.stored = append(run.stored, recording.input(candidate.score, reasons, candidate.reasonContext))
 	}
 	return run, nil
+}
+
+// withoutRepeatedContext keeps the first value of each reason context key when
+// several inputs name the same recording. MusicBrainz answers about the
+// recording an asked-for one was merged into, so two records ListenBrainz named
+// apart arrive as one recording with, say, two last-listened times, and
+// prepareCandidates refuses a merge that disagrees. Reason codes and scores
+// still merge there. This keeps the first the way ownInputs does.
+func withoutRepeatedContext(inputs []CandidateInput) []CandidateInput {
+	taken := make(map[uuid.UUID]map[string]struct{}, len(inputs))
+	for index, input := range inputs {
+		keys, repeated := taken[input.MusicBrainzRecordingID]
+		if !repeated {
+			keys = make(map[string]struct{}, len(input.ReasonContext))
+			taken[input.MusicBrainzRecordingID] = keys
+		}
+		context := make(map[string]any, len(input.ReasonContext))
+		for key, value := range input.ReasonContext {
+			if _, held := keys[key]; !held {
+				keys[key] = struct{}{}
+				context[key] = value
+			}
+		}
+		inputs[index].ReasonContext = context
+	}
+	return inputs
 }
 
 // recordingExpansion is what MusicBrainz says about one recording, in the shape
