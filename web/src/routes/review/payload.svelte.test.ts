@@ -441,6 +441,46 @@ describe('what a review answer sends', () => {
     });
   });
 
+  // An answer is permanent. Until the queue has been read again the question
+  // just answered is still on screen, and it must not take a second answer.
+  it('keeps Accept disabled after an answer until the queue is read again', async () => {
+    piles.wants = [want('copies')];
+    const answering = vi.mocked(fetch).getMockImplementation()!;
+    let answered = false;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const reply = answering(input, init);
+      if ((init?.method ?? 'GET') !== 'GET') answered = true;
+      else if (answered && String(input).startsWith('/api/v1/review-queue?')) {
+        return new Promise<Response>(() => {});
+      }
+      return reply;
+    });
+    await open('Evensong');
+
+    await press('Accept copy');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const accept = screen.getByRole('button', { name: 'Accept copy' }) as HTMLButtonElement;
+    expect(accept.disabled).toBe(true);
+  });
+
+  it('drops the reason an answer failed once the reader moves to another question', async () => {
+    piles.wants = [want('copies'), want('resolution', 'ffffffff-0000-4000-8000-000000000009')];
+    const answering = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const reply = answering(input, init);
+      if ((init?.method ?? 'GET') === 'GET') return reply;
+      return new Response(JSON.stringify({ title: 'review copy not found' }), { status: 404 });
+    });
+    await open('Evensong');
+
+    await press('Accept copy');
+    expect(await screen.findByText(/review copy not found/i)).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+
+    await waitFor(() => expect(screen.queryByText(/review copy not found/i)).toBeNull());
+  });
+
   // Skip is the one answer that is not written down.
   it('records nothing at all when the reader presses Skip', async () => {
     piles.wants = [want('copies'), want('resolution', 'ffffffff-0000-4000-8000-000000000009')];

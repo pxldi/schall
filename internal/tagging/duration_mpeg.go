@@ -142,6 +142,10 @@ func countMPEGFrames(path string) (int, error) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		if errors.Is(err, errResyncLimit) {
+			// The rest of the file was never reached, so the count is a prefix.
+			return noDuration(path)
+		}
 		if err != nil {
 			return 0, fmt.Errorf("walk the frames of %s: %w", path, err)
 		}
@@ -229,8 +233,12 @@ func nextFrame(reader *bufio.Reader) (*frame, error) {
 			return nil, io.EOF
 		}
 	}
-	return nil, io.EOF
+	return nil, errResyncLimit
 }
+
+// errResyncLimit is the walk giving up on a file that still has bytes to read.
+// It is kept apart from io.EOF, because what was counted before it is a prefix.
+var errResyncLimit = errors.New("no frame header within the resync limit")
 
 // parseFrame turns a four-byte header into the two numbers the walk needs, or
 // nil if the header is not one. Every reserved combination is a nil: a byte

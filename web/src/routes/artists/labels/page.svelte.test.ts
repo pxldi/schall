@@ -133,3 +133,54 @@ describe('the labels list', () => {
     );
   });
 });
+
+describe('the safety-net poll', () => {
+  async function listReadsOver(list: LabelList) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answering(list);
+    opened();
+    await screen.findByText(list.items[0].name);
+    const reads = () =>
+      vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith('/api/v1/labels'))
+        .length;
+    const before = reads();
+    await vi.advanceTimersByTimeAsync(31_000);
+    const after = reads();
+    vi.useRealTimers();
+    return after - before;
+  }
+
+  it('asks again while a refresh is running', async () => {
+    const list = { items: [label({ refreshStatus: 'running' })], total: 1, followedCount: 1 };
+    expect(await listReadsOver(list)).toBeGreaterThan(0);
+  });
+
+  // 'pending' means no refresh job exists, which can stay true for good.
+  it('stays quiet for a label no refresh was ever queued for', async () => {
+    const list = { items: [label({ refreshStatus: 'pending' })], total: 1, followedCount: 1 };
+    expect(await listReadsOver(list)).toBe(0);
+  });
+});
+
+describe('a failed follow', () => {
+  it('says why it failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/labels' && init?.method === undefined) {
+          const items = [label({ followed: false, followedAt: null })];
+          return new Response(JSON.stringify({ items, total: 1, followedCount: 0 }));
+        }
+        return new Response(JSON.stringify({ title: 'MusicBrainz is temporarily unavailable' }), {
+          status: 503
+        });
+      })
+    );
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Follow' }));
+
+    expect(await screen.findByText("MusicBrainz isn't answering.")).toBeTruthy();
+  });
+});

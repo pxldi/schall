@@ -87,11 +87,10 @@
     queryKey: ['artists', artistID],
     queryFn: () => api.artist(artistID),
     // The refresh announces itself over the event stream; this is the fallback
-    // for a stream that never arrived.
+    // for a stream that never arrived. 'pending' is not on the list: it means
+    // no refresh job exists, which for a held artist is for good.
     refetchInterval: (query) =>
-      ['pending', 'queued', 'running'].includes(query.state.data?.refreshStatus ?? '')
-        ? 15_000
-        : false
+      ['queued', 'running'].includes(query.state.data?.refreshStatus ?? '') ? 15_000 : false
   });
 
   // The popular list is drawn only once the artist and the releases are in,
@@ -134,7 +133,7 @@
         }),
       placeholderData: keepPreviousData,
       refetchInterval: () =>
-        ['pending', 'queued', 'running'].includes($artist.data?.refreshStatus ?? '') ? 15_000 : false
+        ['queued', 'running'].includes($artist.data?.refreshStatus ?? '') ? 15_000 : false
     })
   );
   const releases = createQuery(toStore(() => releaseOptions));
@@ -169,9 +168,11 @@
   const wantMissing = createMutation({
     mutationFn: (on: boolean) => api.setArtistWantMissing(artistID, on),
     onSuccess: async () => {
+      // The release tiles count the tracks still wanted, so they are read again too.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['releases'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     }
@@ -215,7 +216,9 @@
       await api.followHeldArtist(artistID);
       await api.setArtistMonitorLevel(artistID, level);
     },
-    onSuccess: async () => {
+    // Settled rather than succeeded: when the level fails after the follow
+    // landed, the artist is followed and the page has to read that back.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
@@ -447,7 +450,7 @@
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     }

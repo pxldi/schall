@@ -195,3 +195,41 @@ describe('the playlist list', () => {
     );
   });
 });
+
+describe('the safety-net poll', () => {
+  function playlistReads(fetch: ReturnType<typeof vi.fn>) {
+    return fetch.mock.calls.filter(
+      ([input]) => new URL(String(input), 'http://localhost').pathname === '/api/v1/playlists'
+    ).length;
+  }
+
+  async function readsOver(items: Playlist[]) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ items }), { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    opened();
+    await screen.findByText(items[0].name);
+    const before = playlistReads(fetch);
+    await vi.advanceTimersByTimeAsync(31_000);
+    const after = playlistReads(fetch);
+    vi.useRealTimers();
+    return after - before;
+  }
+
+  it('asks again while a Spotify playlist waits on its first import', async () => {
+    expect(await readsOver([playlist({ importedAt: null })])).toBeGreaterThan(0);
+  });
+
+  // Weekly, new releases, manual and Navidrome lists never get an import
+  // date, so waiting on one would poll for as long as the page is open.
+  it('stays quiet over lists that are never imported', async () => {
+    expect(
+      await readsOver([
+        playlist({ name: 'Weekly', source: 'weekly', importedAt: null }),
+        playlist({ id: 'n', name: 'New', source: 'new_releases', importedAt: null }),
+        playlist({ id: 'm', name: 'Mine', source: 'manual', importedAt: null }),
+        playlist({ id: 'd', name: 'Player', source: 'navidrome', importedAt: null })
+      ])
+    ).toBe(0);
+  });
+});

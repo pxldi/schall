@@ -538,13 +538,13 @@
         {/each}
         {#if result.refusedBelowBitRate === result.refused.length}
           <a
-            href="/settings#bitrate-floor"
+            href="/settings/library#bitrate-floor"
             class="tap w-fit text-meta font-medium text-ink-2 underline-offset-2 hover:underline"
           >
             Change your minimum bit rate
           </a>
         {:else}
-          <a href="/settings" class="tap w-fit text-meta font-medium text-ink-2 underline-offset-2 hover:underline">
+          <a href="/settings/library" class="tap w-fit text-meta font-medium text-ink-2 underline-offset-2 hover:underline">
             Change the formats you accept
           </a>
         {/if}

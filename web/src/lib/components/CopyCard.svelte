@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { api, type AcquiredCopy } from '$lib/api';
   import { clock, namesDiffer, verdict } from '$lib/review';
   import { listening } from '$lib/preview.svelte';
@@ -62,6 +62,20 @@
   // the same as an ordinary pause.
   $effect(() => {
     if (loadedSrc === src && listening.sounding !== src) audioEl?.pause();
+  });
+
+  // Handed another copy while this one was loaded: Review reuses the card
+  // between filed questions, and the old copy must not keep sounding there.
+  $effect(() => {
+    const next = src;
+    untrack(() => {
+      if (!loadedSrc || loadedSrc === next) return;
+      audioEl?.pause();
+      if (listening.sounding === loadedSrc) listening.sounding = '';
+      loadedSrc = '';
+      elapsed = 0;
+      duration = 0;
+    });
   });
 
   $effect(() => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { clock, listenFrom } from '$lib/review';
   import { listening } from '$lib/preview.svelte';
 
@@ -40,7 +40,9 @@
     elapsed = 0;
     duration = 0;
     audioEl.src = source;
-    audioEl.volume = listening.volume;
+    // Untracked: the effect below follows the volume. Tracking it here would
+    // load the copy again, from the start, every time the slider moved.
+    audioEl.volume = untrack(() => listening.volume);
     audioEl.load();
   });
 

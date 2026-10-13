@@ -98,6 +98,9 @@ type fakeStore struct {
 	openWants   int
 	staleWants  int
 	leaseByID   map[uuid.UUID]db.LibraryFileLeaseRow
+	// askedElsewhere names the wants something other than the weekly playlist
+	// also asked for.
+	askedElsewhere map[uuid.UUID]bool
 
 	entryArtists    []string
 	libraryPool     []db.WeeklyLibraryCandidateRow
@@ -273,6 +276,10 @@ func (store *fakeStore) RecordRecommendationUnkept(
 func (store *fakeStore) SettleWeeklyTargetNotWanted(_ context.Context, id uuid.UUID, _ string) error {
 	store.settledTargets = append(store.settledTargets, id)
 	return nil
+}
+
+func (store *fakeStore) OnlyTheWeeklyAskedFor(_ context.Context, id uuid.UUID) (bool, error) {
+	return !store.askedElsewhere[id], nil
 }
 
 func (store *fakeStore) WeeklyPlaylistArrivals(context.Context, uuid.UUID) ([]db.WeeklyPlaylistArrivalRow, error) {
@@ -802,6 +809,54 @@ func TestASongThatArrivedIsPutOnTrialByTheRunThatFoundIt(t *testing.T) {
 	}
 }
 
+// A song somebody else also asked for is theirs. It arrives kept, so no weekly
+// signal can ever delete it.
+func TestASongSomebodyElseAskedForArrivesKept(t *testing.T) {
+	store := newFakeStore()
+	store.arrivals = []db.WeeklyPlaylistArrivalRow{{
+		EntryID: uuid.New(), TargetID: targetID, LibraryFileID: fileID,
+		LibraryPath:            "/music/Weekly/Portishead - Glory Box.flac",
+		MusicBrainzRecordingID: recording,
+		AskedElsewhere:         true,
+	}}
+
+	service := newService(store)
+	if _, err := service.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if len(store.kept) != 1 || store.kept[0].keptBy != keptAskedElsewhere {
+		t.Fatalf("kept = %+v, want the song kept for whoever else asked", store.kept)
+	}
+}
+
+// Somebody can ask for a song after it went on trial. The removal asks again
+// right before deleting, and their ask keeps the file.
+func TestAnAnnouncedSongSomebodyAskedForSinceIsKept(t *testing.T) {
+	store := newFakeStore()
+	lease := leavingLease()
+	store.leases = []db.LibraryFileLeaseRow{lease}
+	store.askedElsewhere = map[uuid.UUID]bool{targetID: true}
+	remover := &fakeRemover{}
+
+	service := newService(store).
+		WithStars(&fakeStars{answers: map[string]SignalRead{lease.LibraryPath: {Reading: Absent}}}).
+		WithRemover(remover)
+	if _, err := service.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if len(remover.removed) != 0 {
+		t.Fatalf("a file somebody asked for was deleted: %v", remover.removed)
+	}
+	if len(store.kept) != 1 || store.kept[0].keptBy != keptAskedElsewhere {
+		t.Fatalf("kept = %+v, want the lease kept for whoever asked", store.kept)
+	}
+	if len(store.settledTargets) != 0 {
+		t.Fatalf("the want somebody asked for was settled as not wanted: %v", store.settledTargets)
+	}
+}
+
 func TestARefreshAsksForTheWeeksSongsAndCountsTheOnesAlreadyBeingLookedFor(t *testing.T) {
 	store := newFakeStore()
 	store.settings.SongsPerWeek = 5
@@ -827,6 +882,9 @@ func TestARefreshAsksForTheWeeksSongsAndCountsTheOnesAlreadyBeingLookedFor(t *te
 	}
 	if store.createdTargets[0].Origin != "recommendation" {
 		t.Fatalf("the want does not say where it came from: %q", store.createdTargets[0].Origin)
+	}
+	if !store.createdTargets[0].WeeklyOnly {
+		t.Fatal("the want does not say the weekly playlist is the one asking")
 	}
 	if store.sweepsQueued != 1 {
 		t.Fatalf("the acquisition sweep was woken %d times, want 1", store.sweepsQueued)

@@ -1516,3 +1516,52 @@ func TestRetryingARequestWithNoFailedTransferIsRefused(t *testing.T) {
 		t.Fatalf("RetryDownloadRequestFiles() error = %v, want ErrNothingToRetry", err)
 	}
 }
+
+func TestStartedDownloadRequestsListsEveryStartedRequest(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	artistID, albumID := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (id, musicbrainz_id, name, sort_name)
+		VALUES ($1, $2, 'Portishead', 'Portishead')
+	`, artistID, uuid.New()); err != nil {
+		t.Fatalf("seed artist: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO albums (id, artist_id, title, album_type)
+		VALUES ($1, $2, 'Dummy', 'album')
+	`, albumID, artistID); err != nil {
+		t.Fatalf("seed album: %v", err)
+	}
+
+	queries := New(pool)
+	// The poller follows every started request. A page of the newest would
+	// leave the oldest transfers unwatched once more than a page are moving.
+	const started = 201
+	for index := range started {
+		id, _, err := queries.CreateDownloadRequest(ctx, CreateDownloadRequestParams{
+			AlbumID: albumID, Provider: "slskd", SourceUsername: fmt.Sprintf("peer-%03d", index),
+			SourceDirectory: `@@peer\Music\Dummy`, FileCount: 1, ExpectedTrackCount: 1,
+			TotalSizeBytes: 100, Format: "flac", Score: 0.9,
+			Files: []DownloadRequestFile{{
+				Path: `@@peer\Music\Dummy\01.flac`, Name: "01.flac", Extension: "flac", SizeBytes: 100,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("CreateDownloadRequest(%d) error = %v", index, err)
+		}
+		if _, err := queries.StartDownloadRequest(ctx, id); err != nil {
+			t.Fatalf("StartDownloadRequest(%d) error = %v", index, err)
+		}
+	}
+
+	following, err := queries.StartedDownloadRequests(ctx)
+	if err != nil {
+		t.Fatalf("StartedDownloadRequests() error = %v", err)
+	}
+	if len(following) != started {
+		t.Fatalf("following %d requests, want all %d started", len(following), started)
+	}
+}

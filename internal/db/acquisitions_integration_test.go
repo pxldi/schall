@@ -1783,6 +1783,32 @@ func TestAWantWhoseImportFailedIsOfferedASiblingsFolderAgain(t *testing.T) {
 	}
 }
 
+// A want stopped to wait on a person or on evidence has no next look, and a
+// sibling's folder must not give it one. Fetching for it would reschedule it and
+// undo the stop (StopAfterCreditOnlyRefusals, StopLookingForAcquisitionTarget).
+func TestAStoppedWantIsNotOfferedASiblingsFolder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	releaseGroupID := uuid.New()
+	glory := wantOnRelease(ctx, t, pool, "Glory Box", releaseGroupID)
+	mysterons := wantOnRelease(ctx, t, pool, "Mysterons", releaseGroupID)
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets SET next_attempt_at = NULL WHERE id = $1
+	`, mysterons); err != nil {
+		t.Fatal(err)
+	}
+
+	siblings, err := New(pool).WantsSharingAReleaseWith(ctx, glory)
+	if err != nil {
+		t.Fatalf("WantsSharingAReleaseWith() error = %v", err)
+	}
+	if len(siblings) != 0 {
+		t.Fatalf("siblings = %v, want a stopped want left alone", siblings)
+	}
+}
+
 // The answers offered for an entry are read back in the order the attempt ranked
 // them, with the evidence that stood for each: a question stored without its
 // evidence is a list of titles and a request to guess.

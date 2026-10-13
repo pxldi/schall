@@ -885,3 +885,92 @@ describe('the releases fail to load', () => {
     expect(screen.queryByText('No releases yet')).toBeNull();
   });
 });
+
+describe('the safety-net poll', () => {
+  async function artistReadsOver(artist: ArtistDetail) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answering(artist);
+    opened();
+    await screen.findByRole('heading', { level: 1, name: 'Talk Talk' });
+    const reads = () =>
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) => String(input).endsWith(`/api/v1/artists/${artistID}`))
+        .length;
+    const before = reads();
+    await vi.advanceTimersByTimeAsync(31_000);
+    const after = reads();
+    vi.useRealTimers();
+    return after - before;
+  }
+
+  it('asks again while a refresh is queued', async () => {
+    expect(await artistReadsOver(detail({ refreshStatus: 'queued' }))).toBeGreaterThan(0);
+  });
+
+  // 'pending' is what the server says when no refresh job exists at all, which
+  // for an artist who is only held stays true for good.
+  it('stays quiet for an artist no refresh was ever queued for', async () => {
+    expect(await artistReadsOver(detail({ followed: false, refreshStatus: 'pending' }))).toBe(0);
+  });
+});
+
+describe('the standing want', () => {
+  function albumReads() {
+    return vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input]) => new URL(String(input), 'http://localhost').pathname === '/api/v1/albums'
+      ).length;
+  }
+
+  // Each tile counts the tracks still wanted, so wanting has to read them again.
+  it('reads the releases again once it is set', async () => {
+    const seen: { method: string; pathname: string; body?: string }[] = [];
+    answeringWithActions(detail(), seen);
+    opened();
+
+    const button = await screen.findByRole('button', { name: 'Add 2 missing' });
+    await waitFor(() => expect(albumReads()).toBeGreaterThan(0));
+    const before = albumReads();
+    await fireEvent.click(button);
+
+    await waitFor(() => expect(albumReads()).toBeGreaterThan(before));
+  });
+});
+
+describe('a follow that half lands', () => {
+  // Following and setting the level are two requests. When the second fails
+  // the artist is followed all the same, and the page has to say so.
+  it('reads the artist again when the follow lands but the level does not', async () => {
+    let followed = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        const method = (init?.method ?? 'GET').toUpperCase();
+        const body = (value: unknown, status = 200) =>
+          new Response(JSON.stringify(value), { status });
+        if (url.pathname === `/api/v1/artists/${artistID}` && method === 'GET') {
+          return body(detail({ followed, monitorLevel: 'main' }));
+        }
+        if (url.pathname === `/api/v1/artists/${artistID}/follow` && method === 'POST') {
+          followed = true;
+          return body(detail({ followed: true }));
+        }
+        if (url.pathname === `/api/v1/artists/${artistID}/monitor`) {
+          return body({ title: 'database is unavailable' }, 503);
+        }
+        return body({ items: [], total: 0, limit: 24, offset: 0 });
+      })
+    );
+    opened();
+
+    const select = (await screen.findByLabelText('Follow this artist')) as HTMLSelectElement;
+    await fireEvent.change(select, { target: { value: 'everything' } });
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Follow this artist') as HTMLSelectElement).value).toBe('main')
+    );
+  });
+});

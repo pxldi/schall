@@ -3,6 +3,7 @@ import type { AcquiredCopy, AcquisitionTarget, DownloadRequest, ImportEvidence, 
 import {
   ASKS,
   batchChoice,
+  batchProof,
   candidateRow,
   clock,
   groupByAlbum,
@@ -552,5 +553,21 @@ describe('deciding an album at once', () => {
   it('starts a copy a third of the way in', () => {
     expect(listenFrom(300)).toBe(100);
     expect(listenFrom(Number.NaN)).toBe(0);
+  });
+
+  // A contradiction voids a pair whatever else agrees, and the distributor's
+  // sample disagreeing is one.
+  it('does not check a copy whose sample disagreed, even with an agreeing ISRC', () => {
+    const disagreed = copy({
+      evidence: {
+        name: 'x',
+        agrees: ['ISRC'],
+        differs: [],
+        problems: [],
+        anchor: { source: 'deezer', rate: 0.4, measured: true, agrees: false }
+      }
+    });
+
+    expect(batchProof(disagreed)).toBe('');
   });
 });

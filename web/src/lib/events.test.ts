@@ -165,7 +165,7 @@ describe('connectEvents', () => {
 
       vi.advanceTimersByTime(NOTICE_GAP_MS);
 
-      expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'global-search', ...queue]);
+      expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'labels', 'global-search', ...queue]);
     } finally {
       vi.useRealTimers();
     }
@@ -209,7 +209,28 @@ describe('connectEvents', () => {
 
     stream.announce('catalogue');
 
-    expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'global-search', ...queue, 'dashboard']);
+    expect(asked(invalidateQueries)).toEqual(['artists', 'releases', 'labels', 'global-search', ...queue, 'dashboard']);
+  });
+
+  // A label refresh is announced on the catalogue topic.
+  it('reaches the labels when the catalogue moves', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('catalogue');
+
+    expect(asked(invalidateQueries)).toContain('labels');
+  });
+
+  // The weekly and new-releases lists are refreshed by jobs that announce on
+  // the playlists topic, and Settings reads each under a key of its own.
+  it('reaches the weekly and new-releases lists when the playlists move', () => {
+    const { invalidateQueries, stream } = connect();
+
+    stream.announce('playlists');
+
+    expect(asked(invalidateQueries)).toEqual(
+      expect.arrayContaining(['playlists', 'weekly', 'new-releases'])
+    );
   });
 
   // The palette asks one question of everything at once, so anything that

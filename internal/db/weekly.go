@@ -703,6 +703,43 @@ func (q *Queries) SettleWeeklyTargetNotWanted(ctx context.Context, targetID uuid
 	return nil
 }
 
+// onlyTheWeeklyAsked is "nothing but the weekly playlist asked for this want",
+// for the want named targets. It is what licenses a lease to delete the want's
+// file (ADR 0021). The flag is cleared by any other ask that went through
+// CreateAcquisitionTarget. The link check covers another playlist's entry joined
+// to the want directly, or to a want merged into it.
+const onlyTheWeeklyAsked = `
+	targets.weekly_only
+	AND NOT EXISTS (
+	    SELECT 1
+	    FROM playlist_entry_targets asked
+	    JOIN acquisition_targets linked ON linked.id = asked.acquisition_target_id
+	    JOIN playlist_entries ON playlist_entries.id = asked.playlist_entry_id
+	    JOIN playlists ON playlists.id = playlist_entries.playlist_id
+	    WHERE (linked.id = targets.id OR linked.superseded_by_id = targets.id)
+	      AND playlists.source <> 'weekly'
+	)
+`
+
+// OnlyTheWeeklyAskedFor reports whether the weekly playlist is still the one
+// thing that asked for this want. A removal asks it again right before deleting,
+// because somebody may have asked for the recording after the lease was granted.
+func (q *Queries) OnlyTheWeeklyAskedFor(ctx context.Context, targetID uuid.UUID) (bool, error) {
+	var only bool
+	err := q.db.QueryRow(ctx, `
+		SELECT `+onlyTheWeeklyAsked+`
+		FROM acquisition_targets targets
+		WHERE targets.id = $1
+	`, targetID).Scan(&only)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read who asked for want %s: %w", targetID, err)
+	}
+	return only, nil
+}
+
 // WeeklyPlaylistArrivalRow is one song on the weekly playlist that has arrived
 // and is not yet on trial.
 type WeeklyPlaylistArrivalRow struct {
@@ -713,6 +750,10 @@ type WeeklyPlaylistArrivalRow struct {
 	MusicBrainzRecordingID uuid.UUID
 	EntryArtist            string
 	EntryTitle             string
+	// AskedElsewhere is set when something other than the weekly playlist also
+	// asked for the want. Its file belongs to whoever asked and is never put on
+	// trial.
+	AskedElsewhere bool
 }
 
 // WeeklyPlaylistArrivals returns the entries of the weekly playlist whose want
@@ -726,24 +767,25 @@ func (q *Queries) WeeklyPlaylistArrivals(
 	ctx context.Context, playlistID uuid.UUID,
 ) ([]WeeklyPlaylistArrivalRow, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT playlist_entries.id, acquisition_targets.id,
+		SELECT playlist_entries.id, targets.id,
 		       library_files.id, library_files.path,
-		       acquisition_targets.musicbrainz_recording_id,
-		       acquisition_targets.entry_artist, acquisition_targets.entry_title
+		       targets.musicbrainz_recording_id,
+		       targets.entry_artist, targets.entry_title,
+		       NOT (`+onlyTheWeeklyAsked+`)
 		FROM playlist_entries
 		JOIN playlist_entry_targets
 		    ON playlist_entry_targets.playlist_entry_id = playlist_entries.id
-		JOIN acquisition_targets
-		    ON acquisition_targets.id = playlist_entry_targets.acquisition_target_id
+		JOIN acquisition_targets targets
+		    ON targets.id = playlist_entry_targets.acquisition_target_id
 		JOIN library_files
-		    ON library_files.id = acquisition_targets.acquired_library_file_id
+		    ON library_files.id = targets.acquired_library_file_id
 		WHERE playlist_entries.playlist_id = $1
-		  AND acquisition_targets.status = 'acquired'
-		  AND acquisition_targets.musicbrainz_recording_id IS NOT NULL
+		  AND targets.status = 'acquired'
+		  AND targets.musicbrainz_recording_id IS NOT NULL
 		  AND library_files.missing_at IS NULL
 		  AND NOT EXISTS (
 		      SELECT 1 FROM library_file_leases
-		      WHERE library_file_leases.acquisition_target_id = acquisition_targets.id
+		      WHERE library_file_leases.acquisition_target_id = targets.id
 		  )
 		  -- A file Schall holds by its address on another service is passed
 		  -- over. The weekly playlist decides what to keep and what to delete by
@@ -770,6 +812,7 @@ func (q *Queries) WeeklyPlaylistArrivals(
 		if err := rows.Scan(
 			&arrival.EntryID, &arrival.TargetID, &arrival.LibraryFileID, &arrival.LibraryPath,
 			&arrival.MusicBrainzRecordingID, &arrival.EntryArtist, &arrival.EntryTitle,
+			&arrival.AskedElsewhere,
 		); err != nil {
 			return nil, err
 		}

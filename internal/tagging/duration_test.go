@@ -417,3 +417,22 @@ func copyFixture(t *testing.T, name, to string) {
 		t.Fatal(err)
 	}
 }
+
+// A block of junk longer than the walk will search through leaves the rest of
+// the file unread. What was counted before it is a prefix of the file, and a
+// prefix is not a length.
+func TestCountedDurationRefusesAnMP3ItCouldNotWalkToTheEnd(t *testing.T) {
+	whole, err := os.ReadFile(filepath.Join("testdata", "silence.mp3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := append(append(append([]byte{}, whole...), make([]byte, 1<<17)...), whole...)
+	path := filepath.Join(t.TempDir(), "broken.mp3")
+	if err := os.WriteFile(path, broken, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	counted, err := CountedDurationMS(path)
+	if !errors.Is(err, ErrNoDuration) {
+		t.Fatalf("counted = %dms, err = %v; want ErrNoDuration", counted, err)
+	}
+}

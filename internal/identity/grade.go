@@ -1264,7 +1264,8 @@ const rowLengthToleranceMS = 2000
 // where the codes are all that separates the clean edition from the explicit
 // one, and the row asked about is the clean one, the explicit row answers for it
 // (ADR 0032). A name and a length cannot outvote the label having
-// registered the two rows separately in any other case.
+// registered the two rows separately in any other case. Outside that exception,
+// one row marked clean and the other not ends it too.
 //
 // copyDurationMS is how long the copy in hand actually runs, and it is read only
 // where MusicBrainz does not know one of the two lengths.
@@ -1274,6 +1275,11 @@ func oneRegistration(
 	switch {
 	case explicitEditionOf(wanted, other, copyDurationMS):
 		return byExplicitEdition
+	case cleanEdition(wanted) != cleanEdition(other):
+		// One row marked clean and the other not are two editions, whatever the
+		// codes say. MusicBrainz often enters the clean row without a code, and
+		// the name and the length cannot tell the editions apart.
+		return notOneRegistration
 	case registrationCodesDisagree(wanted, other):
 		return notOneRegistration
 	case sameArtists(wanted, other) && sameTitle(wanted, other) &&

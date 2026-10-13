@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
+	"github.com/pxldi/schall/internal/musicbrainz"
 	"github.com/rs/zerolog"
 )
 
@@ -276,5 +277,77 @@ func TestWithdrawingADecisionLeavesUnrelatedIdentitiesAlone(t *testing.T) {
 	}
 	if status, _ := built.statusOf(t, ctx, unrelated); status != StatusResolved {
 		t.Errorf("status = %q, want the unrelated file left resolved", status)
+	}
+}
+
+// reresolvable turns the chain's head into an automatic identity on a file
+// whose tags changed, the shape a scan leaves behind: the identity is still
+// there and the file is back in the resolution queue.
+func (built chain) reresolvable(t *testing.T, ctx context.Context) {
+	t.Helper()
+	if _, err := built.pool.Exec(ctx, `
+		UPDATE library_file_identities SET is_manual = false, method = 'acoustid'
+		WHERE library_file_id = $1
+	`, built.decided); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := built.pool.Exec(ctx, `
+		UPDATE library_files SET resolution_status = 'pending' WHERE id = $1
+	`, built.decided); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Resolving the file again is a third way its answer can change. When the new
+// attempt no longer says it is the recording it lent, what it lent is taken back
+// the way a person changing the answer takes it back.
+func TestResolvingAFileAgainWithdrawsWhatItsOldIdentityAdmitted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	built := setupChain(t, ctx)
+	built.reresolvable(t, ctx)
+	service := NewService(built.pool, &stubProvider{}, zerolog.Nop())
+
+	if err := service.Resolve(ctx, built.decided); err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if built.identityOf(t, ctx, built.decided) {
+		t.Fatal("the file kept an identity the providers no longer give it")
+	}
+	for _, fileID := range []uuid.UUID{built.admitted, built.second} {
+		if built.identityOf(t, ctx, fileID) {
+			t.Errorf("file %s still has an identity, want it withdrawn with its ancestor", fileID)
+		}
+		if status, _ := built.statusOf(t, ctx, fileID); status != StatusNeedsReview {
+			t.Errorf("status = %q, want the file to be a question again", status)
+		}
+	}
+}
+
+// The same attempt arriving at the same recording has changed nothing, and
+// nothing that rested on it falls.
+func TestResolvingAFileToTheSameRecordingKeepsWhatItAdmitted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	built := setupChain(t, ctx)
+	built.reresolvable(t, ctx)
+	length := 487000
+	service := NewService(built.pool, &stubProvider{results: []musicbrainz.Recording{{
+		ID: built.recordingID, Title: "Candy from Strangers", ArtistCredit: "Anetha",
+		DurationMS: &length,
+	}}}, zerolog.Nop())
+
+	if err := service.Resolve(ctx, built.decided); err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if status, summary := built.statusOf(t, ctx, built.decided); status != StatusResolved {
+		t.Fatalf("status = %q (%s), want the file resolved to the same recording", status, summary)
+	}
+	for _, fileID := range []uuid.UUID{built.admitted, built.second} {
+		if !built.identityOf(t, ctx, fileID) {
+			t.Errorf("file %s lost its identity, want it kept", fileID)
+		}
 	}
 }

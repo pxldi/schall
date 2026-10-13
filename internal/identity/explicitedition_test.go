@@ -301,3 +301,36 @@ func TestAnEntryWithoutTheFlagStillResolvesToTheOnlyRow(t *testing.T) {
 		t.Errorf("resolved to %s, want %s", outcome.Identity.RecordingID, clean.ID)
 	}
 }
+
+// MusicBrainz often enters the clean edition without a registration code. With
+// no codes to disagree, 0031's name-and-length test would read the clean row as
+// the explicit one, and audio naming the clean row would be set aside for a want
+// for the explicit edition. The clean marker alone keeps them two tracks.
+func TestACleanRowWithoutACodeIsNotTheExplicitOne(t *testing.T) {
+	clean, explicit := timelessRows()
+	clean.ISRCs = nil
+
+	if got := oneRegistration(explicit, clean, 256000); got != notOneRegistration {
+		t.Errorf("oneRegistration(explicit, clean) = %v, want not one registration", got)
+	}
+	if verdict := filingVerdict(t, explicit, clean, 256000); verdict != FilingOtherRecording {
+		t.Errorf("verdict = %v, want the want to keep looking", verdict)
+	}
+
+	copy := Evidence{
+		Subject: SubjectFile, Artist: "The Weeknd", Title: "Timeless", DurationMS: 256000,
+		Acoustic: heard(cluster(0.97, firstID)),
+	}
+	sample := excerptOf(0.05)
+	sample.RecordingID = explicit.ID
+	copy.Anchor = sample
+	verification, err := NewResolver(rowProvider(clean, explicit)).Verify(
+		context.Background(), copy, explicit.ID)
+	if err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	if verification.Proven() {
+		t.Errorf("the clean edition was admitted for a want for the explicit one: %s",
+			verification.Summary)
+	}
+}

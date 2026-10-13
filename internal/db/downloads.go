@@ -967,9 +967,10 @@ type Peer struct {
 }
 
 // StartedDownloadRequests lists the requests whose transfers are still being
-// followed, so the poller knows whether there is anything left to do.
+// followed, so the poller knows whether there is anything left to do. It has
+// no limit: the list is newest first, so a page would drop the oldest transfers.
 func (q *Queries) StartedDownloadRequests(ctx context.Context) ([]DownloadRequestRow, error) {
-	page, err := q.ListDownloadRequests(ctx, ListDownloadRequestsParams{Status: "started", Limit: 200})
+	page, err := q.ListDownloadRequests(ctx, ListDownloadRequestsParams{Status: "started"})
 	return page.Items, err
 }
 

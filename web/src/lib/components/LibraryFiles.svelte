@@ -179,6 +179,8 @@
     soundCloudOpen = true;
   }
 
+  let identityRead = 0;
+
   async function showIdentity(fileId: string) {
     if (identityFileID === fileId) {
       identityFileID = null;
@@ -190,12 +192,16 @@
     fileResolution = null;
     identityError = null;
     loadingIdentity = true;
+    // Only the latest read may answer. An older one, shown under the next file,
+    // offers its candidates to be accepted as that file's identity.
+    const read = ++identityRead;
     try {
-      fileResolution = await api.fileIdentity(fileId);
+      const resolution = await api.fileIdentity(fileId);
+      if (read === identityRead) fileResolution = resolution;
     } catch (error) {
-      identityError = error;
+      if (read === identityRead) identityError = error;
     } finally {
-      loadingIdentity = false;
+      if (read === identityRead) loadingIdentity = false;
     }
   }
 
@@ -203,8 +209,11 @@
     mutationFn: ({ fileId, recordingId }: { fileId: string; recordingId: string }) =>
       api.acceptIdentity(fileId, recordingId),
     onSuccess: (result) => {
-      fileResolution = result;
-      chosenIdentity = -1;
+      // The reader may have opened another file while this was sent.
+      if (result.fileId === identityFileID) {
+        fileResolution = result;
+        chosenIdentity = -1;
+      }
       void queryClient.invalidateQueries({ queryKey: ['library-files'] });
       void queryClient.invalidateQueries({ queryKey: ['library'] });
     }
@@ -212,8 +221,11 @@
   const localOnly = createMutation({
     mutationFn: (fileId: string) => api.markLocalOnly(fileId),
     onSuccess: (result) => {
-      fileResolution = result;
-      chosenIdentity = -1;
+      // The reader may have opened another file while this was sent.
+      if (result.fileId === identityFileID) {
+        fileResolution = result;
+        chosenIdentity = -1;
+      }
       void queryClient.invalidateQueries({ queryKey: ['library-files'] });
       void queryClient.invalidateQueries({ queryKey: ['library'] });
     }

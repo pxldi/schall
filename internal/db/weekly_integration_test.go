@@ -63,12 +63,117 @@ func seedWeeklySong(ctx context.Context, t *testing.T, queries *Queries, title s
 		MusicBrainzRecordingID: uuid.NullUUID{UUID: fixture.recordingID, Valid: true},
 		ResolutionMethod:       pgtype.Text{String: "manual", Valid: true},
 		Summary:                "wanted for the weekly playlist",
+		WeeklyOnly:             true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fixture.targetID = targetID
 	return fixture
+}
+
+func onlyTheWeekly(ctx context.Context, t *testing.T, queries *Queries, targetID uuid.UUID) bool {
+	t.Helper()
+	only, err := queries.OnlyTheWeeklyAskedFor(ctx, targetID)
+	if err != nil {
+		t.Fatalf("OnlyTheWeeklyAskedFor() error = %v", err)
+	}
+	return only
+}
+
+// The weekly playlist's own want is its alone until something else asks.
+func TestAWantTheWeeklyCreatedIsOnlyTheWeeklys(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+	fixture := seedWeeklySong(ctx, t, queries, "Glory Box")
+
+	if !onlyTheWeekly(ctx, t, queries, fixture.targetID) {
+		t.Fatal("the weekly playlist's own want reads as asked for elsewhere")
+	}
+}
+
+// Asking for a recording the weekly playlist already wants returns its want, and
+// the ask stays on it: the file is no longer the weekly's to delete.
+func TestAskingForTheWeeklysRecordingMakesTheWantNotOnlyTheWeeklys(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+	fixture := seedWeeklySong(ctx, t, queries, "Glory Box")
+
+	if _, _, err := queries.CreateAcquisitionTarget(ctx, CreateAcquisitionTargetParams{
+		Origin: "recommendation", EntryArtist: "Portishead", EntryTitle: "Glory Box",
+		MusicBrainzRecordingID: uuid.NullUUID{UUID: fixture.recordingID, Valid: true},
+		Summary:                "Wanted.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if onlyTheWeekly(ctx, t, queries, fixture.targetID) {
+		t.Fatal("a person's ask left the want deletable by the weekly playlist")
+	}
+}
+
+// The weekly playlist picking a recording somebody already wants does not make
+// that want the weekly's.
+func TestTheWeeklyPickingAWantedRecordingDoesNotTakeItOver(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+	recordingID := uuid.New()
+	wanted, _, err := queries.CreateAcquisitionTarget(ctx, CreateAcquisitionTargetParams{
+		Origin: "manual", EntryArtist: "Portishead", EntryTitle: "Glory Box",
+		MusicBrainzRecordingID: uuid.NullUUID{UUID: recordingID, Valid: true},
+		Summary:                "Wanted.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	again, created, err := queries.CreateAcquisitionTarget(ctx, CreateAcquisitionTargetParams{
+		Origin: "recommendation", EntryArtist: "Portishead", EntryTitle: "Glory Box",
+		MusicBrainzRecordingID: uuid.NullUUID{UUID: recordingID, Valid: true},
+		Summary:                "wanted for the weekly playlist",
+		WeeklyOnly:             true,
+	})
+	if err != nil || created || again != wanted {
+		t.Fatalf("CreateAcquisitionTarget() = %v, %v, %v; want the person's want back", again, created, err)
+	}
+	if onlyTheWeekly(ctx, t, queries, wanted) {
+		t.Fatal("the weekly playlist took over a want a person made")
+	}
+}
+
+// An entry that resolves to the weekly's recording is merged into its want, and
+// the ask comes with it.
+func TestAnEntryMergedIntoTheWeeklysWantMakesItNotOnlyTheWeeklys(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	queries := New(dbtest.Setup(t))
+	fixture := seedWeeklySong(ctx, t, queries, "Glory Box")
+	unresolved, _, err := queries.CreateAcquisitionTarget(ctx, CreateAcquisitionTargetParams{
+		Origin: "playlist", EntryArtist: "Portishead", EntryTitle: "Glory Box",
+		Summary: "Wanted.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	merged, err := queries.ResolveAcquisitionTarget(ctx, ResolveAcquisitionTargetParams{
+		ID: unresolved, MusicBrainzRecordingID: fixture.recordingID, ResolutionMethod: "isrc",
+		Summary: "Resolved.", SupersededSummary: "Merged.", SupersededNotWanted: "Merged.",
+		Detail: "resolved", NextAttemptAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("ResolveAcquisitionTarget() error = %v", err)
+	}
+	if merged.Status != "superseded" || merged.SupersededByID.UUID != fixture.targetID {
+		t.Fatalf("resolved = %s by %v, want it merged into the weekly's want",
+			merged.Status, merged.SupersededByID)
+	}
+	if onlyTheWeekly(ctx, t, queries, fixture.targetID) {
+		t.Fatal("a merged entry's ask left the want deletable by the weekly playlist")
+	}
 }
 
 // acquire marks the want as obtained, which is what makes the song an arrival

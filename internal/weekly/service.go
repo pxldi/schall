@@ -78,6 +78,10 @@ const (
 
 	signalStar = "navidrome_star"
 	signalKeep = "schall_keep"
+	// keptAskedElsewhere settles a lease whose want something other than the
+	// weekly playlist also asked for. That file is the asker's, and no weekly
+	// signal may delete it.
+	keptAskedElsewhere = "asked_elsewhere"
 
 	outcomeKept       = "kept"
 	outcomeAbsent     = "absent"
@@ -192,6 +196,7 @@ type Store interface {
 
 	RecordRecommendationUnkept(ctx context.Context, recordingID uuid.UUID, runID uuid.NullUUID, suppressedUntil time.Time) error
 	SettleWeeklyTargetNotWanted(ctx context.Context, targetID uuid.UUID, summary string) error
+	OnlyTheWeeklyAskedFor(ctx context.Context, targetID uuid.UUID) (bool, error)
 
 	WeeklyPlaylistArrivals(ctx context.Context, playlistID uuid.UUID) ([]db.WeeklyPlaylistArrivalRow, error)
 	WeeklyPlaylistOpenWants(ctx context.Context, playlistID uuid.UUID) (int, error)
@@ -772,6 +777,21 @@ func (service *Service) remove(
 			Msg("abandon weekly lease removal")
 		return nil
 	}
+	// Somebody may have asked for the recording since the lease was granted: a
+	// playlist of theirs, or the want button. Their ask outranks the trial.
+	only, err := service.store.OnlyTheWeeklyAskedFor(ctx, lease.AcquisitionTargetID)
+	if err != nil {
+		return fmt.Errorf("read who asked for %s before removal: %w", lease.LibraryPath, err)
+	}
+	if !only {
+		if _, err := service.store.KeepLibraryFileLease(
+			ctx, lease.ID, keptAskedElsewhere, uuid.NullUUID{UUID: run.ID, Valid: true},
+		); err != nil {
+			return err
+		}
+		tally.kept++
+		return nil
+	}
 
 	_, err = service.remover.Remove(ctx, fileID)
 	switch {
@@ -818,7 +838,7 @@ func (service *Service) takeIn(
 	}
 	expires := service.now().Add(trialWeek)
 	for _, arrival := range arrivals {
-		_, err := service.store.GrantLibraryFileLease(ctx, db.GrantLibraryFileLeaseParams{
+		lease, err := service.store.GrantLibraryFileLease(ctx, db.GrantLibraryFileLeaseParams{
 			LibraryFileID:          arrival.LibraryFileID,
 			LibraryPath:            arrival.LibraryPath,
 			MusicBrainzRecordingID: arrival.MusicBrainzRecordingID,
@@ -828,6 +848,16 @@ func (service *Service) takeIn(
 		})
 		if err != nil {
 			return fmt.Errorf("put %s on trial: %w", arrival.LibraryPath, err)
+		}
+		// A want somebody else also asked for is kept on arrival. The lease is
+		// still written so the entry settles and leaves the list like any other.
+		if arrival.AskedElsewhere {
+			if _, err := service.store.KeepLibraryFileLease(
+				ctx, lease.ID, keptAskedElsewhere, uuid.NullUUID{UUID: run.ID, Valid: true},
+			); err != nil {
+				return fmt.Errorf("keep %s: %w", arrival.LibraryPath, err)
+			}
+			tally.kept++
 		}
 		if err := service.store.MarkPlaylistEntryOwned(
 			ctx, arrival.EntryID, uuid.NullUUID{UUID: arrival.LibraryFileID, Valid: true},
@@ -1071,6 +1101,7 @@ func (service *Service) chooseFromSuggestions(
 			MusicBrainzReleaseGroupID: uuid.NullUUID{UUID: candidate.MusicBrainzReleaseGroupID, Valid: true},
 			ResolutionMethod:          pgtype.Text{String: "manual", Valid: true},
 			Summary:                   "For the weekly playlist",
+			WeeklyOnly:                true,
 		})
 		if err != nil {
 			return fmt.Errorf("ask for %s: %w", candidate.RecordingTitle, err)
