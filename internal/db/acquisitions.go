@@ -193,6 +193,9 @@ type CreateAcquisitionTargetParams struct {
 	// UpgradeOfLibraryFileID names the file this want exists to replace. See
 	// AcquisitionTargetRow.UpgradeOfLibraryFileID.
 	UpgradeOfLibraryFileID uuid.NullUUID
+	// WeeklyOnly says the weekly playlist is the one asking. Only a want it
+	// creates this way may later be put on trial and deleted (ADR 0021).
+	WeeklyOnly bool
 }
 
 // CreateAcquisitionTarget records a want, reporting whether it is a new one.
@@ -218,13 +221,13 @@ func (q *Queries) CreateAcquisitionTarget(
 				entry_duration_ms, entry_isrc, musicbrainz_recording_id,
 				musicbrainz_release_group_id, resolution_method, resolved_at,
 				status, summary, next_attempt_at, upgrade_of_library_file_id,
-				entry_explicit
+				entry_explicit, weekly_only
 			)
 			VALUES (
 				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 				CASE WHEN $8::uuid IS NULL THEN NULL ELSE now() END,
 				CASE WHEN $8::uuid IS NULL THEN 'unresolved' ELSE 'pending' END,
-				$11, now(), $12, $13
+				$11, now(), $12, $13, $14
 			)
 			ON CONFLICT (musicbrainz_recording_id)
 				WHERE musicbrainz_recording_id IS NOT NULL AND status <> 'superseded'
@@ -244,7 +247,7 @@ func (q *Queries) CreateAcquisitionTarget(
 		params.EntryAlbum, params.EntryDurationMS, params.EntryISRC,
 		params.MusicBrainzRecordingID, params.MusicBrainzReleaseGroupID,
 		params.ResolutionMethod, params.Summary, params.UpgradeOfLibraryFileID,
-		params.EntryExplicit,
+		params.EntryExplicit, params.WeeklyOnly,
 	).Scan(&id, &created)
 	// The fallback above reads the snapshot this statement started with, so a
 	// row another caller committed while ON CONFLICT was waiting on its lock is
@@ -257,9 +260,31 @@ func (q *Queries) CreateAcquisitionTarget(
 			FROM acquisition_targets
 			WHERE musicbrainz_recording_id = $1 AND status <> 'superseded'
 		`, params.MusicBrainzRecordingID.UUID).Scan(&id)
-		return id, false, err
+		created = false
 	}
-	return id, created, err
+	if err != nil {
+		return id, created, err
+	}
+	// Somebody other than the weekly playlist asked for a recording it already
+	// wanted. The want is theirs too now, so no weekly lease may delete its file.
+	if !created && !params.WeeklyOnly {
+		if err := q.markAskedBeyondTheWeekly(ctx, id); err != nil {
+			return id, created, err
+		}
+	}
+	return id, created, nil
+}
+
+// markAskedBeyondTheWeekly records that something other than the weekly
+// playlist wants this want's recording.
+func (q *Queries) markAskedBeyondTheWeekly(ctx context.Context, id uuid.UUID) error {
+	if _, err := q.db.Exec(ctx, `
+		UPDATE acquisition_targets SET weekly_only = false
+		WHERE id = $1 AND weekly_only
+	`, id); err != nil {
+		return fmt.Errorf("record another ask for want %s: %w", id, err)
+	}
+	return nil
 }
 
 // AcquisitionTarget returns one target, or pgx.ErrNoRows when it does not
@@ -1259,6 +1284,14 @@ func (q *Queries) supersedeAcquisitionTarget(
 			  AND status = $8
 			  AND EXISTS (SELECT 1 FROM survivor)
 			RETURNING`+acquisitionTargetColumns+`
+		),
+		-- The merged entry asked for the survivor's recording too, so a want
+		-- only the weekly playlist had asked for is no longer only its own.
+		asked AS (
+			UPDATE acquisition_targets SET weekly_only = false
+			WHERE id = (SELECT id FROM survivor)
+			  AND weekly_only
+			  AND EXISTS (SELECT 1 FROM merged)
 		),
 		logged AS (
 			INSERT INTO acquisition_target_attempts (
