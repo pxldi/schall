@@ -189,10 +189,11 @@ async function sayingNo(scope: RegExp) {
   await fireEvent.click(await screen.findByRole('menuitem', { name: scope }));
 }
 
-function opened() {
+function opened(
   // The client is per test: a cache shared between them would answer the second
   // one from the first one's list without asking anything.
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+) {
   return render(Recommendations, undefined, {
     wrapper: QueryClientProvider,
     wrapperProps: { client }
@@ -727,6 +728,22 @@ describe('Recommendations', () => {
           releaseGroupId: 'b2000000-0000-4000-8000-000000000001'
         }
       })
+    );
+  });
+
+  // The wishlist is read under ['wants', ...]. A want made here has to mark it
+  // stale, or the Downloads page keeps showing the list from before the press.
+  it('marks the wishlist stale once it wants a recording', async () => {
+    answering(answer());
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['wants', 'list', 'looking', 0], { items: [], total: 0 });
+    opened(client);
+    await screen.findByText('Weather Report');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+
+    await vi.waitFor(() =>
+      expect(client.getQueryState(['wants', 'list', 'looking', 0])?.isInvalidated).toBe(true)
     );
   });
 

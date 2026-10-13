@@ -165,7 +165,7 @@
       wanted = wantedMessage(target);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['recommendations'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     },

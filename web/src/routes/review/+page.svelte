@@ -421,7 +421,7 @@
     for (const key of [
       ['review-queue'],
       ['downloads'],
-      ['acquisition-targets'],
+      ['wants'],
       ['library'],
       ['library-files'],
       ['dashboard']

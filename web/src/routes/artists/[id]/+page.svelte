@@ -172,7 +172,7 @@
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     }
@@ -450,7 +450,7 @@
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     }

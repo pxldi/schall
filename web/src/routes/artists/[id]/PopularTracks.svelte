@@ -55,7 +55,7 @@
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists', artistID, 'popular'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
-        queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wants'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);
     }
