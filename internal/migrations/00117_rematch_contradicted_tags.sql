@@ -34,13 +34,22 @@ WITH affected AS (
               AND identity.musicbrainz_recording_id NOT IN (
                   SELECT recording_id_aliases(library_files.musicbrainz_recording_id)))
       )
+), recordings AS (
+    -- Every recording the affected files name, aliases included, expanded once.
+    -- Joining tracks on an OR of two alias subqueries per row could not use the
+    -- recording index and ran past the startup probe on a 67,000-track catalogue.
+    SELECT DISTINCT aliased.recording_id
+    FROM affected
+    CROSS JOIN LATERAL (
+        SELECT recording_id_aliases(affected.tag_recording_id)
+        UNION
+        SELECT recording_id_aliases(affected.identity_recording_id)
+    ) AS aliased(recording_id)
+    WHERE aliased.recording_id IS NOT NULL
 ), touched AS (
     SELECT tracks.album_id
-    FROM affected
-    JOIN tracks ON tracks.musicbrainz_recording_id IN (
-            SELECT recording_id_aliases(affected.tag_recording_id))
-        OR tracks.musicbrainz_recording_id IN (
-            SELECT recording_id_aliases(affected.identity_recording_id))
+    FROM recordings
+    JOIN tracks ON tracks.musicbrainz_recording_id = recordings.recording_id
     UNION
     SELECT tracks.album_id
     FROM affected
