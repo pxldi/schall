@@ -164,3 +164,28 @@ func TestAWantWithItsMusicOffersNoCreditRefusals(t *testing.T) {
 		t.Fatalf("offered = %+v, want nothing for a want that has its music", offered)
 	}
 }
+
+// A copy says which provider fetched it. A keyed want's copy is under the fetch
+// folder and not the download inbox, and the pass looks for the bytes in the
+// folder the provider names (ADR 0038 §6).
+func TestACopyRefusedOnTheCreditAloneNamesItsProvider(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	settledCopy(ctx, t, pool, targetID, requestID,
+		AcquiredFileDiscardedTags, creditOnly)
+	if _, err := pool.Exec(ctx, `
+		UPDATE download_requests SET provider = 'soundcloud' WHERE id = $1
+	`, requestID); err != nil {
+		t.Fatalf("record the request as a keyed fetch: %v", err)
+	}
+
+	offered, err := queries.CopiesRefusedOnCreditAlone(ctx)
+	if err != nil {
+		t.Fatalf("CopiesRefusedOnCreditAlone() error = %v", err)
+	}
+	if len(offered) != 1 || offered[0].Provider != "soundcloud" {
+		t.Fatalf("offered = %+v, want the copy with its provider", offered)
+	}
+}

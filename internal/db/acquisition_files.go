@@ -3444,7 +3444,7 @@ func (q *Queries) copiesToJudgeAgain(
 // without asking is the point.
 func (q *Queries) CopiesRefusedOnCreditAlone(ctx context.Context) ([]JudgeAgainRow, error) {
 	rows, err := q.db.Query(ctx, `
-		SELECT copies.id, copies.acquisition_target_id, requests.id,
+		SELECT copies.id, copies.acquisition_target_id, requests.id, requests.provider,
 		       requests.source_directory, copies.file_name, copies.verdict
 		FROM acquisition_target_files copies
 		JOIN acquisition_targets targets ON targets.id = copies.acquisition_target_id
@@ -3472,7 +3472,7 @@ func (q *Queries) CopiesRefusedOnCreditAlone(ctx context.Context) ([]JudgeAgainR
 	for rows.Next() {
 		var row JudgeAgainRow
 		if err := rows.Scan(
-			&row.CopyID, &row.AcquisitionTargetID, &row.RequestID,
+			&row.CopyID, &row.AcquisitionTargetID, &row.RequestID, &row.Provider,
 			&row.SourceDirectory, &row.FileName, &row.Verdict,
 		); err != nil {
 			return nil, err
