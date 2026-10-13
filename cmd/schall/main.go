@@ -18,6 +18,7 @@ import (
 	"github.com/pxldi/schall/internal/acquisition"
 	"github.com/pxldi/schall/internal/activity"
 	"github.com/pxldi/schall/internal/anchor"
+	"github.com/pxldi/schall/internal/applemusic"
 	"github.com/pxldi/schall/internal/chromaprint"
 	"github.com/pxldi/schall/internal/config"
 	"github.com/pxldi/schall/internal/coverart"
@@ -212,11 +213,20 @@ func run() error {
 	// yt-dlp (ADR 0029). With no yt-dlp on the machine such a want
 	// waits on the retry ladder rather than being written off as having no
 	// anchor, so nothing is lost until the program is installed.
+	//
+	// Before the search by name, the pages MusicBrainz links the recording to
+	// are read: a Deezer track, an Apple song, a Bandcamp track, or the track at
+	// the recording's place on a linked album. A link is an editor's key, so its
+	// preview can prove a copy where an upload found by name cannot.
+	deezerClient := deezer.NewClient(deezer.Options{})
 	anchorService := anchor.NewService(store,
-		deezer.NewClient(deezer.Options{}),
+		deezerClient,
 		youtube.NewFinder(youtube.NewClient(youtube.Options{Path: cfg.YtdlpPath})),
 		chromaprint.NewFingerprinter(chromaprint.Options{FpcalcPath: cfg.FpcalcPath}),
-		logger)
+		logger).
+		WithLinks(anchor.NewLinker(musicBrainzClient, deezerClient,
+			applemusic.NewClient(applemusic.Options{}),
+			tracksource.NewClient(tracksource.Options{Path: cfg.YtdlpPath})))
 	// What tells the user that work has stopped and is waiting on them. It reads
 	// its own settings on every use and sends nothing while they say it is off,
 	// so an installation that never opens that section never talks to anybody.

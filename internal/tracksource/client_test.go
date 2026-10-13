@@ -249,3 +249,38 @@ func TestFetchThatFailsLeavesNothing(t *testing.T) {
 		t.Fatalf("folder holds %v, want nothing", entries)
 	}
 }
+
+// The shape of yt-dlp's answer for a Bandcamp album, taken from a live run on
+// 2026-10-13 and cut to two entries.
+func TestAlbumTrackAddressesListsTheAlbumInOrder(t *testing.T) {
+	client, _ := fakeClient(`{"_type":"playlist","extractor":"Bandcamp:album","entries":[
+		{"_type":"url","ie_key":"Bandcamp","url":"https://c418.bandcamp.com/track/key"},
+		{"_type":"url","ie_key":"Bandcamp","url":"https://c418.bandcamp.com/track/door"}]}`, "", nil)
+
+	addresses, err := client.AlbumTrackAddresses(
+		context.Background(), "https://c418.bandcamp.com/album/minecraft-volume-alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(addresses) != 2 || addresses[1] != "https://c418.bandcamp.com/track/door" {
+		t.Fatalf("addresses = %v", addresses)
+	}
+}
+
+func TestAlbumTrackAddressesRefusesWhatIsNotABandcampAlbum(t *testing.T) {
+	client, _ := fakeClient(`{"_type":"playlist","extractor":"soundcloud:set","entries":[
+		{"url":"https://soundcloud.com/a/b"}]}`, "", nil)
+
+	if _, err := client.AlbumTrackAddresses(context.Background(), "https://soundcloud.com/a/sets/b"); !errors.Is(err, ErrNotATrack) {
+		t.Fatalf("err = %v, want ErrNotATrack", err)
+	}
+}
+
+func TestAlbumTrackAddressesRefusesAnEntryWithNoAddress(t *testing.T) {
+	client, _ := fakeClient(`{"_type":"playlist","extractor":"Bandcamp:album","entries":[
+		{"url":"https://x.bandcamp.com/track/a"},{"url":""}]}`, "", nil)
+
+	if _, err := client.AlbumTrackAddresses(context.Background(), "https://x.bandcamp.com/album/y"); !errors.Is(err, ErrNotATrack) {
+		t.Fatalf("err = %v, want ErrNotATrack", err)
+	}
+}
