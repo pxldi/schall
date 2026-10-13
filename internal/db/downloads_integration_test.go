@@ -1108,6 +1108,15 @@ func TestSearchingTheDownloadListFindsRowsPastTheFirstPage(t *testing.T) {
 	if page.Total != 31 || len(page.Items) != 10 {
 		t.Errorf("search portis = %d items / total %d, want 10 of 31", len(page.Items), page.Total)
 	}
+	// Under All, as the screen asks for it: the total is every match, not the
+	// page of 25.
+	page, err = queries.ListDownloadRequests(ctx, ListDownloadRequestsParams{View: "all", Search: "portis", Limit: 25})
+	if err != nil {
+		t.Fatalf("ListDownloadRequests() error = %v", err)
+	}
+	if page.Total != 31 || len(page.Items) != 25 {
+		t.Errorf("all, search portis = %d items / total %d, want 25 of 31", len(page.Items), page.Total)
+	}
 }
 
 // Review asks only about a paused import whose latest pause compared
