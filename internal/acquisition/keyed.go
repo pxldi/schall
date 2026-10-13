@@ -39,28 +39,28 @@ type SourceFetcher interface {
 
 var (
 	// ErrNoTrackSources reports an installation that cannot read addresses.
-	ErrNoTrackSources = errors.New("this installation cannot read track addresses")
+	ErrNoTrackSources = errors.New("Schall can't read track links here")
 	// ErrAddressChanged reports an address that names another track than the
 	// one the person was shown.
-	ErrAddressChanged = errors.New("that address now names a different track")
+	ErrAddressChanged = errors.New("that link now plays a different track")
 	// ErrExcerptUnreadable reports an excerpt that could not be fingerprinted.
 	// Without it the want has no anchor, and keying it would leave it with
 	// nothing that can prove a copy.
-	ErrExcerptUnreadable = errors.New("the audio at that address could not be read")
+	ErrExcerptUnreadable = errors.New("couldn't read the audio at that link")
 )
 
 // keyedSummary is what a keyed want says while it is searched, and
 // keyedAcquiredSummary what it says when the library already holds the track.
 const (
-	keyedSummary         = "Keyed to an address. Looking for a copy that matches its audio."
-	keyedAcquiredSummary = "Keyed to an address. The library already holds this track."
+	keyedSummary         = "Linked. Looking for a copy that sounds the same."
+	keyedAcquiredSummary = "Linked. Already in your library."
 	// What a want says when another want is already keyed to the same address
 	// (ADR 0040 §1), and when that want is one the person removed.
-	keyedSupersededSummary          = "Already wanted. Another entry is keyed to the same address and carries it now."
-	keyedSupersededNotWantedSummary = "Another entry keyed to this address was removed from your wishlist. It has not been added again."
+	keyedSupersededSummary          = "Another wishlist song has the same link."
+	keyedSupersededNotWantedSummary = "You removed a song with this link. Not added again."
 	// sourceFetchedSummary is what a keyed want says while the track fetched
 	// from its address waits to be checked.
-	sourceFetchedSummary = "No peer is sharing a copy. The track was fetched from its address and is being checked."
+	sourceFetchedSummary = "Nobody shares it. Checking the copy from the link."
 )
 
 // WithTrackSources registers what reads an address, and the fingerprinter its
@@ -177,8 +177,8 @@ func (service *Service) fetchFromSource(
 		TargetID: target.ID, Source: target.Source, ExternalID: target.ExternalID,
 		Directory: target.ID.String(), FileName: got.Name, Extension: got.Extension,
 		SizeBytes: got.SizeBytes,
-		Reasons:   []string{"Fetched from " + target.ExternalURL},
-		Summary:   "Fetched from " + target.ExternalURL + ". Being checked against the excerpt.",
+		Reasons:   []string{"Downloaded from " + target.ExternalURL},
+		Summary:   "Downloaded from " + target.ExternalURL + ". Checking against the sample.",
 	})
 	if errors.Is(err, db.ErrWantHasMovedOn) || errors.Is(err, db.ErrSourceAlreadyFetched) {
 		service.logger.Info().Err(err).

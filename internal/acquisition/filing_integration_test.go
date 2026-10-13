@@ -462,7 +462,7 @@ func TestAWantStopsWhenTheFiledRecordingSharesNoRegistration(t *testing.T) {
 		t.Fatalf("status = %s next = %v, want a pending want with no next look",
 			stopped.Status, stopped.NextAttemptAt)
 	}
-	for _, want := range []string{"Glory Box", "cannot tell the two apart"} {
+	for _, want := range []string{"Glory Box", "Same audio"} {
 		if !strings.Contains(stopped.Summary, want) {
 			t.Errorf("summary = %q, want it to carry %q", stopped.Summary, want)
 		}

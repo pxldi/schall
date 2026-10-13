@@ -30,7 +30,7 @@ const Grace = 30 * 24 * time.Hour
 var ErrNothingToRemove = errors.New("this want was merged into another one")
 
 // removedSummary is what a removed want says about itself.
-const removedSummary = "Removed. Not looked for any more."
+const removedSummary = "Removed from wishlist."
 
 // FileRemover deletes one library file. library.Remover is the one in use, so
 // every deletion goes through the same path the duplicates screen and the

@@ -488,9 +488,8 @@ func unfoundEntry() db.PlaylistEntryRow {
 		TargetID:        uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		TargetStatus:    pgtype.Text{String: "unresolved", Valid: true},
 		TargetSummary: pgtype.Text{
-			String: "No recording MusicBrainz knows of matches this entry yet." +
-				" It will be asked about again.",
-			Valid: true,
+			String: "Not on MusicBrainz yet. Retrying later.",
+			Valid:  true,
 		},
 	}
 }
