@@ -663,6 +663,9 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 		// domestic upstream takes minutes, and thirty seconds of it is a
 		// truncated file. It sets a bound of its own instead.
 		router.Post("/uploads", api.createUpload)
+		// And a live source search, which the provider refuses to start unless
+		// its whole budget of several minutes is left. It sets a bound of its own.
+		router.Get("/albums/{albumID}/sources", api.listAlbumSources)
 
 		router.Group(func(router chi.Router) {
 			router.Use(middleware.Timeout(30 * time.Second))
@@ -727,7 +730,6 @@ func NewAPI(store Store, database Database, artists ArtistSearcher, logger zerol
 			router.Get("/albums/{albumID}/tracks", api.listAlbumTracks)
 			router.Get("/albums/{albumID}/editions", api.listAlbumEditions)
 			router.Post("/albums/{albumID}/edition", api.selectAlbumEdition)
-			router.Get("/albums/{albumID}/sources", api.listAlbumSources)
 			router.Get("/artists/{artistID}/image", api.artistImage)
 			router.Get("/albums/{albumID}/cover", api.albumCover)
 			router.Put("/albums/{albumID}/cover", api.setAlbumCover)
