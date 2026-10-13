@@ -233,6 +233,10 @@
     batch ? (albums?.groups.find((group) => group.key === batch!.key)?.questions ?? []) : []
   );
 
+  // A kind the server already counts as empty has nothing further pages could
+  // add, so its filter shows the empty state at once instead of reading on.
+  const moreOfThisKind = $derived(moreToRead && counts[filter] > 0);
+
   function chooseFilter(next: QuestionKind | 'all') {
     filter = next;
     batch = undefined;
@@ -282,7 +286,7 @@
   // remain. A filter whose kind the loaded pages hold none of reads on until
   // it finds one or the lists end.
   $effect(() => {
-    if (moreToRead && filtered.length - at <= 5) untrack(readAhead);
+    if (moreOfThisKind && filtered.length - at <= 5) untrack(readAhead);
   });
 
   /** Reads ahead when the foot of the rail scrolls into view. */
@@ -857,7 +861,7 @@
             {@render row(question, index)}
           {/each}
         {/if}
-        {#if moreToRead && !loadError}
+        {#if moreOfThisKind && !loadError}
           <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
         {/if}
       </div>
@@ -881,7 +885,7 @@
       <!-- The filter chosen holds nothing. The rail stays, so the reader can
            choose another kind. -->
       <section aria-label="Review" class="flex min-w-0 flex-1 flex-col px-4 pb-6 pt-5 sm:px-6 lg:border-l lg:border-line-thin lg:px-8">
-        {#if moreToRead && !loadError}
+        {#if moreOfThisKind && !loadError}
           <SkeletonRows count={4} label="Reading more of the queue" />
         {:else}
           <EmptyPanel role="idle" heading="Nothing of this kind">
