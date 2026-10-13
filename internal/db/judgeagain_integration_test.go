@@ -283,11 +283,14 @@ func TestTheNextPartOffersOnlyWantsAfterTheLastOne(t *testing.T) {
 	settledCopy(ctx, t, pool, targetID, requestID,
 		AcquiredFileDiscardedAudio, namedOtherMusic)
 
-	before, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil, time.Time{})
+	// A copy refused on its audio leaves nothing held, so the want is in the
+	// second round.
+	before, err := queries.CopiesToJudgeAgainAfter(ctx, JudgeAgainPlace{Rest: true}, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
 	}
-	after, err := queries.CopiesToJudgeAgainAfter(ctx, targetID, time.Time{})
+	after, err := queries.CopiesToJudgeAgainAfter(
+		ctx, JudgeAgainPlace{Rest: true, After: targetID}, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
 	}
@@ -308,7 +311,7 @@ func TestACopyDecidedSinceThePassStartedIsNotOfferedAgain(t *testing.T) {
 	settledCopy(ctx, t, pool, targetID, requestID,
 		AcquiredFileDiscardedAudio, namedOtherMusic)
 
-	since, err := queries.CopiesToJudgeAgainAfter(ctx, uuid.Nil, started)
+	since, err := queries.CopiesToJudgeAgainAfter(ctx, JudgeAgainPlace{Rest: true}, started)
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
 	}
@@ -330,18 +333,21 @@ func TestTheNextPartIsQueuedWithItsPlace(t *testing.T) {
 	queries := New(pool)
 	last := uuid.New()
 
-	if err := queries.QueueJudgeCopiesAgainAfter(ctx, time.Now(), last, time.Now()); err != nil {
+	place := JudgeAgainPlace{Rest: true, After: last}
+	if err := queries.QueueJudgeCopiesAgainAfter(ctx, time.Now(), place, time.Now()); err != nil {
 		t.Fatalf("QueueJudgeCopiesAgainAfter() error = %v", err)
 	}
 
 	var after uuid.UUID
+	var rest bool
 	if err := pool.QueryRow(ctx, `
-		SELECT (payload->>'after')::uuid FROM jobs WHERE kind = 'judge_copies_again'
-	`).Scan(&after); err != nil {
+		SELECT (payload->>'after')::uuid, (payload->>'rest')::boolean
+		FROM jobs WHERE kind = 'judge_copies_again'
+	`).Scan(&after, &rest); err != nil {
 		t.Fatalf("read the next part: %v", err)
 	}
-	if after != last {
-		t.Errorf("next part starts after %s, want %s", after, last)
+	if after != last || !rest {
+		t.Errorf("next part starts after %s in the second round %v, want %s and true", after, rest, last)
 	}
 }
 
@@ -509,5 +515,62 @@ func TestAHeldCopyNamedBesideAnotherRowIsOfferedAgain(t *testing.T) {
 	}
 	if len(offered) != 1 || offered[0].RequestID != requestID {
 		t.Fatalf("offered = %+v, want the copy back", offered)
+	}
+}
+
+// The first round of a pass is the wants the review queue is asking about: a
+// want holding a copy that waits on a person is offered there and not in the
+// second round.
+func TestAWantWithAHeldCopyIsJudgedInTheFirstRound(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	anchored(ctx, t, queries, targetID)
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, `{}`)
+
+	first, err := queries.CopiesToJudgeAgainAfter(ctx, JudgeAgainPlace{}, time.Time{})
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
+	}
+	rest, err := queries.CopiesToJudgeAgainAfter(ctx, JudgeAgainPlace{Rest: true}, time.Time{})
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgainAfter() error = %v", err)
+	}
+	if len(first) != 1 || len(rest) != 0 {
+		t.Fatalf("first round = %d, second round = %d, want 1 and 0", len(first), len(rest))
+	}
+}
+
+// A copy already measured against the sample the want holds now was judged
+// with it, so it is not offered again. A copy measured against an earlier
+// sample is.
+func TestACopyMeasuredAgainstTheWantsSampleIsNotOfferedAgain(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		reference string
+		offered   int
+	}{
+		{name: "the same sample", reference: "2178654", offered: 0},
+		{name: "an earlier sample", reference: "1000001", offered: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			pool := dbtest.Setup(t)
+			queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+			anchored(ctx, t, queries, targetID)
+			settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
+				`{"anchor": {"source": "deezer", "reference": "`+test.reference+
+					`", "rate": 0.3, "measured": true}}`)
+
+			offered, err := queries.CopiesToJudgeAgain(ctx)
+			if err != nil {
+				t.Fatalf("CopiesToJudgeAgain() error = %v", err)
+			}
+			if len(offered) != test.offered {
+				t.Fatalf("offered = %d, want %d", len(offered), test.offered)
+			}
+		})
 	}
 }

@@ -2843,17 +2843,18 @@ func (q *Queries) QueueJudgeCopiesAgain(ctx context.Context, runAfter time.Time)
 // since is when the pass first started, carried so the next part skips the
 // copies the pass already judged.
 func (q *Queries) QueueJudgeCopiesAgainAfter(
-	ctx context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
+	ctx context.Context, runAfter time.Time, place JudgeAgainPlace, since time.Time,
 ) error {
 	_, err := q.db.Exec(ctx, `
 		INSERT INTO jobs (kind, payload, max_attempts, run_after)
 		SELECT 'judge_copies_again',
-		       jsonb_build_object('after', $2::uuid, 'since', $3::timestamptz), 1, $1
+		       jsonb_build_object('after', $2::uuid, 'rest', $4::boolean,
+		                          'since', $3::timestamptz), 1, $1
 		WHERE NOT EXISTS (
 			SELECT 1 FROM jobs
 			WHERE kind = 'judge_copies_again' AND status IN ('queued', 'running')
 		)
-	`, runAfter, after, since)
+	`, runAfter, place.After, since, place.Rest)
 	if err != nil {
 		return fmt.Errorf("ask for the next part of a pass over the copies already decided about: %w", err)
 	}
@@ -3223,12 +3224,25 @@ type JudgeAgainRow struct {
 //     was answered since, so a want that has its music must not be offered more.
 //   - Only wants that hold an anchor. Without one nothing has changed for that
 //     want and re-judging would reach the same answer at the cost of a decode.
+//     The same holds for a copy already measured against the anchor the want
+//     holds now.
 //   - Only copies whose refusal could be the one that changed: a copy held for a
 //     person, or one discarded because the audio was identified as another
 //     recording. A copy the sample itself refused is left alone — nothing about
 //     that has changed — as is one refused on its own tags.
 func (q *Queries) CopiesToJudgeAgain(ctx context.Context) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, uuid.Nil, time.Time{})
+	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, uuid.Nil, time.Time{}, nil)
+}
+
+// JudgeAgainPlace is where a pass over the copies already decided about
+// stands. A pass goes round twice: first over the wants the review queue is
+// asking about, which hold a copy waiting on a person, and then over the rest.
+// The first round is the one whose answers take questions off the queue, so it
+// is not left behind thousands of wants nobody is looking at. After is the
+// last want the round finished, in want id order.
+type JudgeAgainPlace struct {
+	Rest  bool      `json:"rest,omitempty"`
+	After uuid.UUID `json:"after"`
 }
 
 // CopiesToJudgeAgainAfter is CopiesToJudgeAgain for the wants whose id sorts
@@ -3239,10 +3253,13 @@ func (q *Queries) CopiesToJudgeAgain(ctx context.Context) ([]JudgeAgainRow, erro
 // started: a copy decided since then was judged by this pass, or by a live
 // validation under the same rules, and a restart in the middle of a part
 // skips it. A zero moment bounds nothing.
+//
+// The place also names the round: the wants holding a copy that waits on a
+// person, or the wants holding none.
 func (q *Queries) CopiesToJudgeAgainAfter(
-	ctx context.Context, after uuid.UUID, before time.Time,
+	ctx context.Context, place JudgeAgainPlace, before time.Time,
 ) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, after, before)
+	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, place.After, before, &place.Rest)
 }
 
 // CopiesToJudgeAgainForWant is CopiesToJudgeAgain narrowed to one want. It is
@@ -3262,7 +3279,8 @@ func (q *Queries) CopiesToJudgeAgainAfter(
 func (q *Queries) CopiesToJudgeAgainForWant(
 	ctx context.Context, targetID uuid.UUID, before time.Time,
 ) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{UUID: targetID, Valid: true}, uuid.Nil, before)
+	return q.copiesToJudgeAgain(
+		ctx, uuid.NullUUID{UUID: targetID, Valid: true}, uuid.Nil, before, nil)
 }
 
 // unaskedRegistrationSummary is the opening of what a copy is told when its
@@ -3304,7 +3322,7 @@ const libraryCanSpeakForTheWant = `
 `
 
 func (q *Queries) copiesToJudgeAgain(
-	ctx context.Context, targetID uuid.NullUUID, after uuid.UUID, before time.Time,
+	ctx context.Context, targetID uuid.NullUUID, after uuid.UUID, before time.Time, rest *bool,
 ) ([]JudgeAgainRow, error) {
 	var decidedBefore *time.Time
 	if !before.IsZero() {
@@ -3327,7 +3345,15 @@ func (q *Queries) copiesToJudgeAgain(
 		  -- An unresolved want searched on its anchor holds copies too, and a
 		  -- keyed want's are judged again when its excerpt lands (ADR 0038 §3).
 		  AND `+searchedWant("targets.")+`
-		  AND (targets.anchor_fingerprint IS NOT NULL
+		  -- A copy already measured against the anchor the want holds now was
+		  -- judged with it, and judging it again reaches the same answer at the
+		  -- cost of several decodes.
+		  AND ((targets.anchor_fingerprint IS NOT NULL
+		        AND NOT (coalesce(copies.evidence->'anchor'->>'measured', '') = 'true'
+		                 AND coalesce(copies.evidence->'anchor'->>'source', '')
+		                     = coalesce(targets.anchor_source, '')
+		                 AND coalesce(copies.evidence->'anchor'->>'reference', '')
+		                     = coalesce(targets.anchor_reference, '')))
 		       OR copies.summary LIKE '`+unaskedRegistrationSummary+`%'
 		       -- The leading cluster named several rows, which the file's own
 		       -- identifier can now pick from.
@@ -3355,8 +3381,13 @@ func (q *Queries) copiesToJudgeAgain(
 		  AND ($1::uuid IS NULL OR targets.id = $1)
 		  AND targets.id > $3
 		  AND ($4::timestamptz IS NULL OR copies.decided_at < $4)
+		  -- The round: wants with a copy waiting on a person, or wants with none.
+		  AND ($5::boolean IS NULL OR $5 <> EXISTS (
+		      SELECT 1 FROM acquisition_target_files asked
+		      WHERE asked.acquisition_target_id = targets.id AND asked.verdict = 'held'
+		  ))
 		ORDER BY copies.acquisition_target_id, copies.decided_at, copies.id
-	`, targetID, settledProofs, after, decidedBefore)
+	`, targetID, settledProofs, after, decidedBefore, rest)
 	if err != nil {
 		return nil, fmt.Errorf("list the copies worth judging again: %w", err)
 	}

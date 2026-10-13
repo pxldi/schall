@@ -371,7 +371,8 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil,
 		&fakeVerifier{verification: identity.Verification{}})
 
-	first, next, more, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{}, nil)
+	first, next, more, err := importer.judgeAgainPart(
+		context.Background(), db.JudgeAgainPlace{}, time.Time{}, nil)
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}
@@ -379,13 +380,21 @@ func TestAPartOfThePassStopsAfterItsWantsAndTheNextCarriesOn(t *testing.T) {
 		t.Fatalf("first part = %+v, more = %v, want %d wants and one left",
 			first, more, judgeAgainWants)
 	}
-	second, _, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{}, nil)
+	second, next, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{}, nil)
 	if err != nil {
 		t.Fatalf("judgeAgainPart() error = %v", err)
 	}
-	if second.Answered != 1 || more {
-		t.Fatalf("second part = %+v, more = %v, want the one want left and the pass over",
-			second, more)
+	if second.Answered != 1 || !more || next != (db.JudgeAgainPlace{Rest: true}) {
+		t.Fatalf("second part = %+v, next %+v, more = %v, want the one want left and the second round next",
+			second, next, more)
+	}
+	third, _, more, err := importer.judgeAgainPart(context.Background(), next, time.Time{}, nil)
+	if err != nil {
+		t.Fatalf("judgeAgainPart() error = %v", err)
+	}
+	if third.Offered != 0 || more {
+		t.Fatalf("third part = %+v, more = %v, want nothing in the second round and the pass over",
+			third, more)
 	}
 }
 
@@ -420,7 +429,7 @@ func TestAPartKeepsItsPlaceAfterEachWant(t *testing.T) {
 		&fakeVerifier{verification: identity.Verification{}})
 
 	var kept []uuid.UUID
-	_, _, err := importer.JudgeAgain(context.Background(), uuid.Nil, time.Time{},
+	_, _, err := importer.JudgeAgain(context.Background(), db.JudgeAgainPlace{}, time.Time{},
 		func(_ context.Context, want uuid.UUID) error {
 			kept = append(kept, want)
 			return nil
@@ -466,7 +475,8 @@ func TestACopyThatHangsIsCutOffAndThePassGoesOn(t *testing.T) {
 
 	done := make(chan JudgedAgain, 1)
 	go func() {
-		result, _, _, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{}, nil)
+		result, _, _, err := importer.judgeAgainPart(
+			context.Background(), db.JudgeAgainPlace{}, time.Time{}, nil)
 		if err != nil {
 			t.Errorf("judgeAgainPart() error = %v", err)
 		}
@@ -518,7 +528,7 @@ func TestAWantsCopiesStopWhenItsTimeRunsOutAndThePassGoesOn(t *testing.T) {
 	importer := candidateImporter(store, inbox, libraryPath, nil, verifier)
 
 	var kept []uuid.UUID
-	result, _, _, err := importer.judgeAgainPart(context.Background(), uuid.Nil, time.Time{},
+	result, _, _, err := importer.judgeAgainPart(context.Background(), db.JudgeAgainPlace{}, time.Time{},
 		func(_ context.Context, want uuid.UUID) error {
 			kept = append(kept, want)
 			return nil

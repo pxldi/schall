@@ -70,6 +70,7 @@ type fakeQueue struct {
 	judgeAgainQueuedAfter         uuid.UUID
 	judgeAgainQueuedSince         time.Time
 	judgedUpTo                    []uuid.UUID
+	judgeAgainQueuedRest          bool
 	firstStarted                  time.Time
 	spectrumSweepQueuedFor        time.Time
 	upgradeSweepQueuedFor         time.Time
@@ -465,14 +466,15 @@ func (queue *fakeQueue) QueueSpectrumSweep(_ context.Context, runAfter time.Time
 	return nil
 }
 func (queue *fakeQueue) QueueJudgeCopiesAgainAfter(
-	_ context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
+	_ context.Context, runAfter time.Time, place db.JudgeAgainPlace, since time.Time,
 ) error {
 	queue.judgeAgainQueuedSince = since
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
 	}
 	queue.judgeAgainQueuedFor = runAfter
-	queue.judgeAgainQueuedAfter = after
+	queue.judgeAgainQueuedAfter = place.After
+	queue.judgeAgainQueuedRest = place.Rest
 	return nil
 }
 
@@ -601,6 +603,10 @@ type fakeImporter struct {
 	judgeAgainNext   uuid.UUID
 	// judgeAgainFinishes are the wants a part reports finishing, in order.
 	judgeAgainFinishes []uuid.UUID
+	// judgeAgainNextRest says the next part is in the second round, and
+	// judgedAgainRest that the part judged was.
+	judgeAgainNextRest bool
+	judgedAgainRest    bool
 	// judgedSince is the first-start moment a judging pass was given.
 	judgedSince time.Time
 	// The same two for the pass over the copies refused on the artist tag.
@@ -621,18 +627,20 @@ func (importer *fakeImporter) Import(_ context.Context, requestID uuid.UUID) err
 }
 
 func (importer *fakeImporter) JudgeAgain(
-	ctx context.Context, after uuid.UUID, since time.Time,
+	ctx context.Context, place db.JudgeAgainPlace, since time.Time,
 	finished func(context.Context, uuid.UUID) error,
-) (uuid.UUID, bool, error) {
+) (db.JudgeAgainPlace, bool, error) {
 	importer.judgedAgain++
-	importer.judgedAgainAfter = after
+	importer.judgedAgainAfter = place.After
+	importer.judgedAgainRest = place.Rest
 	importer.judgedSince = since
 	for _, want := range importer.judgeAgainFinishes {
 		if err := finished(ctx, want); err != nil {
-			return uuid.Nil, false, err
+			return db.JudgeAgainPlace{}, false, err
 		}
 	}
-	return importer.judgeAgainNext, importer.judgeAgainNext != uuid.Nil, importer.judgeAgainErr
+	next := db.JudgeAgainPlace{Rest: importer.judgeAgainNextRest, After: importer.judgeAgainNext}
+	return next, next != (db.JudgeAgainPlace{}), importer.judgeAgainErr
 }
 
 func (importer *fakeImporter) AskAcoustIDAgain(_ context.Context) error {
@@ -5109,6 +5117,31 @@ func TestAPartOfThePassKeepsItsPlaceAfterEachWant(t *testing.T) {
 
 	if !slices.Equal(queue.judgedUpTo, []uuid.UUID{first, second}) {
 		t.Fatalf("places kept = %v, want %v", queue.judgedUpTo, []uuid.UUID{first, second})
+	}
+}
+
+// The round a part is in travels in the payload: a part of the second round
+// is told so, and a first round that ran out queues the second.
+func TestAPartOfThePassCarriesItsRound(t *testing.T) {
+	queue := &fakeQueue{}
+	importer := &fakeImporter{judgeAgainNextRest: true}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+	payload, _ := json.Marshal(map[string]any{"after": uuid.Nil, "rest": false})
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: JudgeCopiesAgain, Payload: payload, Attempts: 1, MaxAttempts: 1,
+	})
+	if importer.judgedAgainRest || !queue.judgeAgainQueuedRest {
+		t.Fatalf("judged in second round %v, next queued in second round %v, want false then true",
+			importer.judgedAgainRest, queue.judgeAgainQueuedRest)
+	}
+
+	payload, _ = json.Marshal(map[string]any{"after": uuid.New(), "rest": true})
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: JudgeCopiesAgain, Payload: payload, Attempts: 1, MaxAttempts: 1,
+	})
+	if !importer.judgedAgainRest {
+		t.Fatal("a part of the second round was judged as the first")
 	}
 }
 

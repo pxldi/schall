@@ -150,11 +150,21 @@ func (store *fakeImportStore) UserAcceptedCopy(
 // put back into validation, in order, because that order is what stops a want
 // taking two copies.
 func (store *fakeImportStore) CopiesToJudgeAgainAfter(
-	_ context.Context, after uuid.UUID, _ time.Time,
+	_ context.Context, place db.JudgeAgainPlace, _ time.Time,
 ) ([]db.JudgeAgainRow, error) {
+	// A want is in the first round when one of its copies is held for a person.
+	asking := map[uuid.UUID]bool{}
+	for _, row := range store.judgeAgain {
+		if row.Verdict == "held" {
+			asking[row.AcquisitionTargetID] = true
+		}
+	}
 	offered := make([]db.JudgeAgainRow, 0, len(store.judgeAgain))
 	for _, row := range store.judgeAgain {
-		if bytes.Compare(row.AcquisitionTargetID[:], after[:]) > 0 {
+		if asking[row.AcquisitionTargetID] == place.Rest {
+			continue
+		}
+		if bytes.Compare(row.AcquisitionTargetID[:], place.After[:]) > 0 {
 			offered = append(offered, row)
 		}
 	}

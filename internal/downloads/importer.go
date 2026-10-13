@@ -49,7 +49,7 @@ type ImportStore interface {
 	// The three a second pass over copies already decided about needs. See
 	// JudgeAgain: it offers copies, checks the want was not answered in the
 	// meantime, and puts one request back where validation claims from.
-	CopiesToJudgeAgainAfter(context.Context, uuid.UUID, time.Time) ([]db.JudgeAgainRow, error)
+	CopiesToJudgeAgainAfter(context.Context, db.JudgeAgainPlace, time.Time) ([]db.JudgeAgainRow, error)
 	CopiesRefusedOnCreditAlone(context.Context) ([]db.JudgeAgainRow, error)
 	CopiesAcoustIDDidNotKnow(context.Context) ([]db.JudgeAgainRow, error)
 	WantHasAcceptedCopy(context.Context, uuid.UUID) (bool, error)
