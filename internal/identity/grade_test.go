@@ -1078,6 +1078,9 @@ func TestEveryMethodReadsAsASentence(t *testing.T) {
 		"library-witness-and-release": "Schall compared the audio with a file already in " +
 			"your library that is proven to be this recording, and it is the same music. " +
 			"More than one recording fit, and the file's album tag names this one.",
+		"cd-checksum": "Bit for bit this song's CD track, by AccurateRip.",
+		"cd-checksum-and-release": "Bit for bit this song's CD track, by AccurateRip. More " +
+			"than one recording fit, and the file's album tag names this one.",
 		"title-artist-duration": "The title, artist and length in the file's tags all " +
 			"match this recording.",
 		"manual": "Somebody chose this recording by hand.",

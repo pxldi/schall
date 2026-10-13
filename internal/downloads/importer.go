@@ -126,6 +126,9 @@ type Importer struct {
 	// shapes draws the waveform the review queue puts on a held copy's card.
 	// Optional and decides nothing: see WaveformReader.
 	shapes WaveformReader
+	// discs looks lossless copies up in AccurateRip. Optional: see
+	// DiscChecker.
+	discs DiscChecker
 	// layout is the folder shape the operator chose, read per import so that
 	// changing it takes effect without a restart. Without one, music is filed
 	// where an untouched installation has always filed it.
