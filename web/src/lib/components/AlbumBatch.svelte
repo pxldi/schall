@@ -3,13 +3,14 @@
   import Button from './Button.svelte';
   import { onDestroy } from 'svelte';
   import { api } from '$lib/api';
-  import { batchChoice, clock, listenFrom, type Question } from '$lib/review';
+  import { batchChoice, batchProof, clock, listenFrom, tierOf, type Question } from '$lib/review';
   import { listening } from '$lib/preview.svelte';
 
   // One album's wants, decided together. Each row is the copy the single view
   // would have preselected, so accepting here sends what pressing Accept on
   // each question in turn would have sent. A want that asks anything else is
-  // left for the single view and only counted.
+  // left for the single view and only counted. A row starts checked only when
+  // its evidence names a proof (batchProof); the rest wait for the reader.
 
   let {
     album,
@@ -27,20 +28,23 @@
   const rows = $derived(
     questions.flatMap((question) => {
       const copy = batchChoice(question);
-      return copy ? [{ question, copy }] : [];
+      return copy ? [{ question, copy, proof: batchProof(copy) }] : [];
     })
   );
   const oneByOne = $derived(questions.length - rows.length);
 
-  // Rows are checked unless taken out, so a row that arrives later is checked.
-  let unchecked = $state(new Set<string>());
-  const checked = $derived(rows.filter((row) => !unchecked.has(row.question.id)));
+  // What the reader changed from the starting marks, so a row that arrives
+  // later starts from its own evidence.
+  let flipped = $state(new Set<string>());
+  const isChecked = (row: (typeof rows)[number]) =>
+    (row.proof !== '') !== flipped.has(row.question.id);
+  const checked = $derived(rows.filter(isChecked));
 
   function toggle(id: string) {
-    const next = new Set(unchecked);
+    const next = new Set(flipped);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    unchecked = next;
+    flipped = next;
   }
 
   let running = $state(false);
@@ -132,7 +136,7 @@
         <li class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
           <input
             type="checkbox"
-            checked={!unchecked.has(row.question.id)}
+            checked={isChecked(row)}
             onchange={() => toggle(row.question.id)}
             aria-label={`Include ${row.question.title}`}
             disabled={running}
@@ -148,6 +152,18 @@
             <Icon name={sounding(row.copy.id) ? 'pause' : 'play'} size={13} />
           </button>
           <span class="min-w-0 flex-1 truncate text-body text-ink">{row.question.title}</span>
+          {#if row.proof}
+            <span class="shrink-0 text-meta text-ink-2">{row.proof} agrees</span>
+          {:else if (row.copy.evidence?.differs ?? []).length > 0}
+            <span
+              class="min-w-0 max-w-[14rem] shrink truncate text-meta text-fail"
+              title={row.copy.evidence?.differs.join(', ')}
+            >
+              {row.copy.evidence?.differs.join(', ')} differs
+            </span>
+          {:else}
+            <span class="shrink-0 text-meta text-ink-3">{tierOf(row.copy)}</span>
+          {/if}
           <span class="hidden min-w-0 max-w-[16rem] truncate text-meta text-ink-3 sm:block" title={row.copy.name}>
             {row.copy.name}
           </span>

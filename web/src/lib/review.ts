@@ -196,6 +196,25 @@ export function batchChoice(question: Question): AcquiredCopy | undefined {
   return groupCopies(want.copies, want.copyGroups)[0]?.best;
 }
 
+/** What an album batch checks a copy for before the reader looks: an
+ * identifier the file carries that agreed, the want's sample that the audio
+ * matched, or a file the library already proved. Anything that disagreed, and
+ * any copy with none of the three, starts unchecked and is answered '' here.
+ * A name, never a score: the reader still decides, this only says which rows
+ * they can accept without opening them. */
+export function batchProof(copy: AcquiredCopy): string {
+  const evidence = copy.evidence;
+  if (!evidence || (evidence.differs ?? []).length > 0 || evidence.acoustic?.agrees === false) {
+    return '';
+  }
+  if (verdict(copy, 'MusicBrainz recording ID') === 'ok') return 'Recording ID';
+  if (verdict(copy, 'ISRC') === 'ok') return 'ISRC';
+  // A plain upload found by name can be another version of the song.
+  if (evidence.anchor?.agrees === true && evidence.anchor.source !== 'youtube') return 'Sample';
+  if (evidence.witness?.agrees === true) return 'Library file';
+  return '';
+}
+
 /** Where a copy starts when nobody chose a spot: a third of the way in. The
  * opening is often a count-in or silence that sounds alike on every copy. */
 export function listenFrom(duration: number): number {

@@ -200,8 +200,12 @@
       Boolean((navigator as { userActivation?: { hasBeenActive?: boolean } }).userActivation?.hasBeenActive)
   );
   let player = $state<ReturnType<typeof ListenPlayer> | undefined>();
+  // The copy the mode opens on waits for Space or the button. Once the reader
+  // has answered or stepped, each next copy plays by itself.
+  let listenedOn = $state(false);
   function toggleListen(event: MouseEvent) {
     listen = !listen;
+    listenedOn = false;
     batch = undefined;
     placed = false;
     // Space and Y/N go to the page, not to this button.
@@ -540,10 +544,16 @@
         // Claimed whatever happens, so the key never opens search or presses
         // the focused button.
         event.preventDefault();
-        if (key === ' ') player?.replay();
-        else if (key === 'y') confirm();
-        else if (current.want) $refuse.mutate(current.want.target.id);
+        if (key === ' ') player?.toggle();
+        else {
+          listenedOn = true;
+          if (key === 'y') confirm();
+          else if (current.want) $refuse.mutate(current.want.target.id);
+        }
         return;
+      }
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'j', 'k'].includes(key)) {
+        listenedOn = true;
       }
       // Enter on a focused button presses that button; the page leaves it.
       if (key === 'enter' && target?.closest(INTERACTIVE)) return;
@@ -683,20 +693,7 @@
 
 <!-- "Review" is the page's title, in the place every page keeps it; the song
      being decided heads the panel below. -->
-<Hero title="Review" section>
-  {#snippet actions()}
-    <Button
-      variant={listen ? 'primary' : 'outline'}
-      icon
-      aria-pressed={listen}
-      aria-label="Listening mode"
-      title="Listening mode: Y accept, N none, Space play, J/K step"
-      onclick={toggleListen}
-    >
-      <Icon name="listen" size={15} />
-    </Button>
-  {/snippet}
-</Hero>
+<Hero title="Review" section />
 
 <!-- The queue and the question share one panel, the queue down its left. -->
 <div class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6">
@@ -744,7 +741,8 @@
       <EmptyPanel role="ok" heading={listen ? 'Nothing to listen to' : 'Nothing to decide'} />
     </div>
   {:else}
-    {#if !listen}
+    <!-- The rail stays in listening mode for its chips, the way out of the
+         mode among them; only the list of questions steps aside. -->
     <nav
       id="queue-rail"
       data-queue-rail
@@ -767,17 +765,31 @@
             <span class="numeric text-ink-3">{counts[option.key]}</span>
           </button>
         {/each}
+        {#if !listen}
+          <button
+            type="button"
+            onclick={toggleByAlbum}
+            aria-pressed={byAlbum}
+            aria-label="Group by album"
+            title="Group by album: open an album and accept its copies together"
+            class="flex items-center rounded-full border px-2 py-1 text-meta {byAlbum
+              ? 'border-line-regular bg-surface-thick text-ink'
+              : 'border-line-thin text-ink-2'}"
+          >
+            <Icon name="release" size={13} />
+          </button>
+        {/if}
         <button
           type="button"
-          onclick={toggleByAlbum}
-          aria-pressed={byAlbum}
-          aria-label="Group by album"
-          title="Group by album"
-          class="flex items-center rounded-full border px-2 py-1 text-meta {byAlbum
+          onclick={toggleListen}
+          aria-pressed={listen}
+          aria-label="Listening mode"
+          title="Listening mode: Y accept, N none, Space play or pause, J/K step"
+          class="flex items-center rounded-full border px-2 py-1 text-meta {listen
             ? 'border-line-regular bg-surface-thick text-ink'
             : 'border-line-thin text-ink-2'}"
         >
-          <Icon name="release" size={13} />
+          <Icon name="listen" size={13} />
         </button>
       </div>
 
@@ -789,6 +801,7 @@
         </div>
       {/if}
 
+      {#if !listen}
       <div
         use:keepInView={at}
         class="hidden min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-thin lg:flex"
@@ -848,6 +861,7 @@
           <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
         {/if}
       </div>
+      {/if}
 
       <div class="mt-auto hidden items-center gap-2.5 border-t border-line-thin p-4 lg:flex">
         <Icon name="volume" size={14} class="shrink-0 text-ink-3" />
@@ -862,7 +876,6 @@
         />
       </div>
     </nav>
-    {/if}
 
     {#if !current && !batch}
       <!-- The filter chosen holds nothing. The rail stays, so the reader can
@@ -879,7 +892,7 @@
     {:else}
     <section
       aria-label="Review"
-      class="flex min-w-0 flex-1 flex-col {listen ? '' : 'lg:border-l lg:border-line-thin'}"
+      class="flex min-w-0 flex-1 flex-col lg:border-l lg:border-line-thin"
     >
       {#if batch}
         <div class="flex flex-col gap-3 px-4 pt-5 pb-6 sm:px-6 lg:px-8">
@@ -928,13 +941,13 @@
               src={api.reviewCopyAudioUrl(group.best.id)}
               next={nextListen}
               name={current.title}
-              autoplay={gestured}
+              autoplay={gestured && listenedOn}
             />
           </div>
           <p class="flex flex-wrap gap-x-4 gap-y-1 text-meta text-ink-3" aria-label="Keys">
             <span><kbd class="numeric font-medium text-ink-2">Y</kbd> accept</span>
             <span><kbd class="numeric font-medium text-ink-2">N</kbd> none</span>
-            <span><kbd class="numeric font-medium text-ink-2">Space</kbd> play</span>
+            <span><kbd class="numeric font-medium text-ink-2">Space</kbd> play or pause</span>
             <span><kbd class="numeric font-medium text-ink-2">J</kbd>/<kbd class="numeric font-medium text-ink-2">K</kbd> step</span>
             {#if groups.length > 1}<span><kbd class="numeric font-medium text-ink-2">1</kbd>–<kbd class="numeric font-medium text-ink-2">{Math.min(groups.length, 9)}</kbd> copy</span>{/if}
           </p>

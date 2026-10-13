@@ -59,6 +59,13 @@ function copy(id: string): AcquiredCopy {
   };
 }
 
+/** A copy whose ISRC agreed, which an album batch checks before the reader. */
+function proven(id: string): AcquiredCopy {
+  const held = copy(id);
+  held.evidence!.agrees = ['ISRC'];
+  return held;
+}
+
 function want(id: string, title: string, album: string, overrides: Partial<ReviewItem> = {}): ReviewItem {
   return {
     kind: 'copies',
@@ -142,9 +149,9 @@ describe('deciding an album at once', () => {
 
   it('accepts each checked row once and nothing for a row taken out', async () => {
     wants = [
-      want('a', 'Evensong', 'Nine Lanterns'),
-      want('b', 'Ember', 'Nine Lanterns'),
-      want('c', 'Ashfall', 'Nine Lanterns'),
+      want('a', 'Evensong', 'Nine Lanterns', { copies: [proven('copy-a')] }),
+      want('b', 'Ember', 'Nine Lanterns', { copies: [proven('copy-b')] }),
+      want('c', 'Ashfall', 'Nine Lanterns', { copies: [proven('copy-c')] }),
       want('d', 'Undertow', 'Nine Lanterns', { waitingFor: 'musicbrainz' })
     ];
     await open('Evensong');
@@ -163,6 +170,38 @@ describe('deciding an album at once', () => {
       { method: 'POST', url: '/api/v1/review-queue/copies/copy-a/accept' },
       { method: 'POST', url: '/api/v1/review-queue/copies/copy-c/accept' }
     ]);
+  });
+
+  it('leaves a row unchecked when its evidence names no proof, and says what it has', async () => {
+    wants = [
+      want('a', 'Evensong', 'Nine Lanterns', { copies: [proven('copy-a')] }),
+      want('b', 'Ember', 'Nine Lanterns')
+    ];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Group by album' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Nine Lanterns by Kestrel Grove, 2' }));
+
+    const proof = (await screen.findByRole('checkbox', { name: 'Include Evensong' })) as HTMLInputElement;
+    const none = screen.getByRole('checkbox', { name: 'Include Ember' }) as HTMLInputElement;
+    expect([proof.checked, none.checked]).toEqual([true, false]);
+    expect(screen.getByText('ISRC agrees')).toBeTruthy();
+    expect(screen.getByText('Audio unidentified')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Accept checked/ }).textContent).toContain('1');
+  });
+
+  it('leaves a row unchecked when a field differs, and names the field', async () => {
+    const differs = proven('copy-a');
+    differs.evidence!.differs = ['duration (9s out)'];
+    wants = [want('a', 'Evensong', 'Nine Lanterns', { copies: [differs] })];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Group by album' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Nine Lanterns by Kestrel Grove, 1' }));
+
+    const row = (await screen.findByRole('checkbox', { name: 'Include Evensong' })) as HTMLInputElement;
+    expect(row.checked).toBe(false);
+    expect(screen.getByText('duration (9s out) differs')).toBeTruthy();
   });
 });
 
@@ -198,6 +237,36 @@ describe('listening mode', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(writes()).toEqual([]);
+  });
+
+  it('plays nothing by itself when the mode opens', async () => {
+    wants = [want('a', 'Evensong', 'Nine Lanterns')];
+    await open('Evensong');
+    const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
+    // A key on the page first, so the browser would let audio start.
+    await fireEvent.keyDown(window, { key: 'x' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
+    play.mockClear();
+    await fireEvent(document.querySelector('audio')!, new Event('loadedmetadata'));
+
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('pauses a playing copy on Space', async () => {
+    wants = [want('a', 'Evensong', 'Nine Lanterns')];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
+    const pause = HTMLMediaElement.prototype.pause as ReturnType<typeof vi.fn>;
+    const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
+    pause.mockClear();
+    play.mockClear();
+    Object.defineProperty(document.querySelector('audio')!, 'paused', { get: () => false });
+    await fireEvent.keyDown(window, { key: ' ' });
+
+    expect(pause).toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
   });
 
   it('plays the copy on Space', async () => {
