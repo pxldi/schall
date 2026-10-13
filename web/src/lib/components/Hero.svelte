@@ -60,8 +60,11 @@
   {#if kicker}
     <p class="mb-1 text-dense-meta text-ink-2">{@render kicker()}</p>
   {/if}
-  <div class="flex items-end justify-between gap-6">
-    <div class="min-w-0">
+  <!-- The title takes at least 20rem before the actions give way and wrap
+       under it. With the actions fixed beside it, a narrow window squeezed
+       the title to one letter per line at 753px. -->
+  <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+    <div class="min-w-0 flex-[1_1_20rem]">
       <h1 class="-ml-[0.04em] mb-3 font-extrabold text-balance text-ink {sizes[section ? 'xl' : size]}">{title}</h1>
       {#if sub}
         <div class="hero-sub text-quiet-meta text-ink-2">{@render sub()}</div>
