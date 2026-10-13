@@ -677,8 +677,7 @@ func MethodSentence(method string) string {
 		sentence = "Schall compared the audio with a file already in your library " +
 			"that is proven to be this recording, and it is the same music."
 	case "cd-checksum":
-		sentence = "The audio is bit for bit this recording's track on a CD, by the " +
-			"checksum people who ripped that CD submitted to AccurateRip."
+		sentence = "Bit for bit this song's CD track, by AccurateRip."
 	case "fingerprint-and-identifier":
 		sentence = "Schall listened to the audio and it matches this recording. " +
 			"The file's tags name the same one."
@@ -753,7 +752,7 @@ func (level grade) summary() string {
 	case byLibraryWitness:
 		return "identified by a file your library already holds"
 	case byCDChecksum:
-		return "identified as a CD track by its AccurateRip checksum"
+		return "matches a CD rip in AccurateRip"
 	case byRecordingID:
 		return "identified by MusicBrainz recording ID"
 	case byISRC:

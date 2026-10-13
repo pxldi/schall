@@ -56,12 +56,10 @@ type Answer struct {
 }
 
 const (
-	noDiscs             = "MusicBrainz lists no CD of this recording with the table of contents read off it."
-	noTrackOfThatLength = "No CD MusicBrainz lists this recording on holds a track of exactly " +
-		"this copy's length."
-	noChecksum              = "No rip AccurateRip holds of those CDs has this copy's checksum."
-	otherRecordingOnTheDisc = "The copy matched a CD track, and MusicBrainz lists another " +
-		"recording at that place on a release with the same CD."
+	noDiscs                 = "No CD of this song in MusicBrainz"
+	noTrackOfThatLength     = "No CD track of this length"
+	noChecksum              = "No matching CD rip in AccurateRip"
+	otherRecordingOnTheDisc = "Another song at that CD track"
 )
 
 // Checker looks a copy up in AccurateRip under the CDs MusicBrainz lists its

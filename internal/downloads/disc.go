@@ -32,7 +32,7 @@ var cdLossless = map[string]bool{
 	".flac": true, ".wav": true, ".aif": true, ".aiff": true, ".wv": true, ".ape": true,
 }
 
-const notCDAudio = "The copy is not 44.1 kHz stereo, so it cannot be a CD track."
+const notCDAudio = "Not 44.1 kHz stereo, so not a CD rip"
 
 // measureAgainstDisc looks the copy up in AccurateRip and writes down what
 // came of it.
@@ -60,7 +60,7 @@ func (importer *Importer) measureAgainstDisc(
 	}
 	answer, err := importer.discs.Check(ctx, row.MusicBrainzRecordingID, source)
 	if err != nil {
-		evidence.Disc = &db.ImportDisc{Unavailable: "AccurateRip or MusicBrainz could not be asked"}
+		evidence.Disc = &db.ImportDisc{Unavailable: "AccurateRip or MusicBrainz didn't answer"}
 		importer.logger.Warn().Err(err).Str("file", evidence.Name).
 			Str("musicbrainz_recording_id", row.MusicBrainzRecordingID.String()).
 			Msg("could not look a copy up in accuraterip")

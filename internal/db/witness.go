@@ -138,7 +138,7 @@ func ProofSentence(proof string) string {
 	case "library-witness":
 		return "another file you own"
 	case "cd-checksum":
-		return "the checksum of a CD it is on"
+		return "a CD rip in AccurateRip"
 	}
 	return "the evidence Schall had"
 }
