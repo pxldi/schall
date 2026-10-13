@@ -171,17 +171,17 @@ type Message struct {
 func sentence(waiting counts) string {
 	parts := make([]string, 0, 2)
 	if waiting.heldCopies > 0 {
-		parts = append(parts, plural(waiting.heldCopies, "copy nobody could identify",
-			"copies nobody could identify"))
+		parts = append(parts, plural(waiting.heldCopies, "copy to check",
+			"copies to check"))
 	}
 	if waiting.pausedItems > 0 {
-		parts = append(parts, plural(waiting.pausedItems, "import waiting for a decision",
-			"imports waiting for a decision"))
+		parts = append(parts, plural(waiting.pausedItems, "import to check",
+			"imports to check"))
 	}
 	if len(parts) == 0 {
-		return "The review queue has something waiting."
+		return "Review has something waiting."
 	}
-	return strings.Join(parts, " and ") + ". Open Review to answer."
+	return strings.Join(parts, " and ") + ". Open Review."
 }
 
 func plural(count int64, one, many string) string {

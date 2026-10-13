@@ -208,7 +208,7 @@ func (api *API) releaseSelection(
 	}
 	if len(body.ReleaseIDs) > selectionCap {
 		api.problem(response, http.StatusUnprocessableEntity, "validation failed",
-			[]string{"Select no more than 50 releases at a time."})
+			[]string{"Select up to 50 releases at a time."})
 		return nil, false
 	}
 	// The same release ticked twice is one release. Ignoring would be harmless
@@ -218,7 +218,7 @@ func (api *API) releaseSelection(
 	for _, id := range body.ReleaseIDs {
 		if id == uuid.Nil {
 			api.problem(response, http.StatusUnprocessableEntity, "validation failed",
-				[]string{"One of the releases is not a release."})
+				[]string{"One of the release IDs is empty."})
 			return nil, false
 		}
 		if _, repeat := seen[id]; repeat {

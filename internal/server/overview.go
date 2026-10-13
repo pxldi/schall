@@ -139,7 +139,7 @@ var weekdays = [7]string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
 // browser sent; a zone Postgres does not know falls back to UTC.
 func (api *API) overview(response http.ResponseWriter, request *http.Request) {
 	if api.overviews == nil {
-		api.problem(response, http.StatusNotFound, "The overview is not available on this server.", nil)
+		api.problem(response, http.StatusNotFound, "The overview isn't set up on this server.", nil)
 		return
 	}
 	ctx := request.Context()

@@ -882,13 +882,13 @@ func TestARetriedJobKeepsWhatItIsAbout(t *testing.T) {
 // the outcome the person pressing wanted, arrived at by the first press.
 func TestASecondRetryAnswersPlainlyThatNothingChanged(t *testing.T) {
 	for status, detail := range map[string]string{
-		"queued":    "Already queued. Nothing was changed.",
-		"running":   "Already running. Nothing was changed.",
-		"completed": "Already finished. Nothing was changed.",
+		"queued":    "Already queued.",
+		"running":   "Already running.",
+		"completed": "Already finished.",
 		// The job was running when the press arrived and failed between the
 		// requeue and the read that followed it. Nothing was queued, and the
 		// answer has to say so rather than call it finished.
-		"failed": "It has failed since. Nothing was changed; retry it again.",
+		"failed": "Failed again. Retry it.",
 	} {
 		jobID := uuid.New()
 		store := &queueStore{fakeStore: &fakeStore{}, requeuedNew: false, requeued: db.JobRow{
@@ -981,7 +981,7 @@ func TestCancelReportsAJobRemovedFromTheQueue(t *testing.T) {
 	if !decoded.Cancelled {
 		t.Fatal("cancelled = false, want the press reported as having done something")
 	}
-	if decoded.Detail != "Cancelled. It will not run." {
+	if decoded.Detail != "Cancelled. It won't run." {
 		t.Fatalf("detail = %q, want the press to say what it did", decoded.Detail)
 	}
 	if store.cancelledID != jobID {
@@ -993,9 +993,9 @@ func TestCancelReportsAJobRemovedFromTheQueue(t *testing.T) {
 // the same second-press shape retry answers with.
 func TestASecondCancelAnswersPlainlyThatNothingChanged(t *testing.T) {
 	for status, detail := range map[string]string{
-		"running":   "Already running. Nothing was changed.",
-		"completed": "Already finished. Nothing was changed.",
-		"failed":    "Already finished. Nothing was changed.",
+		"running":   "Already running.",
+		"completed": "Already finished.",
+		"failed":    "Already finished.",
 	} {
 		jobID := uuid.New()
 		store := &queueStore{fakeStore: &fakeStore{}, cancelledNew: false, cancelled: db.JobRow{

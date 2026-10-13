@@ -50,13 +50,13 @@ func (match Match) Known() bool { return match.Expected > 0 }
 func (match Match) Summary() string {
 	switch {
 	case !match.Known():
-		return "Not checked against the catalogue"
+		return "Not checked"
 	case match.Complete() && match.Expected == 1:
-		return "Track confirmed by name and length"
+		return "Name and length match"
 	case match.Complete():
-		return fmt.Sprintf("All %d tracks confirmed by name and length", match.Expected)
+		return fmt.Sprintf("All %d tracks match by name and length", match.Expected)
 	case match.Confirmed == 0 && match.Partial == 0:
-		return fmt.Sprintf("Nothing here matches the %s", pluralTracks(match.Expected))
+		return fmt.Sprintf("No match for the %s", pluralTracks(match.Expected))
 	}
 
 	// Only the counts that are not zero are named. "2 of 3 confirmed, 0 partial,
@@ -262,13 +262,13 @@ func (offer Offer) rank() int {
 func (offer Offer) Summary() string {
 	switch {
 	case offer.Confirmed:
-		return "Named and timed like the wanted recording"
+		return "Name and length match"
 	case offer.Partial:
-		return "Either the name or the length fits, not both"
+		return "Name or length matches, not both"
 	case offer.LengthDiffers && offer.Named:
-		return "Named like the wanted recording, but the peer says it runs to another length"
+		return "Name matches, length differs"
 	case offer.LengthDiffers:
-		return "The peer says it runs to another length"
+		return "Length differs"
 	}
-	return "Nothing the peer disclosed fits; it has not been heard either"
+	return "No match by name or length"
 }
