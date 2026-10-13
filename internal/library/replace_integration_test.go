@@ -99,6 +99,42 @@ func TestReplaceIfBetterDeletesTheOldFileWhenTheNewCopyIsBetter(t *testing.T) {
 	}
 }
 
+// A file that is also mapped onto a track of different music is that music's
+// copy too. A better copy of one recording is no licence to delete another's,
+// so the upgrade leaves it, as Keep one does.
+func TestReplaceIfBetterKeepsAFileThatAlsoAnswersAnotherRecording(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	switchOnUpgrades(t, pool)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+
+	oldPath := filepath.Join(rootPath, "old.mp3")
+	newPath := filepath.Join(rootPath, "new.mp3")
+	oldID := upgradeableFile(t, pool, rootID, oldPath, 128)
+	newID := upgradeableFile(t, pool, rootID, newPath, 320)
+	identifiedAsRecording(t, pool, oldID, recordingID)
+	identifiedAsRecording(t, pool, newID, recordingID)
+	mapTo(t, pool, catalogueTrack(t, pool, "Another Artist", "Another Album"), oldID)
+
+	replaced, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replaced {
+		t.Fatal("a file that is also another recording's copy was replaced")
+	}
+	if !filePresent(t, pool, oldID) {
+		t.Fatal("the old file's library row was deleted")
+	}
+	if _, err := os.Stat(oldPath); err != nil {
+		t.Fatalf("the old audio is gone: %v", err)
+	}
+	if len(removals(t, pool)) != 0 {
+		t.Fatal("a removal was recorded for a file that also answers another recording")
+	}
+}
+
 // The floor already refuses a worse or equal copy for an ordinary want, so
 // this is a belt-and-braces check on the one place that deletes anything:
 // even handed a copy that should never have arrived, ReplaceIfBetter refuses

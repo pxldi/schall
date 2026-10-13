@@ -225,6 +225,19 @@ func TestOneFileUnderTheFloorIsRefusedThoughItsFolderPassed(t *testing.T) {
 	}
 }
 
+// A folder is judged by the format most of its files are in, so one MP3 in a
+// folder of FLAC passes the folder's check. The file is held to the format
+// list itself.
+func TestOneFileInAnUnacceptableFormatIsRefusedThoughItsFolderPassed(t *testing.T) {
+	preferences := Preferences{Unacceptable: []string{"mp3"}}
+
+	reason, kind := preferences.RefuseFile(".MP3", 320)
+
+	if reason == "" || kind != RefusedFormat {
+		t.Fatalf("RefuseFile(.MP3, 320) = %q, %q; want it refused for its format", reason, kind)
+	}
+}
+
 func TestOneFileAtTheFloorIsKept(t *testing.T) {
 	preferences := Preferences{FormatMinimumBitRate: map[string]int{"mp3": 320}}
 

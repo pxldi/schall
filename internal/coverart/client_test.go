@@ -581,6 +581,24 @@ func TestOnlyAnInternetAddressIsReachable(t *testing.T) {
 // A picture past the bound is refused rather than cut short. Half a picture
 // stored as somebody's permanent cover is worse than no picture: it decodes,
 // so nothing ever replaces it.
+// A full-size cover over the bound used to be cut at it and returned as a
+// picture. Its head still decodes, so the cut copy was written beside the music
+// as cover.png, and that file stops the cover ever being asked for again.
+func TestAFullSizeCoverOverTheBoundIsNotCutShort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "image/png")
+		_, _ = response.Write(bytes.Repeat([]byte("x"), maxFullImageBytes+1))
+	}))
+	t.Cleanup(server.Close)
+
+	artwork, err := NewClient(Options{BaseURL: server.URL}).
+		FullFront(context.Background(), nullable(releaseID), uuid.NullUUID{})
+	if !errors.Is(err, ErrNoArtwork) || len(artwork.Image) != 0 {
+		t.Fatalf("FullFront() = %d bytes, error %v; want the oversized cover refused",
+			len(artwork.Image), err)
+	}
+}
+
 func TestAPictureAtAnAddressOverTheBoundIsRefused(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(
 		func(response http.ResponseWriter, _ *http.Request) {

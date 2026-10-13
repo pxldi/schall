@@ -67,7 +67,9 @@ type ImportStore interface {
 	// The two the backfill pass needs. See FingerprintHeldCopies: it reads the
 	// held copies whose audio was never measured, and writes the measurement
 	// back. Neither touches a verdict.
-	CopiesMissingFingerprint(context.Context, int32) ([]db.UnfingerprintedCopyRow, error)
+	CopiesMissingFingerprint(
+		context.Context, db.CopyCursor, int32,
+	) ([]db.UnfingerprintedCopyRow, error)
 	RecordCopyFingerprint(ctx context.Context, copyID uuid.UUID, print string, seconds int) error
 	MarkDownloadImportNeedsReview(context.Context, uuid.UUID, string, *db.ImportEvidence) error
 	CompleteDownloadImport(context.Context, uuid.UUID, string, string, map[string]db.ImportedDownloadFile) error
@@ -815,7 +817,9 @@ func (importer *Importer) verifyAcoustically(
 			}
 		}
 		verdict.Agrees = &agrees
-		if agrees {
+		// A person's decision is permanent. The answer stays on the evidence for
+		// the review page, but it cannot pause a file somebody already judged.
+		if agrees || file.evidence.Decision != nil {
 			continue
 		}
 		// The audio was recognised and is not this recording. That is the file
@@ -1270,6 +1274,12 @@ func containedDirectory(root, candidate string) (string, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return "", err
+	}
+	// The candidate is compared by its real path, so the root has to be too, or
+	// an inbox configured through a symlink holds nothing. A root that cannot be
+	// resolved is compared as written.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
 	}
 	candidate, err = filepath.EvalSymlinks(candidate)
 	if err != nil {

@@ -560,10 +560,11 @@ func (syncer *Syncer) syncOne(
 	}
 	result.Unpaired = unpaired
 
-	if err := syncer.push(ctx, client, remote, paired, songs); err != nil {
+	held := stillHeld(snapshotTracks, unpaired, remote)
+	if err := syncer.push(ctx, client, remote, paired, held, songs); err != nil {
 		return result, err
 	}
-	if err := syncer.writeSnapshot(ctx, playlistID, remote.ID, snapshot.Adopted, paired); err != nil {
+	if err := syncer.writeSnapshot(ctx, playlistID, remote.ID, snapshot.Adopted, paired, held); err != nil {
 		return result, err
 	}
 	result.Pushed = len(paired)
@@ -694,7 +695,7 @@ func (syncer *Syncer) createRemote(
 		syncer.logger.Warn().Err(err).Str("navidrome_playlist_id", remoteID).
 			Msg("sign a playlist schall created")
 	}
-	if err := syncer.writeSnapshot(ctx, playlist.ID, remoteID, false, paired); err != nil {
+	if err := syncer.writeSnapshot(ctx, playlist.ID, remoteID, false, paired, nil); err != nil {
 		return result, err
 	}
 	result.Created = true
@@ -859,11 +860,14 @@ func entryTitle(song Song, file db.LibraryFileRefRow) string {
 // would be acting on exactly the thing that was refused.
 func (syncer *Syncer) push(
 	ctx context.Context, client playlistClient, remote Playlist,
-	paired []pairedTrack, songs songSets,
+	paired []pairedTrack, held []db.NavidromePlaylistSnapshotTrackRow, songs songSets,
 ) error {
-	wanted := make(map[string]struct{}, len(paired))
+	wanted := make(map[string]struct{}, len(paired)+len(held))
 	for _, pair := range paired {
 		wanted[pair.song.ID] = struct{}{}
+	}
+	for _, track := range held {
+		wanted[track.NavidromeSongID] = struct{}{}
 	}
 
 	var removeIndexes []int
@@ -908,6 +912,40 @@ func (syncer *Syncer) push(
 	return nil
 }
 
+// stillHeld is what was pushed for an entry that is still acquired, whose file
+// the player could not find this pass, and whose song the listing still holds.
+// A search that missed, say before a rescan has read new tags, says nothing
+// about whether the track is still wanted, so the song stays where it is.
+func stillHeld(
+	snapshotTracks []db.NavidromePlaylistSnapshotTrackRow, unpaired []UnpairedTrack, remote Playlist,
+) []db.NavidromePlaylistSnapshotTrackRow {
+	if len(unpaired) == 0 {
+		return nil
+	}
+	missed := make(map[uuid.UUID]struct{}, len(unpaired))
+	for _, track := range unpaired {
+		missed[track.EntryID] = struct{}{}
+	}
+	listed := make(map[string]struct{}, len(remote.Entries))
+	for _, entry := range remote.Entries {
+		listed[entry.ID] = struct{}{}
+	}
+	var held []db.NavidromePlaylistSnapshotTrackRow
+	for _, track := range snapshotTracks {
+		if !track.PlaylistEntryID.Valid {
+			continue
+		}
+		if _, still := missed[track.PlaylistEntryID.UUID]; !still {
+			continue
+		}
+		if _, present := listed[track.NavidromeSongID]; !present {
+			continue
+		}
+		held = append(held, track)
+	}
+	return held
+}
+
 // writeSnapshot records what is now pushed, in full.
 //
 // The path written down is the Schall path — the one Schall wrote and owns —
@@ -916,16 +954,33 @@ func (syncer *Syncer) push(
 // silently become wrong the day a mount is renamed; the snapshot is the record
 // of what Schall pushed, in Schall's own terms.
 func (syncer *Syncer) writeSnapshot(
-	ctx context.Context, playlistID uuid.UUID, remoteID string, adopted bool, paired []pairedTrack,
+	ctx context.Context, playlistID uuid.UUID, remoteID string, adopted bool,
+	paired []pairedTrack, held []db.NavidromePlaylistSnapshotTrackRow,
 ) error {
-	tracks := make([]db.NavidromePlaylistSnapshotTrackParams, 0, len(paired))
-	for index, pair := range paired {
+	tracks := make([]db.NavidromePlaylistSnapshotTrackParams, 0, len(paired)+len(held))
+	written := make(map[string]struct{}, len(paired))
+	for _, pair := range paired {
+		written[pair.song.ID] = struct{}{}
 		tracks = append(tracks, db.NavidromePlaylistSnapshotTrackParams{
-			Position:        int32(index + 1),
+			Position:        int32(len(tracks) + 1),
 			NavidromeSongID: pair.song.ID,
 			LibraryPath:     pair.track.LibraryPath,
 			LibraryFileID:   uuid.NullUUID{UUID: pair.track.LibraryFileID, Valid: true},
 			PlaylistEntryID: uuid.NullUUID{UUID: pair.track.EntryID, Valid: true},
+		})
+	}
+	// A held track is written as it was pushed, so the next pass still knows the
+	// song as Schall's and does not take it in as somebody's addition.
+	for _, track := range held {
+		if _, twice := written[track.NavidromeSongID]; twice {
+			continue
+		}
+		tracks = append(tracks, db.NavidromePlaylistSnapshotTrackParams{
+			Position:        int32(len(tracks) + 1),
+			NavidromeSongID: track.NavidromeSongID,
+			LibraryPath:     track.LibraryPath,
+			LibraryFileID:   track.LibraryFileID,
+			PlaylistEntryID: track.PlaylistEntryID,
 		})
 	}
 	if err := syncer.store.ReplaceNavidromePlaylistSnapshot(ctx,

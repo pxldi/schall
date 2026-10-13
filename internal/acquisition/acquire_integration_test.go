@@ -103,6 +103,9 @@ type fakeFetcher struct {
 	cancelled []uuid.UUID
 	err       error
 	pool      *pgxpool.Pool
+	// during runs inside the provider call, for whatever settles a request
+	// while the provider takes its time to refuse it.
+	during func(requestIDs []uuid.UUID)
 }
 
 func (fetcher *fakeFetcher) StartTogether(_ context.Context, requestIDs []uuid.UUID) error {
@@ -110,6 +113,9 @@ func (fetcher *fakeFetcher) StartTogether(_ context.Context, requestIDs []uuid.U
 	defer fetcher.mutex.Unlock()
 	fetcher.batches = append(fetcher.batches, append([]uuid.UUID{}, requestIDs...))
 	fetcher.started = append(fetcher.started, requestIDs...)
+	if fetcher.during != nil {
+		fetcher.during(requestIDs)
+	}
 	return fetcher.err
 }
 
@@ -1199,6 +1205,57 @@ func TestACopyTheProviderWouldNotStartIsNotAJudgement(t *testing.T) {
 	}
 }
 
+// slskd can take its time to refuse a start, and the poller can read the
+// transfer slskd recorded as failed and settle the request meanwhile. There is
+// then nothing left to withdraw, which is not an error, and the want still
+// carries on.
+func TestACopyThatSettledWhileItsStartWasRefusedIsNotAnError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter := &fakeHunter{candidates: offering(sources.File{
+		Path: `Music\Glory Box.flac`, Name: "Glory Box.flac", DurationSeconds: 301,
+	})}
+	fetcher := &fakeFetcher{
+		err: errors.New("slskd returned HTTP 500"),
+		during: func(requestIDs []uuid.UUID) {
+			if _, err := pool.Exec(ctx, `
+				UPDATE download_requests SET status = 'failed', updated_at = now()
+				WHERE id = ANY($1)
+			`, requestIDs); err != nil {
+				t.Error(err)
+			}
+		},
+	}
+	fetcher.pool = pool
+	var logged strings.Builder
+	service := NewService(db.New(pool), zerolog.New(&logged)).
+		WithHunter(hunter).
+		WithFetcher(fetcher).
+		WithListener(&fakeListener{configured: true})
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if strings.Contains(logged.String(), `"level":"error"`) {
+		t.Errorf("logged %s, want no error for a request that had already settled", logged.String())
+	}
+	recorded := offers(ctx, t, pool, target.ID)
+	if len(recorded) != 1 || recorded[0].Verdict != db.AcquiredFileUndelivered {
+		t.Fatalf("offers = %+v, want a transport fact rather than a verdict", recorded)
+	}
+	waiting, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waiting.Status != "pending" || !waiting.NextAttemptAt.Valid {
+		t.Fatalf("status = %s next = %v, want it looked for again later",
+			waiting.Status, waiting.NextAttemptAt)
+	}
+}
+
 func createWantWithDuration(
 	ctx context.Context, t *testing.T, service *Service, recordingID uuid.UUID, durationMS int32,
 ) db.AcquisitionTargetRow {
@@ -1862,6 +1919,79 @@ func TestAFolderFoundForOneWantIsReadForTheWantsSharingItsRelease(t *testing.T) 
 
 // One folder, one person, one question. Ten wants that all chose the same peer
 // and asked it ten times over is what "too many files" was the peer's answer to.
+// Two siblings whose titles both fit one file in the folder cannot both take
+// it. One file arrives once, and only one want's audio check can be about it.
+func TestOneFileInAFolderIsTakenForOneSiblingOnly(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter := &fakeHunter{candidates: offering(
+		sources.File{
+			Path: `Music\Portishead\Dummy\01 Mysterons.flac`, Name: "01 Mysterons.flac",
+			Extension: "flac", SizeBytes: 30_000_000, DurationSeconds: 305,
+		},
+		sources.File{
+			Path: `Music\Portishead\Dummy\05 Glory Box.flac`, Name: "05 Glory Box.flac",
+			Extension: "flac", SizeBytes: 25_000_000, DurationSeconds: 301,
+		},
+	)}
+	fetcher := &fakeFetcher{}
+	service := hunting(pool, hunter, fetcher, true)
+
+	releaseGroupID := uuid.New()
+	mysterons := wantOnARelease(ctx, t, service, pool, "Mysterons", 305_000, releaseGroupID)
+	first := wantOnARelease(ctx, t, service, pool, "Glory Box", 301_000, releaseGroupID)
+	second := wantOnARelease(ctx, t, service, pool, "Glory Box", 301_000, releaseGroupID)
+	if err := service.hunt(ctx, mysterons, nil); err != nil {
+		t.Fatalf("hunt() error = %v", err)
+	}
+
+	taken := len(offers(ctx, t, pool, first.ID)) + len(offers(ctx, t, pool, second.ID))
+	if taken != 1 {
+		t.Fatalf("the one Glory Box file was taken %d times, want once", taken)
+	}
+}
+
+// Not being able to read what was already tried is Schall's failure. Recording
+// it as nobody sharing the music would spend an attempt on a fact nobody learnt.
+func TestAWantWhoseTriedCopiesCannotBeReadSpendsNoAttempt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	fetcher := &fakeFetcher{pool: pool}
+	service := NewService(&unreadableTriesStore{Store: db.New(pool)}, zerolog.Nop()).
+		WithHunter(&fakeHunter{candidates: offering(sources.File{
+			Path: `Music\Portishead\Dummy\05 Glory Box.flac`, Name: "05 Glory Box.flac",
+			Extension: "flac", SizeBytes: 25_000_000, DurationSeconds: 301,
+		})}).
+		WithFetcher(fetcher).
+		WithListener(&fakeListener{configured: true})
+
+	target := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if err := service.hunt(ctx, target, nil); err == nil {
+		t.Fatal("hunt() reported success though what was tried could not be read")
+	}
+
+	after, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Attempts != 0 {
+		t.Fatalf("attempts = %d, want none spent", after.Attempts)
+	}
+	if len(fetcher.started) != 0 {
+		t.Fatalf("started %v, want nothing fetched", fetcher.started)
+	}
+}
+
+type unreadableTriesStore struct{ Store }
+
+func (*unreadableTriesStore) AcquisitionTargetFiles(
+	context.Context, uuid.UUID,
+) ([]db.AcquisitionTargetFileRow, error) {
+	return nil, errors.New("connection reset")
+}
+
 func TestTwoWantsSharingAFolderAreAskedForInOneRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

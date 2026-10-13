@@ -382,6 +382,16 @@ func (remover *Remover) replaceCandidate(
 		locked.recordingID.UUID != doomed.recordingID.UUID {
 		return false, nil
 	}
+	// A file that also answers different music is that music's copy too, and
+	// a better copy of this recording is no licence to delete it. KeepOne
+	// refuses the same file for the same reason.
+	copied, err := remover.lockedCopy(ctx, transaction, doomed.recordingID.UUID, locked.id)
+	if err != nil {
+		return false, err
+	}
+	if copied == nil || copied.answersOther {
+		return false, nil
+	}
 	// The copy we keep must still prove the same recording under this
 	// transaction too. An upload can be re-identified after the caller read it;
 	// its old proof must never authorize deleting another recording's file.

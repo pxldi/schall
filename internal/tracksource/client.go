@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -160,6 +161,12 @@ func (client *Client) Lookup(ctx context.Context, address string) (Track, error)
 	if !strings.Contains(address, "//") {
 		address = "https://" + address
 	}
+	// The address is somebody's paste handed to yt-dlp, which also reads local
+	// files and options. Only a web address goes, and after "--".
+	parsed, err := url.Parse(address)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return Track{}, ErrNotATrack
+	}
 	if !client.enabled() {
 		return Track{}, fmt.Errorf("%w: no binary configured", ErrUnavailable)
 	}
@@ -168,7 +175,7 @@ func (client *Client) Lookup(ctx context.Context, address string) (Track, error)
 	defer cancel()
 	stdout, stderr, runErr := client.run(ctx, client.path,
 		"--dump-single-json", "--flat-playlist", "--no-playlist", "--skip-download",
-		"--no-warnings", address)
+		"--no-warnings", "--", address)
 	if err := client.commandError(ctx, stderr, runErr); err != nil {
 		return Track{}, err
 	}

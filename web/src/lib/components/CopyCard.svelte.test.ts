@@ -379,6 +379,39 @@ describe('the waveform', () => {
   });
 });
 
+describe('the filed copy', () => {
+  // A filed copy was answered and moved into the library. The review routes
+  // refuse it with a 409, so it plays from the library file and draws no shape.
+  function drawFiled() {
+    const { container } = render(CopyCard, {
+      props: {
+        heading: 'In your library',
+        copy: copy({ verdict: 'accepted', libraryFileId: 'file-1' }),
+        wantedMs: 281_000,
+        selected: true,
+        onselect: () => {}
+      }
+    });
+    return container.querySelector('audio') as HTMLAudioElement;
+  }
+
+  it('plays the library file it became', async () => {
+    const audio = drawFiled();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Play In your library' }));
+
+    expect(audio.getAttribute('src')).toBe('/api/v1/library/files/file-1/audio');
+  });
+
+  it('asks the review queue for no waveform', async () => {
+    drawFiled();
+    await Promise.resolve();
+
+    const asked = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(asked.filter((url) => url.includes('/review-queue/'))).toEqual([]);
+  });
+});
+
 describe('two cards, one player', () => {
   it('stops the first once the second starts', async () => {
     const first = render(CopyCard, {

@@ -378,8 +378,11 @@ func windowErrors(left, right []uint32) (float64, int) {
 			if rate > worst {
 				worst = rate
 			}
+			// The tail overlaps the last regular window by more than half, so it
+			// extends no run. After a clean window it is a run of one, which
+			// must not replace a longer run found earlier.
 			if rate >= WindowMismatchAbove && run == 0 {
-				longest = 1
+				longest = max(longest, 1)
 			}
 		}
 	}

@@ -2996,7 +2996,7 @@ func TestTheBackfillOffersOnlyTheCopiesWithNoFingerprint(t *testing.T) {
 		t.Fatalf("SettleAcquiredFile() error = %v", err)
 	}
 
-	waiting, err := queries.CopiesMissingFingerprint(ctx, 20)
+	waiting, err := queries.CopiesMissingFingerprint(ctx, CopyCursor{}, 20)
 	if err != nil {
 		t.Fatalf("CopiesMissingFingerprint() error = %v", err)
 	}
@@ -3006,6 +3006,14 @@ func TestTheBackfillOffersOnlyTheCopiesWithNoFingerprint(t *testing.T) {
 	if waiting[0].SourceDirectory != "Music/Anetha" || waiting[0].FileName != "03.flac" {
 		t.Errorf("copy = %+v, want where its bytes are", waiting[0])
 	}
+	// A pass that could not measure this copy walks on past it.
+	past, err := queries.CopiesMissingFingerprint(ctx, waiting[0].Cursor(), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(past) != 0 {
+		t.Fatalf("waiting = %+v, want nothing after the cursor", past)
+	}
 
 	if err := queries.RecordCopyFingerprint(
 		ctx, waiting[0].CopyID, heldCopyFingerprint, 240,
@@ -3013,7 +3021,7 @@ func TestTheBackfillOffersOnlyTheCopiesWithNoFingerprint(t *testing.T) {
 		t.Fatalf("RecordCopyFingerprint() error = %v", err)
 	}
 
-	again, err := queries.CopiesMissingFingerprint(ctx, 20)
+	again, err := queries.CopiesMissingFingerprint(ctx, CopyCursor{}, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

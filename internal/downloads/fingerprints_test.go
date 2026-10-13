@@ -120,6 +120,40 @@ func TestAnUnreadableCopyDoesNotStopThePass(t *testing.T) {
 	}
 }
 
+// A full batch of copies nothing can measure sits at the front of the queue,
+// oldest first. Before, every pass was offered the same batch, reported more
+// waiting, and was queued again at once: the loop never ended and the copy
+// behind them was never measured.
+func TestCopiesNothingCanMeasureDoNotHoldUpTheCopiesBehindThem(t *testing.T) {
+	inbox := t.TempDir()
+	store := &fakeImportStore{}
+	for range fingerprintBatch {
+		store.unfingerprinted = append(store.unfingerprinted, db.UnfingerprintedCopyRow{
+			CopyID: uuid.New(), SourceDirectory: `Music\Gone`, FileName: "gone.flac",
+		})
+	}
+	behind := heldCopy(t, inbox, "Anetha", "03.flac")
+	store.unfingerprinted = append(store.unfingerprinted, behind)
+	importer := backfillImporter(
+		store, inbox, &fakeFingerprinter{value: anchorFingerprint, available: true})
+
+	passes := 0
+	for more := true; more; passes++ {
+		if passes == 5 {
+			t.Fatal("the backfill was still asking for another pass after 5")
+		}
+		result, err := importer.fingerprintHeldCopies(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		more = result.MoreWaiting
+	}
+	if store.fingerprinted[behind.CopyID] != anchorFingerprint {
+		t.Errorf("fingerprints = %v, want the copy behind the missing ones measured",
+			store.fingerprinted)
+	}
+}
+
 // Nothing waiting. An installation with every copy measured is not missing
 // anything, whether or not it could fingerprint audio at all, so the pass ends
 // quietly rather than reporting that fpcalc is absent.

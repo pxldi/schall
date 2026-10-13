@@ -43,7 +43,7 @@ func TestLookupReadsASoundCloudTrackAsTheUploaderNamedIt(t *testing.T) {
 		t.Fatalf("track = %#v\nwant    %#v", track, want)
 	}
 	wantArgs := []string{"--dump-single-json", "--flat-playlist", "--no-playlist", "--skip-download",
-		"--no-warnings", "https://soundcloud.com/abo/illegal-edit?si=share"}
+		"--no-warnings", "--", "https://soundcloud.com/abo/illegal-edit?si=share"}
 	if strings.Join(*gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
 		t.Fatalf("args = %#v, want %#v", *gotArgs, wantArgs)
 	}
@@ -105,6 +105,26 @@ func TestLookupRefusesAnythingThatIsNotOneTrack(t *testing.T) {
 			client, _ := fakeClient(answer, "", nil)
 			if _, err := client.Lookup(context.Background(), "https://example.com/x"); !errors.Is(err, ErrNotATrack) {
 				t.Fatalf("err = %v, want ErrNotATrack", err)
+			}
+		})
+	}
+}
+
+// A pasted address goes to yt-dlp as an argument. One that is not a web
+// address never reaches it, so "--exec=..." cannot be read as an option.
+func TestLookupRefusesAnAddressThatIsNotAWebAddress(t *testing.T) {
+	for _, address := range []string{
+		"--exec=touch /tmp/owned //",
+		"file:///etc/passwd",
+		"ftp://soundcloud.com/abo/illegal-edit",
+	} {
+		t.Run(address, func(t *testing.T) {
+			client, gotArgs := fakeClient(`{"extractor":"soundcloud","id":"293"}`, "", nil)
+			if _, err := client.Lookup(context.Background(), address); !errors.Is(err, ErrNotATrack) {
+				t.Fatalf("err = %v, want ErrNotATrack", err)
+			}
+			if *gotArgs != nil {
+				t.Fatalf("yt-dlp ran with %#v", *gotArgs)
 			}
 		})
 	}

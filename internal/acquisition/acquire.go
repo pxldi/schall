@@ -355,8 +355,13 @@ func (service *Service) hunt(
 			harvestPreferences = stored.StoredPreferences(ctx)
 		}
 	}
-	offer, found, heldBack, belowFloor := service.choose(
+	// A read that failed is Schall's failure, so it spends no attempt the way
+	// "nobody is sharing it" would.
+	offer, found, heldBack, belowFloor, err := service.choose(
 		ctx, target, candidates, wanted, openAtPeers, preferences)
+	if err != nil {
+		return err
+	}
 	if !found {
 		// A copy passed over only because its peer is busy is not an absence, so
 		// the two are answered differently: the want stands back without spending
@@ -584,6 +589,9 @@ func (service *Service) harvest(
 		return nil
 	}
 	taking := make([]chosen, 0, len(siblings))
+	// Each file goes to one want. Two siblings whose titles fit the same file
+	// would otherwise both be handed it in one batch.
+	takenPaths := map[string]bool{taken.File.Path: true}
 	for _, sibling := range siblings {
 		if len(taking) >= spare {
 			break
@@ -609,10 +617,12 @@ func (service *Service) harvest(
 		if sibling.EntryDurationMS.Valid {
 			wanted.DurationSeconds = int(sibling.EntryDurationMS.Int32) / 1000
 		}
-		offer, found := service.chooseFrom(ctx, sibling, candidates, wanted, taken, preferences)
+		offer, found := service.chooseFrom(
+			ctx, sibling, candidates, wanted, taken, takenPaths, preferences)
 		if !found {
 			continue
 		}
+		takenPaths[offer.File.Path] = true
 		taking = append(taking, chosen{target: sibling, offer: offer})
 	}
 	return taking
@@ -628,10 +638,14 @@ func (service *Service) chooseFrom(
 	candidates []sources.Candidate,
 	wanted sources.QueryTrack,
 	taken sources.Offer,
+	takenPaths map[string]bool,
 	preferences sources.Preferences,
 ) (sources.Offer, bool) {
-	verdicts, ok := service.verdictsFor(ctx, sibling.ID)
-	if !ok {
+	verdicts, err := service.verdictsFor(ctx, sibling.ID)
+	if err != nil {
+		service.logger.Error().Err(err).
+			Str("acquisition_target_id", sibling.ID.String()).
+			Msg("read what has already been tried for a want sharing a release")
 		return sources.Offer{}, false
 	}
 	// A file taken along for a neighbouring want is held to the same floor as
@@ -642,7 +656,7 @@ func (service *Service) chooseFrom(
 		func(offer sources.Offer) bool {
 			return offer.Named &&
 				offer.Provider == taken.Provider && offer.Username == taken.Username &&
-				offer.Directory == taken.Directory && offer.File.Path != taken.File.Path
+				offer.Directory == taken.Directory && !takenPaths[offer.File.Path]
 		})
 }
 
@@ -676,10 +690,10 @@ func (service *Service) choose(
 	wanted sources.QueryTrack,
 	open map[db.Peer]int,
 	preferences sources.Preferences,
-) (sources.Offer, bool, bool, []sources.Refused) {
-	verdicts, ok := service.verdictsFor(ctx, target.ID)
-	if !ok {
-		return sources.Offer{}, false, false, nil
+) (sources.Offer, bool, bool, []sources.Refused, error) {
+	verdicts, err := service.verdictsFor(ctx, target.ID)
+	if err != nil {
+		return sources.Offer{}, false, false, nil, err
 	}
 	// The floor is held only against files this pass would otherwise fetch.
 	// A file nothing disclosed fits is not a copy the floor turned away, and
@@ -690,14 +704,14 @@ func (service *Service) choose(
 	if offer, found := verdicts.pick(service.now(), offers, func(offer sources.Offer) bool {
 		return open[peerOf(offer)] < peerFileBudget
 	}); found {
-		return offer, true, false, belowFloor
+		return offer, true, false, belowFloor, nil
 	}
 	// Nothing was worth fetching. Whether a busy peer is why is the difference
 	// between waiting one's turn and nobody having the music, so it is asked
 	// rather than assumed: the same pick again, with the budget set aside.
 	_, elsewhere := verdicts.pick(service.now(), offers,
 		func(sources.Offer) bool { return true })
-	return sources.Offer{}, false, elsewhere, belowFloor
+	return sources.Offer{}, false, elsewhere, belowFloor, nil
 }
 
 // acceptableOffers takes the files under the user's bitrate floor out of the
@@ -787,13 +801,10 @@ type offerVerdicts struct {
 
 func (service *Service) verdictsFor(
 	ctx context.Context, targetID uuid.UUID,
-) (offerVerdicts, bool) {
+) (offerVerdicts, error) {
 	judged, err := service.store.AcquisitionTargetFiles(ctx, targetID)
 	if err != nil {
-		service.logger.Error().Err(err).
-			Str("acquisition_target_id", targetID.String()).
-			Msg("read what has already been tried for a want")
-		return offerVerdicts{}, false
+		return offerVerdicts{}, fmt.Errorf("read what was tried for want %s: %w", targetID, err)
 	}
 	verdicts := offerVerdicts{
 		settled:     make(map[string]bool, len(judged)),
@@ -817,7 +828,7 @@ func (service *Service) verdictsFor(
 		}
 		verdicts.settled[key] = true
 	}
-	return verdicts, true
+	return verdicts, nil
 }
 
 // restFor is how long one copy that did not arrive waits before it is worth
@@ -954,7 +965,15 @@ func (service *Service) abandonFetch(
 		Str("acquisition_target_id", target.ID.String()).
 		Str("download_request_id", requestID.String()).
 		Msg("a chosen copy could not be started")
-	if _, err := service.store.CancelDownloadRequest(ctx, requestID); err != nil {
+	_, err := service.store.CancelDownloadRequest(ctx, requestID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// slskd can take up to 30 seconds to refuse, and the poller can read
+		// the failed transfer and settle the request meanwhile. Nothing is left
+		// open to withdraw.
+		service.logger.Debug().Str("download_request_id", requestID.String()).
+			Msg("a copy that could not be started had already settled")
+	case err != nil:
 		service.logger.Error().Err(err).Str("download_request_id", requestID.String()).
 			Msg("withdraw a copy that could not be started")
 	}

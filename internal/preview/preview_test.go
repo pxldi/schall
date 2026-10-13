@@ -418,6 +418,81 @@ func TestATranscodeNobodyHasAskedForInADayIsDropped(t *testing.T) {
 	}
 }
 
+// A .partial younger than a day is an encode still running. Dropping it to meet
+// the budget would fail that encode's rename into place.
+func TestPruningLeavesAnEncodeInProgressAlone(t *testing.T) {
+	cacheDir := t.TempDir()
+	transcoder := New("", cacheDir, zerolog.Nop())
+	transcoder.budget = 300
+
+	aged := time.Now().Add(-time.Hour)
+	for index, name := range []string{"running.mp3.partial", "older.mp3", "newer.mp3"} {
+		path := filepath.Join(cacheDir, name)
+		if err := os.WriteFile(path, make([]byte, 200), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		when := aged.Add(time.Duration(index) * time.Minute)
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	transcoder.prune()
+
+	left := cachedNames(t, cacheDir)
+	if !slices.Contains(left, "running.mp3.partial") {
+		t.Errorf("cache = %v, want the encode in progress kept", left)
+	}
+}
+
+// Requests that waited on an encode that failed take turns at the next one.
+// Each running its own would have several transcoders writing one .partial.
+func TestRequestsThatWaitedOnAFailedTranscodeRunOneMore(t *testing.T) {
+	cacheDir := t.TempDir()
+	runs := filepath.Join(t.TempDir(), "runs")
+	// The first run is slow and fails; every later run succeeds.
+	transcoder := New(fakeTranscoder(t, runs, 0, "",
+		"if [ \"$(wc -l < "+strconv.Quote(runs)+")\" -eq 1 ]; then sleep 0.5; exit 1; fi"),
+		cacheDir, zerolog.Nop())
+	source := filepath.Join(t.TempDir(), "source.flac")
+	if err := os.WriteFile(source, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var wait sync.WaitGroup
+	wait.Add(1)
+	go func() {
+		defer wait.Done()
+		if _, err := transcoder.Playable(context.Background(), source); err == nil {
+			t.Error("the first request succeeded, want the failing run reported")
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(runs); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the first transcode never started")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	for range 3 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			if _, err := transcoder.Playable(context.Background(), source); err != nil {
+				t.Errorf("Playable() error = %v", err)
+			}
+		}()
+	}
+	wait.Wait()
+
+	if got := invocations(t, runs); got != 2 {
+		t.Fatalf("the transcoder ran %d times, want the failed run and one more", got)
+	}
+}
+
 // Only transcodes are the cache's to remove. Anything else that turns up in the
 // directory is left where it is.
 func TestPruningLeavesDirectoriesInTheCacheAlone(t *testing.T) {

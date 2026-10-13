@@ -280,15 +280,32 @@ func (store *fakeImportStore) ReleaseCopyFromJudging(
 // copy, because a pass that wrote nothing and a pass that wrote the wrong thing
 // look the same from the outside.
 func (store *fakeImportStore) CopiesMissingFingerprint(
-	_ context.Context, limit int32,
+	_ context.Context, after db.CopyCursor, limit int32,
 ) ([]db.UnfingerprintedCopyRow, error) {
 	if store.unfingerprintedErr != nil {
 		return nil, store.unfingerprintedErr
 	}
-	if int32(len(store.unfingerprinted)) > limit {
-		return store.unfingerprinted[:limit], nil
+	// The slice is in queue order, so the cursor is a position in it. Like the
+	// real query, a copy already measured is offered no more.
+	start := 0
+	if after.CopyID != uuid.Nil {
+		for index, row := range store.unfingerprinted {
+			if row.CopyID == after.CopyID {
+				start = index + 1
+			}
+		}
 	}
-	return store.unfingerprinted, nil
+	waiting := []db.UnfingerprintedCopyRow{}
+	for _, row := range store.unfingerprinted[start:] {
+		if _, measured := store.fingerprinted[row.CopyID]; measured {
+			continue
+		}
+		if int32(len(waiting)) == limit {
+			break
+		}
+		waiting = append(waiting, row)
+	}
+	return waiting, nil
 }
 
 func (store *fakeImportStore) RecordCopyFingerprint(

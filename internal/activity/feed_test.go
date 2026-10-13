@@ -73,6 +73,34 @@ func TestTheFeedStopsAtItsLimit(t *testing.T) {
 	}
 }
 
+// The last row the cap allows is still a whole run. Stopping at the run's first
+// event would call a run of three a single event.
+func TestTheLastRowTheFeedShowsCountsItsWholeRun(t *testing.T) {
+	var raw []Event
+	for index := 0; index < Limit-1; index++ {
+		kind := Arrived
+		if index%2 == 1 {
+			kind = Refused
+		}
+		raw = append(raw, Event{Kind: kind, At: at(59 - index), Count: 1})
+	}
+	// A kind none of the rows before it has, so the run starts a row of its own.
+	last := Asked
+	for index := 0; index < 3; index++ {
+		raw = append(raw, Event{Kind: last, At: at(59 - Limit - index), Count: 1})
+	}
+	raw = append(raw, Event{Kind: Removed, At: at(0), Count: 1})
+
+	events := collapse(raw)
+
+	if len(events) != Limit {
+		t.Fatalf("rows = %d, want %d", len(events), Limit)
+	}
+	if final := events[Limit-1]; final.Kind != last || final.Count != 3 {
+		t.Fatalf("last row = %q x%d, want %q x3", final.Kind, final.Count, last)
+	}
+}
+
 // Only a question leads anywhere. An arrival and a refusal are settled, and a
 // link onto a page that says "nothing to decide" is a link that wasted a press.
 func TestOnlyAQuestionCarriesSomewhereToGo(t *testing.T) {

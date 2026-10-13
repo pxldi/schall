@@ -236,6 +236,34 @@ func TestAScanIndexesOnlyTheFilesTheLibraryCanHold(t *testing.T) {
 	}
 }
 
+// An import copies a release into a staging folder beside its final place and
+// renames it in when every file is there. A scan that walks in meanwhile would
+// index half-written files under names that are about to stop existing.
+func TestAScanDoesNotIndexAnImportStillBeingStaged(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	for _, staging := range []string{".schall-import-B", ".schall-upload-123"} {
+		directory := filepath.Join(rootPath, "A", staging)
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeAudio(t, directory, "01.flac")
+	}
+	writeAudio(t, filepath.Join(rootPath, "A"), ".schall-transcode-01.mp3")
+
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var indexed int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM library_files`).Scan(&indexed); err != nil {
+		t.Fatal(err)
+	}
+	if indexed != 0 {
+		t.Fatalf("indexed %d files, want nothing from a staging folder", indexed)
+	}
+}
+
 // A symlink is somebody else's file under a name in this folder. Indexing it
 // would give the same audio two library rows the moment the real folder is also
 // a music folder.
@@ -296,6 +324,75 @@ func TestAScanFailsOnAMusicFolderThatIsNotThere(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), missing) {
 		t.Fatalf("error = %v, want it to name the folder that could not be walked", err)
+	}
+}
+
+// lockedFolder indexes one file in a folder of its own, then takes away the
+// right to list that folder, the way lost+found or a folder another user owns
+// looks to the scan.
+func lockedFolder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, rootPath string) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a folder whatever its mode")
+	}
+	locked := filepath.Join(rootPath, "lost+found")
+	if err := os.Mkdir(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := writeAudio(t, locked, "01.mp3")
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	return path
+}
+
+// One folder the scan may not read is no reason to stop reading the others.
+func TestAnUnreadableFolderDoesNotStopTheScan(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	lockedFolder(t, ctx, pool, rootPath)
+	added := writeAudio(t, rootPath, "02.mp3")
+
+	result, err := NewScanner(pool).Scan(ctx)
+	if err != nil {
+		t.Fatalf("scan with one unreadable folder failed: %v", err)
+	}
+	if result.Errors == 0 {
+		t.Fatalf("scan = %#v, want the unreadable folder counted as an error", result)
+	}
+	var indexed bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM library_files WHERE path = $1)`, added).Scan(&indexed); err != nil {
+		t.Fatal(err)
+	}
+	if !indexed {
+		t.Fatal("a file beside the unreadable folder was not indexed")
+	}
+}
+
+// A folder the scan could not list says nothing about the files in it. They
+// stay present rather than being marked missing.
+func TestFilesInAnUnreadableFolderAreNotMarkedMissing(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	hidden := lockedFolder(t, ctx, pool, rootPath)
+
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatalf("scan with one unreadable folder failed: %v", err)
+	}
+	var missing bool
+	if err := pool.QueryRow(ctx,
+		`SELECT missing_at IS NOT NULL FROM library_files WHERE path = $1`, hidden).Scan(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if missing {
+		t.Fatal("a file in a folder the scan could not read was marked missing")
 	}
 }
 

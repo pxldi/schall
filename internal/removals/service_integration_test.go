@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
@@ -267,6 +268,63 @@ func TestAFileStillNeededIsSpared(t *testing.T) {
 			}
 			if swept.Spared != 1 || !onDisc(f.fetched) {
 				t.Fatalf("swept %+v, want the file spared", swept)
+			}
+		})
+	}
+}
+
+// interruptingRemover runs press just before the real delete, which is where
+// a Keep or a new want lands when it is committed after the sweep judged the
+// row and before the file goes.
+type interruptingRemover struct {
+	real  *library.Remover
+	press func()
+}
+
+func (remover interruptingRemover) RemoveIf(
+	ctx context.Context, fileID uuid.UUID, allowed func(context.Context, pgx.Tx) error,
+) (string, error) {
+	remover.press()
+	return remover.real.RemoveIf(ctx, fileID, allowed)
+}
+
+func TestAPressOfWantDuringTheSweepKeepsTheFile(t *testing.T) {
+	for name, press := range map[string]func(f fixture) error{
+		"keep": func(f fixture) error {
+			_, err := f.service.KeepRecording(context.Background(), f.recording)
+			return err
+		},
+		"new want": func(f fixture) error {
+			_, err := f.pool.Exec(context.Background(), `
+				INSERT INTO acquisition_targets (
+					origin, entry_title, status, acquired_at, acquired_library_file_id,
+					anchor_source, summary
+				)
+				VALUES ('playlist', 'Glory Box', 'acquired', now(), $1, 'deezer', 'In your library.')
+			`, f.downloaded)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := setup(t)
+			if _, err := f.service.Remove(context.Background(), f.targetID); err != nil {
+				t.Fatal(err)
+			}
+			f.service.remover = interruptingRemover{
+				real: library.NewRemover(f.pool, zerolog.Nop()),
+				press: func() {
+					if err := press(f); err != nil {
+						t.Error(err)
+					}
+				},
+			}
+			*f.clock = f.now.Add(Grace)
+			swept, err := f.service.Sweep(context.Background())
+			if err != nil {
+				t.Fatalf("Sweep() error = %v", err)
+			}
+			if swept.Removed != 0 || !onDisc(f.fetched) {
+				t.Fatalf("swept %+v, want the file kept", swept)
 			}
 		})
 	}

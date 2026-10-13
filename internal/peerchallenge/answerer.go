@@ -220,10 +220,17 @@ func (service *Service) answerPeer(
 		}
 		read = append(read, message.ID)
 		answeredOne, err := service.answerMessage(ctx, chat, username, message.Text, now)
+		sent = sent || answeredOne
 		if err != nil {
+			// A word that went out but could not be recorded is stopped from
+			// going out again only by the message being marked read.
+			if answeredOne {
+				if ackErr := chat.AcknowledgeMessages(ctx, username, read); ackErr != nil {
+					err = errors.Join(err, fmt.Errorf("mark %s's messages read: %w", username, ackErr))
+				}
+			}
 			return sent, err
 		}
-		sent = sent || answeredOne
 	}
 
 	// Marking them read is what stops the same message being considered again

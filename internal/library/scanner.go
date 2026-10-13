@@ -18,6 +18,10 @@ import (
 	"github.com/pxldi/schall/internal/tagging"
 )
 
+// stagingPrefix begins every name Schall writes into a music folder before it
+// is finished.
+const stagingPrefix = ".schall-"
+
 // supportedExtensions is what the library can hold: the file types a scan
 // indexes and therefore the only ones that can ever become music Schall knows
 // about.
@@ -181,14 +185,36 @@ func (scanner *Scanner) scanRoot(
 ) (ScanResult, error) {
 	startedAt := time.Now().UTC()
 	var result ScanResult
+	// unreadable holds folders under the root the walk could not list. One
+	// such folder (lost+found, another user's) must not stop the scan, and
+	// the files under it are not marked missing, because nothing was learned
+	// about them.
+	var unreadable []string
 	err := filepath.WalkDir(rootPath, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			if path == rootPath {
+				return walkErr
+			}
+			result.Errors++
+			unreadable = append(unreadable, path)
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Imports, uploads and transcodes stage under a .schall- name beside
+		// the final place and rename in when done, so what is inside is
+		// half-written and about to move.
+		if path != rootPath && strings.HasPrefix(entry.Name(), stagingPrefix) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -271,8 +297,12 @@ func (scanner *Scanner) scanRoot(
 		WHERE library_root_id = $1
 		  AND scanned_at < $2
 		  AND missing_at IS NULL
+		  AND NOT EXISTS (
+		      SELECT 1 FROM unnest($3::text[]) AS folder
+		      WHERE starts_with(library_files.path, folder || '/')
+		  )
 		RETURNING id
-	`, rootID, startedAt)
+	`, rootID, startedAt, unreadable)
 	if err != nil {
 		return result, err
 	}

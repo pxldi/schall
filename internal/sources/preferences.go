@@ -139,9 +139,13 @@ func (preferences Preferences) refuseBitRate(format string, bitRate int) (string
 //
 // The folder's bitrate is an average, and a folder averaging 320 kbps can hold a
 // 128 kbps track. A want asks for one file, so the file it asks for is held to
-// the floor itself. Formats the user refuses outright are not asked again here:
-// the folder was already taken out of the results for that.
+// the floor itself. The format list is asked again too, because a folder is
+// judged by the format most of its files are in, and a folder of FLAC can hold
+// one MP3.
 func (preferences Preferences) RefuseFile(format string, bitRate int) (string, string) {
+	if reason, kind := preferences.refuse(Candidate{Format: format}); kind == RefusedFormat {
+		return reason, kind
+	}
 	return preferences.refuseBitRate(format, bitRate)
 }
 

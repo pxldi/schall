@@ -229,6 +229,26 @@ func TestWindowErrorsDoesNotCountPinnedTailAsAnotherMismatch(t *testing.T) {
 	}
 }
 
+// A mismatching tail after a clean window is a run of one. It does not replace
+// a longer run found earlier in the track.
+func TestWindowErrorsKeepsAnEarlierLongerRunPastAMismatchingTail(t *testing.T) {
+	// Regular windows start at 0, 20, 40, 60 and 80; the tail starts at 85.
+	left := make([]uint32, 125)
+	right := make([]uint32, len(left))
+	for index := range 60 {
+		right[index] = ^uint32(0)
+	}
+	// Ten differing frames make the tail a mismatch; five of them fall in the
+	// window at 80, which stays under the threshold.
+	for index := 115; index < len(right); index++ {
+		right[index] = ^uint32(0)
+	}
+	_, run := windowErrors(left, right)
+	if run != 3 {
+		t.Fatalf("longest mismatch run = %d, want the 3 windows at the start", run)
+	}
+}
+
 // wholeTrack is a fingerprint long enough to be read from its start: the two
 // golden vectors are a few seconds of audio each, and a comparison between two
 // files is refused below ten seconds of it.
