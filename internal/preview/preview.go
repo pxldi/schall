@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,12 +118,19 @@ func (transcoder *Transcoder) Playable(ctx context.Context, source string) (stri
 	cached := filepath.Join(transcoder.cacheDir, transcoder.key(source, info)+".mp3")
 
 	// Wait for whoever is already encoding this, then look again: the file they
-	// were producing is the file this request wanted.
-	if inFlight := transcoder.claim(cached); inFlight != nil {
+	// were producing is the file this request wanted. When their encode failed,
+	// the waiters claim again, so one of them encodes and the rest wait on it.
+	for {
+		inFlight := transcoder.claim(cached)
+		if inFlight == nil {
+			break
+		}
 		inFlight.Wait()
-	} else {
-		defer transcoder.release(cached)
+		if _, err := os.Stat(cached); err == nil {
+			return cached, nil
+		}
 	}
+	defer transcoder.release(cached)
 	if _, err := os.Stat(cached); err == nil {
 		return cached, nil
 	}
@@ -284,6 +292,11 @@ func (transcoder *Transcoder) prune() {
 		}
 		if file.stale {
 			transcoder.drop(file.name)
+			continue
+		}
+		// A fresh .partial is an encode still running, and its rename would fail
+		// if it went. One older than a day was left by a crash and goes above.
+		if strings.HasSuffix(file.name, ".partial") {
 			continue
 		}
 		total += file.size
