@@ -413,7 +413,7 @@ describe('the identity of a file', () => {
     opened();
 
     await screen.findByText('Ascension Day');
-    const [whatIsA, whatIsB] = screen.getAllByRole('button', { name: 'What is this file?' });
+    const [whatIsA, whatIsB] = screen.getAllByRole('button', { name: 'Identify' });
     await fireEvent.click(whatIsA);
     await fireEvent.click(whatIsB);
     expect((await screen.findAllByText(/Candidate for B/)).length).toBeGreaterThan(0);

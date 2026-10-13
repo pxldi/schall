@@ -930,7 +930,7 @@ describe('the standing want', () => {
     answeringWithActions(detail(), seen);
     opened();
 
-    const button = await screen.findByRole('button', { name: 'Want 2 missing' });
+    const button = await screen.findByRole('button', { name: 'Add 2 missing' });
     await waitFor(() => expect(albumReads()).toBeGreaterThan(0));
     const before = albumReads();
     await fireEvent.click(button);

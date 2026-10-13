@@ -181,6 +181,6 @@ describe('a failed follow', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Follow' }));
 
-    expect(await screen.findByText('MusicBrainz is not answering.')).toBeTruthy();
+    expect(await screen.findByText("MusicBrainz isn't answering.")).toBeTruthy();
   });
 });

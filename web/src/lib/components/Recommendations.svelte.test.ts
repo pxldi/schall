@@ -740,7 +740,7 @@ describe('Recommendations', () => {
     opened(client);
     await screen.findByText('Weather Report');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Want it' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to wishlist' }));
 
     await vi.waitFor(() =>
       expect(client.getQueryState(['wants', 'list', 'looking', 0])?.isInvalidated).toBe(true)
