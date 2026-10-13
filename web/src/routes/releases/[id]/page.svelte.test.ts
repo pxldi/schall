@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Release, ReleaseDetail, ReleaseEdition, SourceCandidate, SourceResults, Track } from '$lib/api';
@@ -580,5 +580,25 @@ describe('a source search', () => {
 
     expect(await screen.findByText(/ended without an answer/)).toBeTruthy();
     expect(screen.queryByText(/No peer offered/)).toBeNull();
+  });
+
+  // The panel is under the whole track list. Without this a press in the
+  // header changed nothing in sight.
+  it('brings the panel into view when a search starts', async () => {
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    onTestFinished(() => {
+      Element.prototype.scrollIntoView = original;
+    });
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    answering();
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    const field = await screen.findByRole('textbox', { name: 'Search terms' });
+    expect(scrolled.some((element) => element.contains(field))).toBe(true);
   });
 });

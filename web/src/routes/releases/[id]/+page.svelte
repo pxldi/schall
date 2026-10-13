@@ -1,6 +1,6 @@
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import { page } from '$app/state';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -32,6 +32,7 @@
   import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import ArtistReleases from './ArtistReleases.svelte';
+  import { motionMs } from '$lib/motion.svelte';
 
   const releaseID = page.params.id ?? '';
   // Schall serves the picture itself, from a cache it filled once by the
@@ -319,6 +320,7 @@
   let sourceQuery = $state('');
   let searchedQuery = $state('');
   let expandedSource = $state<string | null>(null);
+  let sourcesPanel = $state<HTMLElement>();
 
   // Source searches reach out to the Soulseek network, so they only run when
   // the user asks for them.
@@ -327,6 +329,14 @@
     sourcesLoading = true;
     sourcesError = null;
     expandedSource = null;
+    // The panel sits under the whole track list, so a press in the header
+    // changed nothing in sight until the panel was brought to it.
+    void tick().then(() =>
+      sourcesPanel?.scrollIntoView?.({
+        block: 'start',
+        behavior: motionMs('surface') > 0 ? 'smooth' : 'auto'
+      })
+    );
     try {
       const results = await api.releaseSources(releaseID, override?.trim() || undefined);
       // An empty answer is no answer. Read as an empty list it would say that
@@ -901,7 +911,8 @@
 
       {#if sourcesOpen}
         <div
-          class="mt-5 rounded-panel border border-line-thin p-5"
+          bind:this={sourcesPanel}
+          class="mt-5 scroll-mt-[calc(var(--topbar-height)+1rem)] rounded-panel border border-line-thin p-5"
           style="min-height: 20rem"
         >
           <form class="flex flex-wrap gap-3" onsubmit={(event) => { event.preventDefault(); findSources(sourceQuery); }}>
