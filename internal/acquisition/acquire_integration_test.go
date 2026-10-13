@@ -3243,7 +3243,7 @@ func TestABelowFloorWantParksAfterThreeAnswersAndWaiverTakesCopy(t *testing.T) {
 		t.Fatal("below_floor_since is not set after the third below-floor answer")
 	}
 	if !strings.Contains(parked.Summary, "320 kbps") ||
-		!strings.Contains(parked.Summary, "Looked at again weekly") {
+		!strings.Contains(parked.Summary, "Retrying weekly") {
 		t.Errorf("summary = %q, want the floor and weekly re-check", parked.Summary)
 	}
 	if parked.NextAttemptAt.Time.Before(time.Now().Add(6 * 24 * time.Hour)) {

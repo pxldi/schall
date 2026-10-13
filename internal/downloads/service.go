@@ -35,12 +35,12 @@ const (
 // already sending as much as it will take at once. It says nothing about the
 // music and asks nothing of anybody: the loop comes back on its own, which is
 // the whole point of not calling this a failure.
-const peerBusySummary = "A peer has a copy and is busy. It will be asked again shortly."
+const peerBusySummary = "Peer busy. Retrying soon."
 
 // failedTransferSummary is what a want says when the copy it was following
 // failed to arrive at all. It is looked for again straight away rather than
 // waiting out the rest it gets while a copy is still in flight.
-const failedTransferSummary = "The copy being fetched did not arrive. It will be looked for again."
+const failedTransferSummary = "Download failed. Looking again."
 
 // ErrNotSupported reports a configured provider that can search but not
 // transfer. Search-only providers are legitimate, so this is not a failure of

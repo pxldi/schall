@@ -175,7 +175,7 @@ func (service *Service) CountBelowFloor(ctx context.Context) (int, error) {
 // raiseSummary is the sentence a raised want carries. It names why the want
 // exists rather than what will happen to it, which is exactly what every other
 // want's initial summary says.
-const raiseSummary = "the copy the library holds is below the bit rate you asked for"
+const raiseSummary = "Your copy is below your bit rate floor."
 
 // raise asks for an upgrade want to exist for one candidate and reports
 // whether one now does — false covers both a manual "not wanted" decision and

@@ -285,11 +285,10 @@ func (service *Service) resolveFiling(
 // and "the two rows look alike" is not that reason.
 func sameRegistrationDetail(verdict identity.FilingVerdict, method string) string {
 	if verdict == identity.FilingMerged {
-		return "A copy was fetched and imported. MusicBrainz has since merged " +
-			"the recording your library filed it under with this one."
+		return "Downloaded and imported. MusicBrainz merged the song it was filed under into this one."
 	}
-	return "A copy was fetched and imported. " + identity.MethodSentence(method) +
-		" The recording your library filed it under is the same registered track."
+	return "Downloaded and imported. " + identity.MethodSentence(method) +
+		" Filed under the same registered track."
 }
 
 // fileNobodyAnswered handles a want whose copy became a library file the library
@@ -428,8 +427,7 @@ func filedElsewhereSummary(filing db.AcquiredCopyFiling) string {
 		return disagreedSummary
 	}
 	return fmt.Sprintf(
-		"Your library files that copy as %s. This entry wants %s, and the audio cannot "+
-			"tell the two apart. Match the file to this track, or stop looking.",
+		"Library files this copy as %s, not %s. Same audio. Match the file, or remove the song.",
 		filed, wanted)
 }
 

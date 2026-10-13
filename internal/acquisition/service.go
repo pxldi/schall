@@ -30,11 +30,11 @@ import (
 
 // ErrEntryNotIdentifiable reports an entry with nothing to work from. What a
 // target wants is never guessed at from the rest of the row.
-var ErrEntryNotIdentifiable = errors.New("a target needs a title or an ISRC to be resolved from")
+var ErrEntryNotIdentifiable = errors.New("a song needs a title or an ISRC")
 
 // ErrUnknownOrigin reports a target nobody can account for. Provenance is not
 // decoration: a want nobody remembers asking for has to say where it came from.
-var ErrUnknownOrigin = errors.New("that is not a way a target can come to exist")
+var ErrUnknownOrigin = errors.New("unknown origin for a wishlist song")
 
 // sweepBatch bounds how many targets one pass attempts. Every attempt will
 // eventually be a bounded provider search, and source-search jobs are claimed
@@ -958,85 +958,81 @@ func (service *Service) announce() {
 // The sentences a target explains itself with. Every state has one, because a
 // status nobody can explain is a status nobody trusts.
 const (
-	UnresolvedSummary = "Waiting to be resolved to a MusicBrainz recording."
-	unfoundSummary    = "No recording MusicBrainz knows of matches this entry yet. It will be asked about again."
-	unaskedSummary    = "MusicBrainz could not be reached, so this entry has not been resolved yet."
+	UnresolvedSummary = "Looking up on MusicBrainz."
+	unfoundSummary    = "Not on MusicBrainz yet. Retrying later."
+	unaskedSummary    = "MusicBrainz unreachable. Retrying soon."
 	// A refusal for load reads differently to an outage on purpose: nothing is
 	// wrong, and the entry has lost nothing by being told to come back.
-	catalogueBusySummary = "MusicBrainz is busy. This entry will be asked about again shortly."
-	sweepBusyDetail      = "MusicBrainz is refusing requests for now: it refused another entry in the same pass"
+	catalogueBusySummary = "MusicBrainz is busy. Retrying soon."
+	sweepBusyDetail      = "MusicBrainz is refusing requests for now"
 	// The two ways one recording can already be wanted. Which sentence a merged
 	// target gets is chosen where the survivor is known, so it cannot describe a
 	// decision the survivor did not make.
-	supersededSummary          = "Already wanted. This entry names the same recording as another target, which carries it now."
-	supersededNotWantedSummary = "This entry resolved to a recording you said you did not want. It has not been added again."
-	wantedSummary              = "Wanted. Waiting for a copy to be found."
+	supersededSummary          = "Already on your wishlist."
+	supersededNotWantedSummary = "You removed this song before. Not added again."
+	wantedSummary              = "Looking for a copy."
 	waitingSummary             = "Not in your library yet."
-	throttledSummary           = "The download source is busy. It will be asked again shortly."
+	throttledSummary           = "Download source busy. Retrying soon."
 	// The other refusal: not too many questions, but nowhere to put one. It
 	// avoids saying busy, because a source that is idle for the wrong reason
 	// is exactly what this is.
-	unavailableSummary = "The download source cannot search right now. It will be asked again shortly."
+	unavailableSummary = "Download source can't search now. Retrying soon."
 	// The sentence a want wears between its copy being imported and the scan
 	// making a library file of it. Nothing is pending about the music any more,
 	// only the bookkeeping.
-	importedSummary = "A copy arrived and was proven. It is being taken into your library."
+	importedSummary = "Copy verified. Adding it to your library."
 	// What that sentence turns into when the library row never appears. It says
 	// what is known and not what it means, because Schall cannot tell from here
 	// whether the file was moved, removed, or is of a type no scan reads.
-	strandedSummary  = "A copy was imported, but it never appeared in your library. Nothing is being fetched for this wishlist entry while that copy sits there."
-	strandedDetail   = "An accepted copy has been waiting to be scanned for longer than any scan takes."
+	strandedSummary  = "Imported copy missing from your library. Downloads paused."
+	strandedDetail   = "The copy has waited for a library scan far too long."
 	acquiredSummary  = "In your library."
-	notWantedSummary = "No longer wanted. This recording only; the release and the artist are untouched."
-	rejectedSummary  = "The recording this entry was resolved to was the wrong one. Being looked up again, without it."
-	rejectedDetail   = "A person said this entry does not name that recording."
+	notWantedSummary = "Removed. Album and artist untouched."
+	rejectedSummary  = "Wrong MusicBrainz song. Looking it up again."
+	rejectedDetail   = "You said this isn't the song."
 	// What a chosen answer says. It never claims to have been proven: the
 	// evidence is exactly what could not choose, and a person did.
-	chosenSummary = "You chose which recording this entry names. " + wantedSummary
-	chosenDetail  = "A person chose this recording from the ones the entry could have named."
+	chosenSummary = "You chose the song. " + wantedSummary
+	chosenDetail  = "You picked this song from the matches."
 	// The two decisions a person takes about copies rather than about the entry.
 	// Neither borrows the word proven: nothing proved these, somebody listened.
-	acceptedByHandSummary = "You listened to this copy and said it is the wanted recording."
-	refusedByHandSummary  = "You listened and said this copy is not the wanted recording. It will not be offered for this wishlist entry again."
+	acceptedByHandSummary = "You listened and accepted this copy."
+	refusedByHandSummary  = "You listened and rejected this copy. It won't be offered again."
 	// What a decision that has been taken back says. None of these claims
 	// anything was learned: a copy whose answer was withdrawn is a question
 	// again, exactly as it was before anybody answered it.
-	takenBackCopySummary = "The decision about this copy was taken back. It is waiting for one again."
-	takenBackWantSummary = "A copy is waiting for your decision again."
-	restoredWantSummary  = "You took back saying this entry names the wrong recording. " + wantedSummary
+	takenBackCopySummary = "Decision undone. Listen to decide."
+	takenBackWantSummary = "A copy is waiting again. Listen to decide."
+	restoredWantSummary  = "You undid \"wrong song\". " + wantedSummary
 
 	// What a want says once its copy is on the disc and the library files that
 	// file under another recording. It stops rather than looking again: the music
 	// is here, nothing automatic may say the two recordings are one, and looking
 	// again fetched the same song twelve times in an hour. Both ways on belong to
 	// a person, so both are named.
-	disagreedSummary = "A copy arrived and was proven, but your library calls that file a different recording. " +
-		"Nothing more is being fetched — match the file to this track, or stop looking."
+	disagreedSummary = "Library files this copy as another song. Match the file, or remove the song."
 	// What the same want says when the library's answer is that its copy is owned
 	// music no provider names. It is a different fact from naming another
 	// recording, and reads as one.
-	localOnlyFilingSummary = "A copy arrived and was proven, but your library records that file as owned music with no catalogue recording. " +
-		"Nothing more is being fetched — match the file to this track, or stop looking."
+	localOnlyFilingSummary = "Library files this copy as local music. Match the file, or remove the song."
 	// What the same want says when the library has no identity for its copy at
 	// all and the copy's row carries no proof of this recording to write back.
-	unprovenFilingSummary = "A copy arrived, but your library has no identity for that file and nothing on record proves the copy is this recording. " +
-		"Nothing more is being fetched — match the file to this track, or stop looking."
-	creditOnlyRefusalsSummary = "Every copy found so far carries a different artist credit. Nothing more is being fetched until you decide whether these copies are the wanted recording."
+	unprovenFilingSummary     = "Library can't tell what this copy is. Match the file, or remove the song."
+	creditOnlyRefusalsSummary = "Every copy credits another artist. Paused. Listen to decide."
 	// What a want says while it holds a copy nobody has answered and has no
 	// sample of its own to answer it with. See db.StopWhileACopyWaits.
-	copyWaitingSummary = "A copy is waiting for your answer. Nothing more is fetched until you decide."
+	copyWaitingSummary = "A copy is waiting. Listen to decide."
 
-	acquiredDetail     = "A file the library already holds is proven to be this recording."
-	acquiredCopyDetail = "A copy was fetched, proven by its audio, and imported."
+	acquiredDetail     = "Already in your library."
+	acquiredCopyDetail = "Downloaded, audio verified, imported."
 	// What the attempt records when a person settles a stopped want with no
 	// recording against its library file (ADR 0040 §5).
-	acceptedFiledDetail = "You said the library file this copy became is what this entry asked for."
+	acceptedFiledDetail = "You said the library file is this song."
 	// What an attempt records when the want named the clean edition and the file
 	// on the disc holds the explicit one. The two are different recordings, so
 	// the detail says which one the library has (ADR 0032).
-	explicitEditionDetail = "A copy was fetched, proven by its audio, and imported. " +
-		"Your library files it as the explicit edition of this track, which is the one Schall keeps."
-	waitingDetail = "No file in the library is proven to be this recording."
+	explicitEditionDetail = "Downloaded, audio verified, imported. Kept as the explicit version."
+	waitingDetail         = "No library file proven to be this song."
 )
 
 func text(value string) pgtype.Text {
@@ -1147,7 +1143,7 @@ func (service *Service) AcceptCopy(ctx context.Context, copyID uuid.UUID) error 
 // db.ErrNotWaitingForADecision means there was nothing held to refuse.
 func (service *Service) RefuseCopies(ctx context.Context, targetID uuid.UUID) error {
 	if err := service.store.RefuseHeldCopies(
-		ctx, targetID, refusedByHandSummary, waitingSummary+" The next copy will be tried.",
+		ctx, targetID, refusedByHandSummary, waitingSummary+" Trying the next copy.",
 		service.now(),
 	); err != nil {
 		return err
