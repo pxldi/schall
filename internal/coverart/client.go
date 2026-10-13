@@ -190,6 +190,11 @@ func (client *Client) front(
 ) (Artwork, error) {
 	artwork, err := client.fetch(
 		ctx, client.httpClient, client.baseURL+"/"+kind+"/"+id.String()+"/"+size, cap)
+	if errors.Is(err, ErrPictureTooLarge) {
+		// The archive's copy is not one Schall will keep, and asking again
+		// would download the same bytes again. Callers fall back as for none.
+		return Artwork{}, ErrNoArtwork
+	}
 	if err != nil && !errors.Is(err, ErrNoArtwork) {
 		return Artwork{}, fmt.Errorf("fetch cover art for %s %s: %w", kind, id, err)
 	}
@@ -248,9 +253,15 @@ func (client *Client) fetchOnce(
 	if response.StatusCode != http.StatusOK {
 		return Artwork{}, fmt.Errorf("fetch %s: HTTP %d", address, response.StatusCode)
 	}
-	image, err := io.ReadAll(io.LimitReader(response.Body, cap))
+	// One byte past the bound is read, so a picture exactly at the bound is
+	// kept and one over it is refused. Stopping at the bound would store the
+	// head of a picture as a cover that begins well and that nothing replaces.
+	image, err := io.ReadAll(io.LimitReader(response.Body, cap+1))
 	if err != nil {
 		return Artwork{}, fmt.Errorf("read %s: %w", address, err)
+	}
+	if int64(len(image)) > cap {
+		return Artwork{}, fmt.Errorf("fetch %s: %w", address, ErrPictureTooLarge)
 	}
 	contentType := response.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "image/") || len(image) == 0 {
@@ -482,16 +493,9 @@ func (client *Client) FromURL(ctx context.Context, address string) (Artwork, err
 	if !fetchable(address) {
 		return Artwork{}, fmt.Errorf("fetch %s: %w", address, ErrNotAnAddress)
 	}
-	// One byte past the bound is asked for, so a picture exactly at the bound is
-	// kept and the first byte over it is a refusal. Reading up to the bound and
-	// stopping would store half a picture as somebody's permanent cover, which
-	// is worse than refusing it: nothing would ever replace it.
-	artwork, err := client.fetch(ctx, client.pictureClient, address, maxImageBytes+1)
+	artwork, err := client.fetch(ctx, client.pictureClient, address, maxImageBytes)
 	if err != nil {
 		return Artwork{}, err
-	}
-	if len(artwork.Image) > maxImageBytes {
-		return Artwork{}, fmt.Errorf("fetch %s: %w", address, ErrPictureTooLarge)
 	}
 	return Supplied(artwork.Image)
 }
