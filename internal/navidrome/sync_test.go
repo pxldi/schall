@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -742,6 +743,49 @@ func TestATrackSchallNoLongerWantsIsTakenOutOfTheListing(t *testing.T) {
 	}
 	if len(player.updates[0].RemoveIndexes) != 1 || player.updates[0].RemoveIndexes[0] != 0 {
 		t.Fatalf("update = %#v, want the position it holds in the listing", player.updates[0])
+	}
+}
+
+// A pushed track whose file the player could not find this pass is still
+// wanted and still held. A search that missed, before a rescan has caught up
+// with new tags, is no reason to take it out of the listing or forget it was
+// pushed.
+func TestAPushedTrackThatDidNotPairThisPassStaysInTheListing(t *testing.T) {
+	store, playlistID, _, _ := joinedList(t)
+	secondEntry, secondFile := uuid.New(), uuid.New()
+	store.acquired = append(store.acquired, db.AcquiredPlaylistTrackRow{
+		EntryID: secondEntry, Position: 2, LibraryFileID: secondFile,
+		LibraryPath: "/music/artist/two.flac",
+	})
+	store.snapshotTracks = append(store.snapshotTracks, db.NavidromePlaylistSnapshotTrackRow{
+		PlaylistID: playlistID, Position: 2, NavidromeSongID: "song-2",
+		LibraryPath:     "/music/artist/two.flac",
+		LibraryFileID:   uuid.NullUUID{UUID: secondFile, Valid: true},
+		PlaylistEntryID: uuid.NullUUID{UUID: secondEntry, Valid: true},
+	})
+	player := &syncPlayer{
+		details: map[string]Playlist{"nd-1": {ID: "nd-1", Name: "musik", Entries: []Song{
+			{ID: "song-1", Path: "/music/artist/one.flac"},
+			{ID: "song-2", Path: "/music/artist/two.flac"},
+		}}},
+		byPath: map[string]Song{"/music/artist/one.flac": {ID: "song-1"}},
+	}
+
+	if _, err := syncerFor(store, player, "", t).SyncPlaylist(context.Background(), playlistID); err != nil {
+		t.Fatalf("SyncPlaylist() error = %v", err)
+	}
+	if len(player.updates) != 0 {
+		t.Fatalf("updates = %#v, want the listing left as it is", player.updates)
+	}
+	if len(store.writes) != 1 {
+		t.Fatalf("writes = %d, want one snapshot", len(store.writes))
+	}
+	var songs []string
+	for _, track := range store.writes[0].tracks {
+		songs = append(songs, track.NavidromeSongID)
+	}
+	if !slices.Equal(songs, []string{"song-1", "song-2"}) {
+		t.Fatalf("snapshot = %v, want both pushed songs kept", songs)
 	}
 }
 
