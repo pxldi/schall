@@ -42,11 +42,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pxldi/schall/internal/applemusic"
 	"github.com/pxldi/schall/internal/chromaprint"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/deezer"
 	"github.com/pxldi/schall/internal/identity"
 	"github.com/pxldi/schall/internal/tagmatch"
+	"github.com/pxldi/schall/internal/tracksource"
 	"github.com/rs/zerolog"
 )
 
@@ -95,6 +97,11 @@ const (
 	unreadableExcerpt = "The excerpt taken from the upload could not be read as audio."
 )
 
+// noLinkedPreview is said when MusicBrainz links the recording to no page a
+// preview could be taken from. It sits between the Deezer sentence and the
+// upload sentence, in the order the three were tried.
+const noLinkedPreview = "MusicBrainz links this recording to no page with a preview that fits it."
+
 // Distributor is the part of a music service Schall uses: which track carries a
 // registration code, and the excerpt published for it.
 type Distributor interface {
@@ -126,6 +133,7 @@ type Service struct {
 	store       Store
 	distributor Distributor
 	finder      Finder
+	links       LinkFinder
 	prints      Fingerprinter
 	logger      zerolog.Logger
 	source      string
@@ -150,6 +158,13 @@ func NewService(
 		now:         time.Now,
 		pause:       wait,
 	}
+}
+
+// WithLinks has the sweep follow a recording's MusicBrainz links to a preview
+// when Deezer has none for its ISRC, before it searches uploads by name.
+func (service *Service) WithLinks(links LinkFinder) *Service {
+	service.links = links
+	return service
 }
 
 // Sweep fetches the previews that are due and reports whether there are more
@@ -179,7 +194,8 @@ func (service *Service) Sweep(ctx context.Context) (bool, error) {
 			return false, ctx.Err()
 		}
 		if err := service.fetch(ctx, want); err != nil {
-			if errors.Is(err, deezer.ErrRateLimited) || errors.Is(err, ErrFinderRateLimited) {
+			if errors.Is(err, deezer.ErrRateLimited) || errors.Is(err, ErrFinderRateLimited) ||
+				errors.Is(err, applemusic.ErrRateLimited) || errors.Is(err, tracksource.ErrRateLimited) {
 				// The pass stops rather than working through the rest. Every one of
 				// them would meet the same refusal, and each would spend an attempt
 				// on it.
@@ -196,7 +212,7 @@ func (service *Service) Sweep(ctx context.Context) (bool, error) {
 // the distributor said about the music is never an error here: it is recorded.
 func (service *Service) fetch(ctx context.Context, want db.AnchorDueRow) error {
 	if want.ISRC == "" {
-		return service.fromUploads(ctx, want, noISRCToAskBy)
+		return service.fromLinks(ctx, want, noISRCToAskBy)
 	}
 
 	track, err := service.distributor.TrackByISRC(ctx, want.ISRC)
@@ -205,13 +221,13 @@ func (service *Service) fetch(ctx context.Context, want db.AnchorDueRow) error {
 	case errors.Is(err, deezer.ErrRateLimited):
 		return service.reschedule(ctx, want, err)
 	case errors.Is(err, deezer.ErrNoTrack), errors.Is(err, deezer.ErrNoPreview):
-		return service.fromUploads(ctx, want, noPreviewPublished)
+		return service.fromLinks(ctx, want, noPreviewPublished)
 	case errors.Is(err, deezer.ErrNotAnISRC):
 		// The code is there and is not a code. It is said in its own words rather
 		// than as "no ISRC", because the two are fixed by different things: one
 		// wants the entry to carry a code, the other wants the code it carries to
 		// be corrected.
-		return service.fromUploads(ctx, want, unusableISRC)
+		return service.fromLinks(ctx, want, unusableISRC)
 	default:
 		return service.reschedule(ctx, want, err)
 	}
@@ -247,6 +263,52 @@ func (service *Service) fetch(ctx context.Context, want db.AnchorDueRow) error {
 		Fingerprint: value,
 		Source:      service.source,
 		Reference:   strconv.FormatInt(track.ID, 10),
+		Seconds:     seconds,
+	})
+}
+
+// fromLinks anchors a want to the preview behind a page MusicBrainz links its
+// recording to, for the wants Deezer has no preview for by ISRC. Where there is
+// none it goes on to the uploads, with the sentence for each step kept.
+func (service *Service) fromLinks(
+	ctx context.Context, want db.AnchorDueRow, keyedSilence string,
+) error {
+	if service.links == nil || want.RecordingID == uuid.Nil {
+		return service.fromUploads(ctx, want, keyedSilence)
+	}
+	linked, err := service.links.Find(ctx, want.RecordingID, want.DurationMS, want.ISRC)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrNothingLinked):
+		return service.fromUploads(ctx, want, keyedSilence+" "+noLinkedPreview)
+	default:
+		return service.rescheduleLinks(ctx, want, err)
+	}
+
+	value, seconds, err := service.measure(ctx, linked.Audio)
+	switch {
+	case err == nil:
+	case errors.Is(err, chromaprint.ErrNoFingerprint), errors.Is(err, chromaprint.ErrNotAFingerprint):
+		service.logger.Warn().Err(err).Str("acquisition_target_id", want.ID.String()).
+			Str("reference", linked.Reference).
+			Msg("a preview from a page MusicBrainz links to could not be fingerprinted")
+		return service.fromUploads(ctx, want, keyedSilence+" "+noLinkedPreview)
+	default:
+		return service.rescheduleLinks(ctx, want, err)
+	}
+
+	service.logger.Info().
+		Str("acquisition_target_id", want.ID.String()).
+		Str("reference", linked.Reference).
+		Int("preview_seconds", seconds).
+		Msg("anchored a want to a preview MusicBrainz links its recording to")
+
+	return service.record(ctx, want, db.AnchorParams{
+		TargetID:    want.ID,
+		Fingerprint: value,
+		Source:      identity.AnchorSourceLinked,
+		Reference:   linked.Reference,
+		Label:       linked.Label,
 		Seconds:     seconds,
 	})
 }
@@ -433,6 +495,24 @@ func (service *Service) rescheduleUpload(
 	}
 	service.logger.Warn().Err(cause).Str("acquisition_target_id", want.ID.String()).
 		Msg("could not fetch an upload for a want")
+	return nil
+}
+
+// rescheduleLinks is reschedule for the linked pages. A service refusing for
+// load is handed back so the pass stops.
+func (service *Service) rescheduleLinks(
+	ctx context.Context, want db.AnchorDueRow, cause error,
+) error {
+	reason := fmt.Sprintf("A page MusicBrainz links this recording to could not be read: %s", cause)
+	if err := service.deferUntilLater(ctx, want, reason); err != nil {
+		return err
+	}
+	if errors.Is(cause, deezer.ErrRateLimited) || errors.Is(cause, applemusic.ErrRateLimited) ||
+		errors.Is(cause, tracksource.ErrRateLimited) {
+		return cause
+	}
+	service.logger.Warn().Err(cause).Str("acquisition_target_id", want.ID.String()).
+		Msg("could not read a page MusicBrainz links a want's recording to")
 	return nil
 }
 

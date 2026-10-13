@@ -264,6 +264,8 @@ func TestAnUploadFoundByNameAdmitsButNeverRefuses(t *testing.T) {
 		{"an upload the copy does not reproduce", AnchorByName, 0.44, tagmatch.Unknown},
 		{"a Topic upload the copy does not reproduce", AnchorByNameTopic, 0.44, tagmatch.Unknown},
 		{"an upload in the dead band", AnchorByName, 0.25, tagmatch.Unknown},
+		{"a linked preview the copy reproduces", AnchorSourceLinked, 0.02, tagmatch.Agrees},
+		{"a linked preview the copy does not reproduce", AnchorSourceLinked, 0.44, tagmatch.Unknown},
 	} {
 		t.Run(want.name, func(t *testing.T) {
 			pair := compare(Evidence{Anchor: &AnchorComparison{
@@ -351,5 +353,23 @@ func TestAnUploadThatIsOtherAudioDoesNotVoidThePair(t *testing.T) {
 	file.Anchor.Source = "deezer"
 	if !compare(file, known).contradicted() {
 		t.Fatal("a distributor's own sample stopped refusing a copy")
+	}
+}
+
+// A preview behind a page MusicBrainz links the recording to proves a copy, and
+// is named for the person reading it.
+func TestALinkedPreviewAdmitsAnAgreeingCopy(t *testing.T) {
+	file := Evidence{Anchor: &AnchorComparison{
+		RecordingID: uuid.MustParse(firstID), Rate: 0.02, Source: AnchorSourceLinked,
+	}}
+	known := recording(firstID, "Karma Police", "Radiohead", 308973)
+
+	pair := compare(file, known)
+	if level := gradeOf(pair); level != bySample {
+		t.Fatalf("grade = %v, want the linked preview to prove it", level)
+	}
+	agreements, _ := describeVerdicts(pair)
+	if len(agreements) != 1 || !strings.Contains(agreements[0], "MusicBrainz links") {
+		t.Fatalf("agreements = %v, want the linked preview named", agreements)
 	}
 }

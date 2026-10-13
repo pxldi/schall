@@ -156,3 +156,71 @@ func TestFetchPreviewRefusesAnEmptyBody(t *testing.T) {
 		t.Fatalf("got %v, want ErrNoPreview for an empty address", err)
 	}
 }
+
+func TestTrackByIDReadsWhereTheTrackSits(t *testing.T) {
+	var asked string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		asked = r.URL.Path
+		_, _ = w.Write([]byte(`{"id":103052662,"title":"The Less I Know the Better","isrc":"AUUM71500298",
+			"duration":216,"track_position":7,"disk_number":1,"preview":"https://cdnt-preview.dzcdn.net/x.mp3"}`))
+	})
+
+	track, err := client.TrackByID(context.Background(), 103052662)
+	if err != nil {
+		t.Fatalf("TrackByID: %v", err)
+	}
+	if asked != "/track/103052662" {
+		t.Fatalf("asked %q", asked)
+	}
+	if track.ISRC != "AUUM71500298" || track.Disk != 1 || track.Position != 7 || track.PreviewURL == "" {
+		t.Fatalf("read %+v", track)
+	}
+}
+
+func TestTrackByIDReadsAMissAsNoTrack(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(missBody))
+	})
+	if _, err := client.TrackByID(context.Background(), 1); !errors.Is(err, ErrNoTrack) {
+		t.Fatalf("err = %v, want ErrNoTrack", err)
+	}
+}
+
+func TestTrackByIDReadsAnExceededQuotaAsRateLimiting(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(quotaBody))
+	})
+	if _, err := client.TrackByID(context.Background(), 1); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+}
+
+func TestAlbumTracksListsTheAlbumInOrder(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/album/9/tracks" {
+			t.Errorf("asked %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":1,"title":"One","duration":100,"track_position":1,"disk_number":1,"preview":"p1"},
+			{"id":2,"title":"Two","duration":200,"track_position":2,"disk_number":1,"preview":"p2"}
+		],"total":2}`))
+	})
+
+	tracks, err := client.AlbumTracks(context.Background(), 9)
+	if err != nil {
+		t.Fatalf("AlbumTracks: %v", err)
+	}
+	if len(tracks) != 2 || tracks[1].ID != 2 || tracks[1].Position != 2 {
+		t.Fatalf("read %+v", tracks)
+	}
+}
+
+// A list shorter than the album would put the wrong track at a position.
+func TestAlbumTracksRefusesAListShorterThanTheAlbum(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":1,"track_position":1,"disk_number":1}],"total":30}`))
+	})
+	if _, err := client.AlbumTracks(context.Background(), 9); err == nil {
+		t.Fatal("read a short list as the album")
+	}
+}

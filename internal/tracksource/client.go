@@ -175,6 +175,49 @@ func (client *Client) Lookup(ctx context.Context, address string) (Track, error)
 	return parseTrack(stdout)
 }
 
+// AlbumTrackAddresses lists the track addresses of one Bandcamp album, in the
+// album's order. It is how a release MusicBrainz links to a Bandcamp album is
+// read at one position; nothing is chosen by name.
+func (client *Client) AlbumTrackAddresses(ctx context.Context, address string) ([]string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil, ErrNotATrack
+	}
+	if !client.enabled() {
+		return nil, fmt.Errorf("%w: no binary configured", ErrUnavailable)
+	}
+	ctx, cancel := context.WithTimeout(ctx, client.lookupTimeout)
+	defer cancel()
+	stdout, stderr, runErr := client.run(ctx, client.path,
+		"--dump-single-json", "--flat-playlist", "--skip-download", "--no-warnings", address)
+	if err := client.commandError(ctx, stderr, runErr); err != nil {
+		return nil, err
+	}
+	var value struct {
+		Type      string `json:"_type"`
+		Extractor string `json:"extractor"`
+		Entries   []struct {
+			URL string `json:"url"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(stdout, &value); err != nil {
+		return nil, fmt.Errorf("parse yt-dlp answer: %w", err)
+	}
+	if value.Type != "playlist" || !strings.EqualFold(value.Extractor, "Bandcamp:album") {
+		return nil, ErrNotATrack
+	}
+	addresses := make([]string, 0, len(value.Entries))
+	for _, entry := range value.Entries {
+		entryURL := strings.TrimSpace(entry.URL)
+		if entryURL == "" {
+			// A gap would move every later track up one place.
+			return nil, ErrNotATrack
+		}
+		addresses = append(addresses, entryURL)
+	}
+	return addresses, nil
+}
+
 // Excerpt returns thirty seconds from the middle of the track as MP3 bytes. It
 // takes the same slice the YouTube anchor takes (internal/youtube), so an
 // excerpt from any of the services is measured the same way.
