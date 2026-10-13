@@ -18,6 +18,10 @@ import (
 	"github.com/pxldi/schall/internal/tagging"
 )
 
+// stagingPrefix begins every name Schall writes into a music folder before it
+// is finished.
+const stagingPrefix = ".schall-"
+
 // supportedExtensions is what the library can hold: the file types a scan
 // indexes and therefore the only ones that can ever become music Schall knows
 // about.
@@ -33,10 +37,6 @@ import (
 // exclude them: an absent tag is silence rather than damage (TagsAbsent), the
 // audio is what identifies a file anyway, and a lossless copy the user has is
 // worth more than the tags it is missing.
-// stagingPrefix begins every name Schall writes into a music folder before it
-// is finished.
-const stagingPrefix = ".schall-"
-
 var supportedExtensions = map[string]struct{}{
 	".mp3": {}, ".flac": {}, ".ogg": {}, ".oga": {}, ".opus": {},
 	".m4a": {}, ".m4b": {}, ".m4p": {}, ".mp4": {}, ".dsf": {},
