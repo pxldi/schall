@@ -42,15 +42,38 @@
     variant?: Variant;
   } = $props();
 
-  // From md up the plain strip wraps. It scrolls sideways on a phone, but a
+  // From sm up the plain strip wraps. It scrolls sideways on a phone, but a
   // desktop shows no scrollbar or fade, so the last chips were cut off.
   const containerClass = $derived(
     variant === 'tabs'
       ? 'no-scrollbar flex w-fit max-w-full items-center gap-1 overflow-x-auto'
       : variant === 'filter'
         ? 'no-scrollbar inline-flex h-7 max-w-full items-center gap-0.5 overflow-x-auto rounded-pill border border-line-thin p-0.5'
-        : 'no-scrollbar flex w-fit max-w-full items-center gap-1.5 overflow-x-auto md:flex-wrap'
+        : 'no-scrollbar flex w-fit max-w-full items-center gap-1.5 overflow-x-auto sm:flex-wrap'
   );
+
+  // The fade at the right edge says the strip goes on. It is drawn only while
+  // something is actually hidden past that edge: drawn by width alone, it
+  // dimmed the last tab of a strip that fitted in a half-screen window.
+  let strip = $state<HTMLDivElement>();
+  let more = $state(false);
+
+  $effect(() => {
+    const el = strip;
+    if (!el) return;
+    const measure = () => {
+      more = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    el.addEventListener('scroll', measure, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', measure);
+    };
+  });
 
   function buttonClass(selected: boolean): string {
     if (variant === 'tabs') {
@@ -95,8 +118,8 @@
      most screens, so without `w-fit` it took the whole width of the page and six
      short words sat at the left end of a long empty bar — beside a strip in a
      row, which is content-width, the same control looked like two controls. -->
-<div class="scroll-fade scroll-fade-surface min-w-0 max-w-full">
-  <div class={containerClass} role="group" aria-label={label}>
+<div class="scroll-fade scroll-fade-surface min-w-0 max-w-full" data-more={more || undefined}>
+  <div bind:this={strip} class={containerClass} role="group" aria-label={label}>
   {#each options as option (option.value)}
     <button
       aria-pressed={value === option.value}

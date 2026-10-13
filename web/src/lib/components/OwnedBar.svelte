@@ -40,7 +40,7 @@
       <span class="owned-dot" data-held={index < filled}></span>
     {/each}
   </span>
-  <span class="numeric text-meta text-ink-3">{owned}{compact ? '/' : ' of '}{total}</span>
+  <span class="numeric whitespace-nowrap text-meta text-ink-3">{owned}{compact ? '/' : ' of '}{total}</span>
 </span>
 
 <style>

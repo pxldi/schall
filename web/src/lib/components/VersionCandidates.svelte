@@ -36,8 +36,9 @@
 </script>
 
 <!-- The 40rem floor keeps the columns readable on a phone, where the strip
-     scrolls. On a desktop the review pane is narrower than 40rem at the 133%
-     root, and the floor pushed each card's right edge out of sight. -->
+     scrolls. From 640px up the review pane is narrower than 40rem at the 133%
+     root, half a screen included, and the floor pushed each card's right edge
+     out of sight. -->
 {#if candidates.length === 0}
   <!-- A header row of columns with nothing under it read as a list that failed
        to draw. -->
@@ -46,7 +47,7 @@
   </EmptyPanel>
 {:else}
 <div class="overflow-x-auto">
-  <div class="flex min-w-[40rem] flex-col gap-2 md:min-w-0" role="radiogroup" aria-label="Recordings this could be">
+  <div class="flex min-w-[40rem] flex-col gap-2 sm:min-w-0" role="radiogroup" aria-label="Recordings this could be">
     <div class={`grid ${COLUMNS} gap-x-4 px-[18px] text-dense-micro uppercase text-ink-3`}>
       <span></span>
       <span></span>
@@ -94,13 +95,13 @@
           <span class="numeric text-quiet-meta">{candidate.durationMs ? clock(candidate.durationMs / 1000) : '—'}</span>
           <span class="flex min-w-0 flex-wrap gap-1.5">
             {#each candidate.agrees as entry (entry)}
-              <span class="flex items-center gap-1 rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-2">
+              <span class="flex items-center gap-1 whitespace-nowrap rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-2">
                 <Icon name="check" size={10} class="text-ok" />
                 {chipLabel(entry)}
               </span>
             {/each}
             {#each candidate.differs as entry (entry)}
-              <span class="flex items-center gap-1 rounded-full border border-fail-border px-2 py-0.5 text-meta text-ink-2">
+              <span class="flex items-center gap-1 whitespace-nowrap rounded-full border border-fail-border px-2 py-0.5 text-meta text-ink-2">
                 <Icon name="close" size={10} class="text-fail" />
                 {chipLabel(entry)}
               </span>

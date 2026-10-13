@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { lineStartMarks } from '$lib/separators';
 
   // The top of a page in Duoton: the page's name set very large over the print,
   // with a line of context under it and the page's actions to the right. It
@@ -67,7 +68,7 @@
     <div class="min-w-0 flex-[1_1_20rem]">
       <h1 class="-ml-[0.04em] mb-3 font-extrabold text-balance text-ink {sizes[section ? 'xl' : size]}">{title}</h1>
       {#if sub}
-        <div class="hero-sub text-quiet-meta text-ink-2">{@render sub()}</div>
+        <div class="hero-sub text-quiet-meta text-ink-2" use:lineStartMarks>{@render sub()}</div>
       {/if}
     </div>
     {#if actions}

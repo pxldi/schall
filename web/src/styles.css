@@ -599,10 +599,8 @@ a {
     background: linear-gradient(to right, transparent, var(--color-surface-regular));
   }
 
-  @media (max-width: 48rem) {
-    .scroll-fade::after {
-      opacity: 1;
-    }
+  .scroll-fade[data-more]::after {
+    opacity: 1;
   }
 
   /* The smallest thing in the interface, and the only role allowed under 12px:
@@ -786,6 +784,12 @@ a {
     content: '·';
     margin: 0 0.5rem;
     color: var(--color-ink-4);
+  }
+
+  /* A part that wraps to the start of a line keeps its dot's space but not the
+     dot (lib/separators.ts marks it). */
+  .hero-sub > [data-line-start]::before {
+    visibility: hidden;
   }
 
   /* ── The top bar (ADR Duoton) ────────────────────────────────────────────
