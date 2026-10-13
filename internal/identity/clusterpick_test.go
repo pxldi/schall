@@ -46,8 +46,11 @@ func verifyAgainstClusterOfTwo(t *testing.T, evidence Evidence, rows ...musicbra
 	return verification
 }
 
+// The other row runs as long as the want, so the copy's length cannot rule it
+// out either.
 func TestAClusterOfTwoRowsAloneProvesNothing(t *testing.T) {
 	wanted, other := clusterOfTwo()
+	other.DurationMS = wanted.DurationMS
 	verification := verifyAgainstClusterOfTwo(t, copyHeardAsBoth(), wanted, other)
 	if verification.Audio {
 		t.Fatalf("admitted by audio with no identifier: %q", verification.Summary)
@@ -83,9 +86,11 @@ func TestAnISRCOnlyTheWantCarriesPicksItOutOfTheCluster(t *testing.T) {
 }
 
 // MusicBrainz files one ISRC on genuinely different audio too, so a code both
-// rows carry says nothing about which of them the file is.
+// rows carry says nothing about which of them the file is. The rows run the
+// same length here, so the length cannot pick either.
 func TestAnISRCBothRowsCarryPicksNothing(t *testing.T) {
 	wanted, other := clusterOfTwo()
+	other.DurationMS = wanted.DurationMS
 	other.ISRCs = append(other.ISRCs, "GBF079400305")
 	copied := copyHeardAsBoth()
 	copied.ISRC = "GBF079400305"
@@ -192,6 +197,7 @@ func TestAnUploadPicksNothingWhenTheTagsFitBothRows(t *testing.T) {
 
 func TestAnUploadPicksNothingWithoutTheArtistTag(t *testing.T) {
 	wanted, other := clusterOfTwo()
+	other.DurationMS = wanted.DurationMS
 	copied := copyHeardAsBoth()
 	copied.Anchor = uploadFoundByName()
 	copied.Artist = ""
@@ -199,5 +205,72 @@ func TestAnUploadPicksNothingWithoutTheArtistTag(t *testing.T) {
 	verification := verifyAgainstClusterOfTwo(t, copied, wanted, other)
 	if verification.Audio {
 		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
+
+// The remix runs 280 seconds and the copy 306, so the copy cannot be the remix,
+// and the cluster leaves only the want.
+func TestTheCopysLengthRulesTheOtherRowOut(t *testing.T) {
+	wanted, other := clusterOfTwo()
+
+	verification := verifyAgainstClusterOfTwo(t, copyHeardAsBoth(), wanted, other)
+	if !verification.Proven() || !verification.Audio {
+		t.Fatalf("not proven by audio: %q", verification.Summary)
+	}
+	if !strings.Contains(verification.Summary, "length fits this row and none of the others") {
+		t.Errorf("summary = %q, want it to say the length ruled the other row out", verification.Summary)
+	}
+}
+
+func TestALengthWithinTheToleranceOfTheOtherRowRulesNothingOut(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	near := *wanted.DurationMS - DurationToleranceMS + 1000
+	other.DurationMS = &near
+
+	verification := verifyAgainstClusterOfTwo(t, copyHeardAsBoth(), wanted, other)
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
+
+func TestAnOtherRowWithNoLengthIsNotRuledOut(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	other.DurationMS = nil
+
+	verification := verifyAgainstClusterOfTwo(t, copyHeardAsBoth(), wanted, other)
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
+
+func TestATitleNamingSomethingElseKeepsTheLengthFromPicking(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	copied := copyHeardAsBoth()
+	copied.Title = "Sour Times"
+
+	verification := verifyAgainstClusterOfTwo(t, copied, wanted, other)
+	if verification.Audio {
+		t.Fatalf("admitted by audio: %q", verification.Summary)
+	}
+}
+
+func TestTheLengthPicksNothingWhenTheOtherRowCannotBeAsked(t *testing.T) {
+	wanted, other := clusterOfTwo()
+	provider := rowProvider(wanted, other)
+	answer := provider.answer
+	provider.answer = func(id uuid.UUID) (musicbrainz.Recording, error) {
+		if id == uuid.MustParse(secondID) {
+			return musicbrainz.Recording{}, context.DeadlineExceeded
+		}
+		return answer(id)
+	}
+
+	verification, err := NewResolver(provider).Verify(
+		context.Background(), copyHeardAsBoth(), uuid.MustParse(firstID))
+	if err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	if verification.Audio {
+		t.Fatalf("admitted by audio without asking about the other row: %q", verification.Summary)
 	}
 }

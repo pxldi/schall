@@ -1,7 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
-import type { ReleaseDetail, ReleaseEdition, Track } from '$lib/api';
+import type { Release, ReleaseDetail, ReleaseEdition, Track } from '$lib/api';
+import { holding, quiet } from '$lib/vocabulary';
 
 // Named without the leading `+`, like the other colocated route tests:
 // SvelteKit reads every `+` file in a route folder as a route file.
@@ -82,7 +83,33 @@ function edition(overrides: Partial<ReleaseEdition> = {}): ReleaseEdition {
  * being handed a control to press first. */
 let asked: string[] = [];
 
-function answering(options: { release?: ReleaseDetail; tracks?: Track[]; editions?: ReleaseEdition[] } = {}) {
+function sibling(id: string, title: string, overrides: Partial<Release> = {}): Release {
+  return {
+    id,
+    artistId: 'b1c2d3e4-0000-4000-8000-000000000001',
+    artistName: 'Talk Talk',
+    title,
+    firstReleaseDate: '1988-03-16',
+    albumType: 'album',
+    trackCount: 6,
+    ownedTrackCount: 6,
+    dismissedTrackCount: 0,
+    monitored: true,
+    artistMonitorLevel: 'everything',
+    trackRefreshStatus: 'completed',
+    hasCover: false,
+    ...overrides
+  } as Release;
+}
+
+function answering(
+  options: {
+    release?: ReleaseDetail;
+    tracks?: Track[];
+    editions?: ReleaseEdition[];
+    discography?: Release[];
+  } = {}
+) {
   asked = [];
   vi.stubGlobal(
     'fetch',
@@ -94,6 +121,7 @@ function answering(options: { release?: ReleaseDetail; tracks?: Track[]; edition
       if (url.pathname.endsWith('/editions')) return body({ items: options.editions ?? [edition()] });
       if (url.pathname.endsWith('/downloads')) return body({ items: [] });
       if (url.pathname === `/api/v1/albums/${releaseID}`) return body(options.release ?? detail());
+      if (url.pathname === '/api/v1/albums') return body({ items: options.discography ?? [] });
       return body({ items: [] });
     })
   );
@@ -423,5 +451,71 @@ describe('removing', () => {
       method: 'POST',
       path: '/api/v1/tracks/d1000000-0000-4000-8000-000000000001/wanted'
     });
+  });
+});
+
+describe('the header actions', () => {
+  it('names each icon button by what it does', async () => {
+    answering({ tracks: [track(), track({ id: 't2', title: 'Inheritance', owned: false })] });
+    opened();
+
+    expect(await screen.findByRole('button', { name: 'Find sources' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Remove' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Dismiss it' })).toBeTruthy();
+  });
+});
+
+// A want can settle on a file the library no longer maps. The row used to draw
+// the tick for it, so 88GLAM 2.5 said "2 missing" over sixteen ticks.
+describe('a track fetched once whose file is gone', () => {
+  const gone = () =>
+    track({ owned: false, heldElsewhere: false, wantId: 'w1', wantStatus: 'acquired' });
+
+  it('draws no tick', async () => {
+    answering({ tracks: [gone()] });
+    opened();
+
+    expect(await screen.findByLabelText('Fetched once, file gone')).toBeTruthy();
+    expect(screen.queryByLabelText(quiet(holding.complete))).toBeNull();
+  });
+
+  it('offers no + that would change nothing', async () => {
+    answering({ tracks: [gone()] });
+    opened();
+    await screen.findByLabelText('Fetched once, file gone');
+
+    expect(screen.queryByRole('button', { name: /The Rainbow$/ })).toBeNull();
+  });
+
+  it('is not counted by the want button', async () => {
+    answering({ tracks: [gone(), track({ id: 't2', title: 'Inheritance', owned: false })] });
+    opened();
+
+    expect(await screen.findByRole('button', { name: 'Want 1 missing' })).toBeTruthy();
+  });
+});
+
+describe('the discography beside the tracks', () => {
+  it('lists the artist\'s releases and marks this one', async () => {
+    answering({
+      discography: [
+        sibling('a1b2c3d4-0000-4000-8000-000000000002', 'Laughing Stock', { firstReleaseDate: '1991-09-16' }),
+        sibling(releaseID, 'Spirit of Eden')
+      ]
+    });
+    opened();
+
+    const other = await screen.findByRole('link', { name: /Laughing Stock/ });
+    expect(other.getAttribute('href')).toBe('/releases/a1b2c3d4-0000-4000-8000-000000000002');
+    const here = screen.getAllByRole('link', { name: /Spirit of Eden/ }).find((link) => link.getAttribute('aria-current'));
+    expect(here?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('asks for the discography by the artist', async () => {
+    answering();
+    opened();
+    await screen.findByText('Spirit of Eden');
+
+    expect(asked).toContain('/api/v1/albums');
   });
 });

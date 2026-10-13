@@ -559,6 +559,9 @@ func (resolver *Resolver) secondRowOfSameRegistration(
 // the registration check already made. A lookup that failed leaves the ISRC
 // unread.
 //
+// The copy's measured length answers it too, when every other row has a length
+// the copy is too far from to be.
+//
 // Neither half admits on its own: the identifier is the file's own word, and
 // the cluster is two answers. A cluster tied with a lower one, or a pair that
 // any evidence contradicts, is not read at all.
@@ -593,7 +596,33 @@ func singledOutOfCluster(
 			"audio. The upload found under this recording's name sounds the same, and the " +
 			"file's title, artist and length fit this row and not the other."
 	}
+	// The copy's measured length rules every other row out. The cluster says the
+	// audio is one of its rows, and a length more than the tolerance away from a
+	// row is the same contradiction that voids any pair, so what is left is this
+	// recording. A row with no length cannot be ruled out, and a title naming
+	// something else keeps the copy a question.
+	if pair.duration == tagmatch.Agrees && pair.title != tagmatch.Differs &&
+		lengthRulesOutEveryOtherRow(evidence, check) {
+		return "AcoustID named this recording and another MusicBrainz row for the same " +
+			"audio, and the copy's length fits this row and none of the others."
+	}
 	return ""
+}
+
+// lengthRulesOutEveryOtherRow reports that every other row the leading cluster
+// named was looked up, has a length, and sits further from the copy's length
+// than DurationToleranceMS.
+func lengthRulesOutEveryOtherRow(evidence Evidence, check registrationCheck) bool {
+	if evidence.DurationMS <= 0 || check.unavailable || !check.lookedUp || len(check.others) == 0 {
+		return false
+	}
+	for _, other := range check.others {
+		if other.DurationMS == nil || *other.DurationMS <= 0 ||
+			abs(evidence.DurationMS-*other.DurationMS) <= DurationToleranceMS {
+			return false
+		}
+	}
+	return true
 }
 
 // vouchedForBesideTheOtherRow reports a copy whose leading cluster named only
