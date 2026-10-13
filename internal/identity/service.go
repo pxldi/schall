@@ -418,7 +418,7 @@ func (service *Service) store(ctx context.Context, fileID uuid.UUID, outcome Out
 // its own, and deleting the row beside it would take away the only thing an
 // acquired file has to say what its audio was proven to be.
 func (service *Service) recordMatched(ctx context.Context, fileID uuid.UUID) error {
-	const summary = "The file is matched to a catalogue track, which proves its identity."
+	const summary = "Matched to a catalogue track."
 	transaction, err := service.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
@@ -495,7 +495,7 @@ func (service *Service) Fail(ctx context.Context, fileID uuid.UUID, detail strin
 	_, err := service.pool.Exec(ctx, `
 		UPDATE library_files
 		SET resolution_status = 'failed', resolution_error = $2,
-		    resolution_summary = 'The metadata provider could not be reached, so this file has not been asked about yet.',
+		    resolution_summary = 'MusicBrainz unreachable. Not checked yet.',
 		    resolution_attempted_at = now(), updated_at = now()
 		WHERE id = $1
 	`, fileID, detail)
@@ -542,7 +542,7 @@ func (service *Service) Accept(ctx context.Context, fileID, recordingID uuid.UUI
 	identity.Method = "manual"
 	identity.Confidence = 1
 	identity.Evidence = []string{}
-	identity.Summary = fmt.Sprintf("Resolved by hand to %q by %s.",
+	identity.Summary = fmt.Sprintf("You matched it to %q by %s.",
 		identity.TrackTitle, credited(identity.ArtistName))
 
 	fallen, err := replaceIdentity(
@@ -607,7 +607,7 @@ func (service *Service) AcceptAsWanted(ctx context.Context, fileID, recordingID 
 		Confidence:     1,
 		Evidence:       []string{},
 	}
-	chosen.Summary = fmt.Sprintf("Resolved by hand to %q by %s, the recording a wishlist entry asked for.",
+	chosen.Summary = fmt.Sprintf("You matched it to %q by %s, from your wishlist.",
 		chosen.TrackTitle, credited(chosen.ArtistName))
 
 	transaction, err := service.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -679,7 +679,7 @@ func (service *Service) FileAsAcquired(
 		Confidence:     1,
 		Evidence:       filingEvidence(proof),
 	}
-	filed.Summary = fmt.Sprintf("Filed as %q by %s, the recording a wishlist entry's copy was proven to be.",
+	filed.Summary = fmt.Sprintf("Filed as %q by %s, proven by a wishlist copy.",
 		filed.TrackTitle, credited(filed.ArtistName))
 
 	transaction, err := service.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -784,7 +784,7 @@ func (service *Service) MarkLocalOnly(ctx context.Context, fileID uuid.UUID) err
 		return err
 	}
 	defer func() { _ = transaction.Rollback(ctx) }()
-	const summary = "Recorded by hand as owned music with no external identity."
+	const summary = "You marked this as your own music, not on MusicBrainz."
 	fallen, err := replaceIdentity(
 		ctx, transaction, fileID, nil, true, StatusLocalOnly, summary)
 	if err != nil {
@@ -876,8 +876,7 @@ func RearmWantsHoldingFiles(
 // withdrawnWithItsAncestor is what a file says once the decision it was
 // identified on the strength of has been taken back. It is one sentence: what
 // happened to this file, and that it is a question again.
-const withdrawnWithItsAncestor = "The decision that identified this file was taken back, " +
-	"so what this file is has to be answered again."
+const withdrawnWithItsAncestor = "The match this rested on was undone. Needs matching again."
 
 // WithdrawAdmittedBy takes back every identity that rested on one file, and
 // every identity that rested on those, all the way down.

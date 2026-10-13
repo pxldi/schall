@@ -79,10 +79,10 @@ const minimumFrames = 80
 // agreement, and the second is a check that could not run and is asked again
 // (ADR 0002).
 const (
-	noPreviewPublished = "Deezer publishes no preview for this recording's ISRC."
-	noISRCToAskBy      = "This entry carries no ISRC, and a preview is only ever fetched by ISRC."
-	unusableISRC       = "This entry's ISRC is not a registration code a preview can be fetched by."
-	unreadablePreview  = "The preview Deezer returned could not be read as audio."
+	noPreviewPublished = "Deezer has no preview for this ISRC."
+	noISRCToAskBy      = "No ISRC, so no preview."
+	unusableISRC       = "ISRC is invalid, so no preview."
+	unreadablePreview  = "Deezer's preview is unreadable."
 )
 
 // The sentences a want keeps when the upload search had nothing either. Each is
@@ -90,9 +90,9 @@ const (
 // and a person reading the row needs both: why the keyed reference is missing,
 // and why the searched one is.
 const (
-	noLengthToKeyBy   = "This entry carries no length, and an upload is only ever chosen by name and length."
-	noUploadMatched   = "No upload matched this entry's name and length."
-	unreadableExcerpt = "The excerpt taken from the upload could not be read as audio."
+	noLengthToKeyBy   = "No length, so no upload search."
+	noUploadMatched   = "No matching upload."
+	unreadableExcerpt = "The upload's audio is unreadable."
 )
 
 // Distributor is the part of a music service Schall uses: which track carries a
@@ -407,7 +407,7 @@ func Measure(ctx context.Context, prints Fingerprinter, audio []byte) (string, i
 // reschedule puts a want back on the schedule, and hands the rate-limiting case
 // back to the caller so a pass can stop.
 func (service *Service) reschedule(ctx context.Context, want db.AnchorDueRow, cause error) error {
-	reason := fmt.Sprintf("The preview could not be fetched: %s", cause)
+	reason := fmt.Sprintf("Couldn't fetch the preview: %s", cause)
 	if err := service.deferUntilLater(ctx, want, reason); err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ func (service *Service) reschedule(ctx context.Context, want db.AnchorDueRow, ca
 func (service *Service) rescheduleUpload(
 	ctx context.Context, want db.AnchorDueRow, cause error,
 ) error {
-	reason := fmt.Sprintf("No upload could be fetched for this entry: %s", cause)
+	reason := fmt.Sprintf("Couldn't fetch an upload: %s", cause)
 	if err := service.deferUntilLater(ctx, want, reason); err != nil {
 		return err
 	}

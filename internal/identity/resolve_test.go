@@ -92,7 +92,7 @@ func TestAnUnknownRecordingIDIsAConflictRatherThanAnAbsence(t *testing.T) {
 	if outcome.Status != StatusConflict {
 		t.Fatalf("status = %q, want %q", outcome.Status, StatusConflict)
 	}
-	if !strings.Contains(outcome.Summary, "not known to MusicBrainz") {
+	if !strings.Contains(outcome.Summary, "doesn't know this file's recording ID") {
 		t.Errorf("summary = %q", outcome.Summary)
 	}
 	if len(provider.searches) != 1 || provider.searches[0].Title != "Karma Police" {

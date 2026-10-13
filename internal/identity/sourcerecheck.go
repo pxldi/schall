@@ -98,7 +98,7 @@ func (service *Service) RecheckSource(
 		if entry.Status == StatusResolved && entry.Identity != nil &&
 			entry.Identity.RecordingID != proven.RecordingID {
 			return SourceRecheck{Contradiction: fmt.Sprintf(
-				"The file resolves to %q by %s, and its entry to another recording.",
+				"The file is %q by %s, not the wishlist song.",
 				proven.TrackTitle, credited(proven.ArtistName))}, nil
 		}
 		recording, err := service.resolver.provider.Recording(ctx, proven.RecordingID)
@@ -133,7 +133,7 @@ func (service *Service) RecheckSource(
 	}
 	named.Method = MethodPublishedSample
 	named.Confidence = bySample.confidence()
-	named.Summary = fmt.Sprintf("%q by %s — %s.", named.TrackTitle, credited(named.ArtistName),
+	named.Summary = fmt.Sprintf("%q by %s, %s.", named.TrackTitle, credited(named.ArtistName),
 		bySample.summary())
 	named.Evidence = []string{"audio (matches the published sample of this recording)", "ISRC"}
 	return service.moveOntoRecording(ctx, fileID, source, named)
@@ -145,7 +145,7 @@ func (service *Service) RecheckSource(
 func isrcContradiction(recording musicbrainz.Recording, codes ...string) string {
 	for _, code := range codes {
 		if compareISRC(code, recording.ISRCs) == tagmatch.Differs {
-			return fmt.Sprintf("MusicBrainz names %q by %s, which does not carry the ISRC %s.",
+			return fmt.Sprintf("MusicBrainz's %q by %s lacks ISRC %s.",
 				recording.Title, credited(recording.ArtistCredit), code)
 		}
 	}

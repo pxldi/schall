@@ -90,7 +90,7 @@ func TestMatchingRefusesAnotherTakeAtTheSamePosition(t *testing.T) {
 	if result[0].track != -1 {
 		t.Fatalf("matched a different take: %+v", result[0].match)
 	}
-	if !strings.Contains(result[0].problem, "not conclusively any track") {
+	if !strings.Contains(result[0].problem, "isn't clearly any track here") {
 		t.Fatalf("problem = %q", result[0].problem)
 	}
 }
@@ -144,7 +144,7 @@ func TestMatchingWillNotChooseBetweenTwoEqualTracks(t *testing.T) {
 	if result[0].track != -1 {
 		t.Fatalf("chose between identical tracks: %+v", result[0].match)
 	}
-	if !strings.Contains(result[0].problem, "does not choose between them") ||
+	if !strings.Contains(result[0].problem, "equally well") ||
 		!strings.Contains(result[0].problem, "1-7") {
 		t.Fatalf("problem = %q", result[0].problem)
 	}
@@ -364,7 +364,7 @@ func TestAFileIsToldWhichFileMatchedItsTrackMoreConclusively(t *testing.T) {
 	if result[1].track != -1 {
 		t.Fatalf("two files were matched to one track: %+v", result[1].match)
 	}
-	if !strings.Contains(result[1].problem, `"proven.flac" matched more conclusively`) {
+	if !strings.Contains(result[1].problem, `"proven.flac" matched better`) {
 		t.Fatalf("problem = %q, want it to name the file that took the track", result[1].problem)
 	}
 }
@@ -395,7 +395,7 @@ func TestAFileRefusedAtItsOwnGradeIsNotMatchedAfterwards(t *testing.T) {
 	if result[0].track != -1 {
 		t.Fatalf("a file refused at its own grade was matched later: %+v", result[0].match)
 	}
-	if !strings.Contains(result[0].problem, "the evidence did not settle it") {
+	if !strings.Contains(result[0].problem, "unconfirmed") {
 		t.Fatalf("problem = %q", result[0].problem)
 	}
 }

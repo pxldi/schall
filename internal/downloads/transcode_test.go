@@ -233,7 +233,7 @@ func TestAFileThatNeedsReviewIsNeverTranscoded(t *testing.T) {
 	if err := importer.Import(context.Background(), requestID); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(store.review, "is not conclusively any track of this edition") {
+	if !strings.Contains(store.review, "isn't clearly any track here") {
 		t.Fatalf("review = %q", store.review)
 	}
 	if _, err := os.Stat(marker); err == nil {

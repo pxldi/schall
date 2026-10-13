@@ -16,12 +16,9 @@ import (
 // want's new anchor. None of the three moves the verdict: there is no file to
 // import, so the copy stays the question it was, and these say which question.
 const (
-	storedProvenSummary = "This copy is the wanted recording. Its file has gone from the " +
-		"download folder, so there is nothing left to import and the want is still looking."
-	storedDiffersSummary = "This copy is not the wanted recording, and its file has gone " +
-		"from the download folder."
-	storedUndecidedSummary = "This copy was measured against the wanted recording's sample " +
-		"and it settled nothing. Its file has gone from the download folder."
+	storedProvenSummary    = "Right song, but its file is gone from the download folder. Still looking."
+	storedDiffersSummary   = "Wrong song. Its file is gone from the download folder."
+	storedUndecidedSummary = "Sample check unclear. Its file is gone from the download folder."
 )
 
 // JudgedAgain is what one pass over the copies already decided about came to.

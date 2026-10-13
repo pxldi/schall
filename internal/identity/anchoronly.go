@@ -83,29 +83,26 @@ func VerifyAgainstAnchor(file, entry Evidence) SourceVerification {
 	switch {
 	case verification.AnchorSaysOtherwise:
 		verification.Refused = true
-		verification.Summary = "The audio is not the sample Deezer publishes for this track."
+		verification.Summary = "Audio doesn't match the Deezer preview."
 		if source == AnchorSourceKeyed {
-			verification.Summary = "The audio is not the track at the address this want is keyed to."
+			verification.Summary = "Audio doesn't match the linked track."
 		}
 	case verification.NamesARecording:
-		verification.Summary = "The file carries a MusicBrainz recording ID, and this entry " +
-			"has not been resolved to a recording yet."
+		verification.Summary = "File carries a MusicBrainz recording ID."
 	case verification.Contradicted:
 		verification.Summary = candidateSentence(
 			SubjectEntry, pair, verification.Agrees, verification.Differs, "")
 	case verification.AnchorAgrees:
 		verification.Admitted = true
-		verification.Summary = "The audio matches the sample Deezer publishes for this track. " +
-			"MusicBrainz has no recording for it."
+		verification.Summary = "Audio matches the Deezer preview. Not on MusicBrainz."
 		switch source {
 		case AnchorByNameTopic:
-			verification.Summary = "The audio matches the artist's Topic upload on YouTube. " +
-				"MusicBrainz has no recording for it."
+			verification.Summary = "Audio matches the artist's YouTube Topic upload. Not on MusicBrainz."
 		case AnchorSourceKeyed:
-			verification.Summary = "The audio matches the track at the address this want is keyed to."
+			verification.Summary = "Audio matches the linked track."
 		}
 	default:
-		verification.Summary = "Nothing could decide whether this copy is the track the entry names."
+		verification.Summary = "No sample proves it."
 	}
 	return verification
 }
