@@ -1769,6 +1769,9 @@ func (q *Queries) WantsSharingAReleaseWith(
 		FROM acquisition_targets
 		WHERE acquisition_targets.id <> $1
 		  AND acquisition_targets.status = 'pending'
+		  -- A want with no next look was stopped to wait on a person or on
+		  -- evidence. Fetching for it here would schedule it again and undo that.
+		  AND acquisition_targets.next_attempt_at IS NOT NULL
 		  AND acquisition_targets.musicbrainz_recording_id IS NOT NULL
 		  AND acquisition_targets.musicbrainz_release_group_id IS NOT NULL
 		  AND acquisition_targets.musicbrainz_release_group_id = (
