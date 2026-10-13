@@ -5370,6 +5370,26 @@ func TestAReleaseRefreshIsNotAskedAgainWhenNoEditionCanBeRead(t *testing.T) {
 	}
 }
 
+// A release another album already holds is held tomorrow too, so the refresh
+// is not retried. It failed every day on Ye's BULLY from 09-30.
+func TestAReleaseRefreshIsNotAskedAgainWhenAnotherAlbumHoldsTheRelease(t *testing.T) {
+	jobID := uuid.New()
+	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": uuid.New()})
+	queue := &fakeQueue{
+		musicBrainzID: uuid.New(),
+		saveErr:       &EditionHeldError{ReleaseID: uuid.New(), AlbumID: uuid.New()},
+	}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop())
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if queue.failed != jobID || queue.retried != uuid.Nil {
+		t.Fatalf("failed = %s retried = %s, want a permanent failure", queue.failed, queue.retried)
+	}
+}
+
 // The same release group is recorded as answered, so the backfill stops
 // counting it.
 func TestAReleaseRefreshRecordsThatAnUnreadableGroupHasNoGenres(t *testing.T) {

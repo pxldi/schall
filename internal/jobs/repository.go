@@ -330,6 +330,23 @@ func wakeCoverArtSweep(ctx context.Context, transaction pgx.Tx) error {
 	return nil
 }
 
+// ErrEditionHeldByAnotherAlbum says the release a refresh chose already
+// represents a different album, which happens after MusicBrainz moves a release
+// between release groups or merges two of them.
+var ErrEditionHeldByAnotherAlbum = errors.New("this MusicBrainz release already represents another album")
+
+// EditionHeldError names the release and the album that holds it.
+type EditionHeldError struct {
+	ReleaseID uuid.UUID
+	AlbumID   uuid.UUID
+}
+
+func (err *EditionHeldError) Error() string {
+	return fmt.Sprintf("MusicBrainz release %s already represents album %s", err.ReleaseID, err.AlbumID)
+}
+
+func (err *EditionHeldError) Unwrap() error { return ErrEditionHeldByAnotherAlbum }
+
 func (repository *Repository) SaveReleaseCatalogue(ctx context.Context, albumID uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
 	transaction, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -366,6 +383,21 @@ func (repository *Repository) SaveReleaseCatalogue(ctx context.Context, albumID 
 		`, albumID, catalogue.Genres); err != nil {
 			return fmt.Errorf("update album genres: %w", err)
 		}
+	}
+	// One MusicBrainz release represents one album. When MusicBrainz moves a
+	// release to another release group, or merges two, the release this refresh
+	// chose can already stand for a different album row, and the insert below
+	// failed on the unique release ID every day. Which album keeps it is a
+	// person's call, so the refresh says so and writes nothing.
+	var holder uuid.UUID
+	switch err := transaction.QueryRow(ctx, `
+		SELECT album_id FROM release_editions
+		WHERE musicbrainz_release_id = $1 AND album_id <> $2
+	`, catalogue.Edition.ID, albumID).Scan(&holder); {
+	case err == nil:
+		return &EditionHeldError{ReleaseID: catalogue.Edition.ID, AlbumID: holder}
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("find the album holding release %s: %w", catalogue.Edition.ID, err)
 	}
 	err = transaction.QueryRow(ctx, `
 		INSERT INTO release_editions (
