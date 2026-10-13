@@ -131,10 +131,29 @@ func Thumbnail(data []byte, width int) ([]byte, error) {
 	return scaleToWidth(data, width)
 }
 
+// maxImagePixels bounds the pictures decoded here. A real cover is a few
+// million pixels; a header can declare billions in a few bytes, and the decoder
+// allocates for all of them before it reads one.
+const maxImagePixels = 50_000_000
+
+// decode decodes a picture whose header declares at most maxImagePixels.
+func decode(data []byte) (image.Image, error) {
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if config.Width <= 0 || config.Height <= 0 ||
+		int64(config.Width)*int64(config.Height) > maxImagePixels {
+		return nil, ErrNoArtwork
+	}
+	source, _, err := image.Decode(bytes.NewReader(data))
+	return source, err
+}
+
 // scaleToWidth decodes a picture and re-encodes it as a JPEG no wider than
 // width, keeping its shape. A picture already narrower keeps its size.
 func scaleToWidth(data []byte, width int) ([]byte, error) {
-	source, _, err := image.Decode(bytes.NewReader(data))
+	source, err := decode(data)
 	if err != nil {
 		// Something that will not decode is not a picture, whatever it claims.
 		return nil, ErrNoArtwork

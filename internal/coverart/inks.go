@@ -1,7 +1,6 @@
 package coverart
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"math"
@@ -48,7 +47,7 @@ const (
 // ReadInks reads the inks of a cover. It reports false for a picture that does
 // not decode, which includes SVG.
 func ReadInks(picture []byte) (Inks, bool) {
-	decoded, _, err := image.Decode(bytes.NewReader(picture))
+	decoded, err := decode(picture)
 	if err != nil {
 		return Inks{}, false
 	}

@@ -1,10 +1,5 @@
 package coverart
 
-import (
-	"bytes"
-	"image"
-)
-
 const (
 	// placeholderGrey is how far apart the three channels of a pixel may be
 	// for the pixel to count as grey. JPEG noise keeps a flat grey a few
@@ -24,7 +19,7 @@ const (
 // It reads only display pictures. Nothing it says reaches matching or
 // identity.
 func Placeholder(picture []byte) bool {
-	decoded, _, err := image.Decode(bytes.NewReader(picture))
+	decoded, err := decode(picture)
 	if err != nil {
 		return false
 	}
