@@ -417,24 +417,27 @@
   const choiceMade = $derived(!indistinguishable || saidWhich);
   const shownChoice = $derived(choiceMade ? chosen : -1);
 
+  // Awaited by every answer's onSuccess, so the answer stays pending, and its
+  // controls disabled, until the queue no longer holds the question it
+  // answered. Otherwise the same question could be answered twice.
   function invalidate() {
-    for (const key of [
-      ['review-queue'],
-      ['downloads'],
-      ['wants'],
-      ['library'],
-      ['library-files'],
-      ['dashboard']
-    ]) {
-      void client.invalidateQueries({ queryKey: key });
-    }
+    return Promise.all(
+      [
+        ['review-queue'],
+        ['downloads'],
+        ['wants'],
+        ['library'],
+        ['library-files'],
+        ['dashboard']
+      ].map((key) => client.invalidateQueries({ queryKey: key }))
+    );
   }
 
   /** Moves off the question just answered, onto whatever takes its place. */
-  function decided() {
+  async function decided() {
     placed = true;
     at = Math.min(at, Math.max(filtered.length - 2, 0));
-    invalidate();
+    await invalidate();
   }
 
   const accept = createMutation({
@@ -504,6 +507,27 @@
       $resolveImport.error ??
       $withdrawImport.error) as Error | undefined
   );
+
+  // A failed answer belongs to the question it was given on. Moving to
+  // another question clears it.
+  $effect(() => {
+    void current?.id;
+    untrack(() => {
+      for (const answer of [
+        $accept,
+        $acceptStopped,
+        $refuse,
+        $notWanted,
+        $wrongSong,
+        $chooseRecording,
+        $revalidate,
+        $resolveImport,
+        $withdrawImport
+      ]) {
+        if (answer.isError) answer.reset();
+      }
+    });
+  });
 
   /** What Enter commits: the copy on the selected card, or the candidate on
    * the selected row. Two candidates that say the same thing are never
