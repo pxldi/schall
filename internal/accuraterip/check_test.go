@@ -176,3 +176,14 @@ func TestARecordingOnNoCDWithATableIsSilence(t *testing.T) {
 		t.Fatalf("answer = %+v, %v; want silence %q", answer, err, noDiscs)
 	}
 }
+
+func TestACDNobodySubmittedIsToldApartFromAChecksumThatDiffers(t *testing.T) {
+	audio, checksums := copyOfTrackTwo(t)
+	check, _, database := checker(audio, checksums.V1, 4)
+	database.err = ErrNotListed
+
+	answer, err := check.Check(context.Background(), wanted, "copy.flac")
+	if err != nil || answer.Match != nil || answer.Silence != notInAccurateRip {
+		t.Fatalf("answer = %+v, %v; want silence %q", answer, err, notInAccurateRip)
+	}
+}

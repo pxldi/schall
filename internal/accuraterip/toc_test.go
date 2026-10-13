@@ -47,3 +47,25 @@ func TestATableWhoseOffsetsFallIsNotValid(t *testing.T) {
 		t.Fatal("Valid() = true, want false")
 	}
 }
+
+// Eraserheads, Bananatype EP (1997), as the EAC log published beside its rip
+// on the Internet Archive (Eraserheads_Bananatype1997_Ep) gives the table of
+// contents. Decoding that rip's FLAC files gave these frame counts and the v2
+// checksums the log reports as accurately ripped, for tracks 1, 3 and 5, on
+// 2026-10-13; AccurateRip listed the same checksums under these IDs.
+var bananatype = TOC{Offsets: []int{150, 27462, 50702, 66530, 80467}, Sectors: 93657}
+
+func TestARealRipsDiscIDsAreTheOnesItsChecksumsAreFiledUnder(t *testing.T) {
+	want := IDs{Tracks: 5, ID1: 0x0004da74, ID2: 0x0015e33c, CDDB: 0x4504de05}
+	if got := bananatype.IDs(); got != want {
+		t.Fatalf("IDs() = %+v, want %+v", got, want)
+	}
+}
+
+func TestARealRipsTracksHoldTheFramesItsTableGives(t *testing.T) {
+	for track, frames := range map[int]int{1: 16059456, 3: 9306864, 5: 7755720} {
+		if got := bananatype.Frames(track); got != frames {
+			t.Errorf("Frames(%d) = %d, want %d", track, got, frames)
+		}
+	}
+}

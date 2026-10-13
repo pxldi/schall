@@ -59,6 +59,7 @@ const (
 	noDiscs                 = "No CD of this song in MusicBrainz"
 	noTrackOfThatLength     = "No CD track of this length"
 	noChecksum              = "No matching CD rip in AccurateRip"
+	notInAccurateRip        = "CD not in AccurateRip"
 	otherRecordingOnTheDisc = "Another song at that CD track"
 )
 
@@ -143,6 +144,7 @@ func (checker *Checker) Check(ctx context.Context, recordingID uuid.UUID, path s
 	}
 
 	var unasked error
+	listed := false
 	for index, found := range candidates {
 		if index == discsAsked {
 			break
@@ -155,6 +157,7 @@ func (checker *Checker) Check(ctx context.Context, recordingID uuid.UUID, path s
 			unasked = err
 			continue
 		}
+		listed = true
 		track := found.placement.Track
 		checksums := sums.Checksums(track == 1, track == len(found.toc.Offsets))
 		confidence := 0
@@ -191,6 +194,11 @@ func (checker *Checker) Check(ctx context.Context, recordingID uuid.UUID, path s
 	}
 	if unasked != nil {
 		return Answer{}, unasked
+	}
+	// Which of the two it was tells a rip that differs from every submitted one
+	// apart from a CD nobody submitted at all.
+	if !listed {
+		return Answer{Silence: notInAccurateRip}, nil
 	}
 	return Answer{Silence: noChecksum}, nil
 }
