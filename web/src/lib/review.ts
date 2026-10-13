@@ -204,9 +204,9 @@ export function batchChoice(question: Question): AcquiredCopy | undefined {
  * they can accept without opening them. */
 export function batchProof(copy: AcquiredCopy): string {
   const evidence = copy.evidence;
-  if (!evidence || (evidence.differs ?? []).length > 0 || evidence.acoustic?.agrees === false) {
-    return '';
-  }
+  // contradicted() includes a sample that disagreed, which voids the copy
+  // however well its tags agree.
+  if (!evidence || contradicted(copy)) return '';
   if (verdict(copy, 'MusicBrainz recording ID') === 'ok') return 'Recording ID';
   if (verdict(copy, 'ISRC') === 'ok') return 'ISRC';
   // A plain upload found by name can be another version of the song.
