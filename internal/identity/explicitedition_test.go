@@ -142,7 +142,7 @@ func TestAnEntryTakesTheExplicitEditionOverTheCleanOne(t *testing.T) {
 	if !strings.HasSuffix(outcome.Identity.Method, "-and-"+singledOutByExplicitEdition) {
 		t.Errorf("method = %q, want it to name the rule", outcome.Identity.Method)
 	}
-	if sentence := MethodSentence(outcome.Identity.Method); !strings.Contains(sentence, "clean edition") {
+	if sentence := MethodSentence(outcome.Identity.Method); !strings.Contains(sentence, "clean version") {
 		t.Errorf("method sentence = %q, want it to say what was set aside", sentence)
 	}
 }
@@ -239,7 +239,7 @@ func TestAudioNamingTheExplicitRowIsSetAside(t *testing.T) {
 	if !verification.AudioSetAside {
 		t.Error("the explicit row is not reported as set aside")
 	}
-	if !strings.Contains(verification.Summary, "clean edition") {
+	if !strings.Contains(verification.Summary, "clean version") {
 		t.Errorf("summary = %q, want it to say what MusicBrainz marks this row as",
 			verification.Summary)
 	}

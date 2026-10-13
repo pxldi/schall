@@ -66,7 +66,7 @@ func TestARecordingIDPicksTheWantOutOfTheCluster(t *testing.T) {
 	if verification.Identity.Method != "fingerprint-and-identifier" {
 		t.Errorf("method = %q, want fingerprint-and-identifier", verification.Identity.Method)
 	}
-	if !strings.Contains(verification.Summary, "recording ID names this one") {
+	if !strings.Contains(verification.Summary, "MusicBrainz ID picks this one") {
 		t.Errorf("summary = %q, want it to say the ID picked the row", verification.Summary)
 	}
 }

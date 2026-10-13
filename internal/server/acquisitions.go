@@ -1268,8 +1268,7 @@ func waitingFor(item db.AcquisitionReviewItem, kind string) string {
 // unanswerable registration question says about itself. It is written by
 // downloads and matched here rather than shared, because the sentence belongs to
 // the package that decides and this only reads it back.
-const unaskedRegistrationSummary = "The audio was identified as another recording, " +
-	"and MusicBrainz could not be asked"
+const unaskedRegistrationSummary = "Sounds like another MusicBrainz song. MusicBrainz unreachable"
 
 // copyGroupResponse is one set of copies that sound alike.
 //

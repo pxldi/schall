@@ -3159,8 +3159,7 @@ func TestTheReviewQueueSaysAWantIsWaitingOnMusicBrainz(t *testing.T) {
 		copies: []db.AcquisitionTargetFileRow{{
 			ID: uuid.New(), Provider: "slskd", SourceUsername: "peer",
 			FileName: "03.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall",
-			Summary: unaskedRegistrationSummary +
-				" whether that is this track entered twice. Kept as a question.",
+			Summary: unaskedRegistrationSummary + ".",
 		}},
 	}
 	handler := acquisitionHandler(targets)
@@ -3197,8 +3196,7 @@ func TestAWantThatHasStoppedWaitingSaysSoInTheQueue(t *testing.T) {
 		copies: []db.AcquisitionTargetFileRow{{
 			ID: uuid.New(), Provider: "slskd", SourceUsername: "peer",
 			FileName: "03.flac", Verdict: db.AcquiredFileHeld, DecidedBy: "schall",
-			Summary: unaskedRegistrationSummary +
-				" whether that is this track entered twice. Kept as a question.",
+			Summary: unaskedRegistrationSummary + ".",
 		}},
 	}
 	handler := acquisitionHandler(targets)

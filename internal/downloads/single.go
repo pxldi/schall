@@ -98,61 +98,61 @@ func (importer *Importer) WithWaveforms(reader WaveformReader) *Importer {
 // explain is a file nobody trusts, and these are what the review queue will read
 // long after the peer's copy is gone.
 const (
-	acceptedSummary = "Proven to be the wanted recording and imported."
+	acceptedSummary = "Proven and imported."
 	// A person's acceptance says who decided and does not borrow the word proven.
 	// Nothing proved this; somebody listened and said so, which is a different and
 	// permanent kind of answer.
-	acceptedByHandSummary = "You listened to this copy and said it is the wanted recording. Imported."
-	audioRefusedSummary   = "The audio is a different recording. This copy will not be offered for this want again."
+	acceptedByHandSummary = "You listened and accepted this copy."
+	audioRefusedSummary   = "Audio is a different song. Won't be offered again."
 	// The anchor's own refusal. It says which witness spoke, because a person
 	// reading it may well be able to hear that the copy is something else, and
 	// "the audio is a different recording" with AcoustID knowing nothing about
 	// the music would read as a check that never ran.
-	anchorRefusedSummary = "This copy does not match the published sample of the wanted recording. It will not be offered for this want again."
-	tagsRefusedSummary   = "This file's own identifiers contradict the wanted recording. It will not be offered for this want again."
-	unlistenedSummary    = "The tags match, but nothing checked the audio, and tags alone cannot admit a file from a stranger. Listen to it and decide."
+	anchorRefusedSummary = "Doesn't match the song's sample. Won't be offered again."
+	tagsRefusedSummary   = "Tags name a different song. Won't be offered again."
+	unlistenedSummary    = "Tags match, audio unchecked. Listen to decide."
 	// What a copy is told when the only witness that spoke was an upload found by
 	// the want's name. Such an upload can be another version of the song, so this
 	// is never a refusal, and the sentence says so: a reader who has just been
 	// told the audio is different will otherwise read the copy as thrown away.
-	uploadUnmatchedSummary = "This copy does not reproduce the upload this want is anchored to, which does not refuse it: an upload found by name can be another version. Listen to it and decide."
+	uploadUnmatchedSummary = "Doesn't match the upload found by name. Listen to decide."
 	// What a copy is told when the audio named another MusicBrainz row and
 	// MusicBrainz could not be asked whether the two rows are one track entered
 	// twice. The refusal rests on that answer, so it is not reached.
-	registrationUncheckedSummary = "The audio was identified as another recording, and MusicBrainz could not be asked whether that is this track entered twice. Kept as a question."
+	registrationUncheckedSummary = "Sounds like another MusicBrainz song. MusicBrainz unreachable."
 	// What the want says once it has asked as often as it is going to and still
 	// has no answer. It is the want's own sentence, and it names the one thing
 	// left to do.
-	registrationUnanswerableSummary = "The audio names another recording and MusicBrainz will not say whether that is this track entered twice. Listen to the copy and decide."
-	undecidedSummary                = "Nothing could decide whether this copy is the wanted recording. It is kept as a question."
+	registrationUnanswerableSummary = "Sounds like another MusicBrainz song. MusicBrainz never answered. Listen to decide."
+	undecidedSummary                = "Unclear if this is the song. Listen to decide."
 	// What a copy for a want with no recording is told when its own tags
 	// disagree with the entry. The audio may match; a contradiction still holds
 	// it (ADR 0037 §3).
-	entryContradictedSummary = "This file's own tags disagree with the entry. Listen to it and decide."
+	entryContradictedSummary = "Tags disagree with this song. Listen to decide."
 	// What a copy for a want with no recording is told when it carries a
 	// MusicBrainz recording ID. MusicBrainz knows the file, and resolution has
 	// not caught up with it yet.
-	unresolvedRecordingSummary = "MusicBrainz knows this file, but this entry has no recording yet. Kept as a question."
+	unresolvedRecordingSummary = "MusicBrainz knows this file, not this song yet."
 	// What a copy the audio proved for a keyed want is told when it falls below
 	// the want's minimum bit rate (ADR 0038 §7). The want keeps searching.
-	belowWantFloorSummary = "This copy is the track, but below this want's minimum bit rate. Accept it, or wait for a better copy."
-	undeliveredSummary    = "The bytes did not arrive as offered, so there was nothing to check."
-	waitingNextSummary    = "Not in your library yet. The next copy will be tried."
+	belowWantFloorSummary = "Right song, below the bit rate floor. Accept it or wait for a better copy."
+	undeliveredSummary    = "File didn't arrive as offered."
+	waitingNextSummary    = "Not in your library yet. Trying the next copy."
 	// What a copy is told when MusicBrainz has deleted or merged away the
 	// recording it was fetched to be checked against. Not a judgement about the
 	// file: verification never ran, because there was nothing left to check it
 	// against.
-	recordingGoneSummary = "MusicBrainz no longer has the recording this entry named. The entry will be resolved again."
+	recordingGoneSummary = "Gone from MusicBrainz. Looking it up again."
 	// What the want itself says once it has been sent back to resolution for
 	// that reason, and the same sentence for an entry a person resolved by
 	// hand: their choice is not wrong, MusicBrainz has simply stopped carrying
 	// the recording they chose.
-	wantRecordingGoneSummary       = "MusicBrainz no longer has the recording this was resolved to. It will be resolved again."
-	wantRecordingGoneManualSummary = "You resolved this entry by hand, but MusicBrainz no longer has that recording. It will be resolved again."
+	wantRecordingGoneSummary       = "Gone from MusicBrainz. Looking it up again."
+	wantRecordingGoneManualSummary = "Your pick is gone from MusicBrainz. Looking it up again."
 	// What the want itself says once a copy has been let in. It is the want's
 	// sentence rather than the file's: the music has arrived and only the scan
 	// that gives it a library row is still to come.
-	importedTargetSummary = "A copy arrived and was proven. It is being taken into your library."
+	importedTargetSummary = "Copy verified. Adding it to your library."
 )
 
 // witnessesConsidered is how many settled library files one copy is compared
@@ -1195,12 +1195,10 @@ func (importer *Importer) belowFloor(row db.TargetImportRow, source string) (boo
 	}
 	properties, err := importer.properties(source)
 	if err != nil || properties.BitRateKbps <= 0 {
-		return true, fmt.Sprintf("The audio is the track at the keyed address. Its bit rate could not "+
-			"be read, so it is not shown to meet this want's %d kbit/s minimum.", floor)
+		return true, fmt.Sprintf("Bit rate unreadable, floor is %d kbit/s.", floor)
 	}
 	if properties.BitRateKbps < floor {
-		return true, fmt.Sprintf("The audio is the track at the keyed address. It is %d kbit/s, "+
-			"below this want's %d kbit/s minimum.", properties.BitRateKbps, floor)
+		return true, fmt.Sprintf("%d kbit/s, under the %d kbit/s floor.", properties.BitRateKbps, floor)
 	}
 	return false, ""
 }

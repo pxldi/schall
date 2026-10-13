@@ -3288,9 +3288,9 @@ func (q *Queries) CopiesToJudgeAgainForWant(
 // the two rows are one track entered twice. The sentence itself belongs to
 // downloads; this is the prefix the queries that look for those copies match on,
 // written once so the three of them cannot drift apart. Migration 00089 carries
-// a fourth copy of it, and an applied migration is never edited.
-const unaskedRegistrationSummary = "The audio was identified as another recording, " +
-	"and MusicBrainz could not be asked"
+// a fourth copy of the old wording, and an applied migration is never edited;
+// 00115 rewrote the stored rows to this one.
+const unaskedRegistrationSummary = "Sounds like another MusicBrainz song. MusicBrainz unreachable"
 
 // libraryCanSpeakForTheWant is "the library holds a file proven to be the
 // recording this want names", in the terms SettledWitnesses reads it: an

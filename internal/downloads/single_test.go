@@ -1323,3 +1323,21 @@ func TestACopyAcceptedByHandLandsInTheAlbumFolder(t *testing.T) {
 		t.Fatalf("filed at %q, want %q", local, want)
 	}
 }
+
+// The store and the review handler find copies held on the unanswered
+// registration question by the opening of their summary, each with its own copy
+// of that opening. The sentence for a spent schedule is a different fact and
+// must not open the same way.
+func TestTheUncheckedRegistrationSummaryKeepsThePrefixTheStoreMatches(t *testing.T) {
+	const prefix = "Sounds like another MusicBrainz song. MusicBrainz unreachable"
+	if !strings.HasPrefix(registrationUncheckedSummary, prefix) {
+		t.Errorf("summary = %q, want it to open with %q", registrationUncheckedSummary, prefix)
+	}
+	if strings.HasPrefix(registrationUnanswerableSummary, prefix) {
+		t.Errorf("summary = %q opens with the unchecked prefix %q",
+			registrationUnanswerableSummary, prefix)
+	}
+	if strings.ContainsAny(prefix, `'%_`) {
+		t.Errorf("prefix %q has a character LIKE or SQL quoting reads", prefix)
+	}
+}

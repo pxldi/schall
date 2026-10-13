@@ -87,7 +87,7 @@ func TestSuchACopySaysWhichRowTheAudioNamed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
-	if !strings.Contains(verification.Summary, "same registered track") {
+	if !strings.Contains(verification.Summary, "duplicate MusicBrainz entry") {
 		t.Errorf("summary = %q, want the row AcoustID named", verification.Summary)
 	}
 }
@@ -336,7 +336,7 @@ func TestAFailedLookupLeavesTheCopyUnrefused(t *testing.T) {
 	if !verification.SameRegistrationUnchecked {
 		t.Error("the check is reported as having run, want it reported as unavailable")
 	}
-	if !strings.Contains(verification.Summary, "could not be asked") {
+	if !strings.Contains(verification.Summary, "didn't say") {
 		t.Errorf("summary = %q, want it to say the check could not run", verification.Summary)
 	}
 }

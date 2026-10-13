@@ -379,7 +379,7 @@ func (work *matcher) explain(file int, candidates []db.ImportCandidate) string {
 	}
 	switch {
 	case len(conclusive) > 1:
-		return fmt.Sprintf("%q matches %s equally well; the evidence does not choose between them",
+		return fmt.Sprintf("%q fits %s equally well",
 			name, joinLabels(work.tracks, conclusive))
 	case len(conclusive) == 1:
 		track := conclusive[0]
@@ -390,16 +390,16 @@ func (work *matcher) explain(file int, candidates []db.ImportCandidate) string {
 			return fmt.Sprintf("%q matches catalogue track %s, which was already resolved to %q",
 				name, label, work.reserved[track])
 		case work.trackHolder[track] != "":
-			return fmt.Sprintf("%q matches catalogue track %s, which %q matched more conclusively",
+			return fmt.Sprintf("%q matches catalogue track %s, which %q matched better",
 				name, label, work.trackHolder[track])
 		case len(rivals) > 0:
-			return fmt.Sprintf("%q and %s both match catalogue track %s; the evidence does not choose between them",
+			return fmt.Sprintf("%q and %s both match catalogue track %s",
 				name, joinWords(rivals), label)
 		}
-		return fmt.Sprintf("%q matches catalogue track %s, but the evidence did not settle it", name, label)
+		return fmt.Sprintf("%q matches catalogue track %s, unconfirmed", name, label)
 	case len(candidates) > 0:
 		closest := candidates[0]
-		reason := "the evidence does not identify it conclusively"
+		reason := "it isn't confirmed"
 		if len(closest.Differs) > 0 {
 			verb := " disagrees"
 			if len(closest.Differs) > 1 {
@@ -407,7 +407,7 @@ func (work *matcher) explain(file int, candidates []db.ImportCandidate) string {
 			}
 			reason = "its " + joinWords(closest.Differs) + verb
 		}
-		return fmt.Sprintf("%q is not conclusively any track of this edition; the closest is %s, but %s",
+		return fmt.Sprintf("%q isn't clearly any track here; closest is %s, but %s",
 			name, trackLabel(closest.Track), reason)
 	}
 	return fmt.Sprintf("%q matches no track of this edition", name)

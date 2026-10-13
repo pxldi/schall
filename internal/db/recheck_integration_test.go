@@ -31,7 +31,7 @@ func heldOnAnUnaskedRegistration(
 		)
 		VALUES ($1, 'slskd', 'peer', $2, '03.flac', 9000000, 'held', 'schall', $3, $4)
 	`, targetID, `Music\Anetha\03.flac`,
-		unaskedRegistrationSummary+" whether that is this track entered twice.",
+		unaskedRegistrationSummary+".",
 		requestID); err != nil {
 		t.Fatalf("record the held copy: %v", err)
 	}
@@ -51,7 +51,7 @@ func heldTimeoutCopy(
 		)
 		VALUES ($1, 'slskd', 'peer', $2, $3, 9000000, 'held', 'schall', $4)
 	`, targetID, `Music\Anetha\`+name, name,
-		unaskedRegistrationSummary+" whether that is this track entered twice."); err != nil {
+		unaskedRegistrationSummary+"."); err != nil {
 		t.Fatalf("record another held copy: %v", err)
 	}
 }
