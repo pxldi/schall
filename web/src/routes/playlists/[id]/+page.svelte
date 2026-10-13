@@ -28,6 +28,7 @@
   import { entryState, ownedOf, playlistOrigin, reviewHref, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
   import { coverSrc, usePagePrint } from '$lib/duoton';
+  import { lineSeparators } from '$lib/separators';
   import { nearEnd } from '$lib/grow';
   import { tick } from 'svelte';
 
@@ -278,16 +279,16 @@
     {#snippet sub()}
       <!-- One child, so the hero puts no dot of its own between the parts.
            Each part carries its dot in front, in a box as wide as the gap.
-           The row is pulled left by that width and clipped, so the dot of a
-           part that starts a line is cut off: no line starts or ends with a
-           dot, however narrow the window. -->
+           A part that starts a line hides its dot (lib/separators.ts), and
+           the row is pulled left by the dot's width and clipped, so the
+           hidden dot takes no room at the text edge. -->
       <span class="block overflow-x-clip">
-      <span class="-ml-4 flex flex-wrap items-center gap-y-1">
+      <span class="-ml-4 flex flex-wrap items-center gap-y-1" use:lineSeparators>
         {#each factParts(playlist, entries) as part (part)}
-          <span class="numeric whitespace-nowrap"><span class="inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>{part}</span>
+          <span class="numeric whitespace-nowrap"><span data-sep class="inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>{part}</span>
         {/each}
         <span class="flex flex-wrap items-center gap-2">
-        <span class="-mr-2 inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>
+        <span data-sep class="-mr-2 inline-block w-4 text-center text-ink-4" aria-hidden="true">·</span>
         <OwnedBar owned={ownedOf(entries)} total={entries.length} width={120} noun="songs" />
         <span class="text-meta text-ink-3">owned</span>
         {#if pairingAsked}
