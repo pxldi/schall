@@ -34,7 +34,7 @@ func plainWordingBefore(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (
 		separator = "&"
 	}
 	scopedURL := databaseURL + separator + "search_path=" + schema + ",public"
-	if err := migrations.UpTo(ctx, scopedURL, 113); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 114); err != nil {
 		t.Fatalf("apply the migrations before the one under test: %v", err)
 	}
 	return schema, scopedURL
@@ -96,7 +96,7 @@ func TestTheMigrationRewordsTheSummariesTheLoopComparesExactly(t *testing.T) {
 		copyIDs[id] = want
 	}
 
-	if err := migrations.UpTo(ctx, scopedURL, 114); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 115); err != nil {
 		t.Fatalf("apply the migration under test: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestTheMigrationRewordsABuiltSummaryAroundItsNames(t *testing.T) {
 	floor := plainWordingWant(ctx, t, pool, schema,
 		"Only copies below your 320 kbps minimum were found. Looked at again weekly.")
 
-	if err := migrations.UpTo(ctx, scopedURL, 114); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 115); err != nil {
 		t.Fatalf("apply the migration under test: %v", err)
 	}
 

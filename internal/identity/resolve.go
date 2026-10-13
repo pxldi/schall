@@ -600,8 +600,7 @@ func singledOutOfCluster(
 	// something else keeps the copy a question.
 	if pair.duration == tagmatch.Agrees && pair.title != tagmatch.Differs &&
 		lengthRulesOutEveryOtherRow(evidence, check) {
-		return "AcoustID named this recording and another MusicBrainz row for the same " +
-			"audio, and the copy's length fits this row and none of the others."
+		return "AcoustID named this song and a duplicate. Only this one's length fits."
 	}
 	return ""
 }
