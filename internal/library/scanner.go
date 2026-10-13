@@ -33,6 +33,10 @@ import (
 // exclude them: an absent tag is silence rather than damage (TagsAbsent), the
 // audio is what identifies a file anyway, and a lossless copy the user has is
 // worth more than the tags it is missing.
+// stagingPrefix begins every name Schall writes into a music folder before it
+// is finished.
+const stagingPrefix = ".schall-"
+
 var supportedExtensions = map[string]struct{}{
 	".mp3": {}, ".flac": {}, ".ogg": {}, ".oga": {}, ".opus": {},
 	".m4a": {}, ".m4b": {}, ".m4p": {}, ".mp4": {}, ".dsf": {},
@@ -189,6 +193,15 @@ func (scanner *Scanner) scanRoot(
 			return err
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Imports, uploads and transcodes stage under a .schall- name beside
+		// the final place and rename in when done, so what is inside is
+		// half-written and about to move.
+		if path != rootPath && strings.HasPrefix(entry.Name(), stagingPrefix) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}

@@ -236,6 +236,34 @@ func TestAScanIndexesOnlyTheFilesTheLibraryCanHold(t *testing.T) {
 	}
 }
 
+// An import copies a release into a staging folder beside its final place and
+// renames it in when every file is there. A scan that walks in meanwhile would
+// index half-written files under names that are about to stop existing.
+func TestAScanDoesNotIndexAnImportStillBeingStaged(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	for _, staging := range []string{".schall-import-B", ".schall-upload-123"} {
+		directory := filepath.Join(rootPath, "A", staging)
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeAudio(t, directory, "01.flac")
+	}
+	writeAudio(t, filepath.Join(rootPath, "A"), ".schall-transcode-01.mp3")
+
+	if _, err := NewScanner(pool).Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var indexed int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM library_files`).Scan(&indexed); err != nil {
+		t.Fatal(err)
+	}
+	if indexed != 0 {
+		t.Fatalf("indexed %d files, want nothing from a staging folder", indexed)
+	}
+}
+
 // A symlink is somebody else's file under a name in this folder. Indexing it
 // would give the same audio two library rows the moment the real folder is also
 // a music folder.
