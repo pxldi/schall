@@ -41,7 +41,12 @@
     onselect: () => void;
   } = $props();
 
-  const src = $derived(api.reviewCopyAudioUrl(copy.id));
+  // A filed copy was answered and moved into the library, so the review routes
+  // refuse it (409). It plays from the library file and has no shape to draw.
+  const filedFileId = $derived(copy.verdict === 'accepted' ? copy.libraryFileId : undefined);
+  const src = $derived(
+    filedFileId ? api.libraryFileAudioUrl(filedFileId) : api.reviewCopyAudioUrl(copy.id)
+  );
 
   let audioEl = $state<HTMLAudioElement | null>(null);
   let loadedSrc = $state('');
@@ -77,6 +82,10 @@
     const id = copyID;
     peaks = null;
     waveformFailed = false;
+    if (filedFileId) {
+      waveformFailed = true;
+      return;
+    }
     let live = true;
     void api
       .reviewCopyWaveform(id)
