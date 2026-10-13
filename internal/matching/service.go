@@ -161,6 +161,19 @@ func (service *Service) reconcileFile(ctx context.Context, fileID uuid.UUID, cas
 	status := "unmatched"
 	candidateCount := 0
 	gained := false
+	if len(candidates) == 0 {
+		// A file whose tag and proven identity name two recordings gets no
+		// automatic link to either. It goes to Review, where the candidate list
+		// shows both tracks with what named each.
+		contested, err := contradictedTracks(ctx, transaction, fileID)
+		if err != nil {
+			return err
+		}
+		if contested > 0 {
+			status = "ambiguous"
+			candidateCount = contested
+		}
+	}
 	if len(candidates) > 0 {
 		topPriority := candidates[0].priority
 		top := make([]candidateMatch, 0, len(candidates))
@@ -251,6 +264,29 @@ func (service *Service) reconcileFile(ctx context.Context, fileID uuid.UUID, cas
 		service.queueTagging(ctx, fileID)
 	}
 	return service.reconcilePeers(ctx, peerIDs)
+}
+
+// contradictedTracks counts the catalogue tracks named by a file's tag or by
+// its proven identity when the two name different recordings. It is zero for
+// every file whose witnesses agree or where one of them is silent.
+func contradictedTracks(ctx context.Context, transaction pgx.Tx, fileID uuid.UUID) (int, error) {
+	var count int
+	err := transaction.QueryRow(ctx, `
+		SELECT count(DISTINCT tracks.id)
+		FROM library_files file
+		JOIN library_file_identities identity ON identity.library_file_id = file.id
+		JOIN tracks ON tracks.musicbrainz_recording_id IN (
+		        SELECT recording_id_aliases(file.musicbrainz_recording_id))
+		    OR tracks.musicbrainz_recording_id IN (
+		        SELECT recording_id_aliases(identity.musicbrainz_recording_id))
+		WHERE file.id = $1
+		  AND file.missing_at IS NULL
+		  AND file.musicbrainz_recording_id IS NOT NULL
+		  AND identity.musicbrainz_recording_id IS NOT NULL
+		  AND identity.musicbrainz_recording_id NOT IN (
+		      SELECT recording_id_aliases(file.musicbrainz_recording_id))
+	`, fileID).Scan(&count)
+	return count, err
 }
 
 // mappedTracks is every catalogue track a file answers as things stand.
@@ -399,7 +435,8 @@ func heldByOthers(top []candidateMatch) bool {
 // It reads only musicbrainz_recording_id and resolved_identity groups. Every
 // track such a group names carries the file's own musicbrainz_recording_id
 // (read through recording_id_aliases), so fileCount there counts files whose
-// own identity resolves to that exact recording, and a track such a group
+// own identity resolves to that exact recording (the proven identity first,
+// else the tag), and a track such a group
 // already holds was won by a file that passed the identical test. So a group
 // like this can only fail to be claimable because some other file resolves to
 // the one recording it names: fileCount above one is that file counted
@@ -820,22 +857,26 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		WITH file AS (
 		    SELECT * FROM library_files WHERE id = $1 AND missing_at IS NULL
 		), known AS (
-		    -- The recording this file is already known to be, from an identifier
-		    -- it carries or from a resolution recorded against it. Read once and
-		    -- on its own, because the only arm that needs it is the tag arm and
-		    -- joining the identity row onto every candidate would say nothing to
-		    -- the others.
-		    --
-		    -- Its own tag comes first. Both are identifiers, and a file that
-		    -- carries one has already been matched through it above; reaching the
-		    -- tag arm at all means the catalogue holds no track for it.
-		    SELECT coalesce(
-		               file.musicbrainz_recording_id,
-		               (SELECT identity.musicbrainz_recording_id
-		                FROM library_file_identities identity
-		                WHERE identity.library_file_id = file.id)
-		           ) AS recording_id
+		    -- The two recordings this file is already known to be: the one its
+		    -- own tag names and the one a resolution proved for its audio. They
+		    -- are kept apart because either one contradicting a track voids the
+		    -- pair, and because the two can contradict each other.
+		    SELECT file.musicbrainz_recording_id AS tag_recording_id,
+		           (SELECT identity.musicbrainz_recording_id
+		            FROM library_file_identities identity
+		            WHERE identity.library_file_id = file.id) AS identity_recording_id
 		    FROM file
+		), split AS (
+		    -- A file whose tag names one recording and whose audio was proven to
+		    -- be another. A contradiction voids a pair whatever else agrees, so
+		    -- neither witness may link the file on its own.
+		    SELECT coalesce(
+		               known.tag_recording_id IS NOT NULL
+		               AND known.identity_recording_id IS NOT NULL
+		               AND known.identity_recording_id NOT IN (
+		                   SELECT recording_id_aliases(known.tag_recording_id)),
+		               false) AS contradicted
+		    FROM known
 		), candidates AS (
 		    SELECT tracks.id AS track_id, 'verified_download'::text AS method,
 		           1.0::real AS confidence, 1 AS priority,
@@ -864,20 +905,25 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		    -- that is one. Widening what meets without widening what is counted
 		    -- would let a file carrying the retired identifier and a file
 		    -- carrying the surviving one each believe it were alone.
+		    --
+		    -- Each other file is counted by one recording, the one its audio was
+		    -- proven to be, else the one its tag names. A file whose tag says X
+		    -- and whose audio is proven Z cannot take X, so it is no contender.
 		    SELECT tracks.id AS track_id, 'musicbrainz_recording_id'::text AS method,
 		           1.0::real AS confidence, 2 AS priority,
 		           (SELECT count(*) FROM library_files others
 		            LEFT JOIN library_file_identities other_identity
 		                   ON other_identity.library_file_id = others.id
 		            WHERE others.missing_at IS NULL
-		              AND (others.musicbrainz_recording_id IN (
-		                       SELECT recording_id_aliases(file.musicbrainz_recording_id))
-		                   OR other_identity.musicbrainz_recording_id IN (
-		                       SELECT recording_id_aliases(file.musicbrainz_recording_id)))) AS file_count
+		              AND coalesce(other_identity.musicbrainz_recording_id,
+		                           others.musicbrainz_recording_id) IN (
+		                  SELECT recording_id_aliases(file.musicbrainz_recording_id))) AS file_count
 		    FROM file
+		    CROSS JOIN split
 		    JOIN tracks ON tracks.musicbrainz_recording_id IN (
 		        SELECT recording_id_aliases(file.musicbrainz_recording_id))
 		    WHERE file.musicbrainz_recording_id IS NOT NULL
+		      AND NOT split.contradicted
 		    UNION ALL
 		    -- An identity the providers proved for a file that carries no
 		    -- identifier of its own is an identifier all the same. It is how
@@ -888,23 +934,36 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		            LEFT JOIN library_file_identities other_identity
 		                   ON other_identity.library_file_id = others.id
 		            WHERE others.missing_at IS NULL
-		              AND (others.musicbrainz_recording_id IN (
-		                       SELECT recording_id_aliases(identity.musicbrainz_recording_id))
-		                   OR other_identity.musicbrainz_recording_id IN (
-		                       SELECT recording_id_aliases(identity.musicbrainz_recording_id))))
+		              AND coalesce(other_identity.musicbrainz_recording_id,
+		                           others.musicbrainz_recording_id) IN (
+		                  SELECT recording_id_aliases(identity.musicbrainz_recording_id)))
 		    FROM file
+		    CROSS JOIN split
 		    JOIN library_file_identities identity ON identity.library_file_id = file.id
 		    JOIN tracks ON tracks.musicbrainz_recording_id IN (
 		        SELECT recording_id_aliases(identity.musicbrainz_recording_id))
 		    WHERE identity.musicbrainz_recording_id IS NOT NULL
+		      AND NOT split.contradicted
 		    UNION ALL
+		    -- An ISRC can be shared by recordings MusicBrainz never merged, so a
+		    -- track whose recording either known recording contradicts is voided
+		    -- here exactly as in the tag arm below.
 		    SELECT tracks.id, 'isrc', 0.98::real, 4,
 		           (SELECT count(*) FROM library_files others
 		            WHERE others.missing_at IS NULL
 		              AND upper(btrim(others.isrc)) = upper(btrim(file.isrc)))
 		    FROM file
+		    CROSS JOIN known
 		    JOIN tracks ON upper(btrim(tracks.isrc)) = upper(btrim(file.isrc))
 		    WHERE file.isrc IS NOT NULL
+		      AND NOT (known.tag_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id NOT IN (
+		                   SELECT recording_id_aliases(known.tag_recording_id)))
+		      AND NOT (known.identity_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id NOT IN (
+		                   SELECT recording_id_aliases(known.identity_recording_id)))
 		    UNION ALL
 		    -- Tags, read beside the one field Schall does not write.
 		    --
@@ -962,10 +1021,17 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		      -- literally that is a difference, and a difference voids the pair
 		      -- whatever else agrees — so widening only what meets would have
 		      -- left this to strike the same pair out again.
-		      AND NOT (known.recording_id IS NOT NULL
+		      -- The tag and the proven identity are each checked. Reading only
+		      -- the tag would let a file whose audio is another recording link
+		      -- here by the same tag the arm above refused.
+		      AND NOT (known.tag_recording_id IS NOT NULL
 		               AND tracks.musicbrainz_recording_id IS NOT NULL
 		               AND tracks.musicbrainz_recording_id NOT IN (
-		                   SELECT recording_id_aliases(known.recording_id)))
+		                   SELECT recording_id_aliases(known.tag_recording_id)))
+		      AND NOT (known.identity_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id IS NOT NULL
+		               AND tracks.musicbrainz_recording_id NOT IN (
+		                   SELECT recording_id_aliases(known.identity_recording_id)))
 		      AND NOT (file.isrc IS NOT NULL AND tracks.isrc IS NOT NULL
 		               AND upper(btrim(tracks.isrc)) <> upper(btrim(file.isrc)))
 		), ranked AS (
@@ -1026,6 +1092,9 @@ WITH file AS (
     JOIN tracks ON tracks.id = downloads.track_id
     WHERE download_requests.import_status = 'imported'
     UNION ALL
+    -- These two arms skip the contradiction check the reconcile applies. A
+    -- file whose tag and proven identity disagree is put to a person, and this
+    -- list is where the person sees both recordings and what named each.
     SELECT tracks.id AS track_id, 'musicbrainz_recording_id'::text AS method,
            1.0::real AS confidence, 2 AS priority
     FROM file JOIN tracks ON tracks.musicbrainz_recording_id = file.musicbrainz_recording_id
