@@ -339,7 +339,7 @@ func TestASettledLibraryWitnessOffersAWantsCopiesAgain(t *testing.T) {
 	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
 	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld, `{}`)
 
-	offered, err := queries.CopiesToJudgeAgainForWant(ctx, targetID)
+	offered, err := queries.CopiesToJudgeAgainForWant(ctx, targetID, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainForWant() error = %v", err)
 	}
@@ -349,7 +349,7 @@ func TestASettledLibraryWitnessOffersAWantsCopiesAgain(t *testing.T) {
 
 	settledWitnessFor(ctx, t, pool, recordingOf(ctx, t, pool, targetID))
 
-	offered, err = queries.CopiesToJudgeAgainForWant(ctx, targetID)
+	offered, err = queries.CopiesToJudgeAgainForWant(ctx, targetID, time.Time{})
 	if err != nil {
 		t.Fatalf("CopiesToJudgeAgainForWant() error = %v", err)
 	}

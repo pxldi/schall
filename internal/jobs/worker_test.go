@@ -68,6 +68,8 @@ type fakeQueue struct {
 	askAcoustIDAgainQueuedFor     time.Time
 	judgeAgainQueuedFor           time.Time
 	judgeAgainQueuedAfter         uuid.UUID
+	judgeAgainQueuedSince         time.Time
+	firstStarted                  time.Time
 	spectrumSweepQueuedFor        time.Time
 	upgradeSweepQueuedFor         time.Time
 	upgradeSweepPayload           json.RawMessage
@@ -462,14 +464,21 @@ func (queue *fakeQueue) QueueSpectrumSweep(_ context.Context, runAfter time.Time
 	return nil
 }
 func (queue *fakeQueue) QueueJudgeCopiesAgainAfter(
-	_ context.Context, runAfter time.Time, after uuid.UUID,
+	_ context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
 ) error {
+	queue.judgeAgainQueuedSince = since
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
 	}
 	queue.judgeAgainQueuedFor = runAfter
 	queue.judgeAgainQueuedAfter = after
 	return nil
+}
+
+// StartedFirstAt answers firstStarted, the moment a test says the job was
+// first claimed.
+func (queue *fakeQueue) StartedFirstAt(_ context.Context, _ Job) (time.Time, error) {
+	return queue.firstStarted, nil
 }
 func (queue *fakeQueue) QueueAskAcoustIDAgain(_ context.Context, runAfter time.Time) error {
 	if queue.scheduleErr != nil {
@@ -583,6 +592,8 @@ type fakeImporter struct {
 	// judgeAgainNext the last want it answers taking (uuid.Nil: none left).
 	judgedAgainAfter uuid.UUID
 	judgeAgainNext   uuid.UUID
+	// judgedSince is the first-start moment a judging pass was given.
+	judgedSince time.Time
 	// The same two for the pass over the copies refused on the artist tag.
 	judgedCreditRefusals   int
 	askedAcoustIDAgain     int
@@ -600,9 +611,12 @@ func (importer *fakeImporter) Import(_ context.Context, requestID uuid.UUID) err
 	return importer.err
 }
 
-func (importer *fakeImporter) JudgeAgain(_ context.Context, after uuid.UUID) (uuid.UUID, bool, error) {
+func (importer *fakeImporter) JudgeAgain(
+	_ context.Context, after uuid.UUID, since time.Time,
+) (uuid.UUID, bool, error) {
 	importer.judgedAgain++
 	importer.judgedAgainAfter = after
+	importer.judgedSince = since
 	return importer.judgeAgainNext, importer.judgeAgainNext != uuid.Nil, importer.judgeAgainErr
 }
 
@@ -616,8 +630,11 @@ func (importer *fakeImporter) JudgeCreditRefusalsAgain(_ context.Context) error 
 	return importer.judgeCreditRefusalsErr
 }
 
-func (importer *fakeImporter) JudgeWantCopies(_ context.Context, targetID uuid.UUID) error {
+func (importer *fakeImporter) JudgeWantCopies(
+	_ context.Context, targetID uuid.UUID, since time.Time,
+) error {
 	importer.judgedWants = append(importer.judgedWants, targetID)
+	importer.judgedSince = since
 	return importer.judgeAgainErr
 }
 func (importer *fakeImporter) FingerprintHeldCopies(_ context.Context) (bool, error) {
@@ -5042,6 +5059,42 @@ func TestAPartOfThePassQueuesTheNextFromWhereItStopped(t *testing.T) {
 	if queue.judgeAgainQueuedAfter != last || queue.judgeAgainQueuedFor.IsZero() {
 		t.Fatalf("next part queued after %s at %s, want after %s",
 			queue.judgeAgainQueuedAfter, queue.judgeAgainQueuedFor, last)
+	}
+}
+
+// A part of the pass is given the moment the pass first started and hands it to
+// the next part, so copies judged before a restart are not judged again.
+func TestAPartOfThePassCarriesWhenThePassFirstStarted(t *testing.T) {
+	started := time.Date(2026, 10, 12, 22, 32, 0, 0, time.UTC)
+	queue := &fakeQueue{firstStarted: started}
+	importer := &fakeImporter{judgeAgainNext: uuid.New()}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: JudgeCopiesAgain, Attempts: 7, MaxAttempts: 1,
+	})
+
+	if !importer.judgedSince.Equal(started) || !queue.judgeAgainQueuedSince.Equal(started) {
+		t.Fatalf("judged since %s, next part since %s, want both %s",
+			importer.judgedSince, queue.judgeAgainQueuedSince, started)
+	}
+}
+
+// One want's judge is given the moment it first started too, so a restart in
+// the middle of a want with many copies does not start the want over.
+func TestAWantsJudgeIsGivenWhenItFirstStarted(t *testing.T) {
+	started := time.Date(2026, 10, 12, 22, 32, 0, 0, time.UTC)
+	queue := &fakeQueue{firstStarted: started}
+	importer := &fakeImporter{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).WithDownloadImporter(importer)
+	payload, _ := json.Marshal(map[string]uuid.UUID{"acquisition_target_id": uuid.New()})
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: JudgeWantCopies, Payload: payload, Attempts: 2, MaxAttempts: 3,
+	})
+
+	if !importer.judgedSince.Equal(started) {
+		t.Fatalf("judged since %s, want %s", importer.judgedSince, started)
 	}
 }
 

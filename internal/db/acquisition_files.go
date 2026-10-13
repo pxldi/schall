@@ -2839,17 +2839,21 @@ func (q *Queries) QueueJudgeCopiesAgain(ctx context.Context, runAfter time.Time)
 // already decided about, from the want after the one given. The part that just
 // finished calls it once it is complete, so the guard above sees no pass and
 // lets this one in.
+//
+// since is when the pass first started, carried so the next part skips the
+// copies the pass already judged.
 func (q *Queries) QueueJudgeCopiesAgainAfter(
-	ctx context.Context, runAfter time.Time, after uuid.UUID,
+	ctx context.Context, runAfter time.Time, after uuid.UUID, since time.Time,
 ) error {
 	_, err := q.db.Exec(ctx, `
 		INSERT INTO jobs (kind, payload, max_attempts, run_after)
-		SELECT 'judge_copies_again', jsonb_build_object('after', $2::uuid), 1, $1
+		SELECT 'judge_copies_again',
+		       jsonb_build_object('after', $2::uuid, 'since', $3::timestamptz), 1, $1
 		WHERE NOT EXISTS (
 			SELECT 1 FROM jobs
 			WHERE kind = 'judge_copies_again' AND status IN ('queued', 'running')
 		)
-	`, runAfter, after)
+	`, runAfter, after, since)
 	if err != nil {
 		return fmt.Errorf("ask for the next part of a pass over the copies already decided about: %w", err)
 	}
@@ -3224,17 +3228,21 @@ type JudgeAgainRow struct {
 //     recording. A copy the sample itself refused is left alone — nothing about
 //     that has changed — as is one refused on its own tags.
 func (q *Queries) CopiesToJudgeAgain(ctx context.Context) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, uuid.Nil)
+	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, uuid.Nil, time.Time{})
 }
 
 // CopiesToJudgeAgainAfter is CopiesToJudgeAgain for the wants whose id sorts
-// after the one given. A pass works through the wants in id order and carries
-// the last one it finished, so a restart picks up there instead of offering
-// again the copies it already judged. uuid.Nil starts from the first want.
+// after the one given, decided before the moment given. A pass works through
+// the wants in id order and carries the last one it finished, so a restart
+// picks up there instead of offering again the copies it already judged.
+// uuid.Nil starts from the first want. The moment is when the pass first
+// started: a copy decided since then was judged by this pass, or by a live
+// validation under the same rules, and a restart in the middle of a part
+// skips it. A zero moment bounds nothing.
 func (q *Queries) CopiesToJudgeAgainAfter(
-	ctx context.Context, after uuid.UUID,
+	ctx context.Context, after uuid.UUID, before time.Time,
 ) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, after)
+	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{}, after, before)
 }
 
 // CopiesToJudgeAgainForWant is CopiesToJudgeAgain narrowed to one want. It is
@@ -3248,10 +3256,13 @@ func (q *Queries) CopiesToJudgeAgainAfter(
 // the narrower bounds: it walks every want in the queue, and offering it every
 // copy of every want the library can now speak for would start a decode of most
 // of the queue on one press.
+//
+// before is CopiesToJudgeAgainAfter's: copies decided since the pass first
+// started are not offered again after a restart.
 func (q *Queries) CopiesToJudgeAgainForWant(
-	ctx context.Context, targetID uuid.UUID,
+	ctx context.Context, targetID uuid.UUID, before time.Time,
 ) ([]JudgeAgainRow, error) {
-	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{UUID: targetID, Valid: true}, uuid.Nil)
+	return q.copiesToJudgeAgain(ctx, uuid.NullUUID{UUID: targetID, Valid: true}, uuid.Nil, before)
 }
 
 // unaskedRegistrationSummary is the opening of what a copy is told when its
@@ -3293,8 +3304,12 @@ const libraryCanSpeakForTheWant = `
 `
 
 func (q *Queries) copiesToJudgeAgain(
-	ctx context.Context, targetID uuid.NullUUID, after uuid.UUID,
+	ctx context.Context, targetID uuid.NullUUID, after uuid.UUID, before time.Time,
 ) ([]JudgeAgainRow, error) {
+	var decidedBefore *time.Time
+	if !before.IsZero() {
+		decidedBefore = &before
+	}
 	rows, err := q.db.Query(ctx, `
 		SELECT copies.id, copies.acquisition_target_id, requests.id, requests.provider,
 		       requests.source_directory, copies.file_name, copies.verdict,
@@ -3339,8 +3354,9 @@ func (q *Queries) copiesToJudgeAgain(
 		  )
 		  AND ($1::uuid IS NULL OR targets.id = $1)
 		  AND targets.id > $3
+		  AND ($4::timestamptz IS NULL OR copies.decided_at < $4)
 		ORDER BY copies.acquisition_target_id, copies.decided_at, copies.id
-	`, targetID, settledProofs, after)
+	`, targetID, settledProofs, after, decidedBefore)
 	if err != nil {
 		return nil, fmt.Errorf("list the copies worth judging again: %w", err)
 	}
