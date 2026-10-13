@@ -32,12 +32,19 @@ var ErrNothingToRemove = errors.New("this want was merged into another one")
 // removedSummary is what a removed want says about itself.
 const removedSummary = "Removed from wishlist."
 
-// FileRemover deletes one library file. library.Remover is the one in use, so
-// every deletion goes through the same path the duplicates screen and the
-// weekly playlist use.
+// FileRemover deletes one library file once allowed, run in the deleting
+// transaction, agrees. library.Remover is the one in use, so every deletion
+// goes through the same path the duplicates screen and the weekly playlist use.
 type FileRemover interface {
-	Remove(ctx context.Context, fileID uuid.UUID) (string, error)
+	RemoveIf(ctx context.Context, fileID uuid.UUID, allowed func(context.Context, pgx.Tx) error) (string, error)
 }
+
+// errNotScheduled and errStillNeeded are the two reasons the last check before
+// a delete refuses it.
+var (
+	errNotScheduled = errors.New("the removal was cancelled before its file went")
+	errStillNeeded  = errors.New("something still needs the file")
+)
 
 // Scheduled is one file waiting to be deleted.
 type Scheduled struct {
@@ -331,10 +338,9 @@ const stillNeeded = `
 // Sweep deletes every file whose day has come and nothing else needs.
 //
 // Each row is judged again just before its file goes, because 30 days is long
-// enough for anything to have changed. The audio is deleted before the row is
-// settled as removed: a row saying removed beside a file still on disc would
-// be a lie, and a row still scheduled beside a deleted file is settled as gone
-// by the next pass.
+// enough for anything to have changed. The row is settled as removed in the
+// transaction that deletes the file, which commits only after the audio left
+// the disc: a row saying removed beside a file still on disc would be a lie.
 func (service *Service) Sweep(ctx context.Context) (Swept, error) {
 	var swept Swept
 	rows, err := service.pool.Query(ctx, `
@@ -370,31 +376,42 @@ func (service *Service) settle(ctx context.Context, item due, swept *Swept) erro
 		swept.Gone++
 		return service.close(ctx, item.id, "gone", "the file left the library first")
 	}
+	// Judged inside the transaction that deletes the file, with the row
+	// locked: a Keep waits for the delete to commit, and a press of want or a
+	// new want committed before this check spares the file.
 	var reason string
-	if err := service.pool.QueryRow(ctx, stillNeeded, item.fileID.UUID, item.recording).Scan(&reason); err != nil {
-		return fmt.Errorf("check whether %s is still needed: %w", item.path, err)
-	}
-	if reason != "" {
+	_, err := service.remover.RemoveIf(ctx, item.fileID.UUID, func(ctx context.Context, tx pgx.Tx) error {
+		var state string
+		if err := tx.QueryRow(ctx, `
+			SELECT state FROM scheduled_removals WHERE id = $1 FOR UPDATE
+		`, item.id).Scan(&state); err != nil {
+			return fmt.Errorf("lock removal %s: %w", item.id, err)
+		}
+		if state != "scheduled" {
+			return errNotScheduled
+		}
+		if err := tx.QueryRow(ctx, stillNeeded, item.fileID.UUID, item.recording).Scan(&reason); err != nil {
+			return fmt.Errorf("check whether %s is still needed: %w", item.path, err)
+		}
+		if reason != "" {
+			return errStillNeeded
+		}
+		_, err := tx.Exec(ctx, `
+			UPDATE scheduled_removals
+			SET state = 'removed', settled_at = $2, settled_reason = $3
+			WHERE id = $1
+		`, item.id, service.now(), "removed 30 days earlier and not wanted again")
+		return err
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, errNotScheduled):
+		return nil
+	case errors.Is(err, errStillNeeded):
 		swept.Spared++
 		service.logger.Info().Str("path", item.path).Str("reason", reason).
 			Msg("removal spared")
 		return service.close(ctx, item.id, "spared", reason)
-	}
-	// Read the row once more: a press of want between the read above and now
-	// cancelled it, and that press wins.
-	var state string
-	if err := service.pool.QueryRow(ctx, `
-		SELECT state FROM scheduled_removals WHERE id = $1
-	`, item.id).Scan(&state); err != nil {
-		return err
-	}
-	if state != "scheduled" {
-		return nil
-	}
-
-	_, err := service.remover.Remove(ctx, item.fileID.UUID)
-	switch {
-	case err == nil:
 	case errors.Is(err, library.ErrFileGone):
 		swept.Gone++
 		return service.close(ctx, item.id, "gone", "the file left the library first")
@@ -405,7 +422,7 @@ func (service *Service) settle(ctx context.Context, item due, swept *Swept) erro
 	service.logger.Info().Str("path", item.path).
 		Str("target_id", item.targetID.String()).
 		Msg("removed file deleted")
-	return service.close(ctx, item.id, "removed", "removed 30 days earlier and not wanted again")
+	return nil
 }
 
 func (service *Service) close(ctx context.Context, id uuid.UUID, state, reason string) error {

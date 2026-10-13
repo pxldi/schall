@@ -72,6 +72,16 @@ func (remover *Remover) WithMatcher(matcher FileContender) *Remover {
 // fails the other way instead — the file gone and the row still there — and the
 // next scan reads that as a file that went missing, which it is.
 func (remover *Remover) Remove(ctx context.Context, fileID uuid.UUID) (string, error) {
+	return remover.RemoveIf(ctx, fileID, nil)
+}
+
+// RemoveIf is Remove with a last check. allowed runs inside the transaction
+// that holds the file's row and deletes it, so a licence it reads and settles
+// there cannot be withdrawn between the check and the delete. An error from
+// allowed leaves the file and its row as they were and is returned as is.
+func (remover *Remover) RemoveIf(
+	ctx context.Context, fileID uuid.UUID, allowed func(context.Context, pgx.Tx) error,
+) (string, error) {
 	// Read before the row goes: afterwards there is nothing left to compare
 	// the rest of the library against.
 	var peers []uuid.UUID
@@ -108,6 +118,11 @@ func (remover *Remover) Remove(ctx context.Context, fileID uuid.UUID) (string, e
 	// back.
 	if err := containedIn(rootPath, path); err != nil {
 		return "", err
+	}
+	if allowed != nil {
+		if err := allowed(ctx, transaction); err != nil {
+			return "", err
+		}
 	}
 	// Everything this file admitted goes back to a question before the file
 	// itself goes: a copy was let into the library because its audio agreed
