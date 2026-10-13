@@ -214,7 +214,9 @@
       await api.followHeldArtist(artistID);
       await api.setArtistMonitorLevel(artistID, level);
     },
-    onSuccess: async () => {
+    // Settled rather than succeeded: when the level fails after the follow
+    // landed, the artist is followed and the page has to read that back.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),

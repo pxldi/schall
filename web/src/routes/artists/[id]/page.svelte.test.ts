@@ -914,3 +914,39 @@ describe('the safety-net poll', () => {
     expect(await artistReadsOver(detail({ followed: false, refreshStatus: 'pending' }))).toBe(0);
   });
 });
+
+describe('a follow that half lands', () => {
+  // Following and setting the level are two requests. When the second fails
+  // the artist is followed all the same, and the page has to say so.
+  it('reads the artist again when the follow lands but the level does not', async () => {
+    let followed = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        const method = (init?.method ?? 'GET').toUpperCase();
+        const body = (value: unknown, status = 200) =>
+          new Response(JSON.stringify(value), { status });
+        if (url.pathname === `/api/v1/artists/${artistID}` && method === 'GET') {
+          return body(detail({ followed, monitorLevel: 'main' }));
+        }
+        if (url.pathname === `/api/v1/artists/${artistID}/follow` && method === 'POST') {
+          followed = true;
+          return body(detail({ followed: true }));
+        }
+        if (url.pathname === `/api/v1/artists/${artistID}/monitor`) {
+          return body({ title: 'database is unavailable' }, 503);
+        }
+        return body({ items: [], total: 0, limit: 24, offset: 0 });
+      })
+    );
+    opened();
+
+    const select = (await screen.findByLabelText('Follow this artist')) as HTMLSelectElement;
+    await fireEvent.change(select, { target: { value: 'everything' } });
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Follow this artist') as HTMLSelectElement).value).toBe('main')
+    );
+  });
+});
