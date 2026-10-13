@@ -112,8 +112,8 @@ describe('the setting', () => {
 
     expect(await screen.findByText('Transcode after import')).toBeTruthy();
     expect(screen.queryByText('off')).toBeNull();
-    expect(screen.queryByText(/no files in the library need to be shrunk/)).toBeNull();
-    expect(screen.queryByText('turn re-encoding on above to use this')).toBeNull();
+    expect(screen.queryByText('no files to convert')).toBeNull();
+    expect(screen.queryByText('turn on Transcode after import first')).toBeNull();
   });
 
   it('says when it runs and when the original is deleted', async () => {
@@ -121,7 +121,7 @@ describe('the setting', () => {
 
     expect(
       await screen.findByText(
-        'Runs after a file is proven and imported; the original is deleted only once the MP3 is written and checked.',
+        'Converts new imports to MP3. The original is deleted once the MP3 checks out.',
         { exact: false }
       )
     ).toBeTruthy();
@@ -147,7 +147,7 @@ describe('the setting', () => {
     opened();
 
     const choice = await screen.findByText(
-      'Lossless files, and lossy ones above the target rate'
+      'Lossless, and lossy above the target'
     );
     const choiceButton = choice.closest('button') as HTMLButtonElement;
     await waitFor(() => expect(choiceButton.disabled).toBe(false));
@@ -191,15 +191,15 @@ describe('the setting', () => {
     storedSettings = settings({ transcoderPresent: false, transcoderDetail: 'ffmpeg could not be found' });
     opened();
 
-    expect(await screen.findByText(/ffmpeg could not be found/)).toBeTruthy();
-    expect(screen.getByText(/Install ffmpeg to use this setting/)).toBeTruthy();
+    expect(await screen.findByText(/ffmpeg could not be found\. Install ffmpeg/)).toBeTruthy();
+    expect(screen.getByText(/Install ffmpeg to use this\./)).toBeTruthy();
   });
 
   it('says nothing about a missing encoder once one is found', async () => {
     opened();
 
     await screen.findByText('Transcode after import');
-    expect(screen.queryByText(/Install ffmpeg to use this setting/)).toBeNull();
+    expect(screen.queryByText(/Install ffmpeg to use this\./)).toBeNull();
   });
 
   it('shows the request failed rather than blaming ffmpeg when settings cannot be read', async () => {
@@ -210,8 +210,8 @@ describe('the setting', () => {
     opened();
 
     expect(await screen.findByText('Schall could not read the settings.')).toBeTruthy();
-    expect(screen.queryByText(/ffmpeg could not be found/)).toBeNull();
-    expect(screen.queryByText(/Install ffmpeg to use this setting/)).toBeNull();
+    expect(screen.queryByText(/ffmpeg/)).toBeNull();
+    expect(screen.queryByText(/Install ffmpeg to use this\./)).toBeNull();
   });
 
   it('shows the failure beside the control when saving is refused', async () => {
@@ -247,7 +247,7 @@ describe('transcoding the existing library', () => {
     storedSweep = sweep({ eligible: 42 });
     opened();
 
-    expect(await screen.findByText(/42 files are eligible and would be shrunk/)).toBeTruthy();
+    expect(await screen.findByText(/42 files to convert/)).toBeTruthy();
   });
 
   it('posts to the sweep endpoint when the button is pressed', async () => {
@@ -272,7 +272,7 @@ describe('transcoding the existing library', () => {
       name: /Transcode the library/
     })) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(await screen.findByText('turn re-encoding on above to use this')).toBeTruthy();
+    expect(await screen.findByText('turn on Transcode after import first')).toBeTruthy();
   });
 
   it('says the pass could not be read rather than that nothing needs shrinking', async () => {
@@ -289,8 +289,8 @@ describe('transcoding the existing library', () => {
     );
     opened();
 
-    expect(await screen.findByText('The library pass could not be read.')).toBeTruthy();
-    expect(screen.queryByText(/no files in the library need to be shrunk/)).toBeNull();
+    expect(await screen.findByText("Couldn't load transcode status.")).toBeTruthy();
+    expect(screen.queryByText('no files to convert')).toBeNull();
   });
 
   it('shows progress while a pass is running', async () => {

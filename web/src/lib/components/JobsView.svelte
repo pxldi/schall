@@ -186,17 +186,17 @@
     },
     sweep_preview_anchors: {
       label: 'Preview sweep',
-      does: 'Fetches a sample of each wanted song',
+      does: 'Fetches a sample of each wishlist song',
       waitsFor: 'a worker to run it'
     },
     tag_library: {
       label: 'Tag write sweep',
-      does: 'Rewrites tags for files whose catalogue data changed since they were matched',
+      does: 'Rewrites tags when catalogue data changes',
       waitsFor: 'a worker to run it'
     },
     sweep_duplicates: {
       label: 'Duplicate sweep',
-      does: 'Keeps one proven copy of duplicate recordings',
+      does: 'Keeps one proven copy of duplicate songs',
       waitsFor: 'a worker to run it'
     },
     sweep_loudness: {
@@ -241,7 +241,7 @@
     },
     sweep_transcode: {
       label: 'Transcode sweep',
-      does: 'Shrinks library files to the configured format',
+      does: 'Converts library files to the set format',
       waitsFor: 'a transcode scan'
     },
     refresh_weekly_playlist: {
@@ -251,7 +251,7 @@
     },
     refresh_new_releases_playlist: {
       label: 'New releases refresh',
-      does: 'Updates the playlist of new releases the library owns',
+      does: 'Updates the new releases playlist',
       waitsFor: 'a feed pass or library scan'
     }
   };
@@ -575,7 +575,7 @@
       detail:
         press.pending || press.requeued !== false
           ? ''
-          : `Already queued ${elapsedInWords(queued, at)}. Pressing again does not queue it twice.`
+          : `Already queued ${elapsedInWords(queued, at)}. It won't be queued twice.`
     };
   }
 
@@ -713,7 +713,7 @@
   // So the column answers in one of two grammars: a time, set as a tabular
   // figure, or a condition, set as prose with a quieter lead.
   function waitsFor(item: RecurringJob) {
-    if (item.running) return { lead: 'Asks for', rest: 'its next time when this pass finishes' };
+    if (item.running) return { lead: 'Reschedules', rest: 'when this pass finishes' };
     const copy = sweepCopy[item.kind];
     if (copy) return { lead: 'Waits for', rest: copy.waitsFor };
     return { lead: '', rest: item.detail ?? 'Nothing is scheduled' };
@@ -730,7 +730,7 @@
 
   function causeDetail(cause: FailureCause) {
     return cause.cause === 'other'
-      ? 'Review each recorded error below, then retry the jobs you want to run again.'
+      ? 'Check each error below, then retry the ones you want.'
       : cause.detail;
   }
 </script>
@@ -799,7 +799,7 @@
         <!-- The heading already says the queue is empty. What is worth adding is
              the one thing that stops an empty queue reading as a dead worker. -->
         <p class="text-meta leading-[1.65] text-ink-2">
-          The sweeps below are still on their own clocks.
+          The sweeps below still run on schedule.
         </p>
       </EmptyPanel>
     {:else}
@@ -944,7 +944,7 @@
 
       {#if $queue.data?.truncated}
         <p class="mt-3 text-meta text-ink-4">
-          Top of the queue — {$queue.data.total.toLocaleString()} jobs are running or waiting in all.
+          Top of the queue. {$queue.data.total.toLocaleString()} jobs running or waiting in total.
         </p>
       {/if}
     {/if}
@@ -980,7 +980,7 @@
     {#if $failed.isError && !$failed.data}
       {@render Refused($failed.error, () => $failed.refetch())}
     {:else if causes.length === 0}
-      <EmptyPanel role="ok" level={3} heading="Nothing has spent its attempts" />
+      <EmptyPanel role="ok" level={3} heading="No failed jobs" />
     {:else}
       <!-- One row per cause, not per job. Seventy-one jobs stopped by one
            outage are one fact, and seventy-one rows saying it seventy-one times
@@ -1251,7 +1251,7 @@
        database behind it, and the status card on Sources is the closest
        reading of whether the server is up. -->
   <div class="flex flex-wrap items-start gap-3">
-    <ErrorNote {error} {retry} fallback="The job queue could not be read." class="min-w-0 flex-1" />
+    <ErrorNote {error} {retry} fallback="Couldn't load the job queue." class="min-w-0 flex-1" />
     <Button href="/settings/sources" variant="outline" size="sm" class="shrink-0">
       Check sources status
     </Button>

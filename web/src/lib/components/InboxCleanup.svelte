@@ -52,14 +52,14 @@
   // words; these are the reader's.
   const classNames: Record<InboxCleanupClass['class'], string> = {
     imported: 'Already imported',
-    refused: 'Refused copies',
-    settled: 'Wants that are finished',
-    unknown: 'Nothing recorded them',
-    kept_question: 'Waiting for your answer',
+    refused: 'Rejected copies',
+    settled: 'Finished wishlist songs',
+    unknown: 'No record in Schall',
+    kept_question: 'Waiting in Review',
     kept_open: 'Downloads still open',
     kept_recent: 'Changed in the last day',
     kept_unconfirmed: 'No library copy found',
-    kept_undecided: 'No rule covers them',
+    kept_undecided: 'No rule applies',
     kept_unsafe_path: 'Path changed while running'
   };
 
@@ -80,22 +80,22 @@
       onclick={() => $clean.mutate(true)}
     >
       {#if running || $clean.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
-      Count what can go
+      Count files
     </Button>
   </div>
 
   <span class="text-meta text-ink-3">
-    Deletes the downloaded files nothing needs any more. Review questions, open downloads and
-    anything changed in the last day stay.
+    Deletes downloaded files Schall no longer needs.
   </span>
 
   <details class="text-meta text-ink-3">
     <summary class="cursor-pointer text-ink-2">What is deleted</summary>
     <ul class="mt-1.5 flex list-disc flex-col gap-1 pl-4">
-      <li>the source of a download already in your library, checked on disk first</li>
-      <li>copies refused because the audio or the tags said this is another recording</li>
-      <li>copies of wants that are acquired, not wanted, or superseded</li>
-      <li>files no download and no copy in Schall recorded, including folders fetched by hand</li>
+      <li>downloads already in your library, checked on disk first</li>
+      <li>copies rejected as a different song</li>
+      <li>copies for wishlist songs that are done, removed or replaced</li>
+      <li>files Schall has no record of, including folders added by hand</li>
+      <li>kept: files waiting in Review, open downloads, anything changed in the last day</li>
     </ul>
   </details>
 
@@ -103,7 +103,7 @@
     <ErrorNote
       error={$cleanups.error}
       retry={() => $cleanups.refetch()}
-      fallback="The passes over the inbox could not be read."
+      fallback="Couldn't load inbox cleanups."
     />
   {/if}
 
@@ -122,12 +122,12 @@
        finished with files it could not remove. It is a server sentence, so it
        goes through the note, which keeps the raw words behind a disclosure. -->
   {#if latest?.error}
-    <ErrorNote bare error={latest.error} fallback="The last pass did not finish cleanly." />
+    <ErrorNote bare error={latest.error} fallback="The last cleanup had errors." />
   {/if}
 
   {#if running}
     <span class="text-meta text-ink-3">
-      {latest?.dryRun ? 'Counting' : 'Deleting'} — this reads every file in the inbox.
+      {latest?.dryRun ? 'Counting' : 'Deleting'}. This reads every file in the inbox.
     </span>
   {/if}
 
@@ -164,11 +164,11 @@
     </span>
 
     {#if counted.deleteFiles === 0}
-      <span class="text-meta text-ink-3">Nothing in the inbox can go.</span>
+      <span class="text-meta text-ink-3">Nothing to delete.</span>
     {:else if confirming}
       <div class="flex flex-wrap items-center gap-2.5">
         <span class="text-meta text-ink">
-          Delete {counted.deleteFiles.toLocaleString()} files? This cannot be undone.
+          Delete {counted.deleteFiles.toLocaleString()} files? This can't be undone.
         </span>
         <Button
           variant="danger"

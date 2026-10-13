@@ -60,7 +60,7 @@ describe('InboxCleanup', () => {
 
     expect(screen.queryByRole('button', { name: /^Delete/ })).toBeNull();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Count what can go' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Count files' }));
 
     await waitFor(() => expect(clean).toHaveBeenCalledWith(true));
   });
@@ -72,13 +72,13 @@ describe('InboxCleanup', () => {
 
     const remove = await screen.findByRole('button', { name: /^Delete 13,000 files/ });
     expect(screen.getByText('Already imported')).toBeTruthy();
-    expect(screen.getByText('Nothing recorded them')).toBeTruthy();
+    expect(screen.getByText('No record in Schall')).toBeTruthy();
 
     await fireEvent.click(remove);
 
     // Nothing is sent by revealing the confirmation.
     expect(clean).not.toHaveBeenCalled();
-    expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+    expect(screen.getByText(/This can't be undone/)).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 

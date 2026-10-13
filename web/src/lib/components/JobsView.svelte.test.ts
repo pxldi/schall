@@ -367,7 +367,7 @@ describe('JobsView', () => {
     const button = await vi.waitFor(() => jobPress('Queued'));
 
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    const detail = screen.getByText(/Pressing again does not queue it twice/);
+    const detail = screen.getByText(/It won't be queued twice/);
     expect(detail.textContent).toContain('Already queued 4 seconds ago');
     expect(detail.getAttribute('data-tone')).toBe('quiet');
   });
@@ -433,9 +433,9 @@ describe('JobsView', () => {
     expect(screen.getByText('Fetches and publishes listening recommendations')).toBeTruthy();
     expect(screen.getByText('Measures held copies for duplicate review')).toBeTruthy();
     expect(screen.getByText('Finds library files below the quality floor')).toBeTruthy();
-    expect(screen.getByText('Shrinks library files to the configured format')).toBeTruthy();
+    expect(screen.getByText('Converts library files to the set format')).toBeTruthy();
     expect(screen.getByText('Refreshes the weekly playlist and its trials')).toBeTruthy();
-    expect(screen.getByText('Updates the playlist of new releases the library owns')).toBeTruthy();
+    expect(screen.getByText('Updates the new releases playlist')).toBeTruthy();
   });
 
   // The artist goes in front of the subject and the count after it, so the two
@@ -510,7 +510,7 @@ describe('JobsView', () => {
     answering({ queue: queueOf([]), failed: [], schedule: [] });
     opened();
 
-    expect(await screen.findByText('Nothing has spent its attempts')).toBeTruthy();
+    expect(await screen.findByText('No failed jobs')).toBeTruthy();
     expect(await screen.findByText('No sweeps are scheduled')).toBeTruthy();
     expect(screen.queryByText('Last run')).toBeNull();
   });
@@ -528,7 +528,7 @@ describe('JobsView', () => {
 
     // All three sections read the same queue, so all three refuse together and
     // each carries the same way out.
-    const refusals = await screen.findAllByText(/The job queue could not be read\./);
+    const refusals = await screen.findAllByText(/Couldn't load the job queue\./);
     expect(refusals).toHaveLength(3);
     for (const link of screen.getAllByRole('link', { name: 'Check sources status' })) {
       expect(link.getAttribute('href')).toBe('/settings/sources');

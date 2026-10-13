@@ -119,14 +119,12 @@
     </div>
 
     <span class="text-meta text-ink-3">
-      Runs after a file is proven and imported; the original is deleted only once the MP3 is
-      written and checked.
+      Converts new imports to MP3. The original is deleted once the MP3 checks out.
     </span>
 
     {#if !transcoderPresent}
       <span class="text-meta text-ink-3">
-        {$imports.data?.transcoderDetail ?? 'ffmpeg could not be found'}, so nothing can be
-        shrunk. Install ffmpeg to use this setting.
+        {$imports.data?.transcoderDetail ?? 'ffmpeg not found'}. Install ffmpeg to use this.
       </span>
     {/if}
 
@@ -157,7 +155,7 @@
             Lossless files only
           </span>
           <span class="text-meta text-ink-3">
-            FLAC, WAV, ALAC, AIFF and the like — nothing already lossy is re-encoded
+            FLAC, WAV, ALAC, AIFF; lossy files stay as they are
           </span>
         </span>
       </button>
@@ -182,11 +180,10 @@
           <span
             class="text-body font-medium {when === 'above_target' ? 'text-ink' : 'text-ink-2'}"
           >
-            Lossless files, and lossy ones above the target rate
+            Lossless, and lossy above the target
           </span>
           <span class="text-meta text-ink-3">
-            also re-encodes a lossy file — MP3, AAC, Opus — whose own bit rate is higher than the
-            quality below
+            also MP3, AAC or Opus above the quality below
           </span>
         </span>
       </button>
@@ -234,8 +231,7 @@
     </div>
 
     <span class="text-meta text-ink-3">
-      Shrinks the files already in the library, the same way, in small batches that pick up where
-      they left off.
+      Converts files already in your library, in small batches.
     </span>
 
     <!-- The count waits for both reads. A pass that is still being read, or
@@ -244,26 +240,26 @@
       <ErrorNote
         error={$sweep.error}
         retry={() => $sweep.refetch()}
-        fallback="The library pass could not be read."
+        fallback="Couldn't load transcode status."
       />
     {:else if $imports.isPending || $sweep.isPending}
       <Skeleton class="h-3.5 w-72 max-w-full" />
     {:else}
       <span class="text-meta text-ink-3">
         {#if !enabled}
-          turn re-encoding on above to use this
+          turn on Transcode after import first
         {:else if eligible === 0}
-          no files in the library need to be shrunk under the current setting
+          no files to convert
         {:else}
-          {eligible.toLocaleString()} files are eligible and would be shrunk
+          {eligible.toLocaleString()} files to convert
         {/if}
       </span>
     {/if}
 
     {#if $sweep.data && $sweep.data.status !== 'idle'}
       <span class="numeric text-meta text-ink-3">
-        {$sweep.data.transcoded.toLocaleString()} shrunk · {$sweep.data.skipped.toLocaleString()} left
-        alone · {$sweep.data.failed.toLocaleString()} could not be shrunk
+        {$sweep.data.transcoded.toLocaleString()} converted · {$sweep.data.skipped.toLocaleString()}
+        skipped · {$sweep.data.failed.toLocaleString()} failed
       </span>
     {/if}
 

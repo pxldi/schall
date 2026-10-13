@@ -140,7 +140,7 @@
       <ErrorNote error={$phones.error} retry={() => $phones.refetch()} />
     {:else if ($phones.data?.items ?? []).length === 0}
       <!-- One line, the way the other settings cards say a list is empty. -->
-      <span class="text-meta text-ink-3">No phone has a token yet.</span>
+      <span class="text-meta text-ink-3">No phones yet.</span>
     {:else}
       <!-- Hairlines and space, the shape the other settings lists use. -->
       <div class="flex flex-col">
