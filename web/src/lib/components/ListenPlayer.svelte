@@ -4,9 +4,10 @@
   import { clock, listenFrom } from '$lib/review';
   import { listening } from '$lib/preview.svelte';
 
-  // The one player of listening mode. A new source starts on its own once the
-  // page has had a gesture, a third of the way in, and the next question's
-  // copy loads behind it so stepping on does not wait for the network.
+  // The one player of listening mode. A new source starts a third of the way
+  // in, on its own once the reader has answered or stepped, and the next
+  // question's copy loads behind it so stepping on does not wait for the
+  // network.
   //
   // The want's sample is not played first. The API keeps the sample's
   // fingerprint and alignment, never its audio, so there is nothing to play.
@@ -22,7 +23,8 @@
     next?: string;
     /** What is playing, for the reader who cannot see the button. */
     name: string;
-    /** Browsers refuse to start audio before a press or a key on the page. */
+    /** Off for the copy the mode opens on: nobody asked for sound yet. On once
+     * the reader has answered or stepped, so the next copy plays by itself. */
     autoplay: boolean;
   } = $props();
 
@@ -70,18 +72,8 @@
     void audioEl.play().catch(() => undefined);
   }
 
-  /** Space: plays a paused copy, and takes a playing one back to where it
-   * started, so the same passage can be heard again. */
-  export function replay() {
-    if (!audioEl) return;
-    if (audioEl.paused) {
-      begin();
-      return;
-    }
-    audioEl.currentTime = start;
-  }
-
-  function toggle() {
+  /** Space: plays a paused copy and pauses a playing one, like the button. */
+  export function toggle() {
     if (!audioEl) return;
     if (audioEl.paused) begin();
     else audioEl.pause();
@@ -109,7 +101,7 @@
       (event.currentTarget as HTMLElement).blur();
     }}
     aria-label={paused ? `Play ${name}` : `Pause ${name}`}
-    title={paused ? 'Play (Space)' : 'Pause'}
+    title={paused ? 'Play (Space)' : 'Pause (Space)'}
     class="flex size-12 shrink-0 items-center justify-center rounded-full border border-line-regular bg-surface-thick text-ink"
   >
     <Icon name={paused ? 'play' : 'pause'} size={18} />
