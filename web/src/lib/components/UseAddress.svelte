@@ -83,7 +83,7 @@
   class="cursor-pointer text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-duo-light)]"
   onclick={() => (open = !open)}
 >
-  Use address
+  Use link
 </button>
 {#if open}
   <div
@@ -112,20 +112,20 @@
     {#if lookup}
       <div class="grid gap-2 rounded-row bg-surface-regular px-2.5 py-2 text-meta sm:grid-cols-2">
         <div>
-          <span class="block text-ink-3">Entry</span>
+          <span class="block text-ink-3">Song</span>
           <span class="block truncate text-ink">{entryTitle} · {entryArtist}</span>
           <span class="numeric text-ink-3">{entryDurationMs != null ? clock(entryDurationMs / 1000) : '—'}</span>
         </div>
         <div>
-          <span class="block text-ink-3">Address</span>
+          <span class="block text-ink-3">Link</span>
           <span class="block truncate text-ink">{lookup.title} · {lookup.artist}</span>
           <span class="numeric text-ink-3">
             {lookup.durationMs != null ? clock(lookup.durationMs / 1000) : '—'}
-            {#if lengthDiffers()} · length differs by more than 5 seconds{/if}
+            {#if lengthDiffers()} · over 5s off{/if}
           </span>
         </div>
       </div>
-      <Button disabled={using} onclick={useAddress}>{using ? 'Using…' : 'Use address'}</Button>
+      <Button disabled={using} onclick={useAddress}>{using ? 'Using…' : 'Use link'}</Button>
     {/if}
 
     {#if lookupError}

@@ -72,7 +72,7 @@ export function waitingLabel(want: ReviewItem | undefined): string {
  * Overview's waiting-on-you list, which reads it beside the row it names. */
 export const ASKS: Record<QuestionKind, string> = {
   downloaded: 'Which copy',
-  version: 'Which recording you meant',
+  version: 'Which version you meant',
   folder: 'What these files are'
 };
 
@@ -359,8 +359,8 @@ export function groupCopies(copies: AcquiredCopy[], groups?: CopyGroup[]): CopyG
  * only two cell values `candidateRow` can produce that carry a meaning at
  * all. */
 export const MEANINGS: Record<string, string> = {
-  'listened to': 'The audio was compared against this recording.',
-  'not listened': 'Nothing compared the audio against this recording.'
+  'listened to': 'Audio compared with this song.',
+  'not listened': 'Audio not compared.'
 };
 
 /** One column of the evidence table. Every candidate answers every column, so a

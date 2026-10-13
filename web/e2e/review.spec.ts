@@ -37,13 +37,13 @@ test('a downloaded want draws one card per copy, with Skip, Don\'t want, None of
 
   const footer = page.locator('footer');
   await expect(footer.getByRole('button', { name: 'Skip' })).toBeVisible();
-  await expect(footer.getByRole('button', { name: "Don't want" })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Remove' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'None of these' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Accept copy' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Wrong song' })).toBeVisible();
 });
 
-test('a version want draws one row per candidate, with Skip, Don\'t want and Use recording', async ({
+test('a version want draws one row per candidate, with Skip, Remove and Use version', async ({
   page
 }) => {
   await page.goto('/review');
@@ -54,7 +54,7 @@ test('a version want draws one row per candidate, with Skip, Don\'t want and Use
   await expect(page.getByRole('heading', { name: 'Watchfire' })).toBeVisible();
   await expect(page.getByText('Recording', { exact: true })).toBeVisible();
   await expect(page.getByText('Release', { exact: true })).toBeVisible();
-  await expect(page.getByText('Fits the entry', { exact: true })).toBeVisible();
+  await expect(page.getByText('Matches', { exact: true })).toBeVisible();
   // The two candidates the entry fits.
   await expect(page.getByRole('radio')).toHaveCount(2);
   await expect(page.getByText('Signal Fires', { exact: true })).toBeVisible();
@@ -62,8 +62,8 @@ test('a version want draws one row per candidate, with Skip, Don\'t want and Use
 
   const footer = page.locator('footer');
   await expect(footer.getByRole('button', { name: 'Skip' })).toBeVisible();
-  await expect(footer.getByRole('button', { name: "Don't want" })).toBeVisible();
-  await expect(footer.getByRole('button', { name: 'Use recording' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Remove' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Use version' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Wrong song' })).not.toBeVisible();
 });
 

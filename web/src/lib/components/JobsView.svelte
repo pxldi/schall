@@ -95,7 +95,7 @@
   const laneNames: Record<string, string> = {
     acquisition: 'Search lane',
     transfers: 'Download lane',
-    anchors: 'Anchor lane',
+    anchors: 'Sample lane',
     judging: 'Judging lane',
     general: 'General lane'
   };
@@ -196,7 +196,7 @@
     },
     sweep_duplicates: {
       label: 'Duplicate sweep',
-      does: 'Keeps one proven copy of duplicate songs',
+      does: 'Keeps one proven copy of each duplicate song',
       waitsFor: 'a worker to run it'
     },
     sweep_loudness: {
@@ -241,7 +241,7 @@
     },
     sweep_transcode: {
       label: 'Transcode sweep',
-      does: 'Converts library files to the set format',
+      does: 'Shrinks library files to the configured format',
       waitsFor: 'a transcode scan'
     },
     refresh_weekly_playlist: {
@@ -315,10 +315,10 @@
   const numbers = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
 
   function attemptsLeft(remaining: number) {
-    if (remaining < 1) return 'This is its last attempt.';
+    if (remaining < 1) return 'Last attempt.';
     const count = numbers[remaining] ?? String(remaining);
     const noun = remaining === 1 ? 'attempt' : 'attempts';
-    return `${count} ${noun} left; the wait doubles each time.`;
+    return `${count} ${noun} left. The wait doubles each time.`;
   }
 
   type ActiveState = { role: Role; chip: string; when: string };
@@ -575,7 +575,7 @@
       detail:
         press.pending || press.requeued !== false
           ? ''
-          : `Already queued ${elapsedInWords(queued, at)}. It won't be queued twice.`
+          : `Already queued ${elapsedInWords(queued, at)}. It won't queue twice.`
     };
   }
 
@@ -713,10 +713,10 @@
   // So the column answers in one of two grammars: a time, set as a tabular
   // figure, or a condition, set as prose with a quieter lead.
   function waitsFor(item: RecurringJob) {
-    if (item.running) return { lead: 'Reschedules', rest: 'when this pass finishes' };
+    if (item.running) return { lead: 'Asks for', rest: 'its next time when this pass finishes' };
     const copy = sweepCopy[item.kind];
     if (copy) return { lead: 'Waits for', rest: copy.waitsFor };
-    return { lead: '', rest: item.detail ?? 'Nothing is scheduled' };
+    return { lead: '', rest: item.detail ?? 'Not scheduled' };
   }
 
   function nextClause(item: RecurringJob) {
@@ -725,12 +725,12 @@
   }
 
   function causeTitle(cause: FailureCause) {
-    return cause.cause === 'other' ? 'These jobs failed for different reasons.' : cause.title;
+    return cause.cause === 'other' ? 'Failed for different reasons.' : cause.title;
   }
 
   function causeDetail(cause: FailureCause) {
     return cause.cause === 'other'
-      ? 'Check each error below, then retry the ones you want.'
+      ? 'Read each error below, then retry the ones you want.'
       : cause.detail;
   }
 </script>
@@ -739,7 +739,7 @@
   bind:open={cancelOpen}
   title={cancelling ? `Cancel every queued “${kindName(cancelling.kind)}” job?` : ''}
   description={cancelling
-    ? `${backlogCount(cancelling)} are queued now. This cannot be undone.`
+    ? `${backlogCount(cancelling)} are queued now. This can't be undone.`
     : ''}
   action="Cancel jobs"
   keep="Keep queued"
@@ -931,7 +931,7 @@
                     <ErrorNote
                       bare
                       error={job.error}
-                      fallback="Attempt {job.attempts} did not finish."
+                      fallback="Attempt {job.attempts} didn't finish."
                       action={attemptsLeft(job.maxAttempts - job.attempts - 1)}
                     />
                   </div>
@@ -944,7 +944,7 @@
 
       {#if $queue.data?.truncated}
         <p class="mt-3 text-meta text-ink-4">
-          Top of the queue. {$queue.data.total.toLocaleString()} jobs running or waiting in total.
+          Top of the queue. {$queue.data.total.toLocaleString()} jobs running or waiting in all.
         </p>
       {/if}
     {/if}
@@ -1169,7 +1169,7 @@
     {#if $schedule.isError && !$schedule.data}
       {@render Refused($schedule.error, () => $schedule.refetch())}
     {:else if ($schedule.data?.items ?? []).length === 0}
-      <EmptyPanel role="idle" level={3} heading="No sweeps are scheduled" />
+      <EmptyPanel role="idle" level={3} heading="No sweeps scheduled" />
     {:else}
       <div class="flex flex-col">
         <div
@@ -1251,7 +1251,7 @@
        database behind it, and the status card on Sources is the closest
        reading of whether the server is up. -->
   <div class="flex flex-wrap items-start gap-3">
-    <ErrorNote {error} {retry} fallback="Couldn't load the job queue." class="min-w-0 flex-1" />
+    <ErrorNote {error} {retry} fallback="The job queue could not be read." class="min-w-0 flex-1" />
     <Button href="/settings/sources" variant="outline" size="sm" class="shrink-0">
       Check sources status
     </Button>

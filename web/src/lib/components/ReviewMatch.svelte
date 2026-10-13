@@ -142,16 +142,15 @@
     <div class="flex flex-col gap-1.5 rounded-panel bg-surface-thick p-4">
       <p class="text-body leading-relaxed text-ink">
         {candidates.length === 1
-          ? 'Another file is already matched to the one track this file fits.'
-          : 'Another file is already matched to every track this file fits.'}
-        This is usually the same recording twice.
+          ? 'Another file already has the one track this fits.'
+          : 'Other files already have every track this fits.'}
+        Usually the same song twice.
       </p>
       {#if holder}
         <p class="text-meta leading-relaxed text-ink-3">matched to {holder}</p>
       {/if}
       <p class="text-meta leading-relaxed text-ink-3">
-        Taking the track moves it to this file and leaves the other one unmatched. Leave it
-        alone if this file is the copy you do not want.
+        Taking the track unmatches the other file. Leave it if this is the copy you don't need.
       </p>
     </div>
   {/if}
@@ -163,7 +162,7 @@
         Move {asked.title} to this file?
       </h3>
       <p class="text-meta leading-relaxed text-ink-3">
-        {asked.heldByPath || 'Another file'} is matched to it now and will be left unmatched.
+        {asked.heldByPath || 'Another file'} has it now and will be unmatched.
       </p>
       <div class="flex flex-wrap items-center gap-2">
         <Button
@@ -221,7 +220,7 @@
       {:else}
         <div class="px-3 py-2">
           <span class="text-meta text-ink-3">
-            no candidates · search the catalogue
+            No matches. Search the catalogue.
           </span>
         </div>
       {/each}

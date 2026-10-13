@@ -153,13 +153,17 @@
           </button>
           <span class="min-w-0 flex-1 truncate text-body text-ink">{row.question.title}</span>
           {#if row.proof}
-            <span class="shrink-0 text-meta text-ink-2">{row.proof} agrees</span>
+            <span class="flex shrink-0 items-center gap-1 text-meta text-ink-2">
+              <Icon name="check" aria-label="agrees" size={11} class="text-ok" />
+              <span>{row.proof}</span>
+            </span>
           {:else if (row.copy.evidence?.differs ?? []).length > 0}
             <span
-              class="min-w-0 max-w-[14rem] shrink truncate text-meta text-fail"
-              title={row.copy.evidence?.differs.join(', ')}
+              class="flex min-w-0 max-w-[14rem] shrink items-center gap-1 text-meta text-fail"
+              title={`Differs: ${row.copy.evidence?.differs.join(', ')}`}
             >
-              {row.copy.evidence?.differs.join(', ')} differs
+              <Icon name="close" aria-label="differs" size={11} class="shrink-0" />
+              <span class="truncate">{row.copy.evidence?.differs.join(', ')}</span>
             </span>
           {:else}
             <span class="shrink-0 text-meta text-ink-3">{tierOf(row.copy)}</span>

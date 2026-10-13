@@ -185,7 +185,8 @@ describe('deciding an album at once', () => {
     const proof = (await screen.findByRole('checkbox', { name: 'Include Evensong' })) as HTMLInputElement;
     const none = screen.getByRole('checkbox', { name: 'Include Ember' }) as HTMLInputElement;
     expect([proof.checked, none.checked]).toEqual([true, false]);
-    expect(screen.getByText('ISRC agrees')).toBeTruthy();
+    expect(screen.getByText('ISRC')).toBeTruthy();
+    expect(screen.getAllByLabelText('agrees')).toHaveLength(1);
     expect(screen.getByText('Audio unidentified')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Accept checked/ }).textContent).toContain('1');
   });
@@ -201,7 +202,8 @@ describe('deciding an album at once', () => {
 
     const row = (await screen.findByRole('checkbox', { name: 'Include Evensong' })) as HTMLInputElement;
     expect(row.checked).toBe(false);
-    expect(screen.getByText('duration (9s out) differs')).toBeTruthy();
+    expect(screen.getByText('duration (9s out)')).toBeTruthy();
+    expect(screen.getByLabelText('differs')).toBeTruthy();
   });
 });
 

@@ -28,12 +28,12 @@
   </summary>
   <p class="pt-1 text-meta text-ink-3">
     {#if cutoff}
-      The sound stops at {cutoff}, where a lossy encoder would have stopped it.
+      Sound cuts off at {cutoff}, like a lossy encode.
     {:else}
-      The sound stops where a lossy encoder would have stopped it.
+      Sound cuts off like a lossy encode.
     {/if}
     {#if encoder}
-      The file says {encoder} made it.
+      Encoder: {encoder}.
     {/if}
   </p>
 </details>

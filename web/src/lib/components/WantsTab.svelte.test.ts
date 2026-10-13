@@ -113,7 +113,7 @@ describe('the wants being looked for', () => {
     opened();
 
     const line = await screen.findByText(/from a suggestion/);
-    expect(line.textContent).toContain('3 copies looked at');
+    expect(line.textContent).toContain('3 copies checked');
   });
 
   // The one thing this feature adds to the tab: an upgrade want says which
@@ -135,7 +135,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByTitle(`Looking · No sample · ${reason}`)).toBeTruthy();
+    expect(await screen.findByTitle(`Looking for a copy · No sample · ${reason}`)).toBeTruthy();
     expect(asked.some((path) => path.includes('status=unresolved%2Cpending%2Csearching'))).toBe(
       true
     );
@@ -153,7 +153,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByTitle('Looking · Sample retry in 2d')).toBeTruthy();
+    expect(await screen.findByTitle('Looking for a copy · Sample retry in 2d')).toBeTruthy();
   });
 
   // 1,187 rows are 48 pages, so the filter asks the server rather than
@@ -183,7 +183,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByTitle('Looking · The next copy will be tried.')).toBeTruthy();
+    expect(await screen.findByTitle('Looking for a copy · The next copy will be tried.')).toBeTruthy();
     expect(screen.queryByText(/Not in your library yet/)).toBeNull();
   });
 
@@ -195,7 +195,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByTitle(`Looking · ${why}`)).toBeTruthy();
+    expect(await screen.findByTitle(`Looking for a copy · ${why}`)).toBeTruthy();
     expect(screen.queryByText(why)).toBeNull();
   });
 
@@ -245,7 +245,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText('not looked for yet')).toBeTruthy();
+    expect(await screen.findByText('not searched yet')).toBeTruthy();
   });
 
   it('shows when Soulseek will next search an unresolved want', async () => {
@@ -278,7 +278,7 @@ describe('the wants being looked for', () => {
     answering({ looking: [want()] });
 
     opened();
-    await fireEvent.click(await screen.findByRole('button', { name: "Don't want" }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(stopped).toEqual(['20000000-0000-4000-8000-000000000001']));
   });
@@ -320,9 +320,9 @@ describe('the wants being looked for', () => {
     // Pressed while the opening request is still in flight, which is when a
     // reader actually presses it. Another pile is another question, so it is
     // asked rather than swallowed as a refetch of the one already running.
-    await fireEvent.click(await screen.findByRole('button', { name: /^Not wanted/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Look again' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add back' }));
     await waitFor(() => expect(resumed).toEqual(['20000000-0000-4000-8000-000000000002']));
   });
 
@@ -331,7 +331,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText('Nothing is being looked for')).toBeTruthy();
+    expect(await screen.findByText('Wishlist is empty')).toBeTruthy();
   });
 
   it('carries the API notice as a banner while wishlist tracks are waiting on the audio check', async () => {
@@ -372,7 +372,7 @@ describe('the wants being looked for', () => {
 
     expect(
       await screen.findByTitle(
-        'Looking · Add an AcoustID key in Settings — nothing here can prove a copy is this recording.'
+        'Looking for a copy · Add an AcoustID key in Settings — nothing here can prove a copy is this recording.'
       )
     ).toBeTruthy();
   });
@@ -391,7 +391,7 @@ describe('the wants being looked for', () => {
 
     opened();
 
-    expect(await screen.findByText('Use address')).toBeTruthy();
+    expect(await screen.findByText('Use link')).toBeTruthy();
   });
 
   it('does not offer an address for a settled or already keyed want', async () => {
@@ -403,7 +403,7 @@ describe('the wants being looked for', () => {
     opened();
 
     await screen.findByText('Talk Talk — Ascension Day');
-    expect(screen.queryByText('Use address')).toBeNull();
+    expect(screen.queryByText('Use link')).toBeNull();
   });
 });
 

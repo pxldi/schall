@@ -102,9 +102,9 @@
     if (status === 404) {
       return {
         chip: 'not found',
-        heading: 'This search is not on the server',
-        action: 'Pick the releases in Library and press Find sources to search again.',
-        stale: 'This search has been removed. What is below is the last answer the server gave.',
+        heading: 'Search not found',
+        action: 'Pick releases in Library and press Find sources.',
+        stale: 'This search was removed. Showing the last results.',
         again: false,
         link: { href: '/library?status=missing', label: 'Open Library' }
       };
@@ -113,8 +113,8 @@
     if (status === 0) {
       return {
         chip: 'no answer',
-        heading: 'The server did not answer',
-        stale: 'The server stopped answering. What is below is the last answer it gave.',
+        heading: "The server didn't answer",
+        stale: 'The server stopped answering. Showing the last results.',
         again: true
       };
     }
@@ -125,9 +125,9 @@
     // sentence stays under the disclosure for a bug report.
     return {
       chip: 'refused',
-      heading: 'The search could not be read',
-      action: 'Pick the releases in Library and press Find sources to search again.',
-      stale: 'The server refused the last request. What is below is the answer before it.',
+      heading: "Couldn't load this search",
+      action: 'Pick releases in Library and press Find sources.',
+      stale: 'The server refused the last request. Showing earlier results.',
       again: false,
       link: { href: '/library?status=missing', label: 'Open Library' }
     };
@@ -278,7 +278,7 @@
           size="sm"
           class="shrink-0"
           disabled={$cancel.isPending}
-          aria-label={`Stop the ${pending} releases still waiting to be searched`}
+          aria-label={`Stop the ${pending} unsearched releases`}
           onclick={() => $cancel.mutate()}
         >
           {#if $cancel.isPending}
@@ -374,7 +374,7 @@
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-fail/14 px-3 py-2">
             <StateMark role="fail">!</StateMark>
             <span class="text-meta leading-relaxed text-ink">
-              {result.error ?? 'The search could not be run.'}
+              {result.error ?? 'Search failed.'}
             </span>
             <Button
               href={`/releases/${result.albumId}?sources=1`}
@@ -388,7 +388,7 @@
         {:else if result.status === 'cancelled'}
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-surface-thick px-3 py-2">
             <span class="text-meta text-ink-2">
-              The run was stopped before this release was searched.
+              Stopped before this release was searched.
             </span>
             <Button
               href={`/releases/${result.albumId}?sources=1`}
@@ -403,9 +403,9 @@
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-surface-thick px-3 py-2">
             <span class="text-meta text-ink-2">
               {#if result.refused.length > 0}
-                Copies were on offer, but none matched your format settings.
+                Copies found, none match your format settings.
               {:else}
-                No peer was sharing this while the search ran.
+                Nobody was sharing it.
               {/if}
             </span>
             <span class="text-meta text-ink-4">searched for <span class="numeric">"{result.query}"</span></span>

@@ -87,8 +87,8 @@ describe('KeepOneCopyDialog', () => {
       copy({ id: 'spare-b', path: '/music/rips/teardrop.mp3' })
     ]);
 
-    expect(screen.getByText(/2 copies of Teardrop · Massive Attack will be deleted/)).toBeTruthy();
-    expect(screen.getByText(/cannot be undone/)).toBeTruthy();
+    expect(screen.getByText(/Deletes 2 copies of Teardrop · Massive Attack from disk/)).toBeTruthy();
+    expect(screen.getByText(/can't be undone/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete 2 copies' })).toBeTruthy();
   });
 
@@ -106,7 +106,7 @@ describe('KeepOneCopyDialog', () => {
     ]);
 
     expect(screen.queryByText('/music/comps/Trip Hop/04 Teardrop.mp3')).toBeNull();
-    expect(screen.getByText(/1 copy stays as well/)).toBeTruthy();
+    expect(screen.getByText(/1 more copy stays/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete the other copy' })).toBeTruthy();
   });
 

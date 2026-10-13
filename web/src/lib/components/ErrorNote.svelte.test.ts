@@ -91,7 +91,7 @@ describe('ErrorNote', () => {
 
     await vi.advanceTimersByTimeAsync(120_000);
     expect(retry).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('Reload the page to ask again.')).toBeTruthy();
+    expect(screen.getByText('Reload the page to try again.')).toBeTruthy();
   });
 
   it('says where to sign in on a 401, naming no reload', () => {

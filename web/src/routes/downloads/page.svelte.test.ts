@@ -537,7 +537,7 @@ describe('a peer that asked something', () => {
       )
     ).toBeTruthy();
     expect(
-      screen.getByText('Schall could not read this. If it asks for something, type it and press Send.')
+      screen.getByText("Schall can't answer this. If it asks for something, type it and press Send.")
     ).toBeTruthy();
   });
 

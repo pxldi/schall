@@ -46,7 +46,7 @@ describe('no candidates', () => {
   it('says there is nothing to choose instead of drawing an empty header row', () => {
     render(VersionCandidates, { candidates: [], chosen: -1, onchoose: () => {} });
 
-    expect(screen.getByRole('heading', { name: 'No recordings to choose' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No versions to choose' })).toBeTruthy();
     expect(screen.queryByRole('radiogroup')).toBeNull();
   });
 });

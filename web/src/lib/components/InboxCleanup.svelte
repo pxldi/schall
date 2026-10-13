@@ -52,10 +52,10 @@
   // words; these are the reader's.
   const classNames: Record<InboxCleanupClass['class'], string> = {
     imported: 'Already imported',
-    refused: 'Rejected copies',
-    settled: 'Finished wishlist songs',
-    unknown: 'No record in Schall',
-    kept_question: 'Waiting in Review',
+    refused: 'Refused copies',
+    settled: 'Songs already done',
+    unknown: 'Unknown to Schall',
+    kept_question: 'Waiting for your answer',
     kept_open: 'Downloads still open',
     kept_recent: 'Changed in the last day',
     kept_unconfirmed: 'No library copy found',
@@ -85,17 +85,17 @@
   </div>
 
   <span class="text-meta text-ink-3">
-    Deletes downloaded files Schall no longer needs.
+    Deletes downloads Schall no longer needs. Keeps Review items, open downloads and anything from
+    the last day.
   </span>
 
   <details class="text-meta text-ink-3">
     <summary class="cursor-pointer text-ink-2">What is deleted</summary>
     <ul class="mt-1.5 flex list-disc flex-col gap-1 pl-4">
-      <li>downloads already in your library, checked on disk first</li>
-      <li>copies rejected as a different song</li>
-      <li>copies for wishlist songs that are done, removed or replaced</li>
-      <li>files Schall has no record of, including folders added by hand</li>
-      <li>kept: files waiting in Review, open downloads, anything changed in the last day</li>
+      <li>downloads already in your library (checked on disk first)</li>
+      <li>copies refused as another song</li>
+      <li>copies for songs you have, removed or replaced</li>
+      <li>files Schall has no record of, including folders you fetched by hand</li>
     </ul>
   </details>
 
@@ -122,7 +122,7 @@
        finished with files it could not remove. It is a server sentence, so it
        goes through the note, which keeps the raw words behind a disclosure. -->
   {#if latest?.error}
-    <ErrorNote bare error={latest.error} fallback="The last cleanup had errors." />
+    <ErrorNote bare error={latest.error} fallback="The last cleanup didn't finish cleanly." />
   {/if}
 
   {#if running}

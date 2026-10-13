@@ -72,7 +72,7 @@ describe('InboxCleanup', () => {
 
     const remove = await screen.findByRole('button', { name: /^Delete 13,000 files/ });
     expect(screen.getByText('Already imported')).toBeTruthy();
-    expect(screen.getByText('No record in Schall')).toBeTruthy();
+    expect(screen.getByText('Unknown to Schall')).toBeTruthy();
 
     await fireEvent.click(remove);
 

@@ -142,8 +142,8 @@
 
     <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-3.5 pt-3">
       <p class="text-body text-ink">
-        {going.length === 1 ? '1 copy' : `${going.length} copies`} of {name} will be deleted from disc.
-        This cannot be undone.
+        Deletes {going.length === 1 ? '1 copy' : `${going.length} copies`} of {name} from disk.
+        This can't be undone.
       </p>
 
       <p class="mt-3 label">Stays</p>
@@ -168,8 +168,9 @@
 
       {#if spared.length > 0}
         <p class="mt-3 text-meta leading-4 text-ink-3">
-          {spared.length === 1 ? '1 copy stays' : `${spared.length} copies stay`} as well: each one
-          is also a copy of other music.
+          {spared.length === 1
+            ? '1 more copy stays. It also belongs to other music.'
+            : `${spared.length} more copies stay. They also belong to other music.`}
         </p>
       {/if}
 

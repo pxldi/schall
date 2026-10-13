@@ -118,7 +118,7 @@
   function broke() {
     if (!started) return;
     stop();
-    failed = 'Schall could not play this file.';
+    failed = "Can't play this file.";
   }
 </script>
 

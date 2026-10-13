@@ -258,7 +258,7 @@ describe('JobsView', () => {
     expect(screen.getByText(/next attempt in 4m 12s/)).toBeTruthy();
     // The reason is written for a reader now, with the words the job recorded
     // one press away underneath, and the whole row stays in the quiet ink.
-    expect(screen.getByText('Attempt 1 did not finish.')).toBeTruthy();
+    expect(screen.getByText('Attempt 1 didn\'t finish.')).toBeTruthy();
     expect(screen.getByText(/no source responded within 30s/).getAttribute('data-monospace')).toBe(
       'true'
     );
@@ -367,7 +367,7 @@ describe('JobsView', () => {
     const button = await vi.waitFor(() => jobPress('Queued'));
 
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    const detail = screen.getByText(/It won't be queued twice/);
+    const detail = screen.getByText(/It won't queue twice/);
     expect(detail.textContent).toContain('Already queued 4 seconds ago');
     expect(detail.getAttribute('data-tone')).toBe('quiet');
   });
@@ -433,7 +433,7 @@ describe('JobsView', () => {
     expect(screen.getByText('Fetches and publishes listening recommendations')).toBeTruthy();
     expect(screen.getByText('Measures held copies for duplicate review')).toBeTruthy();
     expect(screen.getByText('Finds library files below the quality floor')).toBeTruthy();
-    expect(screen.getByText('Converts library files to the set format')).toBeTruthy();
+    expect(screen.getByText('Shrinks library files to the configured format')).toBeTruthy();
     expect(screen.getByText('Refreshes the weekly playlist and its trials')).toBeTruthy();
     expect(screen.getByText('Updates the new releases playlist')).toBeTruthy();
   });
@@ -511,7 +511,7 @@ describe('JobsView', () => {
     opened();
 
     expect(await screen.findByText('No failed jobs')).toBeTruthy();
-    expect(await screen.findByText('No sweeps are scheduled')).toBeTruthy();
+    expect(await screen.findByText('No sweeps scheduled')).toBeTruthy();
     expect(screen.queryByText('Last run')).toBeNull();
   });
 
@@ -528,7 +528,7 @@ describe('JobsView', () => {
 
     // All three sections read the same queue, so all three refuse together and
     // each carries the same way out.
-    const refusals = await screen.findAllByText(/Couldn't load the job queue\./);
+    const refusals = await screen.findAllByText(/The job queue could not be read\./);
     expect(refusals).toHaveLength(3);
     for (const link of screen.getAllByRole('link', { name: 'Check sources status' })) {
       expect(link.getAttribute('href')).toBe('/settings/sources');
