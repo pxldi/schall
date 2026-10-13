@@ -168,8 +168,10 @@
   const wantMissing = createMutation({
     mutationFn: (on: boolean) => api.setArtistWantMissing(artistID, on),
     onSuccess: async () => {
+      // The release tiles count the tracks still wanted, so they are read again too.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
+        queryClient.invalidateQueries({ queryKey: ['releases'] }),
         queryClient.invalidateQueries({ queryKey: ['acquisition-targets'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       ]);

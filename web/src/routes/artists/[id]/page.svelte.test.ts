@@ -915,6 +915,30 @@ describe('the safety-net poll', () => {
   });
 });
 
+describe('the standing want', () => {
+  function albumReads() {
+    return vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input]) => new URL(String(input), 'http://localhost').pathname === '/api/v1/albums'
+      ).length;
+  }
+
+  // Each tile counts the tracks still wanted, so wanting has to read them again.
+  it('reads the releases again once it is set', async () => {
+    const seen: { method: string; pathname: string; body?: string }[] = [];
+    answeringWithActions(detail(), seen);
+    opened();
+
+    const button = await screen.findByRole('button', { name: 'Want 2 missing' });
+    await waitFor(() => expect(albumReads()).toBeGreaterThan(0));
+    const before = albumReads();
+    await fireEvent.click(button);
+
+    await waitFor(() => expect(albumReads()).toBeGreaterThan(before));
+  });
+});
+
 describe('a follow that half lands', () => {
   // Following and setting the level are two requests. When the second fails
   // the artist is followed all the same, and the page has to say so.
