@@ -25,6 +25,9 @@ type ReleaseGroupDetail struct {
 	Artist  Artist
 	Credit  string
 	Credits []Credit
+	// MergedInto is the release group MusicBrainz answered with when it is not
+	// the one asked for, which is what a merged release group looks like.
+	MergedInto uuid.UUID
 }
 
 // ReleaseGroup looks one release group up by its MusicBrainz ID, with the
@@ -73,10 +76,19 @@ func (client *Client) ReleaseGroup(ctx context.Context, id uuid.UUID) (ReleaseGr
 			// album views read back out of it.
 			Metadata: metadata,
 		},
-		Artist:  artist,
-		Credit:  artistCredit(payload.ArtistCredit),
-		Credits: artistCredits(payload.ArtistCredit),
+		Artist:     artist,
+		Credit:     artistCredit(payload.ArtistCredit),
+		Credits:    artistCredits(payload.ArtistCredit),
+		MergedInto: mergedInto(id, payload.ID),
 	}, nil
+}
+
+func mergedInto(asked uuid.UUID, answered string) uuid.UUID {
+	id, err := uuid.Parse(answered)
+	if err != nil || id == asked {
+		return uuid.Nil
+	}
+	return id
 }
 
 // creditedArtist takes the first credited artist that identifies itself. A

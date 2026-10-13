@@ -383,7 +383,15 @@ func (api *API) listAlbumSources(response http.ResponseWriter, request *http.Req
 			candidates, err = provider.Search(request.Context(), query)
 		}
 		if err != nil {
+			// Only a caller that left gets no answer. A deadline inside the
+			// provider is a search that ran out of time, and writing nothing for
+			// it sent an empty 200 the page could not read as anything.
+			if request.Context().Err() != nil {
+				return
+			}
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				api.problem(response, http.StatusGatewayTimeout, "the source search ran out of time",
+					[]string{"slskd did not finish the search in time. Try again later."})
 				return
 			}
 			if errors.Is(err, sources.ErrRateLimited) {

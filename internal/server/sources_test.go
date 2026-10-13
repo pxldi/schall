@@ -1283,9 +1283,11 @@ func TestACancelledSourceSearchIsNotAnswered(t *testing.T) {
 	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(),
 		WithSourceProvider(&fakeProvider{searchErr: context.Canceled}))
 
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
-		"/api/v1/albums/"+albumUUID+"/sources", nil))
+		"/api/v1/albums/"+albumUUID+"/sources", nil).WithContext(ctx))
 	if response.Body.Len() != 0 {
 		t.Fatalf("body = %s, want nothing written", response.Body)
 	}
@@ -1598,5 +1600,23 @@ func TestASearchReportsHowManyCopiesTheBitRateFloorRefused(t *testing.T) {
 	}
 	if item.Refused[0].Reason == "" || item.Refused[0].Username != "peer one" {
 		t.Fatalf("first refusal = %#v, want the peer and the reason", item.Refused[0])
+	}
+}
+
+// A deadline inside the provider is a search that ran out of time. Writing
+// nothing for it sent an empty 200, and the page read that as a crash.
+func TestListAlbumSourcesAnswersAnInternalTimeout(t *testing.T) {
+	store := &fakeSettingsStore{
+		fakeStore:  &fakeStore{album: db.GetAlbumRow{ArtistName: "Portishead", Title: "Dummy", TrackCount: 11}},
+		configured: true, settings: configuredSettings(),
+	}
+	provider := &fakeProvider{searchErr: fmt.Errorf("read search responses: %w", context.DeadlineExceeded)}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(), WithSourceProvider(provider))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(
+		http.MethodGet, "/api/v1/albums/"+albumUUID+"/sources", nil))
+	if response.Code != http.StatusGatewayTimeout || response.Body.Len() == 0 {
+		t.Fatalf("status = %d; body = %q, want a 504 that says what happened", response.Code, response.Body)
 	}
 }

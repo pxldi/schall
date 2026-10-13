@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
-import type { Release, ReleaseDetail, ReleaseEdition, Track } from '$lib/api';
+import type { Release, ReleaseDetail, ReleaseEdition, SourceCandidate, SourceResults, Track } from '$lib/api';
 import { holding, quiet } from '$lib/vocabulary';
 
 // Named without the leading `+`, like the other colocated route tests:
@@ -108,6 +108,7 @@ function answering(
     tracks?: Track[];
     editions?: ReleaseEdition[];
     discography?: Release[];
+    sources?: SourceResults | '';
   } = {}
 ) {
   asked = [];
@@ -120,6 +121,10 @@ function answering(
       if (url.pathname.endsWith('/tracks')) return body({ items: options.tracks ?? [track()] });
       if (url.pathname.endsWith('/editions')) return body({ items: options.editions ?? [edition()] });
       if (url.pathname.endsWith('/downloads')) return body({ items: [] });
+      if (url.pathname.endsWith('/sources')) {
+        if (options.sources === '') return new Response('', { status: 200 });
+        return body(options.sources ?? { query: 'talk talk spirit of eden', expectedTrackCount: 2, items: [] });
+      }
       if (url.pathname === `/api/v1/albums/${releaseID}`) return body(options.release ?? detail());
       if (url.pathname === '/api/v1/albums') return body({ items: options.discography ?? [] });
       return body({ items: [] });
@@ -517,5 +522,63 @@ describe('the discography beside the tracks', () => {
     await screen.findByText('Spirit of Eden');
 
     expect(asked).toContain('/api/v1/albums');
+  });
+});
+
+describe('a source search', () => {
+  // The candidate the server writes, field for field, as sourceCandidateResponse
+  // encodes it: Go writes an empty list as null.
+  function candidate(overrides: Partial<SourceCandidate> = {}): SourceCandidate {
+    return {
+      provider: 'slskd',
+      username: 'peer',
+      directory: 'Music\\Talk Talk\\1988 - Spirit of Eden',
+      trackCount: 2,
+      totalSizeBytes: 60_000_000,
+      format: 'flac',
+      freeUploadSlot: true,
+      queueLength: 0,
+      uploadSpeed: 1_000_000,
+      score: 0.9,
+      match: {
+        checked: true,
+        expected: 2,
+        confirmed: 2,
+        partial: 0,
+        absent: 0,
+        complete: true,
+        summary: 'All 2 tracks found'
+      },
+      reasons: ['FLAC', 'Complete'],
+      files: [
+        { path: 'Music\\Talk Talk\\01 The Rainbow.flac', name: '01 The Rainbow.flac', extension: 'flac', sizeBytes: 30_000_000, variableBitRate: false },
+        { path: 'Music\\Talk Talk\\02 Eden.flac', name: '02 Eden.flac', extension: 'flac', sizeBytes: 30_000_000, variableBitRate: false }
+      ],
+      ...overrides
+    };
+  }
+
+  it('lists every folder the server answered with', async () => {
+    const items = Array.from({ length: 50 }, (_, index) =>
+      candidate({ username: `peer-${index}`, directory: `Music\\Spirit of Eden ${index}` })
+    );
+    answering({ sources: { query: 'talk talk spirit of eden', expectedTrackCount: 2, items } });
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    expect(await screen.findByText('50 folders matched “talk talk spirit of eden”')).toBeTruthy();
+    expect(screen.getByText('Music\\Spirit of Eden 0')).toBeTruthy();
+    expect(screen.getByText('Music\\Spirit of Eden 49')).toBeTruthy();
+  });
+
+  it('says the search ended without an answer when the server sent nothing', async () => {
+    answering({ sources: '' });
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find sources' }));
+
+    expect(await screen.findByText(/ended without an answer/)).toBeTruthy();
+    expect(screen.queryByText(/No peer offered/)).toBeNull();
   });
 });

@@ -3779,7 +3779,16 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 		return
 	}
 	if err := worker.queue.SaveReleaseCatalogue(ctx, payload.AlbumID, catalogue); err != nil {
-		worker.finishFailed(ctx, job, fmt.Errorf("save release catalogue: %w", err), true)
+		// The same release chosen again tomorrow meets the same album, so this
+		// is an answer and is not retried.
+		held := errors.Is(err, ErrEditionHeldByAnotherAlbum)
+		if held {
+			worker.logger.Warn().Err(err).
+				Str("album_id", payload.AlbumID.String()).
+				Str("release_group_id", releaseGroupID.String()).
+				Msg("two albums claim one MusicBrainz release, so this one was left as it was")
+		}
+		worker.finishFailed(ctx, job, fmt.Errorf("save release catalogue: %w", err), !held)
 		return
 	}
 	// The other half of a standing "want what is missing". Following an artist

@@ -329,7 +329,10 @@
     expandedSource = null;
     try {
       const results = await api.releaseSources(releaseID, override?.trim() || undefined);
-      sources = results.items;
+      // An empty answer is no answer. Read as an empty list it would say that
+      // no peer has the release, which nobody asked.
+      if (!results) throw new Error('The search ended without an answer. Try again later.');
+      sources = results.items ?? [];
       searchedQuery = results.query;
       sourceQuery = results.query;
     } catch (error) {

@@ -2199,3 +2199,51 @@ func TestAJudgeAgainPartKeepsItsPlaceAcrossARestart(t *testing.T) {
 		t.Fatalf("payload = %s, want after %s and the pass's start kept", again.Payload, want)
 	}
 }
+
+// MusicBrainz moves releases between release groups and merges release
+// groups, so the release a refresh chooses can already stand for another
+// album. The unique release ID refused the insert every day; the refresh now
+// names the album that holds it and changes neither.
+func TestAReleaseAnotherAlbumHoldsIsNotTakenFromIt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	artistID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (musicbrainz_id, name, sort_name) VALUES ($1, 'Ye', 'Ye')
+	`, artistID); err != nil {
+		t.Fatal(err)
+	}
+	album := func(title string) uuid.UUID {
+		var id uuid.UUID
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO albums (artist_id, musicbrainz_release_group_id, title)
+			SELECT id, $2, $3 FROM artists WHERE musicbrainz_id = $1
+			RETURNING id
+		`, artistID, uuid.New(), title).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	holder, newcomer := album("BULLY"), album("BULLY")
+	repository := NewRepository(pool)
+	release := musicbrainz.ReleaseCatalogue{Edition: musicbrainz.ReleaseEdition{
+		ID: uuid.New(), Title: "BULLY", SelectionReason: "Earliest official edition",
+	}}
+	if err := repository.SaveReleaseCatalogue(ctx, holder, release); err != nil {
+		t.Fatalf("first album: %v", err)
+	}
+
+	err := repository.SaveReleaseCatalogue(ctx, newcomer, release)
+	var held *EditionHeldError
+	if !errors.As(err, &held) || held.AlbumID != holder {
+		t.Fatalf("SaveReleaseCatalogue() error = %v, want the release named as held by %s", err, holder)
+	}
+	var owner uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT album_id FROM release_editions WHERE musicbrainz_release_id = $1
+	`, release.Edition.ID).Scan(&owner); err != nil || owner != holder {
+		t.Fatalf("release held by %s (%v), want it left with %s", owner, err, holder)
+	}
+}
