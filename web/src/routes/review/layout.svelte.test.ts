@@ -495,7 +495,7 @@ describe('a queue longer than one page', () => {
     );
     await open('Evensong');
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.getAllByText('Evensong').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Accept copy' })).toBeTruthy();
   });
@@ -550,7 +550,7 @@ describe('the queue reads failing', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(Review, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.getByText('Trying again.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
@@ -563,7 +563,7 @@ describe('the queue reads failing', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(Review, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('No sign-in on this connection.')).toBeTruthy();
+    expect(await screen.findByText('Not signed in.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 });

@@ -209,7 +209,7 @@ describe('the setting', () => {
     );
     opened();
 
-    expect(await screen.findByText('Schall could not read the settings.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load settings.")).toBeTruthy();
     expect(screen.queryByText(/ffmpeg/)).toBeNull();
     expect(screen.queryByText(/Install ffmpeg to use this\./)).toBeNull();
   });
@@ -237,7 +237,7 @@ describe('the setting', () => {
     await waitFor(() => expect(toggle.disabled).toBe(false));
     await fireEvent.click(toggle);
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
   });
 });
 
@@ -326,6 +326,6 @@ describe('transcoding the existing library', () => {
     await waitFor(() => expect(button).not.toHaveProperty('disabled', true));
     await fireEvent.click(button);
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
   });
 });

@@ -146,7 +146,7 @@
     {
       kept: { role: 'ok', word: 'keeps it' },
       absent: { role: 'idle', word: 'nothing found' },
-      unreadable: { role: 'fail', word: 'could not be read' }
+      unreadable: { role: 'fail', word: "couldn't read" }
     };
 </script>
 
@@ -191,7 +191,7 @@
         <span class="label">This week</span>
         <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
         <span class="text-meta text-ink-3">
-          {removing ? 'unkept songs are deleted' : 'reporting only · nothing is deleted'}
+          {removing ? 'unkept songs get deleted' : 'report only · nothing deleted'}
         </span>
       </div>
 
@@ -202,9 +202,9 @@
       {/if}
 
       {#if songs.length === 0}
-        <EmptyPanel role="idle" heading="No songs on the list yet">
+        <EmptyPanel role="idle" heading="No songs yet">
           <span class="text-meta leading-5 text-ink-2">
-            The next refresh picks some from your suggestions.
+            The next refresh adds some.
           </span>
         </EmptyPanel>
       {:else}
@@ -249,7 +249,7 @@
               {#if refused?.id === lease.id}
                 <ErrorNote
                   error={refused.error}
-                  action="Nothing has been deleted, so press Keep again."
+                  action="Nothing deleted. Press Keep again."
                   bare
                 />
               {/if}
@@ -289,7 +289,7 @@
                         {/snippet}
                       {#if reads.length === 0}
                         <span class="text-meta leading-4 text-ink-2">
-                          Nothing was read about this song.
+                          Nothing read for this song.
                         </span>
                       {:else}
                         {#each reads as read, index (index)}

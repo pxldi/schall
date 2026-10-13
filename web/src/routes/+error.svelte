@@ -38,7 +38,7 @@
       <b class="font-semibold text-ink">Nothing at {page.url.pathname}</b>
       <span>It may have moved, or the link is wrong.</span>
     {:else}
-      <b class="font-semibold text-ink">This page did not load.</b>
+      <b class="font-semibold text-ink">This page didn't load.</b>
       <span>Reload it, or go back to Overview.</span>
     {/if}
   {/snippet}
@@ -64,7 +64,7 @@
          line under the title already names Reload. -->
     <ErrorNote
       error={page.error.message}
-      fallback="Loading this page threw an error."
+      fallback="The page threw an error."
       action=""
       class="max-w-[40rem]"
     />

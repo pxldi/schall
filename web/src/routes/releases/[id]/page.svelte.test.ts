@@ -288,7 +288,7 @@ describe('the track list fails to load', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(ReleasePage, undefined, { wrapper: QueryClientProvider, wrapperProps: { client } });
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.queryByText('Importing the track list…')).toBeNull();
   });
 });
@@ -416,7 +416,7 @@ describe('removing', () => {
     answering({ tracks: [track({ removesAt: '2026-11-11T20:00:00Z' })] });
     opened();
 
-    const toggle = await screen.findByRole('button', { name: 'Want The Rainbow' });
+    const toggle = await screen.findByRole('button', { name: 'Add The Rainbow to wishlist' });
     await fireEvent.click(toggle);
 
     expect(pressesSent()).toContainEqual({

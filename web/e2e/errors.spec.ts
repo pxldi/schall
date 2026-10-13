@@ -28,7 +28,7 @@ test('a failed request is drawn in written words, with the server’s own behind
   await page.goto('/artists');
 
   // The sentence a reader gets.
-  await expect(page.getByText('Schall could not read the library.')).toBeVisible();
+  await expect(page.getByText("Couldn't load the library.")).toBeVisible();
   // And not the sentence the server sent, which is a Go sentinel.
   await expect(page.getByText('library is unavailable', { exact: true })).toBeHidden();
 
@@ -51,7 +51,7 @@ test('a failure nobody wrote a sentence for still reaches written words', async 
 
   await page.goto('/artists');
 
-  await expect(page.getByText('Schall could not finish that.')).toBeVisible();
+  await expect(page.getByText("Schall couldn't finish that.")).toBeVisible();
   await page.getByText('What the server said').click();
   await expect(page.getByText('a reason nobody anticipated')).toBeVisible();
 });

@@ -323,7 +323,7 @@
                   <ErrorNote
                     error={$artistSearch.error}
                     retry={() => $artistSearch.refetch()}
-                    action="Type the name again to search once more."
+                    action="Type the name again."
                     bare
                   />
                 </div>
@@ -380,7 +380,7 @@
               onchange={(event) => (wantMissing = event.currentTarget.checked)}
               class="check cursor-pointer"
             />
-            Want what's missing
+            Add missing to wishlist
           </label>
 
           <!-- The follow failed and there is no row and no form elsewhere to
@@ -390,7 +390,7 @@
             <ErrorNote
               error={$followArtist.error}
               action={wantMissingFailed
-                ? 'The artist is followed. Press Want missing on their page.'
+                ? 'Artist followed. Press Add missing on their page.'
                 : undefined}
               class="mt-3"
             />

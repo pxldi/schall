@@ -277,7 +277,7 @@ function trackState(track: GlobalSearchTrack): { role: PaletteRole; mark?: Palet
   if (track.wantStatus === 'not_wanted') {
     return { role: 'idle', mark: { icon: 'dismiss', label: 'Dismissed' } };
   }
-  if (track.wantStatus) return { role: 'busy', mark: { icon: 'want', label: 'Wanted' } };
+  if (track.wantStatus) return { role: 'busy', mark: { icon: 'want', label: 'On wishlist' } };
   return { role: 'idle' };
 }
 
@@ -292,7 +292,7 @@ function fileState(
   if (missing) return { role: 'fail', mark: { icon: 'close', label: 'Missing' } };
   if (matchStatus === 'matched') return { role: 'ok', mark: { icon: 'check', label: 'Matched' } };
   if (matchStatus === 'ambiguous') {
-    return { role: 'decide', mark: { icon: 'pause', label: 'Needs a decision' } };
+    return { role: 'decide', mark: { icon: 'pause', label: 'Needs your decision' } };
   }
   return { role: 'idle', mark: { icon: 'file-unknown', label: 'Not matched' } };
 }

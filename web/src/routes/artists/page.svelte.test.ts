@@ -298,9 +298,9 @@ describe('a 401 on the artist list', () => {
 
     opened();
 
-    await screen.findByText('No sign-in on this connection.');
+    await screen.findByText('Not signed in.');
     expect(
-      screen.getByText('Open Schall at its usual address and sign in there.')
+      screen.getByText('Open Schall at its usual address and sign in.')
     ).toBeTruthy();
   });
 });

@@ -322,7 +322,7 @@
         [
           `Ignored ${plural(dismissed, 'track', 'tracks')}`,
           already ? `${already} already ignored` : '',
-          answer.notFound.length ? `${answer.notFound.length} no longer in the catalogue` : ''
+          answer.notFound.length ? `${answer.notFound.length} gone` : ''
         ]
           .filter(Boolean)
           .join(' · ')
@@ -339,7 +339,7 @@
         [
           `Matching ${plural(queued, 'release', 'releases')} again`,
           running ? `${running} already running` : '',
-          answer.unaskable.length ? `${answer.unaskable.length} could not be asked about` : ''
+          answer.unaskable.length ? `${answer.unaskable.length} skipped` : ''
         ]
           .filter(Boolean)
           .join(' · ')
@@ -355,7 +355,7 @@
       decided(
         [
           `Trying ${plural(retried, 'job', 'jobs')} again`,
-          clear ? `${clear} had nothing that failed` : ''
+          clear ? `${clear} had no failures` : ''
         ]
           .filter(Boolean)
           .join(' · ')
@@ -709,7 +709,7 @@
   {#if $sourceRun.isError}
     <StatusBadge class="basis-full items-start">
       <ErrorNote error={$sourceRun.error} bare class="min-w-0 flex-1" />
-      <span class="shrink-0 text-meta text-ink-3">nothing was queued</span>
+      <span class="shrink-0 text-meta text-ink-3">nothing queued</span>
     </StatusBadge>
   {/if}
 
@@ -720,7 +720,7 @@
   {#if refused}
     <StatusBadge class="basis-full items-start">
       <ErrorNote error={refused} bare class="min-w-0 flex-1" />
-      <span class="shrink-0 text-meta text-ink-3">nothing was decided</span>
+      <span class="shrink-0 text-meta text-ink-3">nothing changed</span>
     </StatusBadge>
   {/if}
 
@@ -997,18 +997,16 @@
     >
       <p class="text-body leading-relaxed text-ink-2">
         {#if scopeTotal}
-          {scopeTotal.toLocaleString()} releases are in view but none are
-          <span class="text-ink">{filterName.toLocaleLowerCase()}</span>. Try another filter.
+          None of {scopeTotal.toLocaleString()} releases are
+          <span class="text-ink">{filterName.toLocaleLowerCase()}</span>.
         {:else if search}
-          Nothing here matches that search. Try a shorter one, or widen the view.
+          Try a shorter search or a wider view.
         {:else if scope}
-          You do not follow or own anything in this scope. Show everything in the catalogue to see the
-          rest.
+          Nothing followed or owned here. Choose Everything in the catalogue to see more.
         {:else if artistId}
-          The catalogue holds no releases by <span class="text-ink">{artistName}</span>. Refresh them
-          from their page to fetch their discography.
+          No releases by <span class="text-ink">{artistName}</span> yet. Refresh them from their page.
         {:else}
-          Follow an artist to build the catalogue.
+          Follow an artist to start.
         {/if}
       </p>
       {#if noReleasesMatch && filesMatching > 0}

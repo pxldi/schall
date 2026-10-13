@@ -21,7 +21,7 @@ describe('pressing + on a track nobody wants yet', () => {
     const onwant = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
     toggle({ onwant });
 
-    const button = screen.getByRole('button', { name: 'Want Teardrop' });
+    const button = screen.getByRole('button', { name: 'Add Teardrop to wishlist' });
     await fireEvent.click(button);
 
     expect(onwant).toHaveBeenCalledOnce();
@@ -34,7 +34,7 @@ describe('pressing + on a track nobody wants yet', () => {
     const onunwant = vi.fn();
     toggle({ onwant, onunwant });
 
-    const button = screen.getByRole('button', { name: 'Want Teardrop' });
+    const button = screen.getByRole('button', { name: 'Add Teardrop to wishlist' });
     await fireEvent.click(button);
     await fireEvent.click(button);
 
@@ -46,10 +46,10 @@ describe('pressing + on a track nobody wants yet', () => {
     const onwant = vi.fn(() => Promise.reject(new Error('no')));
     toggle({ onwant });
 
-    const button = screen.getByRole('button', { name: 'Want Teardrop' });
+    const button = screen.getByRole('button', { name: 'Add Teardrop to wishlist' });
     await fireEvent.click(button);
 
-    await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Want Teardrop'));
+    await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Add Teardrop to wishlist'));
   });
 });
 
@@ -57,7 +57,7 @@ describe('the tooltip', () => {
   it('says a press wants a track nobody wants yet', () => {
     toggle();
 
-    expect(screen.getByRole('button').getAttribute('title')).toBe('Want Teardrop');
+    expect(screen.getByRole('button').getAttribute('title')).toBe('Add Teardrop to wishlist');
   });
 
   it('says a press drops the want on a wanted track', () => {
@@ -78,7 +78,7 @@ describe('pressing a wanted track', () => {
 
     expect(onunwant).toHaveBeenCalledOnce();
     expect(onwant).not.toHaveBeenCalled();
-    expect(button.getAttribute('aria-label')).toBe('Want Teardrop');
+    expect(button.getAttribute('aria-label')).toBe('Add Teardrop to wishlist');
   });
 });
 
@@ -101,12 +101,12 @@ describe('the accessible name', () => {
 
 describe('a toggle with words', () => {
   it('reads the word for the state it shows', async () => {
-    toggle({ label: ['Want it', 'Wanted'] });
+    toggle({ label: ['Add to wishlist', 'On wishlist'] });
 
-    const button = screen.getByRole('button', { name: 'Want it' });
+    const button = screen.getByRole('button', { name: 'Add to wishlist' });
     await fireEvent.click(button);
 
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Wanted' })).toBe(button);
+    expect(screen.getByRole('button', { name: 'On wishlist' })).toBe(button);
   });
 });

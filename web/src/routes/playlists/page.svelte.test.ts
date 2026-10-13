@@ -143,7 +143,7 @@ describe('the playlist list', () => {
     );
     opened();
 
-    expect(await screen.findByText('Schall could not read the library.')).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.queryByText('No playlists followed')).toBeNull();
   });
 
@@ -158,7 +158,7 @@ describe('the playlist list', () => {
     vi.stubGlobal('fetch', fetch);
     opened();
 
-    await screen.findByText('Schall could not read the library.');
+    await screen.findByText("Couldn't load the library.");
     await vi.advanceTimersByTimeAsync(4000);
     expect(await screen.findByText('Late night')).toBeTruthy();
 
@@ -181,14 +181,14 @@ describe('the playlist list', () => {
     );
     opened();
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Stop following' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unfollow' }));
     const question = await screen.findByRole('dialog');
-    expect(question.textContent).toContain('Stop following “Late night”?');
+    expect(question.textContent).toContain('Unfollow “Late night”?');
     // "Cancel" beside "Stop following" did not say which of the two it undid.
     expect(within(question).getByRole('button', { name: 'Keep following' })).toBeTruthy();
     expect(sent).toEqual([]);
 
-    await fireEvent.click(within(question).getByRole('button', { name: 'Stop following' }));
+    await fireEvent.click(within(question).getByRole('button', { name: 'Unfollow' }));
 
     await vi.waitFor(() =>
       expect(sent).toEqual(['/api/v1/playlists/a1b2c3d4-0000-4000-8000-000000000001'])

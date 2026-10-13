@@ -34,7 +34,7 @@ export const progress = {
   /** A copy is on its way from a peer. */
   searching: 'Searching',
   /** Asked for, and the loop has not reached it yet. */
-  wanted: 'Wanted',
+  wanted: 'On wishlist',
   /** The peer has the request and has not started sending. */
   queuedAtPeer: 'Queued at peer',
   /** Schall is working out which recording this is. */

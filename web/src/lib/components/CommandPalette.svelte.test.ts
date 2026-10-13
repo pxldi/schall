@@ -266,7 +266,7 @@ describe('CommandPalette', () => {
     await fireEvent.input(field(), { target: { value: 'radioheads' } });
 
     expect(screen.queryByText('Kid A')).toBeNull();
-    expect(screen.getByText(/Searching five categories/)).toBeTruthy();
+    expect(screen.getByText(/Searching…/)).toBeTruthy();
   });
 
   it('groups what answered under the heading for its kind', async () => {
@@ -472,7 +472,7 @@ describe('CommandPalette', () => {
     // `role="status"` rather than `alert`: the note is a live region that is
     // read out when it arrives without taking focus from the box being typed
     // in, which is what every other failure on the screen does.
-    expect(await screen.findByText('Schall could not finish that.')).toBeTruthy();
+    expect(await screen.findByText("Schall couldn't finish that.")).toBeTruthy();
     // No Try again button: the only thing it did was ask the question that had
     // just failed, so the palette asks by itself and says it is asking.
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();

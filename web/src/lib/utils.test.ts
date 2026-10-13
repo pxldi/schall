@@ -112,7 +112,7 @@ describe('fileStanding', () => {
     const standing = fileStanding(file({ matchStatus: 'ambiguous', matchCandidateCount: 3 }));
 
     expect(standing).toEqual({
-      text: 'More than one catalogue track fits this file',
+      text: 'Fits more than one track',
       state: 'decide'
     });
     expect(standing.text).not.toContain('3');
@@ -130,16 +130,16 @@ describe('fileStanding', () => {
         })
       )
     ).toEqual({
-      text: 'Identified as Courtship Unleashed · Hadone — no catalogue track for it',
+      text: 'Courtship Unleashed · Hadone · no matching track',
       state: 'idle'
     });
   });
 
   it('counts the recordings that could be a file nobody has decided about', () => {
     expect(fileStanding(file({ resolutionStatus: 'needs_review', identityCandidateCount: 3 })).text)
-      .toBe('3 recordings could be this file');
+      .toBe('3 possible songs');
     expect(fileStanding(file({ resolutionStatus: 'needs_review', identityCandidateCount: 1 })).text)
-      .toBe('1 recording could be this file');
+      .toBe('1 possible song');
   });
 
   // The grader never records a review without the candidates it is between, so
@@ -148,13 +148,13 @@ describe('fileStanding', () => {
   // file" is the row claiming the opposite of the state it is in.
   it('does not count a review that has no candidates stored against it', () => {
     expect(fileStanding(file({ resolutionStatus: 'needs_review', identityCandidateCount: 0 }))).toEqual(
-      { text: 'Waiting on a decision about what this is', state: 'decide' }
+      { text: 'Needs your decision', state: 'decide' }
     );
   });
 
   it('reads a contradiction as one, rather than as a file waiting on something', () => {
     expect(fileStanding(file({ resolutionStatus: 'conflict' }))).toEqual({
-      text: 'The evidence disagrees about what this file is',
+      text: 'Evidence disagrees',
       state: 'fail'
     });
   });
@@ -163,26 +163,26 @@ describe('fileStanding', () => {
   // is still the user's music.
   it('says a file with no external identity is owned music all the same', () => {
     expect(fileStanding(file({ resolutionStatus: 'local_only' }))).toEqual({
-      text: 'Owned music with no external identity',
+      text: 'Not on MusicBrainz',
       state: 'idle'
     });
   });
 
   it('separates a file nobody has asked about yet from one nobody could answer', () => {
-    expect(fileStanding(file({ resolutionStatus: 'pending' })).text).toBe('Waiting to be looked up');
+    expect(fileStanding(file({ resolutionStatus: 'pending' })).text).toBe('Not looked up yet');
     expect(fileStanding(file({ resolutionStatus: 'failed' }))).toEqual({
-      text: 'MusicBrainz could not be reached',
+      text: 'MusicBrainz unreachable',
       state: 'fail'
     });
   });
 
   it('tells the two kinds of second copy apart', () => {
     expect(fileStanding(file({ matchStatus: 'duplicate' })).text).toBe(
-      'Second copy of a track already held'
+      'Second copy'
     );
     expect(
       fileStanding(file({ matchStatus: 'duplicate', duplicateKeptAt: '2026-01-02T00:00:00Z' })).text
-    ).toBe('Second copy, kept on purpose');
+    ).toBe('Second copy, kept');
   });
 });
 
@@ -327,7 +327,7 @@ describe('matchMethodName', () => {
   });
 
   it('says what it means when nothing recorded the rule', () => {
-    expect(matchMethodName(undefined)).toBe('a rule Schall no longer records');
+    expect(matchMethodName(undefined)).toBe('an unknown rule');
   });
 });
 

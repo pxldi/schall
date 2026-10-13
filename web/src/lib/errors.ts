@@ -74,19 +74,19 @@ export const sentinels: Record<string, Written> = {
   // Not a failure of the request so much as of the account: something the user
   // has never filled in. The action is always the settings page that holds it.
   'slskd is not configured': {
-    sentence: 'Schall has no download source, so nothing can be fetched.',
-    action: 'Add the slskd address and key under Settings → Connections.'
+    sentence: 'No download source set up.',
+    action: 'Add slskd under Settings → Connections.'
   },
   'no download source is configured': {
-    sentence: 'Schall has no download source, so nothing can be fetched.',
-    action: 'Add the slskd address and key under Settings → Connections.'
+    sentence: 'No download source set up.',
+    action: 'Add slskd under Settings → Connections.'
   },
   'could not reach slskd': {
-    sentence: 'slskd did not answer.',
-    action: 'Check that it is running, then press Test connection under Settings → Connections.'
+    sentence: "slskd didn't answer.",
+    action: "Check it's running, then press Test connection in Settings."
   },
   'navidrome is not configured': {
-    sentence: 'Navidrome is not set up.',
+    sentence: "Navidrome isn't set up.",
     action: 'Add the Navidrome address under Settings → Connections.'
   },
   'ListenBrainz is not configured': {
@@ -94,43 +94,43 @@ export const sentinels: Record<string, Written> = {
     action: 'Add the username under Settings → Connections.'
   },
   'ListenBrainz recommendations are disabled': {
-    sentence: 'Recommendations are switched off.',
+    sentence: 'Recommendations are off.',
     action: 'Turn them on under Settings → Connections.'
   },
   'playlist sync is not configured': {
-    sentence: 'Playlist sync has no player to sync with.',
+    sentence: 'No player to sync with.',
     action: 'Add the Navidrome address under Settings → Connections.'
   },
   'playlists are not configured': {
-    sentence: 'Playlist sync has no player to sync with.',
+    sentence: 'No player to sync with.',
     action: 'Add the Navidrome address under Settings → Connections.'
   },
   'uploading is not configured': {
-    sentence: 'Schall has no upload folder to write to.',
+    sentence: 'No upload folder set.',
     action: 'Set the staging folder under Settings → Library.'
   },
   'library paths are not configured': {
-    sentence: 'Schall has no library folder to read.',
+    sentence: 'No library folder set.',
     action: 'Add one under Settings → Library.'
   },
   'the library layout is not configured': {
-    sentence: 'The library has no folder layout.',
+    sentence: 'No folder layout set.',
     action: 'Choose a layout under Settings → Library.'
   },
   'acquisition targets are not configured': {
-    sentence: 'Nothing is set up to fetch wanted music.',
+    sentence: 'No download source set up.',
     action: 'Add a download source under Settings → Connections.'
   },
   'connect a Spotify account first': {
-    sentence: 'Spotify is not connected.',
+    sentence: "Spotify isn't connected.",
     action: 'Connect it under Settings → Connections.'
   },
   'enter the Spotify client credentials first': {
-    sentence: 'Spotify has no client ID and secret yet.',
+    sentence: 'Spotify client ID and secret missing.',
     action: 'Enter them under Settings → Connections.'
   },
   'there is nowhere to send to': {
-    sentence: 'No notification address is set.',
+    sentence: 'No notification address set.',
     action: 'Add one under Settings → Connections.'
   },
 
@@ -140,192 +140,192 @@ export const sentinels: Record<string, Written> = {
   // dead end, and `CLAUDE.md` keeps that as an explicit exception to the rule
   // that error text is short.
   'this wishlist entry is already following another copy': {
-    sentence: 'Another copy of this song is already on its way.',
-    action: 'Wait for it, or cancel it on Downloads and ask again.',
+    sentence: 'Another copy is already on its way.',
+    action: 'Wait for it, or cancel it on Downloads.',
     role: 'decide'
   },
   'artist is already followed': {
-    sentence: 'This artist is already followed.',
-    action: 'Open them from Artists to change what is monitored.',
+    sentence: 'Already following this artist.',
+    action: 'Open them from Artists to change it.',
     role: 'decide'
   },
   'artist is not followed': {
-    sentence: 'This artist is not followed, so nothing of theirs counts as missing.',
-    action: 'Press Follow to keep their releases complete.',
+    sentence: "You don't follow this artist.",
+    action: 'Press Follow to track their releases.',
     role: 'decide'
   },
   'a layout migration is already planned': {
-    sentence: 'A move of the library folders is already planned.',
-    action: 'Apply or discard that plan before planning another.',
+    sentence: 'A library move is already planned.',
+    action: 'Apply or discard it first.',
     role: 'decide'
   },
   'that layout migration has nothing left to move': {
-    sentence: 'Every file in this plan has already been moved.',
-    action: 'Discard the plan to clear it.',
+    sentence: 'Every file is already moved.',
+    action: 'Discard the plan.',
     role: 'decide'
   },
   'this target is already finished with': {
-    sentence: 'This song is settled, so nothing more will be fetched for it.',
-    action: 'Want it again from the release to start over.',
+    sentence: 'Schall is done with this song.',
+    action: 'Add it again from the release to start over.',
     role: 'decide'
   },
   'music folder already exists': {
-    sentence: 'A folder with that name is already there.',
-    action: 'Choose a different name and save.',
+    sentence: 'That folder already exists.',
+    action: 'Choose another name.',
     role: 'decide'
   },
   'this upload is still being imported': {
     sentence: 'This upload is still being read.',
-    action: 'Wait for it; the row changes by itself when it is done.',
+    action: 'Wait for the row to update.',
     role: 'decide'
   },
   'that upload is not staged': {
-    sentence: 'The files for this upload are no longer on the volume.',
+    sentence: 'The upload files are gone.',
     action: 'Upload them again.',
     role: 'decide'
   },
   'this copy is not waiting for a decision': {
-    sentence: 'Somebody has already answered for this copy.',
-    action: 'Reload the page to see the answer on record.',
+    sentence: 'This copy was already decided.',
+    action: 'Reload to see the decision.',
     role: 'decide'
   },
   'this wishlist entry is not waiting on an answer': {
-    sentence: 'This song is not waiting on a person.',
-    action: 'Reload the page to see where it got to.',
+    sentence: "This song doesn't need you.",
+    action: 'Reload to see where it is.',
     role: 'decide'
   },
   'this wishlist entry has no copies waiting for a decision': {
-    sentence: 'No copy of this song is waiting for an answer.',
-    action: 'Reload Review to see what is left.',
+    sentence: 'No copy left to decide.',
+    action: 'Reload Review.',
     role: 'decide'
   },
   'this wishlist entry has no resolution to reject': {
-    sentence: 'There is nothing recorded for this song to turn down.',
-    action: 'Reload the page to see where it got to.',
+    sentence: 'Nothing to reject for this song.',
+    action: 'Reload to see where it is.',
     role: 'decide'
   },
   'no import with that ID is waiting for review': {
-    sentence: 'This import has already been answered.',
-    action: 'Reload Review to see what is left.',
+    sentence: 'This import was already decided.',
+    action: 'Reload Review.',
     role: 'decide'
   },
   'no decision has been recorded for this file': {
-    sentence: 'Nobody has decided anything about this file yet, so there is nothing to undo.',
-    action: 'Reload the page to see its current state.',
+    sentence: 'Nothing to undo for this file.',
+    action: 'Reload to see its state.',
     role: 'decide'
   },
   'that answer is not on record': {
-    sentence: 'That answer is not the one on record.',
-    action: 'Reload the page to see what was decided.',
+    sentence: 'That decision has changed.',
+    action: 'Reload to see the current one.',
     role: 'decide'
   },
   'there is nothing to retry': {
-    sentence: 'There is nothing here left to try again.',
-    action: 'Reload the page to see the current state.',
+    sentence: 'Nothing left to retry.',
+    action: 'Reload the page.',
     role: 'decide'
   },
   'there is nothing left to cancel': {
     sentence: 'This has already stopped.',
-    action: 'Reload the page to see how it ended.',
+    action: 'Reload to see how it ended.',
     role: 'decide'
   },
   'this job was stopped rather than tried': {
-    sentence: 'This job was cancelled and has nothing to repeat.',
-    action: 'Ask for the work again from the page that started it.',
+    sentence: 'This job was cancelled.',
+    action: 'Start it again from its page.',
     role: 'decide'
   },
   'this request cannot be retried': {
-    sentence: 'This download is not in a state that can be tried again.',
-    action: 'Reload Downloads to see where it got to.',
+    sentence: "This download can't be retried now.",
+    action: 'Reload Downloads.',
     role: 'decide'
   },
   'this request cannot be started': {
-    sentence: 'This download is not in a state that can be started.',
-    action: 'Reload Downloads to see where it got to.',
+    sentence: "This download can't be started now.",
+    action: 'Reload Downloads.',
     role: 'decide'
   },
   'this song is not on the weekly playlist': {
-    sentence: 'This song is not on this week’s playlist.',
-    action: 'Reload the playlist to see what is on it.',
+    sentence: "This song isn't on this week’s playlist.",
+    action: 'Reload the playlist.',
     role: 'decide'
   },
   'only a Spotify playlist can be imported': {
-    sentence: 'That link is not a Spotify playlist.',
+    sentence: "That link isn't a Spotify playlist.",
     action: 'Paste a Spotify playlist link or ID.',
     role: 'decide'
   },
 
   // ── The thing is gone ───────────────────────────────────────────────────
   'artist not found': {
-    sentence: 'This artist is not in the catalogue any more.',
+    sentence: 'This artist is gone.',
     action: 'Go back to Artists.'
   },
   'release not found': {
-    sentence: 'This release is not in the catalogue any more.',
+    sentence: 'This release is gone.',
     action: 'Go back to Library.'
   },
   'library file not found': {
-    sentence: 'This file is not in the library any more.',
-    action: 'Reload the page to see the current list.'
+    sentence: 'This file is gone from the library.',
+    action: 'Reload the page.'
   },
   'library file or track not found': {
-    sentence: 'This file is not in the library any more.',
-    action: 'Reload the page to see the current list.'
+    sentence: 'This file is gone from the library.',
+    action: 'Reload the page.'
   },
   'playlist not found': {
     sentence: 'This playlist is gone.',
     action: 'Go back to Playlists.'
   },
   'track not found': {
-    sentence: 'This track is not in the catalogue any more.',
-    action: 'Reload the page to see the current track list.'
+    sentence: 'This track is gone.',
+    action: 'Reload the page.'
   },
   'recording not found': {
-    sentence: 'This recording is not in the catalogue any more.',
-    action: 'Reload the page to see the current track list.'
+    sentence: 'This song is gone.',
+    action: 'Reload the page.'
   },
   'copy not found': {
-    sentence: 'This copy is not on record any more.',
+    sentence: 'This copy is gone.',
     action: 'Go back to Downloads.'
   },
   'download request not found': {
-    sentence: 'This download is not on record any more.',
+    sentence: 'This download is gone.',
     action: 'Go back to Downloads.'
   },
   'acquisition target not found': {
-    sentence: 'This song is no longer wanted.',
-    action: 'Reload the page to see what is still wanted.'
+    sentence: 'This song is off the wishlist.',
+    action: 'Reload the page.'
   },
   'job not found': {
-    sentence: 'This job is no longer on the queue.',
-    action: 'Reload Jobs to see what is left.'
+    sentence: 'This job is gone.',
+    action: 'Reload Jobs.'
   },
   'the file is no longer there': {
-    sentence: 'The file has gone from the volume.',
-    action: 'Run a scan to bring the library up to date.'
+    sentence: 'The file is gone from disk.',
+    action: 'Run a scan.'
   },
   'the copy is no longer there': {
-    sentence: 'The downloaded copy has gone from the volume.',
-    action: 'Ask for it again from the release.'
+    sentence: 'The downloaded copy is gone.',
+    action: 'Add it again from the release.'
   },
 
   // ── The other end did not answer ────────────────────────────────────────
   // Transient: asking again may answer differently, so nobody is asked to press
   // a button that only repeats what just failed.
   'database unavailable': {
-    sentence: 'Schall cannot reach its database.',
+    sentence: "Can't reach the database.",
     transient: true
   },
   'MusicBrainz is temporarily unavailable': {
-    sentence: 'MusicBrainz is not answering.',
+    sentence: "MusicBrainz isn't answering.",
     transient: true
   },
   'could not reach AcoustID': {
-    sentence: 'AcoustID is not answering.',
+    sentence: "AcoustID isn't answering.",
     transient: true
   },
   'no AcoustID API key is configured': {
-    sentence: 'Schall cannot identify audio without an AcoustID key.',
+    sentence: 'No AcoustID key set.',
     action: 'Add one under Settings → Connections.'
   },
   'listenbrainz did not respond in time; check the address and try again': {
@@ -338,15 +338,15 @@ export const sentinels: Record<string, Written> = {
   },
   'slskd did not respond in time; check the base URL and that slskd is running': {
     sentence: 'slskd took too long to answer.',
-    action: 'Check that it is running, then press Test connection under Settings → Connections.'
+    action: "Check it's running, then press Test connection in Settings."
   },
   'AcoustID is rate limiting requests': {
-    sentence: 'AcoustID is being asked too often.',
-    action: 'Wait a minute; Schall slows down by itself.'
+    sentence: 'AcoustID is rate limiting.',
+    action: 'Wait a minute; Schall slows down.'
   },
   'listenbrainz is being asked too often': {
-    sentence: 'ListenBrainz is being asked too often.',
-    action: 'Wait a minute before asking again.'
+    sentence: 'ListenBrainz is rate limiting.',
+    action: 'Wait a minute and try again.'
   },
   'listenbrainz rejected the user token; clear it or replace it': {
     sentence: 'ListenBrainz refused the token.',
@@ -357,123 +357,123 @@ export const sentinels: Record<string, Written> = {
     action: 'Check the username under Settings → Connections.'
   },
   'listenbrainz has not built a model for this account yet': {
-    sentence: 'ListenBrainz has not worked out recommendations for this account yet.',
-    action: 'Listen for a while and come back.'
+    sentence: 'ListenBrainz has no recommendations for you yet.',
+    action: 'Listen for a while and check back.'
   },
   'settings are unavailable': {
-    sentence: 'Schall could not read the settings.',
+    sentence: "Couldn't load settings.",
     transient: true
   },
   'library is unavailable': {
-    sentence: 'Schall could not read the library.',
+    sentence: "Couldn't load the library.",
     transient: true
   },
   'downloads are unavailable': {
-    sentence: 'Schall could not read the downloads.',
+    sentence: "Couldn't load downloads.",
     transient: true
   },
   'source searches are unavailable': {
-    sentence: 'Schall could not read the source searches.',
+    sentence: "Couldn't load searches.",
     transient: true
   },
   'starting transfers is unavailable': {
-    sentence: 'Schall could not start the transfer.',
+    sentence: "Couldn't start the transfer.",
     transient: true
   },
   'could not start the transfer': {
-    sentence: 'The peer did not start sending.',
+    sentence: "The peer didn't start sending.",
     transient: true
   },
   'could not retry the transfer': {
-    sentence: 'The peer did not start sending.',
+    sentence: "The peer didn't start sending.",
     transient: true
   },
   'could not stop the transfer': {
-    sentence: 'The transfer did not stop.',
-    action: 'Reload Downloads to see whether it stopped anyway.'
+    sentence: "The transfer didn't stop.",
+    action: 'Reload Downloads to check.'
   },
   'could not check the source': {
-    sentence: 'The peer did not say what it still holds.',
+    sentence: "The peer didn't say what it has.",
     transient: true
   },
   'source search failed': {
-    sentence: 'The search for copies did not finish.',
+    sentence: "The search didn't finish.",
     transient: true
   },
   'artist search provider failed': {
-    sentence: 'MusicBrainz did not answer the artist search.',
+    sentence: "MusicBrainz didn't answer the search.",
     transient: true
   },
   'recommendations are unavailable': {
-    sentence: 'Schall could not read the recommendations.',
+    sentence: "Couldn't load recommendations.",
     transient: true
   },
   'the recommendation source is unavailable': {
-    sentence: 'ListenBrainz is not answering.',
+    sentence: "ListenBrainz isn't answering.",
     transient: true
   },
   'identity resolution is unavailable': {
-    sentence: 'Schall could not read what this file was identified as.',
+    sentence: "Couldn't load this file's match.",
     transient: true
   },
   'edition lookup is unavailable': {
-    sentence: 'Schall could not read the editions of this release.',
+    sentence: "Couldn't load the editions.",
     transient: true
   },
   'edition selection is unavailable': {
-    sentence: 'Schall could not record the edition.',
+    sentence: "Couldn't save the edition.",
     transient: true
   },
   'the weekly playlist is unavailable': {
-    sentence: 'Schall could not read this week’s playlist.',
+    sentence: "Couldn't load this week’s playlist.",
     transient: true
   },
   'the job queue cannot be read': {
-    sentence: 'Schall could not read the job queue.',
+    sentence: "Couldn't load the job queue.",
     transient: true
   },
   'acquisition targets are unavailable': {
-    sentence: 'Schall could not read what is wanted.',
+    sentence: "Couldn't load the wishlist.",
     transient: true
   },
   'notifications are unavailable': {
-    sentence: 'Schall could not send the notification.',
+    sentence: "Couldn't send the notification.",
     transient: true
   },
   'notification settings are unavailable': {
-    sentence: 'Schall could not read the notification settings.',
+    sentence: "Couldn't load notification settings.",
     transient: true
   },
   'the message could not be sent': {
-    sentence: 'The test message did not arrive.',
+    sentence: "The test message didn't arrive.",
     action: 'Check the address under Settings → Connections.'
   },
   'deleting files is unavailable': {
-    sentence: 'Schall could not delete the files.',
+    sentence: "Couldn't delete the files.",
     transient: true
   },
   'event streaming is unavailable': {
-    sentence: 'Schall stopped sending live updates, so this page may be behind.',
+    sentence: 'Live updates stopped.',
     action: 'Reload the page.'
   },
   'audio preview is unavailable': {
-    sentence: 'This file cannot be played here.',
-    action: 'Reload the page; if it stays, the audio is unreadable.'
+    sentence: "Can't play this file.",
+    action: 'Reload the page.'
   },
   'the upload was refused': {
-    sentence: 'The upload was not accepted.',
-    action: 'Check the files and upload them again.'
+    sentence: 'Upload refused.',
+    action: 'Check the files and try again.'
   },
   'the upload is too large': {
-    sentence: 'This upload is bigger than Schall accepts.',
+    sentence: 'Upload too large.',
     action: 'Upload fewer files at a time.'
   },
   'the upload contains no files': {
-    sentence: 'This upload has no files in it.',
-    action: 'Choose the files and upload again.'
+    sentence: 'Upload has no files.',
+    action: 'Choose files and try again.'
   },
   'no cover art': {
-    sentence: 'There is no cover for this release.',
+    sentence: 'No cover yet.',
     action: 'Schall fetches one when MusicBrainz has it.'
   },
 
@@ -483,44 +483,44 @@ export const sentinels: Record<string, Written> = {
   // sentences the owner named: correct as Go, and the documentation voice on
   // screen.
   'artist has no MusicBrainz identity': {
-    sentence: 'Schall has no MusicBrainz link for this artist, so it cannot read their releases.',
+    sentence: 'This artist has no MusicBrainz link.',
     action: 'Find them with Follow artist on Artists.'
   },
   'album has no MusicBrainz release group identity': {
-    sentence: 'Schall has no MusicBrainz link for this release, so it cannot read its track list.',
+    sentence: 'This release has no MusicBrainz link.',
     action: 'Refresh the artist.'
   },
   'artist identity changed during refresh': {
-    sentence: 'MusicBrainz merged this artist into another one while Schall was reading them.',
-    action: 'The next refresh reads the artist they were merged into.'
+    sentence: 'MusicBrainz merged this artist into another.',
+    action: 'The next refresh follows the merge.'
   },
   'MusicBrainz has no such entity': {
-    sentence: 'MusicBrainz no longer has this entry.',
-    action: 'It may have been merged; the next refresh follows the merge.'
+    sentence: "MusicBrainz doesn't have this anymore.",
+    action: 'The next refresh follows any merge.'
   },
   'MusicBrainz artist response is missing a name': {
-    sentence: 'MusicBrainz answered with an artist that has no name, which Schall cannot file.',
-    action: 'Nothing to do here; the next refresh asks again.'
+    sentence: 'MusicBrainz sent an artist with no name.',
+    action: 'The next refresh asks again.'
   },
   'MusicBrainz does not know the recording this was to be checked against': {
-    sentence: 'MusicBrainz has no recording to check this copy against.',
-    action: 'Listen to the copy on Review and decide by ear.'
+    sentence: "MusicBrainz doesn't know this song.",
+    action: 'Listen on Review to decide.'
   },
   'LRCLIB has no lyrics for this recording': {
-    sentence: 'No lyrics were found for this song.',
-    action: 'Schall asks again when the song is next scanned.'
+    sentence: 'No lyrics found.',
+    action: 'Schall asks again on the next scan.'
   },
   'downloaded folder escapes the configured inbox': {
-    sentence: 'This download landed outside the folder Schall is allowed to read.',
+    sentence: 'Download landed outside the inbox.',
     action: 'Check the download folder under Settings → Library.'
   },
   'downloaded folder is not a directory': {
-    sentence: 'What arrived is not a folder Schall can import.',
+    sentence: "The download isn't a folder.",
     action: 'Check the download folder under Settings → Library.'
   },
   'is no longer readable audio': {
-    sentence: 'This file can no longer be read as audio.',
-    action: 'Run a scan to update the library.'
+    sentence: "This file isn't readable audio anymore.",
+    action: 'Run a scan.'
   }
 };
 
@@ -530,48 +530,48 @@ export const sentinels: Record<string, Written> = {
  * different sentence from a server that answered with a refusal. */
 const byStatus: Record<number, Written> = {
   0: {
-    sentence: 'Nothing answered. Schall may be restarting.',
+    sentence: "Schall didn't answer. It may be restarting.",
     transient: true
   },
   400: {
-    sentence: 'Schall could not read that request.',
-    action: 'Reload the page and try once more.'
+    sentence: "Schall couldn't read that request.",
+    action: 'Reload and try again.'
   },
   401: {
-    sentence: 'No sign-in on this connection.',
-    action: 'Open Schall at its usual address and sign in there.'
+    sentence: 'Not signed in.',
+    action: 'Open Schall at its usual address and sign in.'
   },
   403: {
-    sentence: 'This account is not allowed to do that.',
-    action: 'Ask whoever runs this Schall for access.'
+    sentence: "This account can't do that.",
+    action: 'Ask whoever runs Schall for access.'
   },
   404: {
-    sentence: 'That is not there any more.',
-    action: 'Reload the page to see what is.'
+    sentence: "That's gone.",
+    action: 'Reload the page.'
   },
   409: {
-    sentence: 'Something about this has already been decided.',
-    action: 'Reload the page to see what is on record.',
+    sentence: 'This was already decided.',
+    action: 'Reload to see the decision.',
     role: 'decide'
   },
   422: {
-    sentence: 'Something in the form is not right.',
+    sentence: 'A field is wrong.',
     action: 'Check the fields and save again.'
   },
   429: {
-    sentence: 'Schall is asking too fast and has been told to wait.',
-    action: 'Wait a minute before asking again.'
+    sentence: 'Too many requests.',
+    action: 'Wait a minute and try again.'
   }
 };
 
 const serverFault: Written = {
-  sentence: 'Schall could not finish that.',
+  sentence: "Schall couldn't finish that.",
   transient: true,
   subjectless: true
 };
 
 const unknown: Written = {
-  sentence: 'Schall could not finish that.',
+  sentence: "Schall couldn't finish that.",
   action: 'Try again in a moment.',
   subjectless: true
 };
@@ -645,8 +645,8 @@ export function describeError(error: unknown): ErrorNotice {
   // a dead end.
   if (error instanceof DuplicateProtection) {
     return {
-      sentence: 'Your library may already hold this music, so Schall did not fetch it again.',
-      action: 'Read what it found below, then keep it or fetch it anyway.',
+      sentence: 'You may already have this.',
+      action: 'Check what Schall found below, then keep it or fetch anyway.',
       raw,
       role: 'decide',
       transient: false,
@@ -656,8 +656,8 @@ export function describeError(error: unknown): ErrorNotice {
   }
   if (error instanceof SourceChanged) {
     return {
-      sentence: 'The peer no longer offers what was recorded for this folder.',
-      action: 'Read what changed below, then search for another copy.',
+      sentence: 'The peer changed this folder.',
+      action: 'See what changed below, then search for another copy.',
       raw,
       role: 'decide',
       transient: false,

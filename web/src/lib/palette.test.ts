@@ -279,7 +279,7 @@ describe('paletteCategories', () => {
 
     const [row] = paletteCategories(wanted, 'idioteque')[0].rows;
     expect(row.role).toBe('busy');
-    expect(row.mark).toEqual({ icon: 'want', label: 'Wanted' });
+    expect(row.mark).toEqual({ icon: 'want', label: 'On wishlist' });
   });
 
   it('marks a dismissed track as dismissed', () => {
