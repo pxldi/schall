@@ -2,7 +2,7 @@
   import Icon from './Icon.svelte';
   import { onDestroy } from 'svelte';
   import { api, type AcquiredCopy } from '$lib/api';
-  import { clock, verdict } from '$lib/review';
+  import { clock, namesDiffer, verdict } from '$lib/review';
   import { listening } from '$lib/preview.svelte';
 
   // One copy, played and compared. Fills its grid cell — the grid, not the
@@ -174,16 +174,11 @@
   const album = $derived(copy.evidence?.observed?.album?.trim() ?? '');
   const albumVerdict = $derived(verdict(copy, 'album'));
 
-  function differs(a?: string, b?: string) {
-    const left = a?.trim().toLocaleLowerCase() ?? '';
-    const right = b?.trim().toLocaleLowerCase() ?? '';
-    return left !== '' && right !== '' && left !== right;
-  }
   const creditRow = $derived(
-    credit && differs(credit.fileArtist, credit.wantedArtist) ? credit.fileArtist : ''
+    credit && namesDiffer(credit.fileArtist, credit.wantedArtist) ? credit.fileArtist : ''
   );
   const titleRow = $derived(
-    credit && differs(credit.fileTitle, credit.wantedTitle) ? credit.fileTitle : ''
+    credit && namesDiffer(credit.fileTitle, credit.wantedTitle) ? credit.fileTitle : ''
   );
   const displayHeading = $derived(
     heading === 'In your library' || !copy.origin

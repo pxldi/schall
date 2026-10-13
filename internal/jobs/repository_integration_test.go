@@ -2160,3 +2160,42 @@ func TestAJobKeepsWhenItFirstStartedAcrossARestart(t *testing.T) {
 		t.Fatalf("after a restart the job started at %s, want %s", second, first)
 	}
 }
+
+// The place a judge-again part keeps is in the payload the next claim reads,
+// beside when the pass first started.
+func TestAJudgeAgainPartKeepsItsPlaceAcrossARestart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedJobs(ctx, t, pool, JudgeCopiesAgain)
+	repository := NewRepository(pool)
+
+	job, err := repository.Claim(ctx, Judging())
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if _, err := repository.StartedFirstAt(ctx, job); err != nil {
+		t.Fatalf("StartedFirstAt() error = %v", err)
+	}
+	want := uuid.New()
+	if err := repository.JudgedUpTo(ctx, job, want); err != nil {
+		t.Fatalf("JudgedUpTo() error = %v", err)
+	}
+	if err := repository.RecoverInterrupted(ctx); err != nil {
+		t.Fatalf("RecoverInterrupted() error = %v", err)
+	}
+	again, err := repository.Claim(ctx, Judging())
+	if err != nil {
+		t.Fatalf("second Claim() error = %v", err)
+	}
+	var place struct {
+		After uuid.UUID `json:"after"`
+		Since string    `json:"since"`
+	}
+	if err := json.Unmarshal(again.Payload, &place); err != nil {
+		t.Fatalf("read payload %s: %v", again.Payload, err)
+	}
+	if place.After != want || place.Since == "" {
+		t.Fatalf("payload = %s, want after %s and the pass's start kept", again.Payload, want)
+	}
+}

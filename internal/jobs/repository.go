@@ -727,6 +727,21 @@ func (repository *Repository) StartedFirstAt(ctx context.Context, job Job) (time
 	return since, nil
 }
 
+// JudgedUpTo writes the last want a part of a judge-again pass finished into
+// the job's payload, where the part reads its place from when a restart puts
+// it back on the queue.
+func (repository *Repository) JudgedUpTo(ctx context.Context, job Job, want uuid.UUID) error {
+	_, err := repository.pool.Exec(ctx, `
+		UPDATE jobs
+		SET payload = jsonb_set(coalesce(payload, '{}'::jsonb), '{after}', to_jsonb($2::text))
+		WHERE id = $1
+	`, job.ID, want.String())
+	if err != nil {
+		return fmt.Errorf("keep the place of job %s: %w", job.ID, err)
+	}
+	return nil
+}
+
 func (repository *Repository) QueueAskAcoustIDAgain(ctx context.Context, runAfter time.Time) error {
 	return db.New(repository.pool).QueueAskAcoustIDAgain(ctx, runAfter)
 }

@@ -269,6 +269,17 @@ describe('the three kinds Review holds', () => {
     expect(labels).toEqual(['Skip', "Don't want", 'None of these', 'Accept copy']);
   });
 
+  it('does not make Accept copy the main action when the chosen copy has a field that differs', async () => {
+    const differing = copy();
+    differing.evidence = { ...differing.evidence!, agrees: ['title'], differs: ['artist'] };
+    piles.wants = [{ ...want('copies'), copies: [differing] }];
+    await open('Evensong');
+
+    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
+      'outline'
+    );
+  });
+
   it('shows a version question with Skip, Don\'t want and Use, in order', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
@@ -372,6 +383,25 @@ describe('a stopped want', () => {
 
     const credit = screen.getByText('JACKBOYS feat. Young Thug');
     expect(credit.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('does not make Accept copy the main action when the credit names somebody else', async () => {
+    piles.wants = [stoppedWant()];
+    await open('In your library');
+
+    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
+      'outline'
+    );
+  });
+
+  it('makes Accept copy the main action when the credit and title agree', async () => {
+    const stopped = stoppedWant();
+    piles.wants = [{ ...stopped, fileArtist: 'JACKBOYS', fileTitle: 'OUT WEST' }];
+    await open('In your library');
+
+    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
+      'primary'
+    );
   });
 
   it('renders a credit-only stopped want as an ordinary downloaded card', async () => {
