@@ -3573,10 +3573,27 @@ type UnfingerprintedCopyRow struct {
 	Provider            string
 	SourceDirectory     string
 	FileName            string
+	DecidedAt           time.Time
 }
 
-// CopiesMissingFingerprint lists the held copies with no fingerprint on record,
-// oldest decision first.
+// CopyCursor is how far a walk through the unmeasured copies has got: the
+// decision time and id of the last copy it was offered. The zero value starts
+// at the oldest copy.
+type CopyCursor struct {
+	DecidedAt time.Time
+	CopyID    uuid.UUID
+}
+
+// Cursor is the place just past this copy.
+func (row UnfingerprintedCopyRow) Cursor() CopyCursor {
+	return CopyCursor{DecidedAt: row.DecidedAt, CopyID: row.CopyID}
+}
+
+// CopiesMissingFingerprint lists the held copies with no fingerprint on record
+// after the cursor, oldest decision first.
+//
+// The cursor lets a pass walk past copies nothing can measure. Their column
+// stays empty, so without it every pass would be offered the same ones again.
 //
 // A held copy is one a peer sent that nothing could decide about, kept as a
 // question for a person. Every copy fetched from now on is fingerprinted as it
@@ -3587,19 +3604,20 @@ type UnfingerprintedCopyRow struct {
 // review queue to show the copies of one piece of audio as one row, and by
 // nothing that admits or refuses anything.
 func (q *Queries) CopiesMissingFingerprint(
-	ctx context.Context, limit int32,
+	ctx context.Context, after CopyCursor, limit int32,
 ) ([]UnfingerprintedCopyRow, error) {
 	rows, err := q.db.Query(ctx, `
 		SELECT copies.id, copies.acquisition_target_id, requests.provider,
-		       requests.source_directory, copies.file_name
+		       requests.source_directory, copies.file_name, copies.decided_at
 		FROM acquisition_target_files copies
 		JOIN download_requests requests ON requests.id = copies.download_request_id
 		WHERE copies.verdict = 'held'
 		  AND copies.audio_fingerprint IS NULL
 		  AND requests.status = 'completed'
+		  AND (copies.decided_at, copies.id) > ($2::timestamptz, $3::uuid)
 		ORDER BY copies.decided_at, copies.id
 		LIMIT $1
-	`, limit)
+	`, limit, after.DecidedAt, after.CopyID)
 	if err != nil {
 		return nil, fmt.Errorf("read the copies with no fingerprint: %w", err)
 	}
@@ -3610,7 +3628,7 @@ func (q *Queries) CopiesMissingFingerprint(
 		var row UnfingerprintedCopyRow
 		if err := rows.Scan(
 			&row.CopyID, &row.AcquisitionTargetID, &row.Provider, &row.SourceDirectory,
-			&row.FileName,
+			&row.FileName, &row.DecidedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -50,50 +50,66 @@ func (importer *Importer) fingerprintHeldCopies(
 	ctx context.Context,
 ) (FingerprintedCopies, error) {
 	var result FingerprintedCopies
-	waiting, err := importer.store.CopiesMissingFingerprint(ctx, fingerprintBatch)
-	if err != nil {
-		return result, err
-	}
-	result.Offered = len(waiting)
-	result.MoreWaiting = len(waiting) == fingerprintBatch
-	if len(waiting) == 0 {
-		// Asked before the program is: an installation with nothing waiting is
-		// not missing anything, whether or not it could fingerprint audio.
-		return result, nil
-	}
-	if importer.prints == nil || !importer.prints.Available() {
-		// Said once for the pass rather than once per copy. Without the program
-		// that computes fingerprints there is nothing this pass can do, and it is
-		// not a fault of any copy.
-		return result, fmt.Errorf("%w: no copy can be fingerprinted", chromaprint.ErrNoFpcalc)
-	}
-
-	for _, copied := range waiting {
-		if ctx.Err() != nil {
-			return result, ctx.Err()
-		}
-		source, ok := importer.copySource(copied)
-		if !ok {
-			result.Missing++
-			continue
-		}
-		value, seconds, err := importer.prints.Compute(
-			ctx, source, chromaprint.CandidateLengthSeconds)
-		if err != nil || value == "" || seconds <= 0 {
-			// Audio nothing could read is a fact about this copy and never a
-			// reason to stop the pass. Nothing is written: no measurement is
-			// silence, and silence is what the absent column already says.
-			result.Unreadable++
-			importer.logger.Warn().Err(err).Str("copy_id", copied.CopyID.String()).
-				Msg("could not fingerprint a held copy")
-			continue
-		}
-		if err := importer.store.RecordCopyFingerprint(
-			ctx, copied.CopyID, value, seconds,
-		); err != nil {
+	// The pass walks past copies it could not measure rather than stopping at
+	// them. Nothing is written for those, so a pass that only counted its first
+	// page would be offered the same page forever and never reach the copies
+	// behind it. A batch is full when fingerprintBatch copies were measured.
+	var after db.CopyCursor
+	for {
+		waiting, err := importer.store.CopiesMissingFingerprint(ctx, after, fingerprintBatch)
+		if err != nil {
 			return result, err
 		}
-		result.Measured++
+		if len(waiting) > 0 && result.Offered == 0 &&
+			(importer.prints == nil || !importer.prints.Available()) {
+			// Said once for the pass rather than once per copy. Without the
+			// program that computes fingerprints there is nothing this pass can
+			// do, and it is not a fault of any copy. An installation with nothing
+			// waiting is not missing anything, so this is asked only once a copy
+			// is.
+			result.Offered = len(waiting)
+			return result, fmt.Errorf("%w: no copy can be fingerprinted", chromaprint.ErrNoFpcalc)
+		}
+		result.Offered += len(waiting)
+
+		for _, copied := range waiting {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			after = copied.Cursor()
+			source, ok := importer.copySource(copied)
+			if !ok {
+				result.Missing++
+				continue
+			}
+			value, seconds, err := importer.prints.Compute(
+				ctx, source, chromaprint.CandidateLengthSeconds)
+			if err != nil || value == "" || seconds <= 0 {
+				// Audio nothing could read is a fact about this copy and never a
+				// reason to stop the pass. Nothing is written: no measurement is
+				// silence, and silence is what the absent column already says.
+				result.Unreadable++
+				importer.logger.Warn().Err(err).Str("copy_id", copied.CopyID.String()).
+					Msg("could not fingerprint a held copy")
+				continue
+			}
+			if err := importer.store.RecordCopyFingerprint(
+				ctx, copied.CopyID, value, seconds,
+			); err != nil {
+				return result, err
+			}
+			result.Measured++
+			if result.Measured == fingerprintBatch {
+				result.MoreWaiting = true
+				break
+			}
+		}
+		if result.MoreWaiting || len(waiting) < fingerprintBatch {
+			break
+		}
+	}
+	if result.Offered == 0 {
+		return result, nil
 	}
 	importer.logger.Info().
 		Int("offered", result.Offered).Int("measured", result.Measured).

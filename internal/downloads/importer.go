@@ -67,7 +67,9 @@ type ImportStore interface {
 	// The two the backfill pass needs. See FingerprintHeldCopies: it reads the
 	// held copies whose audio was never measured, and writes the measurement
 	// back. Neither touches a verdict.
-	CopiesMissingFingerprint(context.Context, int32) ([]db.UnfingerprintedCopyRow, error)
+	CopiesMissingFingerprint(
+		context.Context, db.CopyCursor, int32,
+	) ([]db.UnfingerprintedCopyRow, error)
 	RecordCopyFingerprint(ctx context.Context, copyID uuid.UUID, print string, seconds int) error
 	MarkDownloadImportNeedsReview(context.Context, uuid.UUID, string, *db.ImportEvidence) error
 	CompleteDownloadImport(context.Context, uuid.UUID, string, string, map[string]db.ImportedDownloadFile) error
