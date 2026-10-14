@@ -1059,7 +1059,9 @@ completeness AS (
     JOIN LATERAL (
         -- What the artist's monitor level says this release is. MusicBrainz's
         -- own types decide "main": albums, EPs and singles that are not one of
-        -- the secondary shapes nobody means when they ask for a discography.
+        -- the secondary shapes nobody means when they ask for a discography,
+        -- and whose chosen edition is not a bootleg, promo or pseudo-release.
+        -- The edition is official whenever the group has an official release.
         -- "owned" counts only what the library already holds — every release it
         -- reaches is complete by construction, and nothing else exists to be
         -- missing.
