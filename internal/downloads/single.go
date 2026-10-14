@@ -339,6 +339,12 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 	case verification.Contradicted:
 		return importer.refuse(ctx, row, evidence,
 			db.AcquiredFileDiscardedTags, tagsRefusedSummary, verification.Summary)
+	case verification.TitleSaysOtherwise && unheard(evidence, verification):
+		// The title names another song and no audio check said anything for the
+		// copy. Asking a person about it costs more than the next search, and
+		// refusing admits nothing (ADR 0002 amendment).
+		return importer.refuse(ctx, row, evidence,
+			db.AcquiredFileDiscardedTags, tagsRefusedSummary, verification.Summary)
 	case verification.Proven():
 		// The tags identify it and nothing listened. That is not a refusal — the
 		// file may well be right — and it is not an admission either.
@@ -366,6 +372,17 @@ func (importer *Importer) damage(ctx context.Context, source string) string {
 		return ""
 	}
 	return damage
+}
+
+// unheard reports a copy no audio check spoke about: AcoustID was asked and
+// named no recording, no sample was measured against it, and no library file
+// matched it. AcoustID left unasked is not unheard, because it may name the
+// song when it is asked again.
+func unheard(evidence *db.AcquiredFileEvidence, verification identity.Verification) bool {
+	acoustic := evidence.Acoustic
+	return acoustic != nil && acoustic.Unavailable == "" && len(acoustic.RecordingIDs) == 0 &&
+		(evidence.Anchor == nil || !evidence.Anchor.Measured) &&
+		!verification.Audio && !verification.WitnessAgrees
 }
 
 // uploadSaidOtherAudio reports a comparison that ran against an upload found by
