@@ -354,10 +354,13 @@ func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
 			--   * one album, which is the ordinary case. Albums that render the
 			--     same artist, title and identifier are one answer, because they
 			--     are one folder;
+			--   * for a file that arrived after albumFirstFrom, the one studio
+			--     album, else the one EP, else the one single, so the folder
+			--     agrees with the tags internal/library/tags.go choose() writes;
 			--   * or the one of them the audio was identified on, which is the
 			--     only thing in Schall that says which release a file is a copy
-			--     of. internal/library/tags.go choose() reads them in this same
-			--     order and for this same reason.
+			--     of. choose() reads them in this same order and for this same
+			--     reason.
 			--
 			-- Anything else answers nothing at all, and the identity above names
 			-- the folder instead. Taking whichever album the database returned
@@ -365,10 +368,15 @@ func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
 			-- two planning runs could pick differently.
 			SELECT artist_name, album_title, short_id
 			FROM (
+				SELECT ranked.*,
+				       count(*) FILTER (WHERE ranked.kind_rank = ranked.best_rank)
+				           OVER () AS albums_best
+				FROM (
 				SELECT mapped.*,
 				       count(*) OVER () AS albums_mapped,
 				       count(*) FILTER (WHERE mapped.on_the_identified_release)
-				           OVER () AS albums_identified
+				           OVER () AS albums_identified,
+				       min(mapped.kind_rank) OVER () AS best_rank
 				FROM (
 					SELECT DISTINCT artists.name AS artist_name,
 					       albums.title AS album_title,
@@ -380,20 +388,31 @@ func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
 					           albums.musicbrainz_release_group_id
 					               = identities.musicbrainz_release_group_id,
 					           false
-					       ) AS on_the_identified_release
+					       ) AS on_the_identified_release,
+					       CASE
+					           WHEN files.created_at < $1 OR cardinality(albums.secondary_types) > 0
+					               THEN 3
+					           WHEN lower(albums.album_type) = 'album' THEN 0
+					           WHEN lower(albums.album_type) = 'ep' THEN 1
+					           WHEN lower(albums.album_type) = 'single' THEN 2
+					           ELSE 3
+					       END AS kind_rank
 					FROM track_mappings
 					JOIN tracks ON tracks.id = track_mappings.track_id
 					JOIN albums ON albums.id = tracks.album_id
 					JOIN artists ON artists.id = albums.artist_id
 					WHERE track_mappings.library_file_id = files.id
 				) mapped
+				) ranked
 			) answers
 			WHERE albums_mapped = 1
-			   OR (on_the_identified_release AND albums_identified = 1)
+			   OR (best_rank < 3 AND albums_best = 1 AND kind_rank = best_rank)
+			   OR (NOT (best_rank < 3 AND albums_best = 1)
+			       AND on_the_identified_release AND albums_identified = 1)
 		) matched ON true
 		WHERE files.missing_at IS NULL
 		ORDER BY files.path
-	`)
+	`, albumFirstFrom)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read the library for a layout migration: %w", err)
 	}

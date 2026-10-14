@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -379,6 +380,12 @@ type mappedFile struct {
 	// tells two releases carrying the same recording apart when the file
 	// answers both. See choose.
 	identityReleaseGroup *uuid.UUID
+	// albumType and secondaryTypes are the MusicBrainz types of the release
+	// this row answers, and arrivedAt is when the file entered the library.
+	// See choose.
+	albumType      string
+	secondaryTypes []string
+	arrivedAt      time.Time
 }
 
 // mapped reads the next batch of files that are mapped to a catalogue track,
@@ -449,7 +456,8 @@ func (tagger *Tagger) describe(ctx context.Context, selection string, args ...an
 		       coalesce(albums.genres[1], artists.genres[1], ''),
 		       this_file.replaygain_track_gain,
 		       coalesce(this_file.replaygain_track_peak, 0),
-		       album_loudness.entries
+		       album_loudness.entries,
+		       albums.album_type, albums.secondary_types, this_file.created_at
 		FROM batch
 		-- The file's own row again, for how loud it was measured to be. It is
 		-- read here rather than carried through the selection above so that
@@ -566,6 +574,7 @@ func (tagger *Tagger) describe(ctx context.Context, selection string, args ...an
 			&releaseID, &date, &file.identityReleaseGroup,
 			&trackCredits, &albumCredits, &genre,
 			&trackGain, &trackPeak, &albumMeasure,
+			&file.albumType, &file.secondaryTypes, &file.arrivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -716,18 +725,28 @@ func credits(entries []byte) ([]tagging.Credit, error) {
 // One file answers the same recording on every release that lists it — an EP
 // and the compilation that gathers it, a single and the album it was lifted
 // from — and those releases disagree about the album name, the date and the
-// position on the disc. Which of them the file is a copy of is a question
-// nothing in a mapping answers, and the resolved identity of the file is the
-// one thing in Schall that does: it names the release group the audio was
-// identified against.
+// position on the disc. A music server files a track under the one album its
+// tags name, so the album wins for a file that arrived after albumFirstFrom:
+// then the album is complete there, and the single loses a song it holds
+// anyway. See preferredRelease.
 //
-// Where that does not single one out, the file is left exactly as it is. An
-// album picked from two would be a guess about which release the user owns,
-// written into their file, and a wrong one files the same album under two names
-// — the whole thing this exists to stop.
+// Otherwise the resolved identity of the file decides: it names the release
+// group the audio was identified against. A file that was already in the library
+// keeps that rule, because a music server may key its tracks by their tags, and
+// retagging would cost the likes and plays recorded against the old entry.
+//
+// Where neither singles one out, the file is left exactly as it is. An album
+// picked from two would be a guess about which release the user owns, written
+// into their file, and a wrong one files the same album under two names — the
+// whole thing this exists to stop.
 func choose(answers []mappedFile) mappedFile {
 	if len(answers) == 1 {
 		return answers[0]
+	}
+	if !answers[0].arrivedAt.Before(albumFirstFrom) {
+		if preferred, ok := preferredRelease(answers); ok {
+			return preferred
+		}
 	}
 	identity := answers[0].identityReleaseGroup
 	if identity != nil {
@@ -742,6 +761,49 @@ func choose(answers []mappedFile) mappedFile {
 		}
 	}
 	return mappedFile{fileID: answers[0].fileID, path: answers[0].path, ambiguous: true}
+}
+
+// albumFirstFrom is when files started being written as their album rather than
+// as the release their audio was identified on (2026-10-14). Files that arrived
+// earlier keep the release they were written as.
+var albumFirstFrom = time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+
+// preferredRelease picks the one release of the best kind among those a file
+// answers: a studio album, then an EP, then a single. A compilation, live
+// recording, soundtrack or anything else with a secondary type is never
+// preferred, and neither is a kind two releases share at the top: those are
+// left to the identity.
+func preferredRelease(answers []mappedFile) (mappedFile, bool) {
+	best, bestRank := mappedFile{}, len(releaseKinds)
+	shared := false
+	for _, answer := range answers {
+		rank := releaseRank(answer)
+		switch {
+		case rank < bestRank:
+			best, bestRank, shared = answer, rank, false
+		case rank == bestRank && answer.tags.ReleaseGroupID != best.tags.ReleaseGroupID:
+			shared = true
+		}
+	}
+	if bestRank == len(releaseKinds) || shared {
+		return mappedFile{}, false
+	}
+	return best, true
+}
+
+// releaseKinds is the order preferredRelease reads MusicBrainz primary types in.
+var releaseKinds = []string{"album", "ep", "single"}
+
+func releaseRank(answer mappedFile) int {
+	if len(answer.secondaryTypes) > 0 {
+		return len(releaseKinds)
+	}
+	for rank, kind := range releaseKinds {
+		if strings.EqualFold(answer.albumType, kind) {
+			return rank
+		}
+	}
+	return len(releaseKinds)
 }
 
 // tag writes one file, counting what became of it.
