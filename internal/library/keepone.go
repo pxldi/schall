@@ -276,6 +276,13 @@ func (remover *Remover) releaseCopy(
 		removedBy, removalReason).Scan(&removalID); err != nil {
 		return nil, fmt.Errorf("record the removal of %s: %w", doomed.path, err)
 	}
+	// The keeper was proven a copy of this recording under the lock above, so
+	// a want settled on the doomed file and a playlist entry it answered are
+	// answered by the keeper now. Without this the want read "Fetched once,
+	// file gone" for music the library still holds.
+	if err := db.CarryToKeptFile(ctx, transaction, doomed.id, keeper.id); err != nil {
+		return nil, err
+	}
 	// Everything this file admitted goes back to a question before the file
 	// itself goes — the same reason Remove withdraws it first: a copy was let
 	// into the library because its audio agreed with this one, and this file
