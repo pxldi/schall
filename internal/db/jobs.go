@@ -369,6 +369,7 @@ var ScheduledSweepKinds = []string{
 	"sweep_loudness",
 	"sweep_audio_spectrum",
 	"sweep_decode_check",
+	"check_invariants",
 	"sweep_upgrade_candidates",
 	"refresh_weekly_playlist",
 	"refresh_new_releases_playlist",

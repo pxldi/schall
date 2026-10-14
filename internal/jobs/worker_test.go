@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,6 +76,7 @@ type fakeQueue struct {
 	firstStarted                  time.Time
 	spectrumSweepQueuedFor        time.Time
 	decodeSweepQueuedFor          time.Time
+	invariantCheckQueuedFor       time.Time
 	upgradeSweepQueuedFor         time.Time
 	upgradeSweepPayload           json.RawMessage
 	lyricsSweepPayload            json.RawMessage
@@ -484,6 +486,13 @@ func (queue *fakeQueue) QueueCopyFingerprintSweep(_ context.Context, runAfter ti
 		return queue.scheduleErr
 	}
 	queue.copyFingerprintSweepQueuedFor = runAfter
+	return nil
+}
+func (queue *fakeQueue) QueueInvariantCheck(_ context.Context, runAfter time.Time) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.invariantCheckQueuedFor = runAfter
 	return nil
 }
 func (queue *fakeQueue) QueueDecodeSweep(_ context.Context, runAfter time.Time) error {
@@ -5686,5 +5695,58 @@ func TestARefreshOfAnAlbumThatIsGoneIsNotAskedAgain(t *testing.T) {
 
 	if queue.failed != jobID || queue.retried != uuid.Nil {
 		t.Fatalf("failed = %s retried = %s, want a permanent failure", queue.failed, queue.retried)
+	}
+}
+
+type fakeInvariantCounter struct {
+	counts []db.InvariantCount
+	err    error
+}
+
+func (counter *fakeInvariantCounter) CountInvariantViolations(context.Context) ([]db.InvariantCount, error) {
+	return counter.counts, counter.err
+}
+
+// The invariant check counts again a day later, whatever it found.
+func TestAnInvariantCheckSchedulesTheNextOneADayLater(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	jobID := uuid.New()
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).
+		WithInvariantCounter(&fakeInvariantCounter{counts: []db.InvariantCount{
+			{Name: "album_without_tracks", Rule: "an album a day old has tracks", Violations: 16},
+		}})
+	worker.now = func() time.Time { return now }
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: CheckInvariants, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if queue.completed != jobID || !queue.invariantCheckQueuedFor.Equal(now.Add(invariantCheckIdle)) {
+		t.Fatalf("completed = %s, next check = %s; want %s, %s",
+			queue.completed, queue.invariantCheckQueuedFor, jobID, now.Add(invariantCheckIdle))
+	}
+}
+
+// A broken rule is logged with its name and count, so the log says which rule
+// and how often.
+func TestAnInvariantCheckLogsEachBrokenRule(t *testing.T) {
+	var logged bytes.Buffer
+	worker := NewWorker(&fakeQueue{}, fakeProvider{}, zerolog.New(&logged)).
+		WithInvariantCounter(&fakeInvariantCounter{counts: []db.InvariantCount{
+			{Name: "album_without_tracks", Rule: "an album a day old has tracks", Violations: 16},
+			{Name: "file_without_root", Rule: "a present file sits under a library root", Violations: 0},
+		}})
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: CheckInvariants, Attempts: 1, MaxAttempts: 3,
+	})
+
+	out := logged.String()
+	if !strings.Contains(out, `"invariant":"album_without_tracks"`) || !strings.Contains(out, `"violations":16`) {
+		t.Errorf("log %q does not name the broken rule and its count", out)
+	}
+	if strings.Contains(out, `"invariant":"file_without_root"`) {
+		t.Errorf("log %q names a rule nothing breaks", out)
 	}
 }

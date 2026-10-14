@@ -495,11 +495,14 @@ func (service *Service) fetchTogether(ctx context.Context, wants []chosen) error
 	if err := service.fetcher.StartTogether(ctx, requestIDs); err != nil {
 		// Every want in the batch was asked in the same breath, so a refusal is
 		// every one of their refusals. Each withdraws its own copy and carries on
-		// with the next one, exactly as it would have alone.
+		// with the next one, exactly as it would have alone. The withdrawal
+		// outlives the caller: a start refused because the sweep was being
+		// stopped otherwise left its request recorded and its want waiting on it.
 		var first error
 		for index, want := range recorded {
 			if failed := service.abandonFetch(
-				ctx, want.target, want.offer, requestIDs[index], err); failed != nil && first == nil {
+				context.WithoutCancel(ctx), want.target, want.offer, requestIDs[index], err,
+			); failed != nil && first == nil {
 				first = failed
 			}
 		}
