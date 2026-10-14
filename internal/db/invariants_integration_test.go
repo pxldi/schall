@@ -325,3 +325,100 @@ func TestTwoWantsForOneMergedSongBreakAnInvariant(t *testing.T) {
 		"one_want_per_song": 1,
 	})
 }
+
+// plantSettledOnAnotherRow writes a present file filed under one MusicBrainz
+// row and an acquired want for another row settled on it with detail. The
+// file's identity is written identityAge before the want settled; a negative
+// age means the library answered the file again after the want settled.
+func plantSettledOnAnotherRow(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, detail string, identityAge time.Duration,
+) {
+	t.Helper()
+	want := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		WITH root AS (
+		    INSERT INTO library_roots (path) VALUES ('/music') RETURNING id),
+		file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at, library_root_id,
+		                               resolution_status, match_status)
+		    SELECT '/music/Souly/07 Nichts Hittet Mehr.mp3', 1, now(), id, 'resolved', 'unmatched'
+		    FROM root RETURNING id),
+		identity AS (
+		    INSERT INTO library_file_identities (library_file_id, kind, musicbrainz_recording_id,
+		                                         method, created_at)
+		    SELECT id, 'external', $2, 'acoustid', now() - $4::interval FROM file),
+		settled AS (
+		    INSERT INTO acquisition_targets (
+		        id, origin, entry_artist, entry_title, musicbrainz_recording_id,
+		        status, attempts, acquired_at, acquired_library_file_id)
+		    SELECT $1, 'manual', 'Souly', 'Nichts hittet mehr (clean)', $3, 'acquired', 1, now(), id
+		    FROM file)
+		INSERT INTO acquisition_target_attempts (acquisition_target_id, attempt, outcome, detail)
+		VALUES ($1, 1, 'acquired', $5)
+	`, want, uuid.New(), uuid.New(), identityAge.String(), detail); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A want for a clean edition settles on the explicit file it holds (ADR 0032),
+// and the explicit row stays the file's own.
+func TestAWantKeptAsTheExplicitVersionKeepsTheInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantSettledOnAnotherRow(ctx, t, pool, ExplicitEditionDetail, time.Hour)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}
+
+func TestAWantSettledOnAFileFiledAsAnotherSongBreaksAnInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantSettledOnAnotherRow(ctx, t, pool, "Downloaded, audio verified, imported.", time.Hour)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{
+		"acquired_recording_not_held": 1,
+	})
+}
+
+// Once the library answers the explicit file again, the clean want's
+// settlement no longer stands on what the file was.
+func TestAnExplicitVersionAnsweredAgainBreaksAnInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantSettledOnAnotherRow(ctx, t, pool, ExplicitEditionDetail, -time.Hour)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{
+		"acquired_recording_not_held": 1,
+	})
+}
+
+// A want can settle on a file with no identity that the matcher mapped onto
+// another row of the song, and no second row can be recorded without an
+// identity.
+func TestAWantSettledOnAMappedFileWithNoIdentityKeepsTheInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	if _, err := pool.Exec(ctx, `
+		WITH artist AS (
+		    INSERT INTO artists (name, sort_name) VALUES ('Souly', 'Souly') RETURNING id),
+		album AS (
+		    INSERT INTO albums (artist_id, title) SELECT id, 'traence' FROM artist RETURNING id),
+		track AS (
+		    INSERT INTO tracks (album_id, musicbrainz_recording_id, title, track_number)
+		    SELECT id, $1, 'Nichts hittet mehr', 7 FROM album RETURNING id),
+		root AS (
+		    INSERT INTO library_roots (path) VALUES ('/music') RETURNING id),
+		file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at, library_root_id,
+		                               resolution_status, match_status)
+		    SELECT '/music/Souly/07 Nichts Hittet Mehr.mp3', 1, now(), id, 'pending', 'matched'
+		    FROM root RETURNING id),
+		mapping AS (
+		    INSERT INTO track_mappings (track_id, library_file_id, method, confidence)
+		    SELECT track.id, file.id, 'tags', 1 FROM track, file)
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id,
+		    status, acquired_at, acquired_library_file_id)
+		SELECT 'manual', 'Souly', 'Nichts hittet mehr', $2, 'acquired', now(), id FROM file
+	`, uuid.New(), uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}

@@ -46,6 +46,11 @@ const heldRecordings = `
 	JOIN tracks AS track ON track.id = mapping.track_id
 	WHERE track.musicbrainz_recording_id IS NOT NULL`
 
+// ExplicitEditionDetail is the attempt detail a want for a clean edition
+// settles with when the file holds the explicit one (ADR 0032). The data check
+// reads it back, so the acquisition service writes this constant.
+const ExplicitEditionDetail = "Downloaded, audio verified, imported. Kept as the explicit version."
+
 // Invariants are the rules a live read on 2026-10-14 checked (the queries in
 // the project's data-checks/invariants.sql, less the ones that only find cases
 // to read). Each one stays cheap on a library of ~70k files: the whole set ran
@@ -57,9 +62,27 @@ var Invariants = []Invariant{
 		Query: `
 			WITH held AS (` + heldRecordings + `)
 			SELECT count(*) FROM acquisition_targets AS want
+			LEFT JOIN library_files AS settled_on
+			    ON settled_on.id = want.acquired_library_file_id AND settled_on.missing_at IS NULL
+			LEFT JOIN library_file_identities AS settled_identity
+			    ON settled_identity.library_file_id = settled_on.id
 			WHERE want.status = 'acquired' AND want.musicbrainz_recording_id IS NOT NULL
 			  AND canonical_recording_id(want.musicbrainz_recording_id)
-			      NOT IN (SELECT recording_id FROM held WHERE recording_id IS NOT NULL)`,
+			      NOT IN (SELECT recording_id FROM held WHERE recording_id IS NOT NULL)
+			  -- Two settlements leave the want's row unheld on purpose, and LostWants
+			  -- leaves both alone. A want for a clean edition settles on the explicit
+			  -- file it holds (ADR 0032), and the file keeps the explicit row until
+			  -- something answers it again. A want can also settle on a file with no
+			  -- identity that the matcher mapped onto another row of the song.
+			  AND NOT (settled_on.id IS NOT NULL AND settled_identity.id IS NOT NULL
+			           AND settled_identity.created_at <= want.acquired_at
+			           AND (SELECT attempt.detail FROM acquisition_target_attempts AS attempt
+			                WHERE attempt.acquisition_target_id = want.id AND attempt.outcome = 'acquired'
+			                ORDER BY attempt.recorded_at DESC LIMIT 1)
+			               = '` + ExplicitEditionDetail + `')
+			  AND NOT (settled_on.id IS NOT NULL AND settled_identity.id IS NULL
+			           AND EXISTS (SELECT 1 FROM track_mappings AS mapping
+			                       WHERE mapping.library_file_id = settled_on.id))`,
 	},
 	{
 		Name: "acquired_source_file_gone",

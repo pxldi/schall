@@ -1089,7 +1089,7 @@ const (
 	// What an attempt records when the want named the clean edition and the file
 	// on the disc holds the explicit one. The two are different recordings, so
 	// the detail says which one the library has (ADR 0032).
-	explicitEditionDetail = "Downloaded, audio verified, imported. Kept as the explicit version."
+	explicitEditionDetail = db.ExplicitEditionDetail
 	// What an attempt records when AcoustID names the wanted song and the one the
 	// library filed the file under as one piece of audio.
 	sameClusterDetail = "Downloaded, audio verified, imported. AcoustID knows this audio under both MusicBrainz entries."
