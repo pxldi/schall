@@ -492,6 +492,11 @@ var recurringJobs = []recurringJob{
 		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
+		kind:  jobs.CheckInvariants,
+		label: "Data check",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
+	},
+	{
 		kind:  jobs.SweepPreviewAnchors,
 		label: "Preview sweep",
 		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",

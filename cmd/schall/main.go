@@ -398,6 +398,9 @@ func run() error {
 		// floor was set, or before it was raised, and raises an ordinary want
 		// for each one under it. It ships switched off, in its own settings.
 		WithUpgradeSweeper(upgradeService).
+		// And the daily count of rows that break a rule Schall's data keeps
+		// (db.Invariants). It reads only and logs what it finds.
+		WithInvariantCounter(store).
 		// And a word to the user when a pass leaves a question behind. One
 		// message per pass, never one per question, and a message that could
 		// not be delivered costs nothing but a line in the log.
@@ -722,6 +725,12 @@ func run() error {
 	// upgrade sweep.
 	if err := store.EnsureDecodeSweepQueued(ctx, time.Now()); err != nil {
 		logger.Error().Err(err).Msg("queue decode check sweep")
+	}
+
+	// And one invariant check, which counts rows that break a rule Schall's
+	// data keeps and logs them. A failure to queue it does not stop startup.
+	if err := store.EnsureInvariantCheckQueued(ctx, time.Now()); err != nil {
+		logger.Error().Err(err).Msg("queue invariant check")
 	}
 
 	// And one upgrade sweep, which walks the library's files against the
