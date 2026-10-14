@@ -391,40 +391,44 @@
     variant="filter"
   />
 
-  <form class="ml-auto w-full sm:w-48" onsubmit={applySearch}>
-    <label class="field flex w-full items-center gap-2">
-      <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
-      <input
-        bind:value={searchInput}
-        placeholder="Search artists, then Enter"
-        aria-label="Search artists"
-        enterkeyhint="search"
-        class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
-      />
-    </label>
-  </form>
+  <!-- Search, genre and sort wrap as one group, so the search box never sits
+       alone at the end of the first line with genre and sort under it. -->
+  <div class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
+    <form class="w-full sm:w-48" onsubmit={applySearch}>
+      <label class="field flex w-full items-center gap-2">
+        <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
+        <input
+          bind:value={searchInput}
+          placeholder="Search artists, then Enter"
+          aria-label="Search artists"
+          enterkeyhint="search"
+          class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
+        />
+      </label>
+    </form>
 
-  <PillSelect
-    options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
-    value={genre}
-    onchange={setGenre}
-    label="Which genre"
-    quiet
-    prefix="Genre"
-  />
+    <PillSelect
+      options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
+      value={genre}
+      onchange={setGenre}
+      label="Which genre"
+      quiet
+      prefix="Genre"
+    />
 
-  <PillSelect
-    options={sorts.map((option) => ({ value: option.value, name: option.label }))}
-    value={sort}
-    onchange={(value) => setSort(value as Sort)}
-    label="How to sort artists"
-    quiet
-    prefix="Sort"
-  />
+    <PillSelect
+      options={sorts.map((option) => ({ value: option.value, name: option.label }))}
+      value={sort}
+      onchange={(value) => setSort(value as Sort)}
+      label="How to sort artists"
+      quiet
+      prefix="Sort"
+    />
 
-  {#if hasFilters}
-    <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
-  {/if}
+    {#if hasFilters}
+      <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
+    {/if}
+  </div>
 </ControlRail>
 
 <div class="flex flex-col gap-5 px-4 sm:px-6 py-5">
