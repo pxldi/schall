@@ -12,9 +12,21 @@ import (
 	"github.com/pxldi/schall/internal/tagmatch"
 )
 
-// searchLimit bounds one provider search. Five candidates is already more than
-// a person will read, and the ranking keeps the plausible ones at the top.
+// searchLimit bounds one provider search by ISRC. Five candidates is already
+// more than a person will read, and the ranking keeps the plausible ones at the
+// top.
 const searchLimit = 10
+
+// nameSearchLimit bounds a search by title and artist, and it is the most
+// MusicBrainz returns in one answer.
+//
+// A search by name is read differently from a search by ISRC. Title, artist and
+// length prove a recording only when no other row fits as well, and a row the
+// search never returned cannot be ruled out. Nirvana's "Lithium" has 464 rows,
+// and the first ten MusicBrainz returned were all bootlegs, so the one bootleg
+// within five seconds was taken for the studio file. Reading more rows makes a
+// search complete more often; decideAmong handles the searches that still are not.
+const nameSearchLimit = 100
 
 // Provider is the metadata provider resolution asks. It is deliberately narrow:
 // resolution looks recordings up, searches for them, and asks which recording an
@@ -184,17 +196,36 @@ func (resolver *Resolver) Resolve(
 		}
 	}
 
+	seen := seenEveryRow
 	if title := strings.TrimSpace(evidence.Title); title != "" {
 		recordings, err := resolver.provider.SearchRecordings(ctx, musicbrainz.RecordingQuery{
 			Artist: evidence.Artist, Title: title,
-		}, searchLimit)
+		}, nameSearchLimit)
 		if err != nil {
 			return Outcome{}, fmt.Errorf("search recordings for %q: %w", title, err)
 		}
 		found = merge(found, recordings, skip)
+		// A full page means MusicBrainz may hold more rows than it returned. The
+		// album tag narrows the question to the rows on that album, and a search
+		// for those that comes back short of a page has returned every one of them.
+		if len(recordings) >= nameSearchLimit {
+			seen = seenSomeRows
+			if album := strings.TrimSpace(evidence.Album); album != "" {
+				onAlbum, err := resolver.provider.SearchRecordings(ctx, musicbrainz.RecordingQuery{
+					Artist: evidence.Artist, Title: title, Release: album,
+				}, nameSearchLimit)
+				if err != nil {
+					return Outcome{}, fmt.Errorf("search recordings for %q on %q: %w", title, album, err)
+				}
+				found = merge(found, onAlbum, skip)
+				if len(onAlbum) < nameSearchLimit {
+					seen = seenEveryRowOnTheAlbum
+				}
+			}
+		}
 	}
 
-	outcome := decide(evidence, found)
+	outcome := decideAmong(evidence, found, seen)
 	if unknownIdentifier {
 		// Music naming a recording the provider has never heard of is not music
 		// without an identity: it is music whose identity is wrong, and that is a
