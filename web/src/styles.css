@@ -343,10 +343,10 @@
   --animate-pulse: pulse calc(var(--motion-ambient) * 2) var(--motion-ease) infinite;
 }
 
-/* Registered so a change of inks eases rather than cuts: an unregistered custom
-   property cannot be interpolated. One arriving step, the same as the page
-   rising into place, so the colours change with the page. At two steps they
-   were still moving after the page had settled and read as loading late. */
+/* The inks change in the same frame as the page they belong to. An eased
+   change started only once the new page's first frame had been drawn, which
+   took about a second on a page of covers, so the colours visibly arrived
+   after the page. */
 @property --color-duo-dark {
   syntax: '<color>';
   inherits: true;
@@ -359,22 +359,9 @@
   initial-value: #ffb59e;
 }
 
-html {
-  transition:
-    --color-duo-dark var(--motion-enter) var(--motion-ease-arrive),
-    --color-duo-light var(--motion-enter) var(--motion-ease-arrive);
-}
-
-/* The first inks the application shows are cut in (AppShell): there is no
-   page before them to change from, only the house inks of an empty frame. */
-html[data-inks-cut] {
-  transition: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    transition: none;
-  }
+html[data-inks-changing],
+html[data-inks-changing] * {
+  transition: none !important;
 }
 
 :root {
