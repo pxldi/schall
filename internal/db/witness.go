@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -141,4 +142,29 @@ func ProofSentence(proof string) string {
 		return "a CD rip in AccurateRip"
 	}
 	return "the evidence Schall had"
+}
+
+// The endings a resolved method carries when several recordings were proven
+// and one was singled out: by its release, or as the explicit edition
+// (ADR 0032). What proved it is the method before the ending.
+const (
+	MethodSingledOutByRelease         = "-and-release"
+	MethodSingledOutByExplicitEdition = "explicit-edition"
+)
+
+// ProvenForItsWant reports that a recorded method rests on the audio or on a
+// person: AcoustID at the leading cluster, a distributor's preview, a proven
+// library file, a CD checksum, or a manual decision. Tag methods do not
+// qualify. identity.ProvenForItsWant documents the rule.
+func ProvenForItsWant(method string) bool {
+	base, _ := strings.CutSuffix(method, MethodSingledOutByRelease)
+	if trimmed, cut := strings.CutSuffix(base, "-and-"+MethodSingledOutByExplicitEdition); cut {
+		base = trimmed
+	}
+	switch base {
+	case "fingerprint", "fingerprint-and-identifier", "published-sample",
+		"library-witness", "cd-checksum", "manual":
+		return true
+	}
+	return false
 }
