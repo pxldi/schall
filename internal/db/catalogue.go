@@ -133,14 +133,23 @@ const (
 	// part of "complete". It is written once because two things read it — the
 	// column every release page carries, and the completeness an artist's page
 	// states — and a second copy would drift the moment a level was added.
+	// "main" and "albums_eps" skip a release whose chosen edition is not
+	// official: the edition picker prefers an official release, so a bootleg
+	// edition means MusicBrainz knows no official one.
 	albumMonitored = `CASE artists.monitor_level
 			WHEN 'everything' THEN true
 			WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
 				AND NOT (albums.secondary_types
 					&& '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+				AND NOT EXISTS (SELECT 1 FROM release_editions
+					WHERE release_editions.album_id = albums.id
+					  AND lower(release_editions.status) <> 'official')
 			WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
 				AND NOT (albums.secondary_types
 					&& '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+				AND NOT EXISTS (SELECT 1 FROM release_editions
+					WHERE release_editions.album_id = albums.id
+					  AND lower(release_editions.status) <> 'official')
 			ELSE albums.owned_track_count > 0
 		END`
 )
