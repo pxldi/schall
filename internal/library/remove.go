@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pxldi/schall/internal/chromaprint"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/identity"
 	"github.com/rs/zerolog"
@@ -52,6 +53,7 @@ type Remover struct {
 	pool    *pgxpool.Pool
 	logger  zerolog.Logger
 	matcher FileContender
+	prints  *chromaprint.Fingerprinter
 }
 
 func NewRemover(pool *pgxpool.Pool, logger zerolog.Logger) *Remover {

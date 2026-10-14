@@ -289,3 +289,98 @@ func TestSweepRaisesAWantForADamagedFileEndToEnd(t *testing.T) {
 		t.Fatal("a want was raised for a clean file with no floor set")
 	}
 }
+
+// A damaged file identified only by its tags is offered too. The replacement
+// deletes it only once the new copy's audio agrees with it.
+func TestADamagedFileIdentifiedByItsTagsIsAnUpgradeCandidate(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootID := libraryRoot(t, pool)
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/damaged.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "title-artist-duration", recordingID: uuid.New(),
+	})
+	damage := "Header missing"
+	setDecodeError(t, pool, fileID, &damage)
+
+	candidates, err := db.New(pool).UpgradeCandidates(context.Background(), uuid.Nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].FileID != fileID || !candidates[0].Damaged {
+		t.Fatalf("candidates = %+v; want the damaged file, marked damaged", candidates)
+	}
+}
+
+func TestAnUndamagedFileIdentifiedByItsTagsIsNotAnUpgradeCandidate(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootID := libraryRoot(t, pool)
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/clean.mp3", bitRateKbps: bitRate(96),
+		resolved: true, settledProof: "title-artist-duration", recordingID: uuid.New(),
+	})
+	setDecodeError(t, pool, fileID, nil)
+
+	candidates, err := db.New(pool).UpgradeCandidates(context.Background(), uuid.Nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("candidates = %+v; want none", candidates)
+	}
+}
+
+// After a replacement whose audio did not agree, both files stay. The damaged
+// one must not raise a want for a third copy.
+func TestADamagedFileIdentifiedByItsTagsBesideAnUndamagedCopyIsNotAnUpgradeCandidate(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootID := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/damaged.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "title-artist-duration", recordingID: recordingID,
+	})
+	damage := "Header missing"
+	setDecodeError(t, pool, fileID, &damage)
+	newID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/new.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "published-sample", recordingID: recordingID,
+	})
+	setDecodeError(t, pool, newID, nil)
+
+	candidates, err := db.New(pool).UpgradeCandidates(context.Background(), uuid.Nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("candidates = %+v; want none", candidates)
+	}
+}
+
+func TestSweepRaisesAWantForADamagedFileIdentifiedByItsTags(t *testing.T) {
+	pool := dbtest.Setup(t)
+	enableUpgrades(t, pool)
+	rootID := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/damaged.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "same-registration", recordingID: recordingID,
+	})
+	damage := "Header missing"
+	setDecodeError(t, pool, fileID, &damage)
+
+	service := NewService(db.New(pool), zerolog.Nop())
+	if _, err := service.Sweep(context.Background(), uuid.Nil); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	var summary string
+	var upgradeOf uuid.NullUUID
+	if err := pool.QueryRow(context.Background(), `
+		SELECT summary, upgrade_of_library_file_id FROM acquisition_targets
+		WHERE musicbrainz_recording_id = $1 AND status <> 'superseded'
+	`, recordingID).Scan(&summary, &upgradeOf); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "Your copy's audio is damaged." || upgradeOf.UUID != fileID {
+		t.Fatalf("want = %q for %v; want the damaged summary for %s", summary, upgradeOf, fileID)
+	}
+}

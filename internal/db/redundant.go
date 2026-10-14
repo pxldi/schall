@@ -90,6 +90,9 @@ func judge(copies []HeldTwiceCopy) (string, bool) {
 				"weigh up a decision somebody already made.", false
 		}
 	}
+	if anyUnprovenDamaged(copies) {
+		return unprovenDamagedVerdict, false
+	}
 
 	keeper := -1
 	for candidate := range copies {
@@ -125,6 +128,24 @@ func judge(copies []HeldTwiceCopy) (string, bool) {
 		worst = index
 	}
 	return whyKeep(copies[keeper], copies[worst]), true
+}
+
+// unprovenDamagedVerdict is what the duplicates screen says about a group
+// with a damaged copy nothing proved.
+const unprovenDamagedVerdict = "One copy is damaged and nothing proved it is this recording. " +
+	"Listen to both before you keep one."
+
+// anyUnprovenDamaged reports a damaged copy whose identity is not settled.
+// The upgrade keeps such a file beside its replacement when their audio did
+// not agree (library.ReplaceIfBetter), and this comparison reads no audio, so
+// it must not delete the file in its place.
+func anyUnprovenDamaged(copies []HeldTwiceCopy) bool {
+	for _, copied := range copies {
+		if copied.unprovenDamaged {
+			return true
+		}
+	}
+	return false
 }
 
 // supersedes reports whether one copy can stand in for another entirely.
@@ -381,6 +402,9 @@ func ChooseKeeperWhenAnyWillDo(copies []HeldTwiceCopy) (uuid.UUID, bool) {
 		if copied.byHand {
 			return uuid.Nil, false
 		}
+	}
+	if anyUnprovenDamaged(copies) {
+		return uuid.Nil, false
 	}
 	// Every copy has to be the same audio as every other. A group where one
 	// pair is a tie and another pair cannot be compared is not a group of

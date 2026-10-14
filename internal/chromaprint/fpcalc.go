@@ -34,8 +34,14 @@ type Options struct {
 	// FpcalcPath is where the fpcalc program is. Empty means look for it on the
 	// PATH under its own name.
 	FpcalcPath string
+	// FFmpegPath is where ffmpeg is, for PlayableFrames. Empty means look for
+	// it on the PATH under its own name.
+	FFmpegPath string
 	// Run executes fpcalc. Tests replace it; nothing else should.
 	Run func(ctx context.Context, path string, args ...string) ([]byte, error)
+	// Pipe runs ffmpeg into fpcalc for PlayableFrames. Tests replace it;
+	// nothing else should.
+	Pipe PipeFunc
 }
 
 // Fingerprinter computes fingerprints of files with fpcalc.
@@ -49,7 +55,9 @@ type Options struct {
 // one fingerprint.
 type Fingerprinter struct {
 	fpcalcPath string
+	ffmpegPath string
 	run        func(ctx context.Context, path string, args ...string) ([]byte, error)
+	pipe       PipeFunc
 	// Whether run is the real program. A test that supplies its own runner is
 	// always able to answer, and must not be told the program is missing because
 	// the machine running the test does not have it.
@@ -59,10 +67,18 @@ type Fingerprinter struct {
 func NewFingerprinter(options Options) *Fingerprinter {
 	print := &Fingerprinter{
 		fpcalcPath: strings.TrimSpace(options.FpcalcPath),
+		ffmpegPath: strings.TrimSpace(options.FFmpegPath),
 		run:        options.Run,
+		pipe:       options.Pipe,
 	}
 	if print.fpcalcPath == "" {
 		print.fpcalcPath = defaultFpcalc
+	}
+	if print.ffmpegPath == "" {
+		print.ffmpegPath = "ffmpeg"
+	}
+	if print.pipe == nil {
+		print.pipe = runPipe
 	}
 	if print.run == nil {
 		print.run, print.real = runCommand, true
