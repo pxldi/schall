@@ -2247,3 +2247,138 @@ func TestAReleaseAnotherAlbumHoldsIsNotTakenFromIt(t *testing.T) {
 		t.Fatalf("release held by %s (%v), want it left with %s", owner, err, holder)
 	}
 }
+
+// MusicBrainz moved BULLY's release to another release group and removed the
+// old one. The album the release moved to takes the tracks with their files
+// and wants, and the old album is gone. Before, the refresh could only refuse.
+func TestAnAlbumIsMergedIntoTheOneItsReleaseMovedTo(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	holder, newcomer := twoAlbums(t, ctx, pool)
+	repository := NewRepository(pool)
+	release := musicbrainz.ReleaseCatalogue{
+		Edition: musicbrainz.ReleaseEdition{ID: uuid.New(), Title: "BULLY", SelectionReason: "Earliest official edition"},
+		Tracks: []musicbrainz.Track{
+			{RecordingID: uuid.New(), Title: "KING", DiscNumber: 1, TrackNumber: 1},
+			{RecordingID: uuid.New(), Title: "THIS ONE", DiscNumber: 1, TrackNumber: 2},
+		},
+	}
+	if err := repository.SaveReleaseCatalogue(ctx, holder, release); err != nil {
+		t.Fatalf("holder: %v", err)
+	}
+	var trackID, fileID, wantID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		WITH file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at)
+		    VALUES ('/music/ye/bully/01.flac', 1024, now()) RETURNING id
+		), track AS (
+		    SELECT id FROM tracks WHERE album_id = $1 AND track_number = 1
+		), mapping AS (
+		    INSERT INTO track_mappings (track_id, library_file_id, method)
+		    SELECT track.id, file.id, 'manual' FROM track, file
+		), want AS (
+		    INSERT INTO acquisition_targets (origin, entry_artist, entry_title, musicbrainz_recording_id, status, origin_album_id)
+		    VALUES ('manual', 'Ye', 'THIS ONE', $2, 'pending', $1) RETURNING id
+		)
+		SELECT track.id, file.id, want.id FROM track, file, want
+	`, holder, release.Tracks[1].RecordingID).Scan(&trackID, &fileID, &wantID); err != nil {
+		t.Fatal(err)
+	}
+	// An unmatched track left from an earlier edition of the newcomer.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO tracks (album_id, musicbrainz_recording_id, title, disc_number, track_number)
+		VALUES ($1, $2, 'KING', 1, 1)
+	`, newcomer, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.MergeAlbumInto(ctx, holder, newcomer, release.Edition.ID); err != nil {
+		t.Fatalf("MergeAlbumInto() error = %v", err)
+	}
+	if err := repository.SaveReleaseCatalogue(ctx, newcomer, release); err != nil {
+		t.Fatalf("SaveReleaseCatalogue() after the merge error = %v", err)
+	}
+
+	var albums, tracks int
+	var trackAlbum, mappedTrack, wantAlbum, edition uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM albums WHERE id = $1),
+		       (SELECT count(*) FROM tracks WHERE album_id = $2),
+		       (SELECT album_id FROM tracks WHERE id = $3),
+		       (SELECT track_id FROM track_mappings WHERE library_file_id = $4),
+		       (SELECT origin_album_id FROM acquisition_targets WHERE id = $5),
+		       (SELECT album_id FROM release_editions WHERE musicbrainz_release_id = $6)
+	`, holder, newcomer, trackID, fileID, wantID, release.Edition.ID).Scan(
+		&albums, &tracks, &trackAlbum, &mappedTrack, &wantAlbum, &edition,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if albums != 0 || tracks != 2 || trackAlbum != newcomer || mappedTrack != trackID ||
+		wantAlbum != newcomer || edition != newcomer {
+		t.Fatalf("old album rows %d, newcomer tracks %d, track on %s, file on track %s, want on %s, release on %s; "+
+			"want 0, 2, and everything on %s with the file on %s",
+			albums, tracks, trackAlbum, mappedTrack, wantAlbum, edition, newcomer, trackID)
+	}
+}
+
+// Two files matched to the same place on both albums are a person's call, so
+// nothing moves.
+func TestAnAlbumIsNotMergedOverAMatchedTrack(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	holder, newcomer := twoAlbums(t, ctx, pool)
+	repository := NewRepository(pool)
+	release := musicbrainz.ReleaseCatalogue{
+		Edition: musicbrainz.ReleaseEdition{ID: uuid.New(), Title: "BULLY", SelectionReason: "Earliest official edition"},
+		Tracks:  []musicbrainz.Track{{RecordingID: uuid.New(), Title: "KING", DiscNumber: 1, TrackNumber: 1}},
+	}
+	if err := repository.SaveReleaseCatalogue(ctx, holder, release); err != nil {
+		t.Fatalf("holder: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		WITH track AS (
+		    INSERT INTO tracks (album_id, musicbrainz_recording_id, title, disc_number, track_number)
+		    VALUES ($1, $2, 'KING', 1, 1) RETURNING id
+		), file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at)
+		    VALUES ('/music/ye/bully/king.flac', 1024, now()) RETURNING id
+		)
+		INSERT INTO track_mappings (track_id, library_file_id, method)
+		SELECT track.id, file.id, 'manual' FROM track, file
+	`, newcomer, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+
+	err := repository.MergeAlbumInto(ctx, holder, newcomer, release.Edition.ID)
+	if !errors.Is(err, ErrAlbumsCannotMerge) {
+		t.Fatalf("MergeAlbumInto() error = %v, want ErrAlbumsCannotMerge", err)
+	}
+	var albums int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM albums WHERE id = $1`, holder).Scan(&albums); err != nil || albums != 1 {
+		t.Fatalf("old album rows = %d (%v), want it kept", albums, err)
+	}
+}
+
+func twoAlbums(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	artistID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO artists (musicbrainz_id, name, sort_name) VALUES ($1, 'Ye', 'Ye')
+	`, artistID); err != nil {
+		t.Fatal(err)
+	}
+	album := func(title string) uuid.UUID {
+		var id uuid.UUID
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO albums (artist_id, musicbrainz_release_group_id, title)
+			SELECT id, $2, $3 FROM artists WHERE musicbrainz_id = $1
+			RETURNING id
+		`, artistID, uuid.New(), title).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	return album("BULLY (by Chropic)"), album("BULLY")
+}

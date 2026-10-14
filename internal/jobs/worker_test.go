@@ -92,7 +92,14 @@ type fakeQueue struct {
 	// saveErr breaks writing a catalogue back, completeErr breaks recording a
 	// job as done, cancelErr breaks stopping one, scheduleErr breaks queueing a
 	// successor, and resolutionsErr breaks queueing the files a scan found.
-	saveErr              error
+	saveErr error
+	// saveErrOnce fails the next catalogue save only, and albumGroups names
+	// the release group of an album that is not the one musicBrainzID names.
+	// merged records the albums merged away, and mergeErr breaks a merge.
+	saveErrOnce          error
+	albumGroups          map[uuid.UUID]uuid.UUID
+	merged               []uuid.UUID
+	mergeErr             error
 	completeErr          error
 	cancelErr            error
 	scheduleErr          error
@@ -257,8 +264,18 @@ func (queue *fakeQueue) Claim(_ context.Context, lane Lane) (Job, error) {
 func (queue *fakeQueue) ArtistMusicBrainzID(context.Context, uuid.UUID) (uuid.UUID, error) {
 	return queue.musicBrainzID, queue.err
 }
-func (queue *fakeQueue) AlbumMusicBrainzIDs(context.Context, uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+func (queue *fakeQueue) AlbumMusicBrainzIDs(_ context.Context, albumID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	if group, ok := queue.albumGroups[albumID]; ok {
+		return group, uuid.Nil, nil
+	}
 	return queue.musicBrainzID, uuid.Nil, queue.err
+}
+func (queue *fakeQueue) MergeAlbumInto(_ context.Context, from, _, _ uuid.UUID) error {
+	if queue.mergeErr != nil {
+		return queue.mergeErr
+	}
+	queue.merged = append(queue.merged, from)
+	return nil
 }
 func (queue *fakeQueue) SaveArtistCatalogue(_ context.Context, _ uuid.UUID, catalogue musicbrainz.ArtistCatalogue) error {
 	queue.catalogue = catalogue
@@ -266,6 +283,10 @@ func (queue *fakeQueue) SaveArtistCatalogue(_ context.Context, _ uuid.UUID, cata
 }
 func (queue *fakeQueue) SaveReleaseCatalogue(_ context.Context, _ uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
 	queue.release = catalogue
+	if err := queue.saveErrOnce; err != nil {
+		queue.saveErrOnce = nil
+		return err
+	}
 	return queue.saveErr
 }
 func (queue *fakeQueue) MarkArtistGenresAsked(_ context.Context, artistID uuid.UUID) error {
@@ -5390,6 +5411,75 @@ func TestAReleaseRefreshIsNotAskedAgainWhenAnotherAlbumHoldsTheRelease(t *testin
 	}
 }
 
+// An album whose release group MusicBrainz removed or merged into the one
+// being refreshed is merged into it, and the catalogue is saved after. Before,
+// the refresh stopped at the held release every day and the album kept no
+// tracks.
+func TestAReleaseRefreshMergesTheAlbumMusicBrainzMovedItsReleaseFrom(t *testing.T) {
+	for name, provider := range map[string]fakeProvider{
+		"removed": {releaseGroupErr: musicbrainz.ErrReleaseGroupRemoved},
+		"merged":  {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			jobID, albumID, holderID := uuid.New(), uuid.New(), uuid.New()
+			groupID := uuid.New()
+			payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": albumID})
+			queue := &fakeQueue{
+				musicBrainzID: groupID,
+				albumGroups:   map[uuid.UUID]uuid.UUID{holderID: uuid.New()},
+				saveErrOnce:   &EditionHeldError{ReleaseID: uuid.New(), AlbumID: holderID},
+			}
+			if name == "merged" {
+				provider.releaseGroup = musicbrainz.ReleaseGroupDetail{MergedInto: groupID}
+			}
+			worker := NewWorker(queue, provider, zerolog.Nop())
+
+			worker.process(context.Background(), Job{
+				ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+			})
+
+			if len(queue.merged) != 1 || queue.merged[0] != holderID {
+				t.Fatalf("merged = %v, want %s", queue.merged, holderID)
+			}
+			if queue.completed != jobID {
+				t.Fatalf("completed = %s failed = %s, want the refresh done", queue.completed, queue.failed)
+			}
+		})
+	}
+}
+
+// A holder whose release group MusicBrainz still has, under its own ID or
+// another one, or holds but cannot attribute, is not merged.
+func TestAReleaseRefreshLeavesAHolderMusicBrainzStillHas(t *testing.T) {
+	for name, provider := range map[string]fakeProvider{
+		"still there":      {},
+		"merged elsewhere": {releaseGroup: musicbrainz.ReleaseGroupDetail{MergedInto: uuid.New()}},
+		"uncredited":       {releaseGroupErr: musicbrainz.ErrNotFound},
+	} {
+		t.Run(name, func(t *testing.T) {
+			jobID, holderID := uuid.New(), uuid.New()
+			payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": uuid.New()})
+			queue := &fakeQueue{
+				musicBrainzID: uuid.New(),
+				albumGroups:   map[uuid.UUID]uuid.UUID{holderID: uuid.New()},
+				saveErr:       &EditionHeldError{ReleaseID: uuid.New(), AlbumID: holderID},
+			}
+			worker := NewWorker(queue, provider, zerolog.Nop())
+
+			worker.process(context.Background(), Job{
+				ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+			})
+
+			if len(queue.merged) != 0 {
+				t.Fatalf("merged = %v, want nothing", queue.merged)
+			}
+			if queue.failed != jobID || queue.retried != uuid.Nil {
+				t.Fatalf("failed = %s retried = %s, want a permanent failure", queue.failed, queue.retried)
+			}
+		})
+	}
+}
+
 // The same release group is recorded as answered, so the backfill stops
 // counting it.
 func TestAReleaseRefreshRecordsThatAnUnreadableGroupHasNoGenres(t *testing.T) {
@@ -5498,5 +5588,22 @@ func TestThePassAskingAcoustIDAgainQueuesTheNextAWeekOn(t *testing.T) {
 	}
 	if want := now.Add(7 * 24 * time.Hour); !queue.askAcoustIDAgainQueuedFor.Equal(want) {
 		t.Errorf("next pass at %v, want %v", queue.askAcoustIDAgainQueuedFor, want)
+	}
+}
+
+// A refresh queued for an album that has since been merged away finds it gone,
+// and would find it gone on every retry.
+func TestARefreshOfAnAlbumThatIsGoneIsNotAskedAgain(t *testing.T) {
+	jobID := uuid.New()
+	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": uuid.New()})
+	queue := &fakeQueue{err: pgx.ErrNoRows}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop())
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if queue.failed != jobID || queue.retried != uuid.Nil {
+		t.Fatalf("failed = %s retried = %s, want a permanent failure", queue.failed, queue.retried)
 	}
 }

@@ -347,6 +347,143 @@ func (err *EditionHeldError) Error() string {
 
 func (err *EditionHeldError) Unwrap() error { return ErrEditionHeldByAnotherAlbum }
 
+// ErrAlbumsCannotMerge says an album a release has moved to already has a
+// matched track where the album holding the release keeps one of its own.
+var ErrAlbumsCannotMerge = errors.New("both albums hold matched tracks at the same place")
+
+// MergeAlbumInto moves the album holding releaseID onto into and removes the
+// emptied row. The refresh calls it only after MusicBrainz said the holder's
+// release group is gone or merged into into's, so this is MusicBrainz's own
+// decision carried out. Tracks keep their IDs, so the files mapped to them and
+// the wants on their recordings stay where they were. Nothing on disk is
+// touched.
+func (repository *Repository) MergeAlbumInto(ctx context.Context, from, into, releaseID uuid.UUID) error {
+	transaction, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = transaction.Rollback(ctx) }()
+
+	locked := 0
+	rows, err := transaction.Query(ctx, `
+		SELECT id FROM albums WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE
+	`, []uuid.UUID{from, into})
+	if err != nil {
+		return fmt.Errorf("lock albums %s and %s: %w", from, into, err)
+	}
+	for rows.Next() {
+		locked++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("lock albums %s and %s: %w", from, into, err)
+	}
+	if locked != 2 {
+		return fmt.Errorf("merge album %s into %s: %w", from, into, pgx.ErrNoRows)
+	}
+	// The release may have changed hands since the refresh looked.
+	var holds bool
+	if err := transaction.QueryRow(ctx, `
+		SELECT EXISTS (
+		    SELECT 1 FROM release_editions WHERE album_id = $1 AND musicbrainz_release_id = $2
+		)
+	`, from, releaseID).Scan(&holds); err != nil {
+		return fmt.Errorf("check album %s holds release %s: %w", from, releaseID, err)
+	}
+	if !holds {
+		return fmt.Errorf("album %s no longer holds release %s", from, releaseID)
+	}
+
+	// Unmatched tracks on into are what the save after this would remove or
+	// rewrite anyway. A matched one standing where a holder's track stands is
+	// two files claiming one place, which is a person's call.
+	if _, err := transaction.Exec(ctx, `
+		DELETE FROM tracks
+		WHERE album_id = $1
+		  AND NOT EXISTS (SELECT 1 FROM track_mappings WHERE track_mappings.track_id = tracks.id)
+	`, into); err != nil {
+		return fmt.Errorf("clear unmatched tracks of album %s: %w", into, err)
+	}
+	var collides bool
+	if err := transaction.QueryRow(ctx, `
+		SELECT EXISTS (
+		    SELECT 1 FROM tracks AS kept
+		    JOIN tracks AS moving
+		      ON moving.disc_number = kept.disc_number AND moving.track_number = kept.track_number
+		    WHERE kept.album_id = $1 AND moving.album_id = $2
+		)
+	`, into, from).Scan(&collides); err != nil {
+		return fmt.Errorf("compare tracks of albums %s and %s: %w", from, into, err)
+	}
+	if collides {
+		return ErrAlbumsCannotMerge
+	}
+
+	statements := []struct {
+		what string
+		sql  string
+		args []any
+	}{
+		{"tracks", `UPDATE tracks SET album_id = $2, updated_at = now() WHERE album_id = $1`, []any{from, into}},
+		// A manual choice of this very release is a person's decision and goes
+		// with it.
+		{"preferred release", `
+			UPDATE albums SET preferred_musicbrainz_release_id = held.preferred_musicbrainz_release_id,
+			                  updated_at = now()
+			FROM albums AS held
+			WHERE albums.id = $2 AND held.id = $1
+			  AND albums.preferred_musicbrainz_release_id IS NULL
+			  AND held.preferred_musicbrainz_release_id = $3`, []any{from, into, releaseID}},
+		{"release edition source", `
+			DELETE FROM metadata_sources
+			WHERE entity_type = 'release_edition'
+			  AND entity_id IN (SELECT id FROM release_editions WHERE album_id = $1)`, []any{from}},
+		{"cover art", `
+			UPDATE release_cover_art SET album_id = $2
+			WHERE album_id = $1
+			  AND NOT EXISTS (SELECT 1 FROM release_cover_art WHERE album_id = $2)`, []any{from, into}},
+		{"labels", `
+			UPDATE label_releases SET album_id = $2
+			WHERE album_id = $1
+			  AND NOT EXISTS (
+			      SELECT 1 FROM label_releases AS kept
+			      WHERE kept.album_id = $2 AND kept.label_id = label_releases.label_id
+			  )`, []any{from, into}},
+		{"source searches", `
+			UPDATE source_searches SET album_id = $2
+			WHERE album_id = $1
+			  AND NOT EXISTS (
+			      SELECT 1 FROM source_searches AS kept
+			      WHERE kept.album_id = $2 AND kept.run_id = source_searches.run_id
+			  )`, []any{from, into}},
+		{"download requests", `
+			UPDATE download_requests SET album_id = $2
+			WHERE album_id = $1
+			  AND NOT (
+			      status IN ('requested', 'started')
+			      AND EXISTS (
+			          SELECT 1 FROM download_requests AS kept
+			          WHERE kept.album_id = $2
+			            AND kept.status IN ('requested', 'started')
+			            AND kept.provider = download_requests.provider
+			            AND kept.source_username IS NOT DISTINCT FROM download_requests.source_username
+			            AND kept.source_directory IS NOT DISTINCT FROM download_requests.source_directory
+			      )
+			  )`, []any{from, into}},
+		{"downloads", `UPDATE downloads SET album_id = $2 WHERE album_id = $1`, []any{from, into}},
+		{"wants", `UPDATE acquisition_targets SET origin_album_id = $2 WHERE origin_album_id = $1`, []any{from, into}},
+		{"new releases playlist", `UPDATE new_release_playlist_members SET album_id = $2 WHERE album_id = $1`, []any{from, into}},
+		{"album source", `DELETE FROM metadata_sources WHERE entity_type = 'album' AND entity_id = $1`, []any{from}},
+		{"album", `DELETE FROM albums WHERE id = $1`, []any{from}},
+	}
+	for _, statement := range statements {
+		if _, err := transaction.Exec(ctx, statement.sql, statement.args...); err != nil {
+			return fmt.Errorf("move %s of album %s to %s: %w", statement.what, from, into, err)
+		}
+	}
+	return transaction.Commit(ctx)
+}
+
 func (repository *Repository) SaveReleaseCatalogue(ctx context.Context, albumID uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
 	transaction, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

@@ -30,6 +30,12 @@ type ReleaseGroupDetail struct {
 	MergedInto uuid.UUID
 }
 
+// ErrReleaseGroupRemoved is a release group lookup answered 404. It is kept
+// apart from the other ErrNotFound answers, an empty title or no credited
+// artist, because only a 404 says MusicBrainz no longer has the group, and an
+// album is merged away on that answer alone.
+var ErrReleaseGroupRemoved = fmt.Errorf("MusicBrainz removed this release group: %w", ErrNotFound)
+
 // ReleaseGroup looks one release group up by its MusicBrainz ID, with the
 // artist it is credited to.
 func (client *Client) ReleaseGroup(ctx context.Context, id uuid.UUID) (ReleaseGroupDetail, error) {
@@ -46,7 +52,7 @@ func (client *Client) ReleaseGroup(ctx context.Context, id uuid.UUID) (ReleaseGr
 	}, &payload)
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) && httpErr.StatusCode == 404 {
-		return ReleaseGroupDetail{}, ErrNotFound
+		return ReleaseGroupDetail{}, ErrReleaseGroupRemoved
 	}
 	if err != nil {
 		return ReleaseGroupDetail{}, fmt.Errorf("look up MusicBrainz release group: %w", err)

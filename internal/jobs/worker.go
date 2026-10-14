@@ -550,6 +550,9 @@ type Queue interface {
 	MarkArtistGenresAsked(context.Context, uuid.UUID) error
 	MarkAlbumGenresAsked(context.Context, uuid.UUID) error
 	SaveReleaseCatalogue(context.Context, uuid.UUID, musicbrainz.ReleaseCatalogue) error
+	// MergeAlbumInto moves the album holding a release onto the album that
+	// release now belongs to, and removes the emptied album.
+	MergeAlbumInto(ctx context.Context, from, into, releaseID uuid.UUID) error
 	SaveCatalogueReleaseGroup(context.Context, musicbrainz.ReleaseGroupDetail) (uuid.UUID, error)
 	Complete(context.Context, Job) error
 	JobPayload(context.Context, uuid.UUID) ([]byte, error)
@@ -3757,7 +3760,9 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 
 	releaseGroupID, selectedReleaseID, err := worker.queue.AlbumMusicBrainzIDs(ctx, payload.AlbumID)
 	if err != nil {
-		worker.finishFailed(ctx, job, fmt.Errorf("load album: %w", err), true)
+		// An album merged into another since this job was queued is gone for
+		// good, and asking again finds it gone again.
+		worker.finishFailed(ctx, job, fmt.Errorf("load album: %w", err), !errors.Is(err, pgx.ErrNoRows))
 		return
 	}
 	catalogue, err := worker.provider.ReleaseCatalogue(ctx, releaseGroupID, selectedReleaseID)
@@ -3778,7 +3783,18 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, fmt.Errorf("fetch release catalogue: %w", err), !answered)
 		return
 	}
-	if err := worker.queue.SaveReleaseCatalogue(ctx, payload.AlbumID, catalogue); err != nil {
+	err = worker.queue.SaveReleaseCatalogue(ctx, payload.AlbumID, catalogue)
+	if held := (*EditionHeldError)(nil); errors.As(err, &held) {
+		merged, mergeErr := worker.mergeHolder(ctx, payload.AlbumID, releaseGroupID, held)
+		if mergeErr != nil {
+			worker.finishFailed(ctx, job, mergeErr, true)
+			return
+		}
+		if merged {
+			err = worker.queue.SaveReleaseCatalogue(ctx, payload.AlbumID, catalogue)
+		}
+	}
+	if err != nil {
 		// The same release chosen again tomorrow meets the same album, so this
 		// is an answer and is not retried.
 		held := errors.Is(err, ErrEditionHeldByAnotherAlbum)
@@ -3821,6 +3837,48 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 		Int("tracks", len(catalogue.Tracks)).
 		Int("wanted", wanted).
 		Msg("release metadata refreshed")
+}
+
+// mergeHolder merges the album holding a release into the album being
+// refreshed, when MusicBrainz proves the holder is gone: its release group
+// answers 404, or answers as the group being refreshed, which is how a merged
+// group reads. Any other answer leaves both albums as they are, because which
+// one keeps the release is then a person's call. It reports whether it merged.
+func (worker *Worker) mergeHolder(
+	ctx context.Context, albumID, releaseGroupID uuid.UUID, held *EditionHeldError,
+) (bool, error) {
+	holderGroupID, _, err := worker.queue.AlbumMusicBrainzIDs(ctx, held.AlbumID)
+	if err != nil {
+		return false, fmt.Errorf("load album %s holding release %s: %w", held.AlbumID, held.ReleaseID, err)
+	}
+	if holderGroupID == releaseGroupID {
+		return false, nil
+	}
+	group, err := worker.provider.ReleaseGroup(ctx, holderGroupID)
+	removed := errors.Is(err, musicbrainz.ErrReleaseGroupRemoved)
+	if err != nil && !removed && !errors.Is(err, musicbrainz.ErrNotFound) {
+		return false, fmt.Errorf("look up release group %s: %w", holderGroupID, err)
+	}
+	if !removed && (err != nil || group.MergedInto != releaseGroupID) {
+		return false, nil
+	}
+	if err := worker.queue.MergeAlbumInto(ctx, held.AlbumID, albumID, held.ReleaseID); err != nil {
+		if errors.Is(err, ErrAlbumsCannotMerge) {
+			worker.logger.Warn().Err(err).
+				Str("album_id", albumID.String()).
+				Str("holder_album_id", held.AlbumID.String()).
+				Msg("album could not be merged")
+			return false, nil
+		}
+		return false, fmt.Errorf("merge album %s into %s: %w", held.AlbumID, albumID, err)
+	}
+	worker.logger.Info().
+		Str("album_id", albumID.String()).
+		Str("merged_album_id", held.AlbumID.String()).
+		Str("merged_release_group_id", holderGroupID.String()).
+		Bool("removed", removed).
+		Msg("album merged into the one MusicBrainz now files its release under")
+	return true, nil
 }
 
 // spent reports that this failure ends the job rather than putting it a rung up
