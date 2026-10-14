@@ -166,9 +166,20 @@ func (service *Service) reconcileFile(ctx context.Context, fileID uuid.UUID, cas
 		// rests on tags rather than audio, gets no automatic link to either. It
 		// goes to Review, where the candidate list shows both tracks with what
 		// named each.
-		contested, err := contradictedTracks(ctx, transaction, fileID)
+		//
+		// A file whose audio was proven is not contested: the tag is void and
+		// the proven recording is simply not in the catalogue yet. It waits
+		// unmatched, as any resolved file does, until its release arrives.
+		audioProven, err := identityProvenByAudio(ctx, transaction, fileID)
 		if err != nil {
 			return err
+		}
+		contested := 0
+		if !audioProven {
+			contested, err = contradictedTracks(ctx, transaction, fileID)
+			if err != nil {
+				return err
+			}
 		}
 		if contested > 0 {
 			status = "ambiguous"

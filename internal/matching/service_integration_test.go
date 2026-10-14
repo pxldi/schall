@@ -2086,6 +2086,31 @@ func TestASampleProvenIdentityWinsOverAContradictingTag(t *testing.T) {
 	assertMapping(t, ctx, pool, fileID, provenTrack, "resolved_identity", false)
 }
 
+// A file proven to be a recording the catalogue does not hold yet is not a
+// question: its tag is void and it waits unmatched for the release.
+func TestAFingerprintedFileWhoseRecordingIsNotInTheCatalogueIsNotAQuestion(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	tagged := uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Kanye West", "Graduation")
+	seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Homecoming", number: ptr(int32(12)), recordingID: &tagged,
+	})
+	fileID := seedFile(t, ctx, pool, fileFixture{
+		path: "/music/Graduation Reworked/12.mp3", recordingID: &tagged,
+	})
+	insertIdentity(t, ctx, pool, fileID, uuid.New())
+	setIdentityMethod(t, ctx, pool, fileID, "fingerprint")
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus(t, ctx, pool, fileID, "unmatched", 0)
+	assertNoMapping(t, ctx, pool, fileID)
+}
+
 // An identity resting on title, artist and length is tags against tags, so the
 // contradiction still goes to a person.
 func TestATagBasedIdentityAgainstAContradictingTagStaysAQuestion(t *testing.T) {
