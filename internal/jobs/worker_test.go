@@ -3441,6 +3441,25 @@ func TestAFailureThatReachedNobodyWaitsMinutesBeforeTheNextAttempt(t *testing.T)
 	}
 }
 
+// A service that says it is unavailable waits as long as one that does not
+// answer. A MusicBrainz 503 on the short ladder spent an import's three
+// attempts in fifteen seconds and threw the fetched copy away.
+func TestAServiceThatSaysItIsUnavailableWaitsMinutesBeforeTheNextAttempt(t *testing.T) {
+	failure := ClassifyMessage(`import download: verify "Home.mp3" against recording ` +
+		`9f1: look up recording 9f1: MusicBrainz returned HTTP 503`)
+	if delay := retryDelay(failure, 1); delay != 2*time.Minute {
+		t.Fatalf("retryDelay = %s, want the first rung of the unreachable ladder", delay)
+	}
+}
+
+// A 500 is a fault in the service, not an outage, and keeps the short ladder.
+func TestAServerFaultKeepsTheShortLadder(t *testing.T) {
+	failure := ClassifyMessage("MusicBrainz returned HTTP 500")
+	if delay := retryDelay(failure, 1); delay != 5*time.Second {
+		t.Fatalf("retryDelay = %s, want 5s", delay)
+	}
+}
+
 // The same ladder, still doubling and still bounded.
 func TestTheUnreachableBackoffStopsDoublingAtHalfAnHour(t *testing.T) {
 	failure := ClassifyMessage("dial tcp 10.43.0.7:5030: connect: connection refused")

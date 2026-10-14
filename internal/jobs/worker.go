@@ -4209,8 +4209,12 @@ var ordinaryLadder = retryLadder{first: 5 * time.Second, longest: 5 * time.Minut
 var unreachableLadder = retryLadder{first: 2 * time.Minute, longest: 30 * time.Minute}
 
 // retryDelay is how long this failure waits before the next attempt.
+//
+// A service that answers 502, 503 or 504 is down or overloaded just as surely
+// as one that does not answer. On 2026-10-14 a MusicBrainz 503 spent all three
+// attempts of an import inside fifteen seconds and threw away a fetched copy.
 func retryDelay(failure Failure, attempt int) time.Duration {
-	if failure.Unreachable {
+	if failure.Unreachable || failure.outage() {
 		return unreachableLadder.wait(attempt)
 	}
 	return ordinaryLadder.wait(attempt)

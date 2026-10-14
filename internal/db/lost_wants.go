@@ -30,13 +30,16 @@ type LostWant struct {
 // identity, a mapping onto a track, or a second row. A file gone from disk or
 // deleted is the removals' business and not listed here.
 //
-// changedOnly keeps the wants whose file the library answered again after they
-// settled, and the wants holding a copy whose file has no answer at all. A want
-// can settle on purpose against a file filed under another row (a clean edition
-// held as the explicit one, ADR 0032), and without this every sweep would open
-// it again. A want with no copy whose file has no answer is silence, and is
-// never listed.
-func (q *Queries) LostWants(ctx context.Context, limit int32, changedOnly bool) ([]LostWant, error) {
+// Only the wants whose file the library answered again after they settled are
+// listed, and the wants holding a copy whose file has no answer at all, neither
+// an identity nor a track. A want can settle on purpose against a file filed
+// under another row (a clean edition held as the explicit one, ADR 0032), and
+// a want can settle on a file mapped onto another row of its song, where no
+// identity exists to hang a second row off. Listing either would open it again
+// on every sweep: on 2026-10-14 four wants were judged again every minute or
+// two, and each judgement asked MusicBrainz again. A want with no copy whose
+// file has no answer is silence, and is never listed.
+func (q *Queries) LostWants(ctx context.Context, limit int32) ([]LostWant, error) {
 	rows, err := q.db.Query(ctx, `
 		SELECT`+acquisitionTargetColumns+`,
 		       EXISTS (
@@ -55,19 +58,16 @@ func (q *Queries) LostWants(ctx context.Context, limit int32, changedOnly bool) 
 		WHERE acquisition_targets.status = 'acquired'
 		  AND acquisition_targets.musicbrainz_recording_id IS NOT NULL
 		  AND acquisition_targets.source IS NULL
-		  -- A want with no copy whose file has no answer is silence.
-		  AND (settled_identity.id IS NOT NULL OR EXISTS (
-		      SELECT 1 FROM acquisition_target_files files
-		      WHERE files.acquisition_target_id = acquisition_targets.id
-		        AND files.verdict = 'accepted'
-		        AND files.library_file_id = settled_on.id))
-		  AND (NOT $2::boolean
-		       OR settled_identity.created_at > acquisition_targets.acquired_at
-		       OR (settled_identity.id IS NULL AND EXISTS (
-		           SELECT 1 FROM acquisition_target_files files
-		           WHERE files.acquisition_target_id = acquisition_targets.id
-		             AND files.verdict = 'accepted'
-		             AND files.library_file_id = settled_on.id)))
+		  AND (settled_identity.created_at > acquisition_targets.acquired_at
+		       OR (settled_identity.id IS NULL
+		           AND NOT EXISTS (
+		               SELECT 1 FROM track_mappings
+		               WHERE track_mappings.library_file_id = settled_on.id)
+		           AND EXISTS (
+		               SELECT 1 FROM acquisition_target_files files
+		               WHERE files.acquisition_target_id = acquisition_targets.id
+		                 AND files.verdict = 'accepted'
+		                 AND files.library_file_id = settled_on.id)))
 		  AND NOT EXISTS (
 		      SELECT 1
 		      FROM recording_id_aliases(acquisition_targets.musicbrainz_recording_id) wanted (id)
@@ -91,7 +91,7 @@ func (q *Queries) LostWants(ctx context.Context, limit int32, changedOnly bool) 
 		  )
 		ORDER BY acquisition_targets.acquired_at, acquisition_targets.id
 		LIMIT $1
-	`, limit, changedOnly)
+	`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list the settled wants whose file is filed as another song: %w", err)
 	}

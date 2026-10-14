@@ -241,7 +241,7 @@ type Store interface {
 	RecordCopyWaveform(ctx context.Context, copyID uuid.UUID, peaks []byte) error
 	StoppedTargetsHoldingAFiledCopy(context.Context, int32) ([]db.AcquisitionTargetRow, error)
 	// The settled wants whose file the library has since filed as another song.
-	LostWants(ctx context.Context, limit int32, changedOnly bool) ([]db.LostWant, error)
+	LostWants(ctx context.Context, limit int32) ([]db.LostWant, error)
 	ReopenLostWant(ctx context.Context, id uuid.UUID, summary string) (bool, error)
 	// QueueFileResolution asks the library what one of its files is. A want
 	// whose copy nobody has asked about yet waits for the answer rather than
@@ -528,11 +528,8 @@ func (service *Service) Sweep(ctx context.Context) error {
 	service.reviewed.Do(func() {
 		service.reviewStoppedFilings(ctx)
 		service.reviewWaitingCopies(ctx)
-		if err := service.reviewLostWants(ctx, false); err != nil {
-			service.logger.Error().Err(err).Msg("look again at every settled want filed as another song")
-		}
 	})
-	if err := service.reviewLostWants(ctx, true); err != nil {
+	if err := service.reviewLostWants(ctx); err != nil {
 		return fmt.Errorf("look again at the settled wants filed as another song: %w", err)
 	}
 	if err := service.resolveDue(ctx); err != nil {

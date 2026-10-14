@@ -310,6 +310,14 @@ func answeredWith(name string, status int) Failure {
 	}
 }
 
+// outage reports a service that answered that it is down or overloaded: a
+// gateway that could not reach it, or the service itself saying it cannot take
+// requests for now.
+func (failure Failure) outage() bool {
+	return failure.Cause == CauseUnanswered &&
+		(failure.Status == 502 || failure.Status == 503 || failure.Status == 504)
+}
+
 // meaningOf says what a status code means in words. Only the ones Schall meets
 // are named; anything else is left as the number it is, because inventing a
 // meaning for a status nobody has seen would be this file guessing.
