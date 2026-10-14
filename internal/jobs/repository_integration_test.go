@@ -2131,6 +2131,61 @@ func TestAnArtistRefreshDoesNotRequeueAnUnchangedRelease(t *testing.T) {
 	}
 }
 
+// A release group new to the artist with the title and type of an album the
+// artist already has refreshes that album too, because that refresh is what
+// folds it in when MusicBrainz merged the two. Before, the older album kept
+// its tracks and was never asked again (AL-90 "Murmansk-60" stood twice).
+func TestAnArtistRefreshRefreshesTheAlbumANewReleaseGroupSharesItsTitleWith(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	repository := NewRepository(pool)
+
+	musicBrainzID, oldGroup, newGroup := uuid.New(), uuid.New(), uuid.New()
+	var artistID, oldAlbum uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		WITH artist AS (
+		    INSERT INTO artists (musicbrainz_id, name, sort_name)
+		    VALUES ($1, 'AL-90', 'AL-90')
+		    RETURNING id
+		), album AS (
+		    INSERT INTO albums (artist_id, musicbrainz_release_group_id, title, album_type)
+		    SELECT id, $2, 'Murmansk-60', 'album' FROM artist
+		    RETURNING id
+		), track AS (
+		    INSERT INTO tracks (album_id, title, track_number)
+		    SELECT id, 'Intro', 1 FROM album
+		)
+		SELECT artist.id, album.id FROM artist, album
+	`, musicBrainzID, oldGroup).Scan(&artistID, &oldAlbum); err != nil {
+		t.Fatal(err)
+	}
+
+	err := repository.SaveArtistCatalogue(ctx, artistID, musicbrainz.ArtistCatalogue{
+		Artist:   musicbrainz.Artist{ID: musicBrainzID, Name: "AL-90", SortName: "AL-90"},
+		Metadata: json.RawMessage(`{}`),
+		ReleaseGroups: []musicbrainz.ReleaseGroup{{
+			ID: newGroup, Title: "Murmansk-60", PrimaryType: "Album", Metadata: json.RawMessage(`{}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SaveArtistCatalogue() error = %v", err)
+	}
+
+	var queued bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+		    SELECT 1 FROM jobs
+		    WHERE kind = 'refresh_album_metadata' AND payload->>'albumId' = $1::text
+		)
+	`, oldAlbum).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if !queued {
+		t.Fatal("the album sharing the new release group's title was not refreshed")
+	}
+}
+
 func countAlbumRefreshes(ctx context.Context, t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 	var count int
