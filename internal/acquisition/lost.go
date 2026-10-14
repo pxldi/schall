@@ -2,13 +2,10 @@ package acquisition
 
 import "context"
 
-// lostWantsReview bounds how many settled wants one sweep looks at again, and
-// lostWantsRepair how many the first sweep of a process does. The list query is
-// cheap, and a reopened want is judged by the sweep's own bounded batch.
-const (
-	lostWantsReview = 50
-	lostWantsRepair = 500
-)
+// lostWantsReview bounds how many settled wants one sweep looks at again. The
+// list query is cheap, and a reopened want is judged by the sweep's own bounded
+// batch.
+const lostWantsReview = 50
 
 // lostSummary is what a reopened want says until the sweep has judged it.
 const lostSummary = "Library now files this song's file as another song. Checking again."
@@ -31,14 +28,12 @@ const lostSummary = "Library now files this song's file as another song. Checkin
 // proves will settle it (Poldi chose this on 2026-10-14).
 //
 // Each sweep reads only the wants whose file was answered again since they
-// settled (see db.LostWants). The first sweep of a process reads them all, once,
-// which is how the wants lost before this existed are repaired.
-func (service *Service) reviewLostWants(ctx context.Context, changedOnly bool) error {
-	limit := int32(lostWantsReview)
-	if !changedOnly {
-		limit = lostWantsRepair
-	}
-	lost, err := service.store.LostWants(ctx, limit, changedOnly)
+// settled (see db.LostWants). The first sweep of each process used to read them
+// all, which repaired the wants lost before this existed (69 to 13 live on
+// 2026-10-14). The rest settled on purpose, and that pass reopened them at
+// every start, so it is gone.
+func (service *Service) reviewLostWants(ctx context.Context) error {
+	lost, err := service.store.LostWants(ctx, lostWantsReview)
 	if err != nil {
 		return err
 	}

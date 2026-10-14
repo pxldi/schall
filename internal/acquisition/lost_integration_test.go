@@ -110,11 +110,10 @@ func TestASettledWantWhoseFileIsFiledUnderASecondRowStaysHeld(t *testing.T) {
 	}
 }
 
-// A person filed the file under a row of the same registration before the want
-// settled, and the want settled with nothing recorded, so its track said
-// "Fetched once, file gone". The first sweep of a process looks at it again: the
-// person's answer stays and the file counts for the want's row as a second row.
-func TestTheFirstSweepRecordsTheSecondRowOfAWantSettledOnAPersonsAnswer(t *testing.T) {
+// A person filed the file under a row of the same registration after the want
+// settled. The want is looked at again: the person's answer stays and the file
+// counts for the want's row as a second row.
+func TestAPersonsAnswerAfterTheWantSettledStaysAndCountsAsASecondRow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	pool := dbtest.Setup(t)
@@ -127,7 +126,6 @@ func TestTheFirstSweepRecordsTheSecondRowOfAWantSettledOnAPersonsAnswer(t *testi
 	alreadyCompleted(ctx, t, pool, target.ID, fileID)
 	settledYesterday(ctx, t, pool, target.ID, fileID)
 	filedAs(ctx, t, pool, fileID, filed, true)
-	answeredBefore(ctx, t, pool, fileID)
 
 	if err := service.Sweep(ctx); err != nil {
 		t.Fatalf("Sweep() error = %v", err)
@@ -191,7 +189,7 @@ func TestOnlyAnAnswerAfterTheWantSettledListsItAgain(t *testing.T) {
 	settledYesterday(ctx, t, pool, target.ID, fileID)
 	filedAs(ctx, t, pool, fileID, filed, false)
 
-	changed, err := queries.LostWants(ctx, 10, true)
+	changed, err := queries.LostWants(ctx, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,19 +198,12 @@ func TestOnlyAnAnswerAfterTheWantSettledListsItAgain(t *testing.T) {
 	}
 
 	answeredBefore(ctx, t, pool, fileID)
-	changed, err = queries.LostWants(ctx, 10, true)
+	changed, err = queries.LostWants(ctx, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(changed) != 0 {
 		t.Errorf("lost wants = %+v, want none answered since they settled", changed)
-	}
-	all, err := queries.LostWants(ctx, 10, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(all) != 1 {
-		t.Errorf("every lost want = %+v, want the one", all)
 	}
 }
 
@@ -273,5 +264,122 @@ func TestASettledWantWithNoCopyStaysOnAFileWithNoAnswer(t *testing.T) {
 	}
 	if len(hunter.queries) != 0 {
 		t.Errorf("searches = %d, want none", len(hunter.queries))
+	}
+}
+
+// attemptsOf counts the attempt rows a want has written.
+func attemptsOf(ctx context.Context, t *testing.T, pool *pgxpool.Pool, targetID uuid.UUID) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM acquisition_target_attempts WHERE acquisition_target_id = $1
+	`, targetID).Scan(&count); err != nil {
+		t.Fatalf("count the attempts of want %s: %v", targetID, err)
+	}
+	return count
+}
+
+// mappedOnto puts a library file under a catalogue track carrying a recording,
+// with no identity beside it, the way tag matching maps a file.
+func mappedOnto(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, fileID, recordingID uuid.UUID,
+) {
+	t.Helper()
+	var artistID, albumID, trackID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO artists (musicbrainz_id, name, sort_name)
+		VALUES ($1, 'Portishead', 'Portishead')
+		RETURNING id
+	`, uuid.New()).Scan(&artistID); err != nil {
+		t.Fatalf("seed artist: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO albums (artist_id, musicbrainz_release_group_id, title, album_type, secondary_types)
+		VALUES ($1, $2, 'Dummy', 'album', '{}')
+		RETURNING id
+	`, artistID, uuid.New()).Scan(&albumID); err != nil {
+		t.Fatalf("seed album: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO tracks (album_id, musicbrainz_recording_id, title, disc_number, track_number, duration_ms)
+		VALUES ($1, $2, 'Glory Box', 1, 11, 301000)
+		RETURNING id
+	`, albumID, recordingID).Scan(&trackID); err != nil {
+		t.Fatalf("seed track: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO track_mappings (track_id, library_file_id, method, is_manual)
+		VALUES ($1, $2, 'musicbrainz_recording_id', false)
+	`, trackID, fileID); err != nil {
+		t.Fatalf("seed track mapping: %v", err)
+	}
+}
+
+// RIN "UP IN SMOKE" settled on its copy, and tag matching mapped the file onto
+// the album row of the same song with no identity beside it. There is no
+// identity to hang the single's row off, so nothing recorded the settlement and
+// every sweep opened the want again and asked MusicBrainz about it, about once a
+// minute live on 2026-10-14. The want now stays settled.
+func TestAWantSettledOnAFileMappedOntoAnotherRowOfItsSongStaysSettled(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	single, album := uuid.New(), uuid.New()
+	service := filingService(pool, singleAndAlbumTrack(single, album, 301000))
+	target := createWant(ctx, t, service, single)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, single)
+	alreadyCompleted(ctx, t, pool, target.ID, fileID)
+	settledYesterday(ctx, t, pool, target.ID, fileID)
+	mappedOnto(ctx, t, pool, fileID, album)
+	before := attemptsOf(ctx, t, pool, target.ID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	settled := targetRow(ctx, t, service, target.ID)
+	if settled.Status != "acquired" {
+		t.Fatalf("status = %s (%q), want acquired", settled.Status, settled.Summary)
+	}
+	if after := attemptsOf(ctx, t, pool, target.ID); after != before {
+		t.Errorf("attempts = %d, want %d: the want was opened and settled again", after, before)
+	}
+}
+
+// Placebo "Every You Every Me" settled on purpose against a file the library
+// had already filed under another row, as a clean edition held as the explicit
+// one is (ADR 0032). The first sweep of every process opened it again and
+// settled it again, eight wants at each start live on 2026-10-14. Only an answer
+// given after the want settled opens it now.
+func TestAWantSettledOnAFileAnsweredBeforeItSettledIsNotOpenedAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	provider := &catalogueProvider{recordings: map[uuid.UUID]musicbrainz.Recording{
+		wanted: recording(wanted, "Glory Box", "Portishead", 301000, "GBAAA9400001"),
+		filed:  recording(filed, "Glory Box (Live)", "Portishead", 305000, "GBAAA9400002"),
+	}}
+	service := filingService(pool, provider)
+	target := createWant(ctx, t, service, wanted)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, wanted)
+	alreadyCompleted(ctx, t, pool, target.ID, fileID)
+	settledYesterday(ctx, t, pool, target.ID, fileID)
+	filedAs(ctx, t, pool, fileID, filed, false)
+	answeredBefore(ctx, t, pool, fileID)
+	before := attemptsOf(ctx, t, pool, target.ID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	settled := targetRow(ctx, t, service, target.ID)
+	if settled.Status != "acquired" {
+		t.Fatalf("status = %s (%q), want acquired", settled.Status, settled.Summary)
+	}
+	if after := attemptsOf(ctx, t, pool, target.ID); after != before {
+		t.Errorf("attempts = %d, want %d: the want was opened and settled again", after, before)
 	}
 }
