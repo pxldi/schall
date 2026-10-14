@@ -730,6 +730,20 @@ func (service *Service) FileAsAcquired(
 		return ErrDecidedByHand
 	}
 
+	// The row the file is filed under now. Where it is a second row of the same
+	// registered track, the file goes on answering it: the tracks that carry it
+	// would otherwise lose a file Schall has just read as their music.
+	var left uuid.NullUUID
+	if proof.SecondRow && !proof.Merged {
+		err = transaction.QueryRow(ctx, `
+			SELECT musicbrainz_recording_id FROM library_file_identities
+			WHERE library_file_id = $1
+		`, fileID).Scan(&left)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
+
 	// Written as an identity nobody decided by hand. A person's answer is theirs
 	// alone, and recording this as one would put a decision in front of them that
 	// they never made and could not withdraw as their own.
@@ -737,6 +751,14 @@ func (service *Service) FileAsAcquired(
 		ctx, transaction, fileID, &filed, false, StatusResolved, filed.Summary)
 	if err != nil {
 		return err
+	}
+	if left.Valid && left.UUID != recordingID {
+		if _, err := transaction.Exec(ctx, `
+			UPDATE library_file_identities SET second_row_recording_id = $2
+			WHERE library_file_id = $1
+		`, fileID, left.UUID); err != nil {
+			return err
+		}
 	}
 	if err := queueReleaseGroupIngest(ctx, transaction, filed.ReleaseGroupID); err != nil {
 		return err

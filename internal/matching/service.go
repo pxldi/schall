@@ -579,7 +579,8 @@ func (service *Service) ReconcileAlbum(ctx context.Context, albumID uuid.UUID) e
 		    OR EXISTS (
 		        SELECT 1
 		        FROM library_file_identities identity
-		        JOIN tracks ON tracks.musicbrainz_recording_id = identity.musicbrainz_recording_id
+		        JOIN tracks ON tracks.musicbrainz_recording_id IN (
+		            identity.musicbrainz_recording_id, identity.second_row_recording_id)
 		        WHERE identity.library_file_id = library_files.id
 		          AND tracks.album_id = $1
 		    )
@@ -968,6 +969,31 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		        SELECT recording_id_aliases(identity.musicbrainz_recording_id))
 		    WHERE identity.musicbrainz_recording_id IS NOT NULL
 		      AND (NOT split.contradicted OR wins.audio)
+		    UNION ALL
+		    -- The row a want's copy re-filed the file off, which Schall read as
+		    -- the same registered track (ADR 0025, 0031). The file answers its
+		    -- tracks beside the ones above. It only fills a gap: a track that
+		    -- another file is proven to be stays that file's, so this never
+		    -- contests a copy of the row's own.
+		    SELECT tracks.id, 'resolved_identity', 0.99::real, 3, 1
+		    FROM file
+		    CROSS JOIN split
+		    CROSS JOIN wins
+		    JOIN library_file_identities identity ON identity.library_file_id = file.id
+		    JOIN tracks ON tracks.musicbrainz_recording_id IN (
+		        SELECT recording_id_aliases(identity.second_row_recording_id))
+		    WHERE identity.musicbrainz_recording_id IS NOT NULL
+		      AND identity.second_row_recording_id IS NOT NULL
+		      AND (NOT split.contradicted OR wins.audio)
+		      AND NOT EXISTS (
+		          SELECT 1 FROM library_files others
+		          LEFT JOIN library_file_identities other_identity
+		                 ON other_identity.library_file_id = others.id
+		          WHERE others.id <> file.id
+		            AND others.missing_at IS NULL
+		            AND coalesce(other_identity.musicbrainz_recording_id,
+		                         others.musicbrainz_recording_id) IN (
+		                SELECT recording_id_aliases(identity.second_row_recording_id)))
 		    UNION ALL
 		    -- An ISRC can be shared by recordings MusicBrainz never merged, so a
 		    -- track whose recording either known recording contradicts is voided

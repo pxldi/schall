@@ -337,6 +337,66 @@ func TestAWantIsSettledByACopyFiledUnderARowOfOneNameAndOneLength(t *testing.T) 
 	}
 }
 
+// secondRowOfFile reads the row a re-filing moved the file off.
+func secondRowOfFile(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, fileID uuid.UUID,
+) uuid.NullUUID {
+	t.Helper()
+	var second uuid.NullUUID
+	if err := pool.QueryRow(ctx, `
+		SELECT second_row_recording_id FROM library_file_identities WHERE library_file_id = $1
+	`, fileID).Scan(&second); err != nil {
+		t.Fatalf("read the second row of file %s: %v", fileID, err)
+	}
+	return second
+}
+
+// Re-filing a copy under the want's row keeps the row it left. Its tracks lost
+// the file before: traence track 7 said "Fetched once, file gone" over a file
+// Schall had just read as its music.
+func TestARefiledCopyKeepsTheRowItWasFiledUnder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	service := filingService(pool, twoRowsOfOneName(wanted, filed))
+	target := createWant(ctx, t, service, wanted)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, wanted)
+	filedAs(ctx, t, pool, fileID, filed, false)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if second := secondRowOfFile(ctx, t, pool, fileID); !second.Valid || second.UUID != filed {
+		t.Errorf("second row = %v, want %s", second, filed)
+	}
+}
+
+// A merge is not a second row. MusicBrainz says the two identifiers are one
+// recording, and the aliases already answer for the retired one.
+func TestAMergedRowIsNotKeptAsASecondRow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	service := filingService(pool, mergedRowsOf(wanted, filed))
+	target := createWant(ctx, t, service, wanted)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, wanted)
+	provenBy(ctx, t, pool, target.ID, "title-artist-duration")
+	filedAs(ctx, t, pool, fileID, filed, false)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if second := secondRowOfFile(ctx, t, pool, fileID); second.Valid {
+		t.Errorf("second row = %s, want none for a merge", second.UUID)
+	}
+}
+
 // The same two rows with nothing having proved the copy. The library file was
 // admitted on its own tags, which is what a stranger writes into a file, so
 // nothing says the audio on the disc is this want's music. Two rows of one name
