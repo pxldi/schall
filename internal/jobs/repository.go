@@ -296,6 +296,31 @@ func (repository *Repository) SaveArtistCatalogue(ctx context.Context, artistID 
 		}
 	}
 
+	// A release group new to this artist with the title and type of one the
+	// artist already has is how a MusicBrainz merge shows up here: the group
+	// the old one went to arrives as a second album. Refreshing the older one
+	// is what folds it into the new one (#128), and nothing else refreshes an
+	// album that already has its tracks.
+	if _, err := transaction.Exec(ctx, `
+		INSERT INTO jobs (kind, payload)
+		SELECT DISTINCT 'refresh_album_metadata', jsonb_build_object('albumId', older.id::text)
+		FROM albums AS fresh
+		JOIN albums AS older
+		  ON older.artist_id = fresh.artist_id
+		 AND older.id <> fresh.id
+		 AND older.album_type = fresh.album_type
+		 AND lower(btrim(older.title)) = lower(btrim(fresh.title))
+		WHERE fresh.artist_id = $1
+		  AND fresh.created_at = now()
+		  AND older.created_at < now()
+		  AND older.musicbrainz_release_group_id IS NOT NULL
+		ON CONFLICT (kind, (payload->>'albumId'))
+		    WHERE kind = 'refresh_album_metadata' AND status IN ('queued', 'running')
+		DO NOTHING
+	`, artistID); err != nil {
+		return fmt.Errorf("queue refresh of albums sharing a new release group's title: %w", err)
+	}
+
 	if err := wakeCoverArtSweep(ctx, transaction); err != nil {
 		return err
 	}
