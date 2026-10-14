@@ -8,7 +8,7 @@ import (
 
 // Invariant is one rule Schall's data keeps at all times, written as a query
 // that counts the rows breaking it. Every count is zero on a healthy database.
-// The invariant check job runs them all and logs each count above zero, and
+// The invariant check job runs them all, stores the counts and logs each one above zero, and
 // the seed's integration test requires every one to be zero on the fixture.
 type Invariant struct {
 	Name  string
@@ -25,13 +25,20 @@ type InvariantCount struct {
 
 // heldRecordings is every recording a present file holds, in the sense the
 // release page uses (ListAlbumTracks): a file whose identity names it, or a
-// file mapped onto any catalogue track carrying it. Retired recording ids
-// count as their surviving id.
+// file mapped onto any catalogue track carrying it. A second row of the
+// file's song (library_file_second_rows, migration 00126) counts as held too,
+// as it does for a want (OwnedFileForRecording). Retired recording ids count
+// as their surviving id.
 const heldRecordings = `
 	SELECT canonical_recording_id(identity.musicbrainz_recording_id) AS recording_id
 	FROM library_file_identities AS identity
 	JOIN library_files AS file ON file.id = identity.library_file_id AND file.missing_at IS NULL
 	WHERE identity.musicbrainz_recording_id IS NOT NULL
+	UNION
+	SELECT canonical_recording_id(second_row.musicbrainz_recording_id)
+	FROM library_file_second_rows AS second_row
+	JOIN library_file_identities AS identity ON identity.id = second_row.identity_id
+	JOIN library_files AS file ON file.id = identity.library_file_id AND file.missing_at IS NULL
 	UNION
 	SELECT canonical_recording_id(track.musicbrainz_recording_id)
 	FROM track_mappings AS mapping
@@ -89,18 +96,21 @@ var Invariants = []Invariant{
 			        AND identity.source = want.source AND identity.external_id = want.external_id)`,
 	},
 	{
-		Name: "retired_recording_stored",
-		Rule: "no want, identity, track or rejection stores a retired recording id",
+		// A want, a track or a tag may keep a retired recording id for good:
+		// every comparison reads it through recording_aliases (migration
+		// 00056). What a merge must not leave is two wants for one song, which
+		// acquisition_targets_recording_idx cannot see because it keys the id
+		// as stored.
+		Name: "one_want_per_song",
+		Rule: "a recording and the ids MusicBrainz merged into it have one want between them",
 		Query: `
-			SELECT (SELECT count(*) FROM acquisition_targets AS want
-			        JOIN recording_aliases AS alias ON alias.retired_id = want.musicbrainz_recording_id
-			        WHERE want.status <> 'superseded')
-			     + (SELECT count(*) FROM library_file_identities AS identity
-			        JOIN recording_aliases AS alias ON alias.retired_id = identity.musicbrainz_recording_id)
-			     + (SELECT count(*) FROM tracks AS track
-			        JOIN recording_aliases AS alias ON alias.retired_id = track.musicbrainz_recording_id)
-			     + (SELECT count(*) FROM acquisition_target_rejected_recordings AS rejected
-			        JOIN recording_aliases AS alias ON alias.retired_id = rejected.musicbrainz_recording_id)`,
+			SELECT count(*) FROM (
+			    SELECT canonical_recording_id(musicbrainz_recording_id)
+			    FROM acquisition_targets
+			    WHERE musicbrainz_recording_id IS NOT NULL AND status <> 'superseded'
+			    GROUP BY 1
+			    HAVING count(*) > 1
+			) AS twice`,
 	},
 	{
 		// A second accepted copy of a want that had already settled on another
@@ -183,22 +193,26 @@ var Invariants = []Invariant{
 			      <> EXISTS (SELECT 1 FROM track_mappings AS mapping WHERE mapping.library_file_id = file.id)`,
 	},
 	{
-		// Manual mappings win (CLAUDE.md), and a same-registration mapping
-		// names a second MusicBrainz row of the file's own recording on purpose
-		// (identity.MethodSameRegistration).
+		// Manual mappings win (CLAUDE.md). A track carrying a second row of the
+		// file's song is the file's own on purpose: the matcher maps the file to
+		// those rows' tracks beside its own (migration 00126).
 		Name: "mapping_contradicts_identity",
-		Rule: "an automatic mapping's track carries the recording the file's identity names",
+		Rule: "an automatic mapping's track carries the recording the file's identity names, or a second row of it",
 		Query: `
 			SELECT count(*) FROM track_mappings AS mapping
 			JOIN library_files AS file ON file.id = mapping.library_file_id AND file.missing_at IS NULL
 			JOIN tracks AS track ON track.id = mapping.track_id
 			JOIN library_file_identities AS identity ON identity.library_file_id = file.id
 			WHERE NOT mapping.is_manual
-			  AND identity.method <> 'same-registration'
 			  AND identity.musicbrainz_recording_id IS NOT NULL
 			  AND track.musicbrainz_recording_id IS NOT NULL
 			  AND canonical_recording_id(identity.musicbrainz_recording_id)
-			      <> canonical_recording_id(track.musicbrainz_recording_id)`,
+			      <> canonical_recording_id(track.musicbrainz_recording_id)
+			  AND NOT EXISTS (
+			      SELECT 1 FROM library_file_second_rows AS second_row
+			      WHERE second_row.identity_id = identity.id
+			        AND canonical_recording_id(second_row.musicbrainz_recording_id)
+			            = canonical_recording_id(track.musicbrainz_recording_id))`,
 	},
 	{
 		Name: "recording_held_twice_unsettled",
@@ -340,6 +354,34 @@ func (q *Queries) CountInvariantViolations(ctx context.Context) ([]InvariantCoun
 		counts = append(counts, InvariantCount{Name: invariant.Name, Rule: invariant.Rule, Violations: violations})
 	}
 	return counts, nil
+}
+
+// invariantResultsKept is how long RecordInvariantCounts keeps a run's counts.
+const invariantResultsKept = "90 days"
+
+// RecordInvariantCounts stores one run's counts, zeros included, under the
+// time the run was taken, and drops runs older than invariantResultsKept.
+func (q *Queries) RecordInvariantCounts(ctx context.Context, checkedAt time.Time, counts []InvariantCount) error {
+	names := make([]string, len(counts))
+	violations := make([]int64, len(counts))
+	for i, count := range counts {
+		names[i], violations[i] = count.Name, count.Violations
+	}
+	if _, err := q.db.Exec(ctx, `
+		INSERT INTO invariant_check_results (checked_at, invariant, violations)
+		SELECT $1, name, violations
+		FROM unnest($2::text[], $3::bigint[]) AS run (name, violations)
+		ON CONFLICT (checked_at, invariant) DO UPDATE SET violations = EXCLUDED.violations
+	`, checkedAt, names, violations); err != nil {
+		return fmt.Errorf("record invariant counts at %s: %w", checkedAt, err)
+	}
+	if _, err := q.db.Exec(ctx, `
+		DELETE FROM invariant_check_results
+		WHERE checked_at < $1::timestamptz - $2::interval
+	`, checkedAt, invariantResultsKept); err != nil {
+		return fmt.Errorf("drop invariant counts older than %s: %w", invariantResultsKept, err)
+	}
+	return nil
 }
 
 // QueueInvariantCheck schedules the next invariant check, in the shape

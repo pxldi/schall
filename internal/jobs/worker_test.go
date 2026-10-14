@@ -5766,12 +5766,19 @@ func TestARefreshOfAnAlbumThatIsGoneIsNotAskedAgain(t *testing.T) {
 }
 
 type fakeInvariantCounter struct {
-	counts []db.InvariantCount
-	err    error
+	counts     []db.InvariantCount
+	err        error
+	recordedAt time.Time
+	recorded   []db.InvariantCount
 }
 
 func (counter *fakeInvariantCounter) CountInvariantViolations(context.Context) ([]db.InvariantCount, error) {
 	return counter.counts, counter.err
+}
+
+func (counter *fakeInvariantCounter) RecordInvariantCounts(_ context.Context, at time.Time, counts []db.InvariantCount) error {
+	counter.recordedAt, counter.recorded = at, counts
+	return nil
 }
 
 // The invariant check counts again a day later, whatever it found.
@@ -5815,5 +5822,26 @@ func TestAnInvariantCheckLogsEachBrokenRule(t *testing.T) {
 	}
 	if strings.Contains(out, `"invariant":"file_without_root"`) {
 		t.Errorf("log %q names a rule nothing breaks", out)
+	}
+}
+
+// Every count is stored under the time of the run, zeros too, so a run can be
+// read after its log is gone.
+func TestAnInvariantCheckStoresEveryCount(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	counts := []db.InvariantCount{
+		{Name: "album_without_tracks", Rule: "an album a day old has tracks", Violations: 14},
+		{Name: "file_without_root", Rule: "a present file sits under a library root", Violations: 0},
+	}
+	counter := &fakeInvariantCounter{counts: counts}
+	worker := NewWorker(&fakeQueue{}, fakeProvider{}, zerolog.Nop()).WithInvariantCounter(counter)
+	worker.now = func() time.Time { return now }
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: CheckInvariants, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if !counter.recordedAt.Equal(now) || len(counter.recorded) != len(counts) {
+		t.Fatalf("stored %d counts at %s; want %d at %s", len(counter.recorded), counter.recordedAt, len(counts), now)
 	}
 }
