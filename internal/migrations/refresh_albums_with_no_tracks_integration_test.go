@@ -13,7 +13,7 @@ import (
 
 const refreshAlbumsWithNoTracksSchema = "schall_refresh_albums_with_no_tracks_check"
 
-// 00128 queues one refresh for each album with no tracks, and none for an
+// 00129 queues one refresh for each album with no tracks, and none for an
 // album that has its tracks or has no MusicBrainz release group to ask about.
 func TestTheMigrationRefreshesAlbumsWithNoTracks(t *testing.T) {
 	ctx := context.Background()
@@ -35,7 +35,7 @@ func TestTheMigrationRefreshesAlbumsWithNoTracks(t *testing.T) {
 		separator = "&"
 	}
 	scopedURL := databaseURL + separator + "search_path=" + schema + ",public"
-	if err := migrations.UpTo(ctx, scopedURL, 127); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 128); err != nil {
 		t.Fatalf("apply the migrations before the one under test: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestTheMigrationRefreshesAlbumsWithNoTracks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrations.UpTo(ctx, scopedURL, 128); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 129); err != nil {
 		t.Fatalf("apply the migration under test: %v", err)
 	}
 
