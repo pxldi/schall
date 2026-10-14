@@ -411,6 +411,10 @@ SET spectral_cutoff_hz = 22000,
     transcode_suspected = false,
     spectrum_read_at = scanned_at;
 
+-- Every seeded file has also been decoded and found clean. The decode sweep
+-- would otherwise run ffmpeg on paths that do not exist.
+UPDATE library_files SET decode_checked_at = scanned_at;
+
 -- One file, one track, and the reason. The eleventh is manual, which is the
 -- decision nothing may ever overwrite.
 INSERT INTO track_mappings (track_id, library_file_id, method, confidence, is_manual)

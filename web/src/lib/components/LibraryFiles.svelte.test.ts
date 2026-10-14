@@ -214,6 +214,16 @@ describe('the states the scanner records', () => {
     });
   });
 
+  it('marks a file whose audio does not decode, with the error as its tooltip', async () => {
+    listed = [file({ decodeError: 'Header missing' }), file({ id: 'c1d2e3f4-0000-4000-8000-000000000002' })];
+    answering();
+    opened();
+
+    const marks = await screen.findAllByLabelText('Damaged audio');
+    expect(marks).toHaveLength(1);
+    expect(marks[0].closest('[title]')?.getAttribute('title')).toBe('Damaged audio · Header missing');
+  });
+
   it('asks for the files the last scan did not find', async () => {
     answering();
     opened();

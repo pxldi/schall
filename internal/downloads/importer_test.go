@@ -483,6 +483,53 @@ func TestImporterValidatesAndCopiesACompleteRelease(t *testing.T) {
 	}
 }
 
+type damageByName map[string]string
+
+func (damageByName) Available() bool { return true }
+
+func (damage damageByName) Check(_ context.Context, path string) (string, error) {
+	return damage[filepath.Base(path)], nil
+}
+
+// A release with one damaged track is not imported. Before the decode check
+// every file whose tags matched was copied into the library.
+func TestImporterRefusesAReleaseWithADamagedTrack(t *testing.T) {
+	inbox, libraryPath := t.TempDir(), t.TempDir()
+	folder := filepath.Join(inbox, "Album")
+	if err := os.Mkdir(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "01.flac"), []byte("one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requestID := uuid.New()
+	store := &fakeImportStore{row: db.DownloadImportRow{
+		RequestID: requestID, AlbumID: fixtureAlbum, ArtistName: "Artist", AlbumTitle: "Album",
+		SourceDirectory: "Album",
+		Files:           []db.DownloadRequestFile{{Path: "01.flac", Name: "01.flac", SizeBytes: 3}},
+		Tracks:          []db.ImportTrack{{Title: "First", DiscNumber: 1, TrackNumber: 1, DurationMS: 100_000}},
+	}}
+	importer := NewImporter(store, inbox, libraryPath, zerolog.Nop()).
+		WithDecodeChecker(damageByName{"01.flac": "illegal residual coding method 3"})
+	importer.inspect = func(string) library.AudioMetadata {
+		return library.AudioMetadata{
+			Artist: "Artist", Album: "Album", Title: "First",
+			DiscNumber: 1, TrackNumber: 1, DurationMS: 101_000,
+		}
+	}
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.destination != "" {
+		t.Fatalf("copied a release with a damaged track to %q", store.destination)
+	}
+	if problems := store.evidence.Files[0].Problems; len(problems) != 1 ||
+		!strings.Contains(problems[0], "illegal residual coding method 3") {
+		t.Fatalf("problems = %q; want the decoder's error", problems)
+	}
+}
+
 // A file that names a different release is not refused for that alone, but
 // nothing else here corroborates it: no duration on either side, and a title
 // and position that another edition could just as easily share. That is a

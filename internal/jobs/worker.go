@@ -76,6 +76,9 @@ const (
 	// SweepAudioSpectrum is fixed by migration 00067, whose partial unique index
 	// is keyed on this exact string.
 	SweepAudioSpectrum = "sweep_audio_spectrum"
+	// SweepDecodeCheck is fixed by migration 00122, whose partial unique index
+	// is keyed on this exact string.
+	SweepDecodeCheck = "sweep_decode_check"
 	// SweepUpgradeCandidates is fixed by migration 00072, whose partial unique
 	// index is keyed on this exact string.
 	SweepUpgradeCandidates = "sweep_upgrade_candidates"
@@ -178,6 +181,10 @@ const anchorIdle = 30 * time.Minute
 // is the same audio tomorrow — so a pass only exists for what a scan has found
 // or re-read since, and it is in no hurry to find it.
 const spectrumIdle = 6 * time.Hour
+
+// decodeIdle is how long the decode sweep waits once every file is checked. A
+// file's audio only changes when a scan finds new bytes, so nothing is urgent.
+const decodeIdle = 6 * time.Hour
 
 // upgradeIdle is how long the upgrade sweep waits when it has walked the whole
 // library and found nothing left under the floor. Nothing about a file's
@@ -581,6 +588,7 @@ type Queue interface {
 	QueueWantCopyJudging(context.Context, uuid.UUID, time.Time) error
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
+	QueueDecodeSweep(context.Context, time.Time) error
 	QueueAskAcoustIDAgain(context.Context, time.Time) error
 	QueueJudgeCopiesAgainAfter(context.Context, time.Time, db.JudgeAgainPlace, time.Time) error
 	// StartedFirstAt answers when a job was first started, across the restarts
@@ -928,6 +936,9 @@ type Worker struct {
 	// without it two copies of one recording are compared on exactly what they
 	// were compared on before.
 	spectra SpectrumSweeper
+	// decodes checks whether each library file's audio decodes. Optional:
+	// without it no file is ever called damaged.
+	decodes DecodeSweeper
 	// upgrades looks for files below the quality floor and raises a want for
 	// each one. Optional, and switched off in its own settings by default: an
 	// installation that never opens the setting has this sweep find nothing.
@@ -1169,6 +1180,18 @@ type SpectrumSweeper interface {
 // WithSpectrumSweeper registers what measures the library's audio.
 func (worker *Worker) WithSpectrumSweeper(sweeper SpectrumSweeper) *Worker {
 	worker.spectra = sweeper
+	return worker
+}
+
+// DecodeSweeper decodes a batch of library files and records the first audio
+// error in each. Sweep reports whether more files are waiting.
+type DecodeSweeper interface {
+	Sweep(context.Context) (bool, error)
+}
+
+// WithDecodeSweeper registers what checks the library's audio for damage.
+func (worker *Worker) WithDecodeSweeper(sweeper DecodeSweeper) *Worker {
+	worker.decodes = sweeper
 	return worker
 }
 
@@ -1583,6 +1606,8 @@ func (worker *Worker) process(ctx context.Context, job Job) {
 		worker.processLoudnessSweep(ctx, job)
 	case SweepAudioSpectrum:
 		worker.processSpectrumSweep(ctx, job)
+	case SweepDecodeCheck:
+		worker.processDecodeSweep(ctx, job)
 	case SweepTranscode:
 		worker.processTranscodeSweep(ctx, job)
 	case SweepDuplicates:
@@ -2013,6 +2038,33 @@ func (worker *Worker) processSpectrumSweep(ctx context.Context, job Job) {
 	worker.queueSpectrumSweep(ctx, next)
 }
 
+// processDecodeSweep checks a batch of library files for damaged audio and
+// schedules its own successor: straight away while files are waiting, after
+// decodeIdle once none are.
+func (worker *Worker) processDecodeSweep(ctx context.Context, job Job) {
+	if worker.decodes == nil {
+		worker.finishFailed(ctx, job, errors.New("the decode check is not configured"), false)
+		return
+	}
+	more, err := worker.decodes.Sweep(ctx)
+	if err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("sweep decode check: %w", err), true)
+		if spent(job, err) {
+			worker.queueDecodeSweep(ctx, worker.now().Add(decodeIdle))
+		}
+		return
+	}
+	if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+		return
+	}
+	next := worker.now().Add(decodeIdle)
+	if more {
+		next = worker.now()
+	}
+	worker.queueDecodeSweep(ctx, next)
+}
+
 // upgradeSweepPosition is what one upgrade sweep pass carries to its
 // successor: the file id it stopped at, in the shape lyrics.Position carries a
 // walk's place through the library.
@@ -2424,6 +2476,12 @@ func (worker *Worker) queueCopyFingerprintSweep(ctx context.Context, at time.Tim
 func (worker *Worker) queueAnchorSweep(ctx context.Context, at time.Time) {
 	if err := worker.queue.QueuePreviewAnchorSweep(ctx, at); err != nil {
 		worker.logger.Error().Err(err).Msg("queue preview anchor sweep")
+	}
+}
+
+func (worker *Worker) queueDecodeSweep(ctx context.Context, at time.Time) {
+	if err := worker.queue.QueueDecodeSweep(ctx, at); err != nil {
+		worker.logger.Error().Err(err).Msg("queue decode check sweep")
 	}
 }
 

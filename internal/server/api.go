@@ -1167,6 +1167,7 @@ type libraryFileResponse struct {
 	ISRC                   *string    `json:"isrc,omitempty"`
 	MissingAt              *time.Time `json:"missingAt,omitempty"`
 	ScanError              *string    `json:"scanError,omitempty"`
+	DecodeError            *string    `json:"decodeError,omitempty"`
 	MatchStatus            string     `json:"matchStatus"`
 	MatchCandidateCount    int32      `json:"matchCandidateCount"`
 	DuplicateKeptAt        *time.Time `json:"duplicateKeptAt,omitempty"`
@@ -1300,6 +1301,7 @@ func libraryFileResponseFrom(file db.LibraryFileRow) libraryFileResponse {
 		MusicBrainzRecordingID: nullableUUID(file.MusicBrainzRecordingID),
 		ISRC:                   textPointer(file.ISRC), MissingAt: nullableTime(file.MissingAt.Valid, file.MissingAt.Time),
 		ScanError:   textPointer(file.ScanError),
+		DecodeError: textPointer(file.DecodeError),
 		MatchStatus: file.MatchStatus, MatchCandidateCount: file.MatchCandidateCount,
 		DuplicateKeptAt:   nullableTime(file.DuplicateKeptAt.Valid, file.DuplicateKeptAt.Time),
 		MappingMethod:     textPointer(file.MappingMethod),

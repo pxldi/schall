@@ -74,6 +74,7 @@ type fakeQueue struct {
 	judgeAgainQueuedRest          bool
 	firstStarted                  time.Time
 	spectrumSweepQueuedFor        time.Time
+	decodeSweepQueuedFor          time.Time
 	upgradeSweepQueuedFor         time.Time
 	upgradeSweepPayload           json.RawMessage
 	lyricsSweepPayload            json.RawMessage
@@ -480,6 +481,14 @@ func (queue *fakeQueue) QueueCopyFingerprintSweep(_ context.Context, runAfter ti
 	queue.copyFingerprintSweepQueuedFor = runAfter
 	return nil
 }
+func (queue *fakeQueue) QueueDecodeSweep(_ context.Context, runAfter time.Time) error {
+	if queue.scheduleErr != nil {
+		return queue.scheduleErr
+	}
+	queue.decodeSweepQueuedFor = runAfter
+	return nil
+}
+
 func (queue *fakeQueue) QueueSpectrumSweep(_ context.Context, runAfter time.Time) error {
 	if queue.scheduleErr != nil {
 		return queue.scheduleErr
@@ -4835,6 +4844,34 @@ type fakeSpectrumSweeper struct {
 
 func (sweeper *fakeSpectrumSweeper) Sweep(context.Context) (bool, error) {
 	return sweeper.more, sweeper.err
+}
+
+// The decode check comes straight back while files are waiting and otherwise
+// waits decodeIdle.
+func TestADecodePassSchedulesItsSuccessor(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		more bool
+		want time.Time
+	}{
+		{more: true, want: now},
+		{more: false, want: now.Add(decodeIdle)},
+	} {
+		jobID := uuid.New()
+		queue := &fakeQueue{}
+		worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).
+			WithDecodeSweeper(&fakeSpectrumSweeper{more: test.more})
+		worker.now = func() time.Time { return now }
+
+		worker.process(context.Background(), Job{
+			ID: jobID, Kind: SweepDecodeCheck, Attempts: 1, MaxAttempts: 3,
+		})
+
+		if queue.completed != jobID || !queue.decodeSweepQueuedFor.Equal(test.want) {
+			t.Fatalf("more = %t: completed = %s, next pass = %s; want %s",
+				test.more, queue.completed, queue.decodeSweepQueuedFor, test.want)
+		}
+	}
 }
 
 // The pass that measures what the library's audio is. It walks the whole

@@ -503,6 +503,64 @@ func TestAnUnreadableCandidateStaysUndelivered(t *testing.T) {
 	}
 }
 
+type fakeDecodeChecker struct {
+	damage  string
+	checked []string
+}
+
+func (checker *fakeDecodeChecker) Available() bool { return true }
+
+func (checker *fakeDecodeChecker) Check(_ context.Context, path string) (string, error) {
+	checker.checked = append(checker.checked, path)
+	return checker.damage, nil
+}
+
+// A copy whose audio does not decode is refused, even when the audio would
+// have proven it the wanted recording. Before the decode check it was
+// imported, and an upgrade want could replace a damaged file with another.
+func TestADamagedCandidateIsRefusedBeforeItIsJudged(t *testing.T) {
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	verifier := &fakeVerifier{verification: provenByAudio()}
+	checker := &fakeDecodeChecker{damage: "Header missing"}
+	importer := candidateImporter(store, inbox, libraryPath,
+		&fakeIdentifier{configured: true}, verifier).WithDecodeChecker(checker)
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.accepted != nil {
+		t.Fatalf("accepted = %+v; want a damaged copy refused", store.accepted)
+	}
+	if store.settled == nil || store.settled.Verdict != db.AcquiredFileUndelivered ||
+		store.settled.Summary != "Audio is damaged. Header missing" {
+		t.Fatalf("settled = %+v; want undelivered with the decoder's error", store.settled)
+	}
+	if len(verifier.asked) != 0 {
+		t.Error("a damaged copy was still verified")
+	}
+	if len(checker.checked) != 1 || filepath.Base(checker.checked[0]) != "03.flac" {
+		t.Errorf("checked %v; want the fetched copy", checker.checked)
+	}
+}
+
+func TestACleanCandidatePassesTheDecodeCheck(t *testing.T) {
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	identifier := &fakeIdentifier{
+		configured: true,
+		clusters:   []acoustid.Cluster{cluster(0.94, uuid.MustParse(wantedRecording))},
+	}
+	importer := candidateImporter(store, inbox, libraryPath, identifier, &fakeVerifier{
+		verification: provenByAudio(),
+	}).WithDecodeChecker(&fakeDecodeChecker{})
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.accepted == nil || store.accepted.Verdict != db.AcquiredFileAccepted {
+		t.Fatalf("verdict = %+v; want a clean copy accepted", store.accepted)
+	}
+}
+
 // Bytes that did not arrive as offered say nothing about whether this peer holds
 // the right music. It is a fact about the transfer, so the offer may be tried
 // again another day rather than being struck off.

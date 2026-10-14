@@ -36,6 +36,7 @@
   import Settle from '$lib/components/Settle.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import SoundCloudTrackModal from '$lib/components/SoundCloudTrackModal.svelte';
+  import StateIcon from '$lib/components/StateIcon.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import * as Table from '$lib/components/ui/table';
@@ -842,6 +843,11 @@
                    ends of the row; the board reads them as one statement. -->
               <Table.Cell>
                 <span class="flex flex-wrap items-center gap-1.5">
+                  <!-- Damaged audio sits beside the standing: a damaged file
+                       can still be matched, and the upgrade sweep replaces it. -->
+                  {#if file.decodeError && !file.missingAt}
+                    <StateIcon icon="alert" label="Damaged audio" role="fail" note={file.decodeError} />
+                  {/if}
                   {#if standing.kind === 'tick'}
                     <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
                     {#if file.matchStatus === 'matched'}

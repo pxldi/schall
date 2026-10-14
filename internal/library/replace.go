@@ -46,6 +46,8 @@ type upgradeCandidate struct {
 	bitRateKbps int
 	recordingID uuid.NullUUID
 	present     bool
+	// damaged is a file whose audio did not decode (library_files.decode_error).
+	damaged bool
 }
 
 // ReplaceIfBetter carries out what a proven upgrade want exists for.
@@ -266,6 +268,20 @@ func (remover *Remover) ReplaceOwnedWithUpload(
 func better(old, fresh upgradeCandidate) bool {
 	oldLossless := sources.Lossless(extension(old.path))
 	freshLossless := sources.Lossless(extension(fresh.path))
+	if fresh.damaged {
+		return false
+	}
+	// A copy that decodes beats a damaged one of the same quality or higher.
+	// A fetched copy's decode_error is still unchecked here; the import refused
+	// it before it reached the library if its audio did not decode
+	// (downloads.DecodeChecker). A lossy copy never replaces a damaged lossless
+	// file, and a lower bit rate never replaces a higher one.
+	if old.damaged {
+		if oldLossless && !freshLossless {
+			return false
+		}
+		return freshLossless || fresh.bitRateKbps >= old.bitRateKbps
+	}
 	if freshLossless && !oldLossless {
 		return true
 	}
@@ -303,7 +319,8 @@ func (remover *Remover) upgradeCandidateByID(
 	rows, err := source.Query(ctx, `
 		SELECT files.id, files.path, roots.path, files.size_bytes,
 		       coalesce(files.bit_rate_kbps, 0),
-		       identities.musicbrainz_recording_id
+		       identities.musicbrainz_recording_id,
+		       files.decode_error IS NOT NULL
 		FROM library_files files
 		JOIN library_roots roots ON roots.id = files.library_root_id
 		LEFT JOIN library_file_identities identities
@@ -320,7 +337,8 @@ func (remover *Remover) upgradeCandidateByID(
 	}
 	var candidate upgradeCandidate
 	if err := rows.Scan(&candidate.id, &candidate.path, &candidate.rootPath,
-		&candidate.size, &candidate.bitRateKbps, &candidate.recordingID); err != nil {
+		&candidate.size, &candidate.bitRateKbps, &candidate.recordingID,
+		&candidate.damaged); err != nil {
 		return upgradeCandidate{}, err
 	}
 	candidate.present = true
