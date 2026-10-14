@@ -1123,3 +1123,26 @@ func TestAnUnknownMethodStillReadsAsASentence(t *testing.T) {
 		}
 	}
 }
+
+// A file whose ISRC names a recording that runs a minute longer is a question,
+// even when its title, artist and length fit another recording that carries no
+// ISRC. Before, the second recording was taken as the answer and the file's own
+// identifier was passed over.
+func TestTagsThatFitAnotherRecordingDoNotOutweighAContradictedISRC(t *testing.T) {
+	named := recording(firstID, "Karma Police", "Radiohead", 260000, "OK Computer")
+	named.ISRCs = []string{"GBAYE9700378"}
+	outcome := decide(Evidence{
+		ISRC: "GBAYE9700378", Artist: "Radiohead", Title: "Karma Police", DurationMS: 200000,
+	}, []musicbrainz.Recording{
+		named,
+		recording(secondID, "Karma Police", "Radiohead", 200500, "Karma Police"),
+	})
+
+	if outcome.Status != StatusConflict || outcome.Identity != nil {
+		t.Fatalf("status = %q identity = %v, want a conflict with nothing stored",
+			outcome.Status, outcome.Identity)
+	}
+	if len(outcome.Candidates) != 2 {
+		t.Errorf("candidates = %+v, want both recordings offered", outcome.Candidates)
+	}
+}
