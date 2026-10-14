@@ -5422,8 +5422,9 @@ func TestAnArtistRefreshRecordsThatAPlaceholderHasNoGenres(t *testing.T) {
 }
 
 // A release group nobody can read a track list off is the same answer every
-// time, for the same reason.
-func TestAReleaseRefreshIsNotAskedAgainWhenNoEditionCanBeRead(t *testing.T) {
+// time, for the same reason. It is MusicBrainz's answer, so the refresh
+// completes: as a failure the release page said reading the track list failed.
+func TestAReleaseRefreshCompletesWhenNoEditionCanBeRead(t *testing.T) {
 	jobID, albumID := uuid.New(), uuid.New()
 	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": albumID})
 	queue := &fakeQueue{musicBrainzID: uuid.New()}
@@ -5433,8 +5434,9 @@ func TestAReleaseRefreshIsNotAskedAgainWhenNoEditionCanBeRead(t *testing.T) {
 		ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
 	})
 
-	if queue.failed != jobID || queue.retried != uuid.Nil {
-		t.Fatalf("failed = %s retried = %s, want a permanent failure", queue.failed, queue.retried)
+	if queue.completed != jobID || queue.failed != uuid.Nil || queue.retried != uuid.Nil {
+		t.Fatalf("completed = %s failed = %s retried = %s, want the job completed",
+			queue.completed, queue.failed, queue.retried)
 	}
 }
 

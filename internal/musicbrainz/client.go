@@ -547,8 +547,12 @@ func (client *Client) browseReleases(ctx context.Context, releaseGroupID uuid.UU
 		_, err := client.getJSON(ctx, "/release", url.Values{
 			"release-group": []string{releaseGroupID.String()},
 			"fmt":           []string{"json"},
-			"limit":         []string{strconv.Itoa(pageSize)},
-			"offset":        []string{strconv.Itoa(offset)},
+			// The media carry each release's track count, so an edition with no
+			// track list entered is passed over before it is looked up. It is the
+			// same request with one more field.
+			"inc":    []string{"media"},
+			"limit":  []string{strconv.Itoa(pageSize)},
+			"offset": []string{strconv.Itoa(offset)},
 		}, &page)
 		if err != nil {
 			return nil, fmt.Errorf("browse MusicBrainz releases: %w", err)
@@ -563,7 +567,11 @@ func (client *Client) browseReleases(ctx context.Context, releaseGroupID uuid.UU
 func selectRepresentativeRelease(candidates []releaseItem) (releaseItem, string, error) {
 	valid := make([]releaseItem, 0, len(candidates))
 	for _, candidate := range candidates {
-		if _, err := uuid.Parse(candidate.ID); err == nil && strings.TrimSpace(candidate.Title) != "" {
+		// A release with no tracks entered is a placeholder. Yeat's ADL has 15
+		// editions, 9 of them empty, and the ID tie-break below picked an empty
+		// one, so the album showed no tracks at all.
+		if _, err := uuid.Parse(candidate.ID); err == nil && strings.TrimSpace(candidate.Title) != "" &&
+			candidate.trackCount() > 0 {
 			valid = append(valid, candidate)
 		}
 	}
@@ -806,11 +814,26 @@ type releaseBrowseResponse struct {
 }
 
 type releaseItem struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Status  string `json:"status"`
-	Date    string `json:"date"`
-	Country string `json:"country"`
+	ID      string             `json:"id"`
+	Title   string             `json:"title"`
+	Status  string             `json:"status"`
+	Date    string             `json:"date"`
+	Country string             `json:"country"`
+	Media   []releaseItemMedia `json:"media"`
+}
+
+type releaseItemMedia struct {
+	TrackCount int `json:"track-count"`
+}
+
+// trackCount is how many tracks MusicBrainz lists on the release, read off the
+// browse's media without looking the release up.
+func (item releaseItem) trackCount() int {
+	count := 0
+	for _, medium := range item.Media {
+		count += medium.TrackCount
+	}
+	return count
 }
 
 type releaseLookupResponse struct {
