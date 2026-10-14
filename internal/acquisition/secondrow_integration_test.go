@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
+	"github.com/pxldi/schall/internal/matching"
 	"github.com/pxldi/schall/internal/musicbrainz"
+	"github.com/rs/zerolog"
 )
 
 // singleAndAlbumTrack is "HARDX" by yaego as MusicBrainz holds it: the single
@@ -146,4 +148,46 @@ func ownerOf(
 		t.Fatalf("OwnedFileForRecording() error = %v", err)
 	}
 	return owned.UUID
+}
+
+// Settling a want against an owned second row must not cost the file the track
+// it already held. The file answers the album track it was filed under and the
+// single's track beside it, and stays matched.
+func TestASecondRowKeepsTheFileOnItsOwnTrack(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	single, album := uuid.New(), uuid.New()
+	matcher := matching.NewService(pool, zerolog.Nop())
+	service := filingService(pool, singleAndAlbumTrack(single, album, 301000)).WithMatcher(matcher)
+	albumTrack := seedCatalogueTrack(ctx, t, pool, album)
+	seedCatalogueTrack(ctx, t, pool, album)
+	singleTrack := seedCatalogueTrack(ctx, t, pool, single)
+	fileID := ownedFile(ctx, t, pool, album)
+	if err := matcher.ReconcileFile(ctx, fileID); err != nil {
+		t.Fatalf("ReconcileFile() error = %v", err)
+	}
+	createWant(ctx, t, service, single)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT match_status FROM library_files WHERE id = $1`,
+		fileID).Scan(&status); err != nil {
+		t.Fatalf("read the match status: %v", err)
+	}
+	if status != "matched" {
+		t.Errorf("match status = %s, want matched", status)
+	}
+	for name, trackID := range map[string]uuid.UUID{"album": albumTrack, "single": singleTrack} {
+		var mapped uuid.UUID
+		err := pool.QueryRow(ctx, `SELECT library_file_id FROM track_mappings WHERE track_id = $1`,
+			trackID).Scan(&mapped)
+		if err != nil || mapped != fileID {
+			t.Errorf("%s track mapped to %s (%v), want %s", name, mapped, err, fileID)
+		}
+	}
 }
