@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -1133,5 +1134,74 @@ func TestATrackNamedFromItsAddressIsFiledUnderItsArtist(t *testing.T) {
 	}
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("the file is not at %s: %v", want, err)
+	}
+}
+
+// plannedDestination plans a run and reads where the one planned file goes.
+func plannedDestination(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	ctx := context.Background()
+	plan, err := NewMover(pool, zerolog.Nop()).Plan(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Planned != 1 {
+		t.Fatalf("plan = %#v, want the file planned", plan)
+	}
+	var to string
+	if err := pool.QueryRow(ctx,
+		`SELECT to_path FROM library_file_moves WHERE run_id = $1`, plan.RunID).Scan(&to); err != nil {
+		t.Fatal(err)
+	}
+	return to
+}
+
+// seedSingleAndAlbumFile is one file on a single and on the album it was lifted
+// from, identified on the single, arriving at the given time.
+func seedSingleAndAlbumFile(
+	t *testing.T, pool *pgxpool.Pool, arrived time.Time,
+) (rootPath string, single, album uuid.UUID) {
+	t.Helper()
+	rootID, rootPath := libraryRoot(t, pool)
+	single, album = uuid.New(), uuid.New()
+	fileID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "loose", "song.mp3"), "", "")
+	singleTrack := catalogueTrackOn(t, pool, "Souly", "Nichts hittet mehr", single)
+	mapTo(t, pool, singleTrack, fileID)
+	mapTo(t, pool, catalogueTrackOn(t, pool, "Souly", "traence", album), fileID)
+	identifiedAs(t, pool, fileID, single, "Souly", "Nichts hittet mehr")
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE albums SET album_type = 'single'
+		WHERE id = (SELECT album_id FROM tracks WHERE id = $1)
+	`, singleTrack); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE library_files SET created_at = $2 WHERE id = $1`, fileID, arrived); err != nil {
+		t.Fatal(err)
+	}
+	return rootPath, single, album
+}
+
+// A new file on a single and an album goes in the album's folder, where its
+// tags put it too. Before, the single the audio was identified on named it.
+func TestANewFileOnASingleAndAnAlbumIsFiledUnderTheAlbum(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootPath, _, album := seedSingleAndAlbumFile(t, pool, albumFirstFrom.Add(time.Hour))
+
+	want := filepath.Join(rootPath, "Souly", "traence ["+album.String()[:8]+"]", "song.mp3")
+	if to := plannedDestination(t, pool); to != want {
+		t.Fatalf("destination = %q, want %q", to, want)
+	}
+}
+
+// A file already in the library stays under the release its audio was
+// identified on, as its tags do.
+func TestAnOlderFileOnASingleAndAnAlbumStaysUnderTheIdentifiedSingle(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootPath, single, _ := seedSingleAndAlbumFile(t, pool, albumFirstFrom.Add(-time.Hour))
+
+	want := filepath.Join(rootPath, "Souly", "Nichts hittet mehr ["+single.String()[:8]+"]", "song.mp3")
+	if to := plannedDestination(t, pool); to != want {
+		t.Fatalf("destination = %q, want %q", to, want)
 	}
 }

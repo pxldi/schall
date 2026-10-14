@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/tagging"
@@ -109,5 +110,80 @@ func TestAFileTooLittleIsProvedAboutIsCountedAsUnproved(t *testing.T) {
 
 	if run.SkippedUnproved != 1 || run.SkippedAmbiguous != 0 || run.Skipped != 1 {
 		t.Fatalf("the pass counted %+v", run)
+	}
+}
+
+// kinded gives each answer the MusicBrainz type of its release and the time the
+// file arrived.
+func kinded(answers []mappedFile, arrived time.Time, kinds ...string) []mappedFile {
+	for i := range answers {
+		answers[i].albumType = kinds[i]
+		answers[i].arrivedAt = arrived
+	}
+	return answers
+}
+
+// "Nichts hittet mehr" is on the single and on traence. A new file is written
+// as the album, so the album is complete in a music server. Before, the release
+// the audio was identified on won, and that was the single.
+func TestANewFileOnASingleAndAnAlbumIsWrittenAsTheAlbum(t *testing.T) {
+	single, album := uuid.New(), uuid.New()
+	answers := kinded(answering(uuid.New(), &single, single, album),
+		albumFirstFrom.Add(time.Hour), "single", "album")
+
+	chosen := choose(answers)
+
+	if chosen.ambiguous || chosen.tags.ReleaseGroupID != album {
+		t.Fatalf("written as %s (ambiguous %v), want the album", chosen.tags.ReleaseGroupID, chosen.ambiguous)
+	}
+}
+
+// A file already in the library keeps the release it was written as. A music
+// server may key its tracks by their tags, and retagging would lose their likes.
+func TestAnOlderFileOnASingleAndAnAlbumKeepsItsIdentifiedRelease(t *testing.T) {
+	single, album := uuid.New(), uuid.New()
+	answers := kinded(answering(uuid.New(), &single, single, album),
+		albumFirstFrom.Add(-time.Hour), "single", "album")
+
+	chosen := choose(answers)
+
+	if chosen.tags.ReleaseGroupID != single {
+		t.Fatalf("written as %s, want the single it was identified on", chosen.tags.ReleaseGroupID)
+	}
+}
+
+// An EP beats a single when no album carries the song.
+func TestANewFileOnASingleAndAnEPIsWrittenAsTheEP(t *testing.T) {
+	single, ep := uuid.New(), uuid.New()
+	answers := kinded(answering(uuid.New(), &single, single, ep),
+		albumFirstFrom.Add(time.Hour), "single", "ep")
+
+	if chosen := choose(answers); chosen.tags.ReleaseGroupID != ep {
+		t.Fatalf("written as %s, want the EP", chosen.tags.ReleaseGroupID)
+	}
+}
+
+// A compilation is an album with a secondary type and is never preferred, so
+// the single the audio was identified on stays.
+func TestACompilationIsNotPreferredOverTheIdentifiedSingle(t *testing.T) {
+	single, compilation := uuid.New(), uuid.New()
+	answers := kinded(answering(uuid.New(), &single, single, compilation),
+		albumFirstFrom.Add(time.Hour), "single", "album")
+	answers[1].secondaryTypes = []string{"compilation"}
+
+	if chosen := choose(answers); chosen.tags.ReleaseGroupID != single {
+		t.Fatalf("written as %s, want the identified single", chosen.tags.ReleaseGroupID)
+	}
+}
+
+// Two albums carrying the song are not told apart by kind. The identity decides
+// between them as before.
+func TestTwoAlbumsAreLeftToTheIdentity(t *testing.T) {
+	one, other := uuid.New(), uuid.New()
+	answers := kinded(answering(uuid.New(), &other, one, other),
+		albumFirstFrom.Add(time.Hour), "album", "album")
+
+	if chosen := choose(answers); chosen.tags.ReleaseGroupID != other {
+		t.Fatalf("written as %s, want the identified album", chosen.tags.ReleaseGroupID)
 	}
 }
