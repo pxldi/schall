@@ -272,3 +272,56 @@ func TestRecordInvariantCountsKeepsNinetyDays(t *testing.T) {
 		t.Fatalf("stored %d runs, %d rows, %d empty albums; want 1, 2, 14", runs, rows, albums)
 	}
 }
+
+// plantMergedWant writes an acquired want for a recording MusicBrainz has
+// since merged into another, as $uicideboy$ "The Road to Hell Is Highway 59"
+// was on 2026-10-05. It returns the surviving recording.
+func plantMergedWant(ctx context.Context, t *testing.T, pool *pgxpool.Pool) uuid.UUID {
+	t.Helper()
+	retired, surviving := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `
+		WITH alias AS (
+		    INSERT INTO recording_aliases (retired_id, surviving_id) VALUES ($1, $2)),
+		root AS (
+		    INSERT INTO library_roots (path) VALUES ('/music') RETURNING id),
+		file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at, library_root_id, resolution_status)
+		    SELECT '/music/$uicideboy$/1 - The Road To Hell Is Highway 59.mp3', 1, now(), id, 'resolved'
+		    FROM root RETURNING id),
+		identity AS (
+		    INSERT INTO library_file_identities (library_file_id, kind, musicbrainz_recording_id, method)
+		    SELECT id, 'external', $2, 'acoustid' FROM file)
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id, status, acquired_at)
+		VALUES ('manual', '$uicideboy$', 'The Road to Hell Is Highway 59', $1, 'acquired', now())
+	`, retired, surviving); err != nil {
+		t.Fatal(err)
+	}
+	return surviving
+}
+
+// A retired id stays readable through recording_aliases, so a want keeping it
+// breaks nothing.
+func TestAWantKeepingARetiredRecordingIDKeepsEveryInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantMergedWant(ctx, t, pool)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}
+
+// A second want for the surviving id is the same song wanted twice.
+func TestTwoWantsForOneMergedSongBreakAnInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	surviving := plantMergedWant(ctx, t, pool)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id, status, acquired_at)
+		VALUES ('manual', '$uicideboy$', 'The Road to Hell Is Highway 59', $1, 'acquired', now())
+	`, surviving); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{
+		"one_want_per_song": 1,
+	})
+}

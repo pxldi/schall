@@ -96,18 +96,21 @@ var Invariants = []Invariant{
 			        AND identity.source = want.source AND identity.external_id = want.external_id)`,
 	},
 	{
-		Name: "retired_recording_stored",
-		Rule: "no want, identity, track or rejection stores a retired recording id",
+		// A want, a track or a tag may keep a retired recording id for good:
+		// every comparison reads it through recording_aliases (migration
+		// 00056). What a merge must not leave is two wants for one song, which
+		// acquisition_targets_recording_idx cannot see because it keys the id
+		// as stored.
+		Name: "one_want_per_song",
+		Rule: "a recording and the ids MusicBrainz merged into it have one want between them",
 		Query: `
-			SELECT (SELECT count(*) FROM acquisition_targets AS want
-			        JOIN recording_aliases AS alias ON alias.retired_id = want.musicbrainz_recording_id
-			        WHERE want.status <> 'superseded')
-			     + (SELECT count(*) FROM library_file_identities AS identity
-			        JOIN recording_aliases AS alias ON alias.retired_id = identity.musicbrainz_recording_id)
-			     + (SELECT count(*) FROM tracks AS track
-			        JOIN recording_aliases AS alias ON alias.retired_id = track.musicbrainz_recording_id)
-			     + (SELECT count(*) FROM acquisition_target_rejected_recordings AS rejected
-			        JOIN recording_aliases AS alias ON alias.retired_id = rejected.musicbrainz_recording_id)`,
+			SELECT count(*) FROM (
+			    SELECT canonical_recording_id(musicbrainz_recording_id)
+			    FROM acquisition_targets
+			    WHERE musicbrainz_recording_id IS NOT NULL AND status <> 'superseded'
+			    GROUP BY 1
+			    HAVING count(*) > 1
+			) AS twice`,
 	},
 	{
 		// A second accepted copy of a want that had already settled on another
