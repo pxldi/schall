@@ -162,9 +162,10 @@ func (service *Service) reconcileFile(ctx context.Context, fileID uuid.UUID, cas
 	candidateCount := 0
 	gained := false
 	if len(candidates) == 0 {
-		// A file whose tag and proven identity name two recordings gets no
-		// automatic link to either. It goes to Review, where the candidate list
-		// shows both tracks with what named each.
+		// A file whose tag and identity name two recordings, where the identity
+		// rests on tags rather than audio, gets no automatic link to either. It
+		// goes to Review, where the candidate list shows both tracks with what
+		// named each.
 		contested, err := contradictedTracks(ctx, transaction, fileID)
 		if err != nil {
 			return err
@@ -853,6 +854,10 @@ func (service *Service) ClearManual(ctx context.Context, fileID uuid.UUID) error
 }
 
 func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UUID) ([]candidateMatch, error) {
+	audioProven, err := identityProvenByAudio(ctx, transaction, fileID)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := transaction.Query(ctx, `
 		WITH file AS (
 		    SELECT * FROM library_files WHERE id = $1 AND missing_at IS NULL
@@ -869,7 +874,8 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		), split AS (
 		    -- A file whose tag names one recording and whose audio was proven to
 		    -- be another. A contradiction voids a pair whatever else agrees, so
-		    -- neither witness may link the file on its own.
+		    -- the tag never links it, and the identity links it only when the
+		    -- audio or a person proved it (wins below).
 		    SELECT coalesce(
 		               known.tag_recording_id IS NOT NULL
 		               AND known.identity_recording_id IS NOT NULL
@@ -877,6 +883,12 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		                   SELECT recording_id_aliases(known.tag_recording_id)),
 		               false) AS contradicted
 		    FROM known
+		), wins AS (
+		    -- Audio proven to be Z outranks a tag that says X. A tag MBID is what
+		    -- somebody wrote on the file; the audio was heard. The identity arm
+		    -- links the file by what was heard and the tag arm stays void.
+		    SELECT split.contradicted AND $2::boolean AS audio
+		    FROM split
 		), candidates AS (
 		    SELECT tracks.id AS track_id, 'verified_download'::text AS method,
 		           1.0::real AS confidence, 1 AS priority,
@@ -939,11 +951,12 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		                  SELECT recording_id_aliases(identity.musicbrainz_recording_id)))
 		    FROM file
 		    CROSS JOIN split
+		    CROSS JOIN wins
 		    JOIN library_file_identities identity ON identity.library_file_id = file.id
 		    JOIN tracks ON tracks.musicbrainz_recording_id IN (
 		        SELECT recording_id_aliases(identity.musicbrainz_recording_id))
 		    WHERE identity.musicbrainz_recording_id IS NOT NULL
-		      AND NOT split.contradicted
+		      AND (NOT split.contradicted OR wins.audio)
 		    UNION ALL
 		    -- An ISRC can be shared by recordings MusicBrainz never merged, so a
 		    -- track whose recording either known recording contradicts is voided
@@ -1052,7 +1065,7 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		FROM ranked
 		LEFT JOIN track_mappings ON track_mappings.track_id = ranked.track_id
 		ORDER BY ranked.priority, ranked.track_id
-	`, fileID)
+	`, fileID, audioProven)
 	if err != nil {
 		return nil, err
 	}
@@ -1070,6 +1083,27 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		result = append(result, candidate)
 	}
 	return result, rows.Err()
+}
+
+// identityProvenByAudio reports whether the file's identity rests on its audio
+// or on a person's decision: the proofs db.ProvenForItsWant enumerates.
+// A file with no identity, or one settled by its tags, reports false.
+func identityProvenByAudio(ctx context.Context, transaction pgx.Tx, fileID uuid.UUID) (bool, error) {
+	var (
+		method string
+		manual bool
+	)
+	err := transaction.QueryRow(ctx, `
+		SELECT method, is_manual FROM library_file_identities
+		WHERE library_file_id = $1 AND musicbrainz_recording_id IS NOT NULL
+	`, fileID).Scan(&method, &manual)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return manual || db.ProvenForItsWant(method), nil
 }
 
 const candidateQuery = `

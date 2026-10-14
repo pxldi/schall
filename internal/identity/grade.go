@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/chromaprint"
+	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/musicbrainz"
 	"github.com/pxldi/schall/internal/tagmatch"
 )
@@ -620,14 +621,14 @@ func (level grade) method() string {
 
 // singledOutByRelease is the ending resolvedOutcome puts on a method when
 // several recordings were all proven and the release named one of them.
-const singledOutByRelease = "-and-release"
+const singledOutByRelease = db.MethodSingledOutByRelease
 
 // singledOutByExplicitEdition is the token resolvedOutcome appends when several
 // recordings were all proven and every one but this was the clean edition of it
 // (ADR 0032). The method carries it as well as the sentence, because
 // "the one recording the tags name" and "one of two, taken because MusicBrainz
 // marks the other as clean" are different things to have concluded.
-const singledOutByExplicitEdition = "explicit-edition"
+const singledOutByExplicitEdition = db.MethodSingledOutByExplicitEdition
 
 // MethodSameRegistration is what a file re-filed under a want's recording
 // carries. No grade produces it: it is written where MusicBrainz merged the row
@@ -707,17 +708,10 @@ func MethodSentence(method string) string {
 // caller holding the record of a decision rather than the decision itself. The
 // endings resolvedOutcome adds come off first, because a recording singled out
 // by its release was still proven by whatever proved it.
+//
+// The list lives in db so the library's reconcile reads the same one.
 func ProvenForItsWant(method string) bool {
-	base, _ := strings.CutSuffix(method, singledOutByRelease)
-	if trimmed, cut := strings.CutSuffix(base, "-and-"+singledOutByExplicitEdition); cut {
-		base = trimmed
-	}
-	switch base {
-	case "fingerprint", "fingerprint-and-identifier", "published-sample",
-		"library-witness", "cd-checksum", "manual":
-		return true
-	}
-	return false
+	return db.ProvenForItsWant(method)
 }
 
 func (level grade) confidence() float32 {

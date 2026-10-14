@@ -2042,6 +2042,67 @@ func TestATagLinkVoidedByTheIdentityPassesToTheProvenFile(t *testing.T) {
 	assertMapping(t, ctx, pool, studio, trackID, "musicbrainz_recording_id", false)
 }
 
+// setIdentityMethod records what proved the file's identity.
+func setIdentityMethod(
+	t *testing.T, ctx context.Context, pool *pgxpool.Pool, fileID uuid.UUID, method string,
+) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_file_identities SET method = $2 WHERE library_file_id = $1
+	`, fileID, method); err != nil {
+		t.Fatalf("set identity method for %s: %v", fileID, err)
+	}
+}
+
+// AcoustID naming the audio outranks a tag MBID naming another recording: the
+// file takes the track it was heard to be.
+func TestAFingerprintedIdentityWinsOverAContradictingTag(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	_, provenTrack, fileID := seedContradiction(t, ctx, pool)
+	setIdentityMethod(t, ctx, pool, fileID, "fingerprint")
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMapping(t, ctx, pool, fileID, provenTrack, "resolved_identity", false)
+}
+
+// The distributor's preview proves the audio as AcoustID does, so it outranks
+// the tag too.
+func TestASampleProvenIdentityWinsOverAContradictingTag(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	_, provenTrack, fileID := seedContradiction(t, ctx, pool)
+	setIdentityMethod(t, ctx, pool, fileID, "published-sample")
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMapping(t, ctx, pool, fileID, provenTrack, "resolved_identity", false)
+}
+
+// An identity resting on title, artist and length is tags against tags, so the
+// contradiction still goes to a person.
+func TestATagBasedIdentityAgainstAContradictingTagStaysAQuestion(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	_, _, fileID := seedContradiction(t, ctx, pool)
+	setIdentityMethod(t, ctx, pool, fileID, "title-artist-duration")
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus(t, ctx, pool, fileID, "ambiguous", 2)
+	assertNoMapping(t, ctx, pool, fileID)
+}
+
 // An ISRC is shared by recordings MusicBrainz never merged, so a track whose
 // recording the file's own tag contradicts is not taken by the ISRC.
 func TestAnISRCDoesNotLinkATrackTheRecordingIDContradicts(t *testing.T) {
