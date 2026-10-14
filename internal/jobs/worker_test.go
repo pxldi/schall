@@ -104,6 +104,12 @@ type fakeQueue struct {
 	merged      []uuid.UUID
 	mergedInto  uuid.UUID
 	mergeErr    error
+	// groupAlbums names the album already standing for a release group,
+	// movedTo records an album filed under a new release group, and
+	// refreshQueued the albums whose track list was asked for again.
+	groupAlbums   map[uuid.UUID]uuid.UUID
+	movedTo       map[uuid.UUID]uuid.UUID
+	refreshQueued []uuid.UUID
 	// savedTo is the album the last release catalogue was saved to.
 	savedTo              uuid.UUID
 	completeErr          error
@@ -282,6 +288,23 @@ func (queue *fakeQueue) MergeAlbumInto(_ context.Context, from, into, _ uuid.UUI
 	}
 	queue.merged = append(queue.merged, from)
 	queue.mergedInto = into
+	return nil
+}
+func (queue *fakeQueue) AlbumForReleaseGroup(_ context.Context, albumID, groupID uuid.UUID) (uuid.UUID, error) {
+	if holder := queue.groupAlbums[groupID]; holder != albumID {
+		return holder, nil
+	}
+	return uuid.Nil, nil
+}
+func (queue *fakeQueue) MoveAlbumToReleaseGroup(_ context.Context, albumID, groupID uuid.UUID) error {
+	if queue.movedTo == nil {
+		queue.movedTo = map[uuid.UUID]uuid.UUID{}
+	}
+	queue.movedTo[albumID] = groupID
+	return nil
+}
+func (queue *fakeQueue) QueueAlbumRefresh(_ context.Context, albumID uuid.UUID) error {
+	queue.refreshQueued = append(queue.refreshQueued, albumID)
 	return nil
 }
 func (queue *fakeQueue) SaveArtistCatalogue(_ context.Context, _ uuid.UUID, catalogue musicbrainz.ArtistCatalogue) error {
@@ -5535,6 +5558,50 @@ func TestAReleaseRefreshFoldsAnAlbumWhoseGroupWasMergedIntoTheHolders(t *testing
 	if queue.savedTo != holderID || queue.completed != jobID {
 		t.Fatalf("saved to %s, completed %s, want the catalogue saved to %s and the job done",
 			queue.savedTo, queue.completed, holderID)
+	}
+}
+
+// An album whose release group MusicBrainz merged into the group another
+// album stands for is folded into that album, whose track list is then read
+// again. Before, both stood side by side for good (AL-90 "Murmansk-60").
+func TestAReleaseRefreshFoldsAnAlbumIntoTheOneForTheGroupItsGroupWasMergedInto(t *testing.T) {
+	jobID, albumID, holderID, keptGroup := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": albumID})
+	queue := &fakeQueue{
+		musicBrainzID: uuid.New(),
+		groupAlbums:   map[uuid.UUID]uuid.UUID{keptGroup: holderID},
+	}
+	provider := fakeProvider{release: musicbrainz.ReleaseCatalogue{MergedInto: keptGroup}}
+	worker := NewWorker(queue, provider, zerolog.Nop())
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if len(queue.merged) != 1 || queue.merged[0] != albumID || queue.mergedInto != holderID {
+		t.Fatalf("merged %v into %s, want %s into %s", queue.merged, queue.mergedInto, albumID, holderID)
+	}
+	if len(queue.refreshQueued) != 1 || queue.refreshQueued[0] != holderID || queue.completed != jobID {
+		t.Fatalf("refreshes queued %v, completed %s, want %s refreshed and the job done",
+			queue.refreshQueued, queue.completed, holderID)
+	}
+}
+
+// With no album for the group it went to, the album is filed under that group,
+// so the artist refresh finds it there instead of adding the group again.
+func TestAReleaseRefreshFilesAnAlbumUnderTheGroupItsGroupWasMergedInto(t *testing.T) {
+	albumID, keptGroup := uuid.New(), uuid.New()
+	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": albumID})
+	queue := &fakeQueue{musicBrainzID: uuid.New()}
+	provider := fakeProvider{release: musicbrainz.ReleaseCatalogue{MergedInto: keptGroup}}
+	worker := NewWorker(queue, provider, zerolog.Nop())
+
+	worker.process(context.Background(), Job{
+		ID: uuid.New(), Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if queue.movedTo[albumID] != keptGroup || len(queue.merged) != 0 {
+		t.Fatalf("moved to %v, merged %v, want %s filed under %s", queue.movedTo, queue.merged, albumID, keptGroup)
 	}
 }
 

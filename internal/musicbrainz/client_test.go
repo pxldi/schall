@@ -771,6 +771,50 @@ func TestAnEditionAlreadySettledOnIsNotChosenAgain(t *testing.T) {
 	}
 }
 
+// MusicBrainz answers a lookup on a merged-away release with the release it
+// was merged into. The edition is the release that answered, so the album
+// holding it can be found; before, the asked-for ID was kept and two albums
+// stood for one release.
+func TestAnEditionMusicBrainzMergedAwayIsReadAsTheReleaseItWentTo(t *testing.T) {
+	asked, kept := uuid.New(), uuid.New()
+	client := testClient(t, func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(`{"id":"` + kept.String() +
+			`","title":"G.R.E.Y.G.O.D.S.","status":"Official","media":[]}`))
+	})
+
+	catalogue, err := client.ReleaseCatalogue(context.Background(), uuid.New(), asked)
+	if err != nil {
+		t.Fatalf("ReleaseCatalogue() error = %v", err)
+	}
+	if catalogue.Edition.ID != kept || catalogue.Edition.MergedFrom != asked {
+		t.Errorf("edition = %s merged from %s, want %s merged from %s",
+			catalogue.Edition.ID, catalogue.Edition.MergedFrom, kept, asked)
+	}
+}
+
+// A release group MusicBrainz merged into another answers its lookup as that
+// other group, and the catalogue says where it went.
+func TestAReleaseCatalogueSaysWhereItsGroupWasMerged(t *testing.T) {
+	group, kept, release := uuid.New(), uuid.New(), uuid.New()
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release-group/"+group.String() {
+			_, _ = response.Write([]byte(`{"id":"` + kept.String() + `","title":"Murmansk-60",
+				"artist-credit":[{"name":"AL-90","artist":{"id":"` + uuid.NewString() + `","name":"AL-90"}}]}`))
+			return
+		}
+		_, _ = response.Write([]byte(`{"id":"` + release.String() +
+			`","title":"Murmansk-60","status":"Official","media":[]}`))
+	})
+
+	catalogue, err := client.ReleaseCatalogue(context.Background(), group, release)
+	if err != nil {
+		t.Fatalf("ReleaseCatalogue() error = %v", err)
+	}
+	if catalogue.MergedInto != kept {
+		t.Errorf("merged into = %s, want %s", catalogue.MergedInto, kept)
+	}
+}
+
 // A release group whose editions none of them identify is one Schall cannot
 // represent, and picking one anyway would mean inventing an edition.
 func TestAReleaseGroupWithNoUsableEditionIsRefused(t *testing.T) {

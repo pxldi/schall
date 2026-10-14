@@ -567,6 +567,11 @@ type Queue interface {
 	// MergeAlbumInto moves an album whose release group MusicBrainz merged away
 	// onto the album for the group it went to, and removes the emptied album.
 	MergeAlbumInto(ctx context.Context, from, into, releaseID uuid.UUID) error
+	// AlbumForReleaseGroup, MoveAlbumToReleaseGroup and QueueAlbumRefresh carry
+	// out a release group merge the album's own refresh found.
+	AlbumForReleaseGroup(ctx context.Context, albumID, releaseGroupID uuid.UUID) (uuid.UUID, error)
+	MoveAlbumToReleaseGroup(ctx context.Context, albumID, releaseGroupID uuid.UUID) error
+	QueueAlbumRefresh(ctx context.Context, albumID uuid.UUID) error
 	SaveCatalogueReleaseGroup(context.Context, musicbrainz.ReleaseGroupDetail) (uuid.UUID, error)
 	Complete(context.Context, Job) error
 	JobPayload(context.Context, uuid.UUID) ([]byte, error)
@@ -3953,6 +3958,14 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, fmt.Errorf("save release catalogue: %w", err), !held)
 		return
 	}
+	if albumID == payload.AlbumID && catalogue.MergedInto != uuid.Nil {
+		keeper, err := worker.followMergedGroup(ctx, albumID, catalogue)
+		if err != nil {
+			worker.finishFailed(ctx, job, err, true)
+			return
+		}
+		albumID = keeper
+	}
 	// The other half of a standing "want what is missing". Following an artist
 	// queues one of these jobs per release group and they land one at a time
 	// behind MusicBrainz's rate limit, so the press on the artist's page reaches
@@ -4032,6 +4045,47 @@ func (worker *Worker) mergeHolder(
 		Bool("removed", removed).
 		Msg("album merged into the one MusicBrainz now files its release under")
 	return into, nil
+}
+
+// followMergedGroup carries out MusicBrainz merging the album's release group
+// into another. With an album already standing for that group, this one is
+// folded into it and that album's track list is read again; otherwise this
+// album is filed under the group it went to. Before, the album kept the
+// merged-away group, the artist refresh added the group it went to as a second
+// album, and both stood side by side (AL-90 "Murmansk-60"). It answers the
+// album that stays.
+func (worker *Worker) followMergedGroup(
+	ctx context.Context, albumID uuid.UUID, catalogue musicbrainz.ReleaseCatalogue,
+) (uuid.UUID, error) {
+	holder, err := worker.queue.AlbumForReleaseGroup(ctx, albumID, catalogue.MergedInto)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if holder == uuid.Nil {
+		if err := worker.queue.MoveAlbumToReleaseGroup(ctx, albumID, catalogue.MergedInto); err != nil {
+			return uuid.Nil, err
+		}
+		return albumID, nil
+	}
+	if err := worker.queue.MergeAlbumInto(ctx, albumID, holder, catalogue.Edition.ID); err != nil {
+		if errors.Is(err, ErrAlbumsCannotMerge) {
+			worker.logger.Warn().Err(err).
+				Str("album_id", holder.String()).
+				Str("merged_album_id", albumID.String()).
+				Msg("album could not be merged")
+			return albumID, nil
+		}
+		return uuid.Nil, fmt.Errorf("merge album %s into %s: %w", albumID, holder, err)
+	}
+	worker.logger.Info().
+		Str("album_id", holder.String()).
+		Str("merged_album_id", albumID.String()).
+		Str("release_group_id", catalogue.MergedInto.String()).
+		Msg("album merged into the one for the release group MusicBrainz merged it into")
+	if err := worker.queue.QueueAlbumRefresh(ctx, holder); err != nil {
+		return uuid.Nil, err
+	}
+	return holder, nil
 }
 
 // mergedInto asks MusicBrainz whether release group gone no longer stands on
