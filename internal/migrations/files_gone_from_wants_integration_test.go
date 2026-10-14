@@ -14,7 +14,7 @@ import (
 
 const filesGoneSchema = "schall_files_gone_check"
 
-// filesGoneFixture is a schema migrated to just before 00129, with helpers for
+// filesGoneFixture is a schema migrated to just before 00130, with helpers for
 // the rows a deletion used to leave pointing at nothing.
 type filesGoneFixture struct {
 	t         *testing.T
@@ -41,7 +41,7 @@ func newFilesGoneFixture(t *testing.T) filesGoneFixture {
 		separator = "&"
 	}
 	scopedURL := databaseURL + separator + "search_path=" + filesGoneSchema + ",public"
-	if err := migrations.UpTo(ctx, scopedURL, 128); err != nil {
+	if err := migrations.UpTo(ctx, scopedURL, 129); err != nil {
 		t.Fatalf("apply the migrations before the one under test: %v", err)
 	}
 	return filesGoneFixture{t: t, pool: pool, scopedURL: scopedURL}
@@ -56,7 +56,7 @@ func (fixture filesGoneFixture) exec(sql string, args ...any) {
 
 func (fixture filesGoneFixture) migrate() {
 	fixture.t.Helper()
-	if err := migrations.UpTo(context.Background(), fixture.scopedURL, 129); err != nil {
+	if err := migrations.UpTo(context.Background(), fixture.scopedURL, 130); err != nil {
 		fixture.t.Fatalf("apply the migration under test: %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func (fixture filesGoneFixture) wantState(id uuid.UUID) wantState {
 	return state
 }
 
-// 00129 points an acquired want whose file was deleted at the present file
+// 00130 points an acquired want whose file was deleted at the present file
 // proven to be its recording, the keeper of a duplicate pair.
 func TestTheMigrationPointsAWantWhoseFileWentAtTheFileThatHoldsItsRecording(t *testing.T) {
 	fixture := newFilesGoneFixture(t)
@@ -170,7 +170,7 @@ func TestTheMigrationPointsAWantWhoseFileWentAtTheFileThatHoldsItsRecording(t *t
 	}
 }
 
-// 00129 sends an acquired want whose music is gone from the library back to
+// 00130 sends an acquired want whose music is gone from the library back to
 // looking for it.
 func TestTheMigrationLooksAgainForAWantWhoseMusicIsGone(t *testing.T) {
 	fixture := newFilesGoneFixture(t)
@@ -184,7 +184,7 @@ func TestTheMigrationLooksAgainForAWantWhoseMusicIsGone(t *testing.T) {
 	}
 }
 
-// The weekly run settles the wants it made, so 00129 leaves one alone.
+// The weekly run settles the wants it made, so 00130 leaves one alone.
 func TestTheMigrationLeavesAWeeklyTrialWantAlone(t *testing.T) {
 	fixture := newFilesGoneFixture(t)
 	wantID := fixture.want("acquired", uuid.New(), true)
@@ -196,7 +196,7 @@ func TestTheMigrationLeavesAWeeklyTrialWantAlone(t *testing.T) {
 	}
 }
 
-// 00129 marks an accepted copy whose transfer leads to no library file as
+// 00130 marks an accepted copy whose transfer leads to no library file as
 // deleted, so a want stops reading it as a copy on its way in.
 func TestTheMigrationMarksACopyWhoseFileWentAsRemoved(t *testing.T) {
 	fixture := newFilesGoneFixture(t)
