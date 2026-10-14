@@ -241,8 +241,12 @@ func (service *Service) resolveFiling(
 	// A person's answer stands whatever else is true, and here it also satisfies
 	// the want as it is: the two rows are one piece of music, so the file they
 	// decided about is the music that was asked for.
+	//
+	// The file keeps the person's answer and counts for the want's row as a
+	// second row, so the want's track shows the song as held. Before, it
+	// settled with nothing recorded and the track said "Fetched once, file gone".
 	if filing.FiledIsManual {
-		return service.settleFiling(ctx, target, filing, detail)
+		return service.settleOnSecondRow(ctx, target, filing, detail)
 	}
 	if service.filer == nil {
 		return service.settleOnClusterOrStop(ctx, target, filing)
@@ -258,7 +262,7 @@ func (service *Service) resolveFiling(
 		// Somebody decided about the file between the read and the write. Their
 		// answer is the same music, so the want settles against it untouched.
 		if errors.Is(err, identity.ErrDecidedByHand) {
-			return service.settleFiling(ctx, target, filing, detail)
+			return service.settleOnSecondRow(ctx, target, filing, detail)
 		}
 		return fmt.Errorf("file %s under the recording want %s names: %w",
 			filing.LibraryFileID, target.ID, err)
@@ -368,6 +372,20 @@ func (service *Service) settleFiling(
 	return nil
 }
 
+// settleOnSecondRow settles a want against a file that keeps another row's
+// identity, and records the want's row as a second row of the file. A merge
+// records nothing, because the aliases already answer for it.
+func (service *Service) settleOnSecondRow(
+	ctx context.Context, target db.AcquisitionTargetRow,
+	filing db.AcquiredCopyFiling, detail string,
+) error {
+	if err := service.store.RecordSecondRow(
+		ctx, filing.LibraryFileID, target.MusicBrainzRecordingID.UUID); err != nil {
+		return err
+	}
+	return service.settleFiling(ctx, target, filing, detail)
+}
+
 // settleOnClusterOrStop settles a want whose copy AcoustID admitted at a
 // leading cluster that also names the recording the library filed the file
 // under, and stops it otherwise.
@@ -389,11 +407,7 @@ func (service *Service) settleOnClusterOrStop(
 		Str("wanted_recording_id", target.MusicBrainzRecordingID.UUID.String()).
 		Str("filed_recording_id", filing.FiledRecordingID.UUID.String()).
 		Msg("a want's copy was filed under a row its own AcoustID cluster names too")
-	if err := service.store.RecordSecondRow(
-		ctx, filing.LibraryFileID, target.MusicBrainzRecordingID.UUID); err != nil {
-		return err
-	}
-	return service.settleFiling(ctx, target, filing, sameClusterDetail)
+	return service.settleOnSecondRow(ctx, target, filing, sameClusterDetail)
 }
 
 // oneClusterNamesBoth reports a copy admitted by AcoustID for the wanted
