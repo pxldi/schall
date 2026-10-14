@@ -1215,6 +1215,7 @@ func (worker *Worker) WithDecodeSweeper(sweeper DecodeSweeper) *Worker {
 // break it (db.Invariants).
 type InvariantCounter interface {
 	CountInvariantViolations(context.Context) ([]db.InvariantCount, error)
+	RecordInvariantCounts(context.Context, time.Time, []db.InvariantCount) error
 }
 
 // WithInvariantCounter registers what the invariant check job reads.
@@ -2096,7 +2097,8 @@ func (worker *Worker) processDecodeSweep(ctx context.Context, job Job) {
 }
 
 // processInvariantCheck counts the rows breaking each rule in db.Invariants,
-// logs every count above zero as a warning, and schedules the next check
+// stores the counts, logs every count above zero as a warning, and schedules
+// the next check
 // after invariantCheckIdle. It only reads: what a count points at is fixed in
 // code, never by this job.
 func (worker *Worker) processInvariantCheck(ctx context.Context, job Job) {
@@ -2104,7 +2106,11 @@ func (worker *Worker) processInvariantCheck(ctx context.Context, job Job) {
 		worker.finishFailed(ctx, job, errors.New("the invariant check is not configured"), false)
 		return
 	}
+	checkedAt := worker.now()
 	counts, err := worker.invariants.CountInvariantViolations(ctx)
+	if err == nil {
+		err = worker.invariants.RecordInvariantCounts(ctx, checkedAt, counts)
+	}
 	if err != nil {
 		worker.finishFailed(ctx, job, fmt.Errorf("check invariants: %w", err), true)
 		if spent(job, err) {

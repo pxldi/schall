@@ -176,3 +176,152 @@ func TestAnAcceptedCopyWhoseTransferHoldsItsFileKeepsTheInvariant(t *testing.T) 
 
 	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
 }
+
+// plantSecondRowFile writes a present file proven to be one MusicBrainz row of
+// a song and recorded as also answering a second row, mapped onto a track that
+// carries the second row: the shape 54 live mappings had on 2026-10-14 after
+// #119. It returns the second row's recording.
+func plantSecondRowFile(ctx context.Context, t *testing.T, pool *pgxpool.Pool) uuid.UUID {
+	t.Helper()
+	own, second := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `
+		WITH artist AS (
+		    INSERT INTO artists (name, sort_name) VALUES ('Souly', 'Souly') RETURNING id),
+		album AS (
+		    INSERT INTO albums (artist_id, title) SELECT id, 'traence' FROM artist RETURNING id),
+		track AS (
+		    INSERT INTO tracks (album_id, musicbrainz_recording_id, title, track_number)
+		    SELECT id, $2, 'Nichts hittet mehr', 7 FROM album RETURNING id),
+		root AS (
+		    INSERT INTO library_roots (path) VALUES ('/music') RETURNING id),
+		file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at, library_root_id,
+		                               resolution_status, match_status)
+		    SELECT '/music/Souly/07 Nichts Hittet Mehr.mp3', 1, now(), id, 'resolved', 'matched'
+		    FROM root RETURNING id),
+		identity AS (
+		    INSERT INTO library_file_identities (library_file_id, kind, musicbrainz_recording_id, method)
+		    SELECT id, 'external', $1, 'fingerprint' FROM file RETURNING id),
+		second_row AS (
+		    INSERT INTO library_file_second_rows (identity_id, musicbrainz_recording_id)
+		    SELECT id, $2 FROM identity)
+		INSERT INTO track_mappings (track_id, library_file_id, method, confidence)
+		SELECT track.id, file.id, 'fingerprint', 1 FROM track, file
+	`, own, second); err != nil {
+		t.Fatal(err)
+	}
+	return second
+}
+
+// The matcher maps a file to its second rows' tracks on purpose, so such a
+// mapping agrees with the file's identity.
+func TestAMappingOntoASecondRowKeepsTheInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantSecondRowFile(ctx, t, pool)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}
+
+// A want for the second row is held by the file, as OwnedFileForRecording
+// says it is, before the matcher has mapped the file onto the row's track.
+func TestASecondRowHoldsAnAcquiredWantsRecording(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	second := plantSecondRowFile(ctx, t, pool)
+	if _, err := pool.Exec(ctx, `
+		WITH unmapped AS (DELETE FROM track_mappings RETURNING library_file_id)
+		UPDATE library_files SET match_status = 'unmatched' WHERE id IN (SELECT library_file_id FROM unmapped)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id, status, acquired_at)
+		VALUES ('manual', 'Souly', 'Nichts hittet mehr', $1, 'acquired', now())
+	`, second); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}
+
+// A run's counts are stored whole, and a run older than invariantResultsKept
+// is dropped when the next one is stored.
+func TestRecordInvariantCountsKeepsNinetyDays(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	now := time.Date(2026, 10, 14, 21, 0, 0, 0, time.UTC)
+	counts := []InvariantCount{
+		{Name: "album_without_tracks", Violations: 14},
+		{Name: "file_without_root", Violations: 0},
+	}
+	if err := store.RecordInvariantCounts(ctx, now.Add(-91*24*time.Hour), counts); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordInvariantCounts(ctx, now, counts); err != nil {
+		t.Fatal(err)
+	}
+
+	var runs, rows, albums int64
+	if err := pool.QueryRow(ctx, `
+		SELECT count(DISTINCT checked_at), count(*),
+		       coalesce(sum(violations) FILTER (WHERE invariant = 'album_without_tracks'), 0)
+		FROM invariant_check_results
+	`).Scan(&runs, &rows, &albums); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 1 || rows != 2 || albums != 14 {
+		t.Fatalf("stored %d runs, %d rows, %d empty albums; want 1, 2, 14", runs, rows, albums)
+	}
+}
+
+// plantMergedWant writes an acquired want for a recording MusicBrainz has
+// since merged into another, as $uicideboy$ "The Road to Hell Is Highway 59"
+// was on 2026-10-05. It returns the surviving recording.
+func plantMergedWant(ctx context.Context, t *testing.T, pool *pgxpool.Pool) uuid.UUID {
+	t.Helper()
+	retired, surviving := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `
+		WITH alias AS (
+		    INSERT INTO recording_aliases (retired_id, surviving_id) VALUES ($1, $2)),
+		root AS (
+		    INSERT INTO library_roots (path) VALUES ('/music') RETURNING id),
+		file AS (
+		    INSERT INTO library_files (path, size_bytes, modified_at, library_root_id, resolution_status)
+		    SELECT '/music/$uicideboy$/1 - The Road To Hell Is Highway 59.mp3', 1, now(), id, 'resolved'
+		    FROM root RETURNING id),
+		identity AS (
+		    INSERT INTO library_file_identities (library_file_id, kind, musicbrainz_recording_id, method)
+		    SELECT id, 'external', $2, 'acoustid' FROM file)
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id, status, acquired_at)
+		VALUES ('manual', '$uicideboy$', 'The Road to Hell Is Highway 59', $1, 'acquired', now())
+	`, retired, surviving); err != nil {
+		t.Fatal(err)
+	}
+	return surviving
+}
+
+// A retired id stays readable through recording_aliases, so a want keeping it
+// breaks nothing.
+func TestAWantKeepingARetiredRecordingIDKeepsEveryInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	plantMergedWant(ctx, t, pool)
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
+}
+
+// A second want for the surviving id is the same song wanted twice.
+func TestTwoWantsForOneMergedSongBreakAnInvariant(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	surviving := plantMergedWant(ctx, t, pool)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_targets (
+		    origin, entry_artist, entry_title, musicbrainz_recording_id, status, acquired_at)
+		VALUES ('manual', '$uicideboy$', 'The Road to Hell Is Highway 59', $1, 'acquired', now())
+	`, surviving); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts(t, countsByName(ctx, t, store), map[string]int64{
+		"one_want_per_song": 1,
+	})
+}
