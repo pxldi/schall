@@ -22,6 +22,8 @@ type release struct {
 	releaseDate    *time.Time
 	albumType      string
 	secondaryTypes []string
+	// editionStatus is MusicBrainz's status of the chosen edition; empty seeds none.
+	editionStatus string
 }
 
 // TestTheFeedWantsARecordingReleasedAfterTheFollow is the whole promise of a
@@ -115,6 +117,55 @@ func TestTheFeedLeavesAReleaseTheMonitorLevelDoesNotCount(t *testing.T) {
 	}
 
 	assertNoWant(ctx, t, pool, recordingID)
+}
+
+// "Main releases" means the artist's own releases. A release group whose chosen
+// edition is a bootleg has no official release at all, because the edition
+// picker prefers an official one, so the feed leaves it alone.
+func TestTheFeedLeavesABootlegAtMainReleases(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	feed := newTestFeed(pool)
+
+	published := time.Now().AddDate(0, 0, -1)
+	recordingID := seedFollowedRelease(ctx, t, pool, release{
+		followedAt:    time.Now().AddDate(0, -1, 0),
+		releaseDate:   &published,
+		monitorLevel:  "main",
+		editionStatus: "Bootleg",
+	})
+
+	if _, err := feed.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	assertNoWant(ctx, t, pool, recordingID)
+}
+
+// The bootleg rule reads the edition's status and nothing else. An official
+// edition at "main" is wanted as before.
+func TestTheFeedWantsAnOfficialReleaseAtMainReleases(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	feed := newTestFeed(pool)
+
+	published := time.Now().AddDate(0, 0, -1)
+	recordingID := seedFollowedRelease(ctx, t, pool, release{
+		followedAt:    time.Now().AddDate(0, -1, 0),
+		releaseDate:   &published,
+		monitorLevel:  "main",
+		editionStatus: "Official",
+	})
+
+	if _, err := feed.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if target := wantFor(ctx, t, pool, recordingID); target.Origin != "follow_feed" {
+		t.Fatalf("origin = %s, want follow_feed", target.Origin)
+	}
 }
 
 // A recording somebody stopped pursuing stays stopped. The feed finds the
@@ -391,6 +442,14 @@ func seedFollowedRelease(
 		VALUES ($1, $2, 'Aviolet Dusk', 1, 1, 245000)
 	`, albumID, recordingID); err != nil {
 		t.Fatalf("seed track: %v", err)
+	}
+	if spec.editionStatus != "" {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO release_editions (album_id, musicbrainz_release_id, title, status, selection_reason)
+			VALUES ($1, $2, 'We Had Good Times Together', $3, 'only edition')
+		`, albumID, uuid.New(), spec.editionStatus); err != nil {
+			t.Fatalf("seed edition: %v", err)
+		}
 	}
 	return recordingID
 }

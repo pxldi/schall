@@ -19,6 +19,8 @@ type standing struct {
 	monitorLevel   string
 	albumType      string
 	secondaryTypes []string
+	// editionStatus is MusicBrainz's status of the chosen edition; empty seeds none.
+	editionStatus string
 	// owned maps the track onto a library file the collection still has, which
 	// is the plain reason not to want it.
 	owned bool
@@ -70,6 +72,28 @@ func TestAStandingWantLeavesAReleaseOutsideTheMonitorLevel(t *testing.T) {
 	}
 	if wanted != 0 {
 		t.Fatalf("wanted = %d, want a live album left alone at 'main'", wanted)
+	}
+	assertNoWant(ctx, t, pool, recordingID)
+}
+
+// A bootleg live set filed as a plain album was wanted at "main" because only
+// the types were read. The chosen edition's status now counts too.
+func TestAStandingWantLeavesABootlegAtMainReleases(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	albumID, recordingID := seedStandingRelease(ctx, t, pool, standing{
+		wantMissing:   true,
+		editionStatus: "Bootleg",
+	})
+
+	wanted, err := newTestStanding(pool).WantAlbumMissing(ctx, albumID)
+	if err != nil {
+		t.Fatalf("WantAlbumMissing() error = %v", err)
+	}
+	if wanted != 0 {
+		t.Fatalf("wanted = %d, want a bootleg left alone at 'main'", wanted)
 	}
 	assertNoWant(ctx, t, pool, recordingID)
 }
@@ -233,6 +257,14 @@ func seedStandingRelease(
 		RETURNING id
 	`, albumID, recordingID).Scan(&trackID); err != nil {
 		t.Fatalf("seed track: %v", err)
+	}
+	if spec.editionStatus != "" {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO release_editions (album_id, musicbrainz_release_id, title, status, selection_reason)
+			VALUES ($1, $2, 'With A Hammer', $3, 'only edition')
+		`, albumID, uuid.New(), spec.editionStatus); err != nil {
+			t.Fatalf("seed edition: %v", err)
+		}
 	}
 	if spec.owned {
 		seedMappedFile(ctx, t, pool, trackID)

@@ -67,9 +67,15 @@ completeness AS (
                 WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
                     AND NOT (albums.secondary_types
                         && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                    AND NOT EXISTS (SELECT 1 FROM release_editions
+                        WHERE release_editions.album_id = albums.id
+                          AND lower(release_editions.status) <> 'official')
                 WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
                     AND NOT (albums.secondary_types
                         && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                    AND NOT EXISTS (SELECT 1 FROM release_editions
+                        WHERE release_editions.album_id = albums.id
+                          AND lower(release_editions.status) <> 'official')
                 ELSE album_tracks.owned_count > 0
             END AS monitored,
             CASE WHEN monitoring.monitor_level = 'owned'
@@ -298,9 +304,15 @@ WHERE albums.artist_id = $1
           WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           ELSE false
       END
 ORDER BY albums.release_date NULLS LAST, albums.id,
@@ -750,9 +762,15 @@ WHERE artists.followed_at IS NOT NULL
           WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           ELSE false
       END
   -- Either way the library can already hold it. A mapping onto a present file —
@@ -1041,7 +1059,9 @@ completeness AS (
     JOIN LATERAL (
         -- What the artist's monitor level says this release is. MusicBrainz's
         -- own types decide "main": albums, EPs and singles that are not one of
-        -- the secondary shapes nobody means when they ask for a discography.
+        -- the secondary shapes nobody means when they ask for a discography,
+        -- and whose chosen edition is not a bootleg, promo or pseudo-release.
+        -- The edition is official whenever the group has an official release.
         -- "owned" counts only what the library already holds — every release it
         -- reaches is complete by construction, and nothing else exists to be
         -- missing.
@@ -1051,9 +1071,15 @@ completeness AS (
                 WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
                     AND NOT (albums.secondary_types
                         && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                    AND NOT EXISTS (SELECT 1 FROM release_editions
+                        WHERE release_editions.album_id = albums.id
+                          AND lower(release_editions.status) <> 'official')
                 WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
                     AND NOT (albums.secondary_types
                         && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                    AND NOT EXISTS (SELECT 1 FROM release_editions
+                        WHERE release_editions.album_id = albums.id
+                          AND lower(release_editions.status) <> 'official')
                 ELSE album_tracks.owned_count > 0
             END AS monitored,
             CASE WHEN monitoring.monitor_level = 'owned'
@@ -1663,9 +1689,15 @@ WHERE albums.id = $1
           WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
               AND NOT (albums.secondary_types
                   && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+              AND NOT EXISTS (SELECT 1 FROM release_editions
+                  WHERE release_editions.album_id = albums.id
+                    AND lower(release_editions.status) <> 'official')
           ELSE false
       END
 ORDER BY tracks.disc_number, tracks.track_number NULLS LAST, tracks.id

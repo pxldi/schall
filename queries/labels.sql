@@ -141,9 +141,15 @@ JOIN LATERAL (
             WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             ELSE album_tracks.owned_count > 0
         END AS monitored
 ) AS measured ON true
@@ -255,9 +261,15 @@ JOIN LATERAL (
             WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             ELSE album_tracks.owned_count > 0
         END AS monitored
 ) AS measured ON true
@@ -423,9 +435,15 @@ JOIN LATERAL (
             WHEN 'main' THEN albums.album_type IN ('album', 'ep', 'single')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             WHEN 'albums_eps' THEN albums.album_type IN ('album', 'ep')
                 AND NOT (albums.secondary_types
                     && '{live,compilation,remix,dj-mix,mixtape/street,demo,broadcast}'::text[])
+                AND NOT EXISTS (SELECT 1 FROM release_editions
+                    WHERE release_editions.album_id = albums.id
+                      AND lower(release_editions.status) <> 'official')
             ELSE album_tracks.owned_count > 0
         END AS monitored
 ) AS measured ON true
