@@ -27,7 +27,7 @@
   import { listening, setVolume } from '$lib/preview.svelte';
   import Button from '$lib/components/Button.svelte';
   import Hero from '$lib/components/Hero.svelte';
-  import { usePagePrint } from '$lib/duoton';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import AlbumBatch from '$lib/components/AlbumBatch.svelte';
   import CopyCard from '$lib/components/CopyCard.svelte';
   import ListenPlayer from '$lib/components/ListenPlayer.svelte';
@@ -259,9 +259,16 @@
   // question carries its own inks (ADR Duoton). A want names the album it came
   // from when it did; a folder names the release it was fetched for.
   const currentAlbum = $derived(current?.want?.target.originAlbumId ?? current?.download?.albumId);
+  const currentInks = $derived(
+    current?.want?.target.originAlbumId ? current.want.inks : current?.download?.inks
+  );
   usePagePrint(() => {
     if (loading) return undefined;
-    return { covers: currentAlbum ? [currentAlbum] : [], mode: 'single', height: 16 };
+    return {
+      covers: currentAlbum ? [{ src: coverSrc(currentAlbum), seed: currentAlbum, inks: currentInks }] : [],
+      mode: 'single',
+      height: 16
+    };
   });
 
   let held = $state('');

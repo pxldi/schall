@@ -1231,6 +1231,9 @@ type reviewItemResponse struct {
 	// WaitingUntil is when the next automatic look is due, for the kind that
 	// waits on a clock. The kind that waits on a fact has none.
 	WaitingUntil *time.Time `json:"waitingUntil,omitempty"`
+	// Inks are the stored inks of the release the want came from, which the
+	// review page is printed in. Absent for a want with no release or no inks.
+	Inks *inksResponse `json:"inks,omitempty"`
 }
 
 // waitingFor reads what a want is still waiting for, from two facts that have to
@@ -1401,6 +1404,18 @@ func (api *API) reviewQueue(response http.ResponseWriter, request *http.Request)
 		}
 		api.addStoppedFileIdentity(request.Context(), &review, item)
 		items = append(items, review)
+	}
+	albumIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		if item.Target.OriginAlbumID != nil {
+			albumIDs = append(albumIDs, *item.Target.OriginAlbumID)
+		}
+	}
+	inks := api.releaseInks(request.Context(), albumIDs)
+	for index := range items {
+		if id := items[index].Target.OriginAlbumID; id != nil {
+			items[index].Inks = rowInks(inks, *id)
+		}
 	}
 	api.warmPreviews(page.Items)
 	api.writeJSON(response, http.StatusOK, map[string]any{

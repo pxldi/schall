@@ -76,10 +76,23 @@
   // The page's two inks live on <html>, so the tokens that name them (the
   // accent, the focus ring, the primary button) resolve to the page's colours
   // everywhere, overlays included.
+  //
+  // The first page's inks are cut in rather than eased from the house inks: a
+  // reload faded every page from navy and peach into its own colours.
+  let inked = false;
   $effect(() => {
-    const root = document.documentElement.style;
-    root.setProperty('--color-duo-dark', duoton.inks.dark);
-    root.setProperty('--color-duo-light', duoton.inks.light);
+    const html = document.documentElement;
+    const cut = !inked;
+    if (cut) html.dataset.inksCut = '';
+    html.style.setProperty('--color-duo-dark', duoton.inks.dark);
+    html.style.setProperty('--color-duo-light', duoton.inks.light);
+    if (cut) {
+      // Reading a style back applies the new inks while the transition is
+      // off, so turning it on again does not start one.
+      void getComputedStyle(html).getPropertyValue('--color-duo-dark');
+      delete html.dataset.inksCut;
+    }
+    if (duoton.claimed) inked = true;
   });
 
   // The bar is a wash over the print and turns solid once the print has

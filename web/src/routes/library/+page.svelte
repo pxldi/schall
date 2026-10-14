@@ -65,7 +65,8 @@
     return {
       covers: items.map((release) => ({
         src: release.hasCover ? `${coverSrc(release.id)}?cached=1` : null,
-        seed: release.id
+        seed: release.id,
+        inks: release.inks
       })),
       height: 15
     };

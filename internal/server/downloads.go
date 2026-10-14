@@ -85,10 +85,14 @@ type downloadRequestResponse struct {
 	// A request is about a release or about one wanted recording, never both and
 	// never neither. The release fields are absent on a request that serves a
 	// want, and the entry is what names the music instead.
-	AlbumID             *uuid.UUID                    `json:"albumId,omitempty"`
-	AlbumTitle          string                        `json:"albumTitle,omitempty"`
-	ArtistID            *uuid.UUID                    `json:"artistId,omitempty"`
-	ArtistName          string                        `json:"artistName,omitempty"`
+	AlbumID    *uuid.UUID `json:"albumId,omitempty"`
+	AlbumTitle string     `json:"albumTitle,omitempty"`
+	ArtistID   *uuid.UUID `json:"artistId,omitempty"`
+	ArtistName string     `json:"artistName,omitempty"`
+	// Inks are the release's stored inks, so a page printed from this
+	// request's cover has its colours with the list rather than after reading
+	// the picture. Only the list fills them in.
+	Inks                *inksResponse                 `json:"inks,omitempty"`
 	AcquisitionTargetID *uuid.UUID                    `json:"acquisitionTargetId,omitempty"`
 	EntryArtist         string                        `json:"entryArtist,omitempty"`
 	EntryTitle          string                        `json:"entryTitle,omitempty"`
@@ -534,6 +538,7 @@ func (api *API) writeDownloadRequests(response http.ResponseWriter, request *htt
 		items = append(items, downloadRequestResponseFrom(row))
 	}
 	api.attachPeerQuestions(request.Context(), items)
+	api.attachDownloadInks(request.Context(), items)
 	// The counts ride with the page so the filter strip above the list and the
 	// list itself are one answer rather than two reads that can disagree.
 	api.writeJSON(response, http.StatusOK, map[string]any{
@@ -1167,6 +1172,23 @@ func (api *API) replyToPeer(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	api.writeJSON(response, http.StatusOK, downloadRequestResponseFrom(refreshed))
+}
+
+// attachDownloadInks fills in the stored inks of each request's release, in
+// one query for the page.
+func (api *API) attachDownloadInks(ctx context.Context, items []downloadRequestResponse) {
+	albumIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		if item.AlbumID != nil {
+			albumIDs = append(albumIDs, *item.AlbumID)
+		}
+	}
+	inks := api.releaseInks(ctx, albumIDs)
+	for index := range items {
+		if items[index].AlbumID != nil {
+			items[index].Inks = rowInks(inks, *items[index].AlbumID)
+		}
+	}
 }
 
 // attachPeerQuestions fills in what each request's peer asked and nobody could

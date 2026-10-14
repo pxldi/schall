@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, setup, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, setup, waitFor, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { DownloadCounts, DownloadRequest, DownloadRequests } from '$lib/api';
 
@@ -593,5 +593,15 @@ describe('a failed poll', () => {
       expect(client.getQueryCache().findAll({ queryKey: ['downloads', 'list'] })[0]?.state.status).toBe('error')
     );
     expect(screen.getByRole('article')).toBeTruthy();
+  });
+});
+
+describe('the print', () => {
+  it("takes the stored inks of the first row's release", async () => {
+    const { duoton } = await import('$lib/duoton');
+    answering(() => listing({ items: [request({ inks: { dark: '#0d1420', light: '#f2b48c' } })] }));
+    opened();
+
+    await waitFor(() => expect(duoton.inks).toEqual({ dark: '#0d1420', light: '#f2b48c' }));
   });
 });

@@ -1941,6 +1941,8 @@ export interface ReviewItem {
   copies: AcquiredCopy[];
   candidates: AcquisitionCandidate[];
   ruledOut: number;
+  /** The stored inks of the release the want came from, when it has some. */
+  inks?: Inks | null;
   /** The identity already recorded for a stopped want's imported file. */
   fileRecordingId?: string;
   fileTitle?: string;
@@ -2185,6 +2187,8 @@ export interface DownloadRequest {
   albumTitle?: string;
   artistId?: string;
   artistName?: string;
+  /** The release's stored inks. Only the list carries them. */
+  inks?: Inks | null;
   acquisitionTargetId?: string;
   entryArtist?: string;
   entryTitle?: string;

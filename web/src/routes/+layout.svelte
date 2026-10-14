@@ -1,39 +1,21 @@
 <script lang="ts">
-  import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
+  import { QueryClientProvider } from '@tanstack/svelte-query';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { connectEvents } from '$lib/events';
-  import { queryRetry } from '$lib/errors';
   import { trackNavigation } from '$lib/navigation.svelte';
   import { pageTransitions } from '$lib/motion.svelte';
-  import { PERSIST_MAX_AGE, persistQueries } from '$lib/persist';
+  import { queriesRestored, queryClient } from '$lib/query-client';
   import AppShell from '$lib/components/AppShell.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import '../styles.css';
 
   let { children } = $props();
 
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 30_000,
-        // Answers are kept in memory as long as they are kept in the browser,
-        // so going back to a page draws it from what it showed last time.
-        gcTime: PERSIST_MAX_AGE,
-        refetchOnWindowFocus: false,
-        retry: queryRetry
-      }
-    }
-  });
-
-  // The pages wait for the kept answers before they first draw, so a page
-  // that has been seen before opens on its data rather than on placeholders.
-  // A slow or missing store is not waited on for long.
+  // The pages wait for the kept answers before they first draw
+  // ($lib/query-client).
   let restored = $state(false);
-  void Promise.race([
-    persistQueries(queryClient, __SCHALL_VERSION__),
-    new Promise((resolve) => setTimeout(resolve, 300))
-  ]).then(() => (restored = true));
+  void queriesRestored.then(() => (restored = true));
 
   // One stream for the whole application: the views that care are invalidated
   // by topic, and there is no reason to open a connection per page.
