@@ -178,6 +178,11 @@ type Store interface {
 		ctx context.Context, fileID uuid.UUID, next time.Time, counted bool, contradiction string,
 	) error
 	OwnedFileForRecording(context.Context, uuid.UUID) (uuid.NullUUID, error)
+	// RecordSecondRow records that a file also answers another MusicBrainz row
+	// of its song (db.AddSecondRow).
+	RecordSecondRow(ctx context.Context, fileID, recordingID uuid.UUID) error
+	OwnedRecordingsTitled(ctx context.Context, title string, except uuid.UUID) ([]uuid.UUID, error)
+	TargetsStoppedOnAWaitingCopy(ctx context.Context, limit int32) ([]db.AcquisitionTargetRow, error)
 	SettleAcquiredTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
 	SettleStoppedUnresolvedTarget(ctx context.Context, id, libraryFileID uuid.UUID, summary, detail string) error
 	RequeueAcquisitionTarget(
@@ -510,7 +515,10 @@ func (service *Service) Sweep(ctx context.Context) error {
 	// The wants that stopped are not due and never will be, so the first sweep of
 	// a process is the only thing that can look at them again. It logs its own
 	// failures: a want nobody could re-read must not stop every want that is due.
-	service.reviewed.Do(func() { service.reviewStoppedFilings(ctx) })
+	service.reviewed.Do(func() {
+		service.reviewStoppedFilings(ctx)
+		service.reviewWaitingCopies(ctx)
+	})
 	if err := service.resolveDue(ctx); err != nil {
 		return err
 	}
@@ -708,11 +716,25 @@ func (service *Service) heldAlready(
 	if err != nil {
 		return false, fmt.Errorf("look for an owned copy of target %s: %w", target.ID, err)
 	}
+	detail := acquiredDetail
 	if !fileID.Valid {
-		return false, nil
+		fileID, err = service.ownedSecondRow(ctx, target)
+		if err != nil {
+			return false, fmt.Errorf("look for an owned second row of target %s: %w", target.ID, err)
+		}
+		if !fileID.Valid {
+			return false, nil
+		}
+		// The file counts for the want's row too, so the release the want came
+		// from shows the song as held rather than missing.
+		if err := service.store.RecordSecondRow(
+			ctx, fileID.UUID, target.MusicBrainzRecordingID.UUID); err != nil {
+			return false, err
+		}
+		detail = secondRowDetail
 	}
 	err = service.store.SettleAcquiredTarget(
-		ctx, target.ID, fileID.UUID, acquiredSummary, acquiredDetail)
+		ctx, target.ID, fileID.UUID, acquiredSummary, detail)
 	// The target stopped being pending between the read and the write, which
 	// means somebody decided something about it while this pass was running.
 	// Their decision stands; the attempt is dropped rather than applied over it.
@@ -731,6 +753,13 @@ func (service *Service) heldAlready(
 		Str("acquisition_target_id", target.ID.String()).
 		Str("library_file_id", fileID.UUID.String()).
 		Msg("a wanted recording was already in the library")
+	if detail == secondRowDetail && service.matcher != nil {
+		if err := service.matcher.ReconcileFile(ctx, fileID.UUID); err != nil {
+			service.logger.Error().Err(err).
+				Str("library_file_id", fileID.UUID.String()).
+				Msg("offer a file held under a second row to the catalogue")
+		}
+	}
 	return true, nil
 }
 
@@ -1024,7 +1053,10 @@ const (
 	// sample of its own to answer it with. See db.StopWhileACopyWaits.
 	copyWaitingSummary = "A copy is waiting. Listen to decide."
 
-	acquiredDetail     = "Already in your library."
+	acquiredDetail = "Already in your library."
+	// What an attempt records when the library holds the song under a second
+	// MusicBrainz entry, such as the album track of a wanted single.
+	secondRowDetail    = "Already in your library under a second MusicBrainz entry of this song."
 	acquiredCopyDetail = "Downloaded, audio verified, imported."
 	// What the attempt records when a person settles a stopped want with no
 	// recording against its library file (ADR 0040 §5).
@@ -1033,7 +1065,10 @@ const (
 	// on the disc holds the explicit one. The two are different recordings, so
 	// the detail says which one the library has (ADR 0032).
 	explicitEditionDetail = "Downloaded, audio verified, imported. Kept as the explicit version."
-	waitingDetail         = "No library file proven to be this song."
+	// What an attempt records when AcoustID names the wanted song and the one the
+	// library filed the file under as one piece of audio.
+	sameClusterDetail = "Downloaded, audio verified, imported. AcoustID knows this audio under both MusicBrainz entries."
+	waitingDetail     = "No library file proven to be this song."
 )
 
 func text(value string) pgtype.Text {

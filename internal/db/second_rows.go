@@ -58,3 +58,8 @@ func SecondRows(ctx context.Context, db DBTX, fileID uuid.UUID) ([]uuid.UUID, er
 	}
 	return found, rows.Err()
 }
+
+// RecordSecondRow is AddSecondRow on the queries' own connection.
+func (q *Queries) RecordSecondRow(ctx context.Context, fileID, recordingID uuid.UUID) error {
+	return AddSecondRow(ctx, q.db, fileID, recordingID)
+}

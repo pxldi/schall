@@ -186,7 +186,7 @@ func (service *Service) resolveFiling(
 		return service.stopOnFiling(ctx, target, localOnlyFilingSummary)
 	}
 	if service.resolver == nil {
-		return service.stopOnFiling(ctx, target, filedElsewhereSummary(filing))
+		return service.settleOnClusterOrStop(ctx, target, filing)
 	}
 	// The excerpt this copy was measured against when it was admitted, with who
 	// published it. The read leaves it out unless it was fetched for the
@@ -213,7 +213,7 @@ func (service *Service) resolveFiling(
 		return nil
 	}
 	if verdict == identity.FilingOtherRecording {
-		return service.stopOnFiling(ctx, target, filedElsewhereSummary(filing))
+		return service.settleOnClusterOrStop(ctx, target, filing)
 	}
 	// The want names the clean edition of the track on the disc, and the owner
 	// keeps the explicit one (ADR 0032). The want settles against the
@@ -245,7 +245,7 @@ func (service *Service) resolveFiling(
 		return service.settleFiling(ctx, target, filing, detail)
 	}
 	if service.filer == nil {
-		return service.stopOnFiling(ctx, target, filedElsewhereSummary(filing))
+		return service.settleOnClusterOrStop(ctx, target, filing)
 	}
 	proof := identity.FilingProof{
 		Merged:    verdict == identity.FilingMerged,
@@ -366,6 +366,54 @@ func (service *Service) settleFiling(
 		}
 	}
 	return nil
+}
+
+// settleOnClusterOrStop settles a want whose copy AcoustID admitted at a
+// leading cluster that also names the recording the library filed the file
+// under, and stops it otherwise.
+//
+// AcoustID naming both rows in one cluster is AcoustID saying they are one
+// piece of audio, and the copy is this want's music by the proof that admitted
+// it (ADR 0011, 0018). The file keeps the identity the library gave it and
+// counts for the want's row as a second row (migration 00126). Before this, the want stopped and asked a person
+// whether the audio AcoustID had already named was the song.
+func (service *Service) settleOnClusterOrStop(
+	ctx context.Context, target db.AcquisitionTargetRow, filing db.AcquiredCopyFiling,
+) error {
+	if !oneClusterNamesBoth(filing, target.MusicBrainzRecordingID.UUID) {
+		return service.stopOnFiling(ctx, target, filedElsewhereSummary(filing))
+	}
+	service.logger.Info().
+		Str("acquisition_target_id", target.ID.String()).
+		Str("library_file_id", filing.LibraryFileID.String()).
+		Str("wanted_recording_id", target.MusicBrainzRecordingID.UUID.String()).
+		Str("filed_recording_id", filing.FiledRecordingID.UUID.String()).
+		Msg("a want's copy was filed under a row its own AcoustID cluster names too")
+	if err := service.store.RecordSecondRow(
+		ctx, filing.LibraryFileID, target.MusicBrainzRecordingID.UUID); err != nil {
+		return err
+	}
+	return service.settleFiling(ctx, target, filing, sameClusterDetail)
+}
+
+// oneClusterNamesBoth reports a copy admitted by AcoustID for the wanted
+// recording whose leading cluster also names the recording the library filed
+// the file under. Any other proof says nothing about the second row, so only
+// the AcoustID methods count.
+func oneClusterNamesBoth(filing db.AcquiredCopyFiling, wanted uuid.UUID) bool {
+	method, _ := strings.CutSuffix(filing.ProvenMethod, db.MethodSingledOutByRelease)
+	if method != "fingerprint" && method != "fingerprint-and-identifier" {
+		return false
+	}
+	if !filing.FiledRecordingID.Valid || wanted == uuid.Nil {
+		return false
+	}
+	var namesWanted, namesFiled bool
+	for _, id := range filing.LeadingCluster {
+		namesWanted = namesWanted || id == wanted
+		namesFiled = namesFiled || id == filing.FiledRecordingID.UUID
+	}
+	return namesWanted && namesFiled
 }
 
 // stopOnFiling takes the want's next look away and says why. It is the state
