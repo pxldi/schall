@@ -2382,3 +2382,50 @@ func twoAlbums(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (uuid.UUID
 	}
 	return album("BULLY (by Chropic)"), album("BULLY")
 }
+
+// The album being refreshed can be the one that is gone: its release group was
+// merged into the group another album already stands for, and that album holds
+// the release. It is folded into the holder, which keeps the release.
+func TestAnAlbumIsMergedIntoTheAlbumHoldingTheRelease(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	holder, stale := twoAlbums(t, ctx, pool)
+	repository := NewRepository(pool)
+	release := musicbrainz.ReleaseCatalogue{
+		Edition: musicbrainz.ReleaseEdition{ID: uuid.New(), Title: "Torquay Hotel", SelectionReason: "Earliest official edition"},
+		Tracks:  []musicbrainz.Track{{RecordingID: uuid.New(), Title: "Torquay Hotel", DiscNumber: 1, TrackNumber: 1}},
+	}
+	if err := repository.SaveReleaseCatalogue(ctx, holder, release); err != nil {
+		t.Fatalf("holder: %v", err)
+	}
+	var wantID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO acquisition_targets (origin, entry_artist, entry_title, musicbrainz_recording_id, status, origin_album_id)
+		VALUES ('manual', 'Ye', 'Torquay Hotel', $2, 'pending', $1) RETURNING id
+	`, stale, release.Tracks[0].RecordingID).Scan(&wantID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.MergeAlbumInto(ctx, stale, holder, release.Edition.ID); err != nil {
+		t.Fatalf("MergeAlbumInto() error = %v", err)
+	}
+	if err := repository.SaveReleaseCatalogue(ctx, holder, release); err != nil {
+		t.Fatalf("SaveReleaseCatalogue() after the merge error = %v", err)
+	}
+
+	var albums, tracks int
+	var wantAlbum, edition uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM albums WHERE id = $1),
+		       (SELECT count(*) FROM tracks WHERE album_id = $2),
+		       (SELECT origin_album_id FROM acquisition_targets WHERE id = $3),
+		       (SELECT album_id FROM release_editions WHERE musicbrainz_release_id = $4)
+	`, stale, holder, wantID, release.Edition.ID).Scan(&albums, &tracks, &wantAlbum, &edition); err != nil {
+		t.Fatal(err)
+	}
+	if albums != 0 || tracks != 1 || wantAlbum != holder || edition != holder {
+		t.Fatalf("stale rows %d, holder tracks %d, want on %s, release on %s; want 0, 1 and both on %s",
+			albums, tracks, wantAlbum, edition, holder)
+	}
+}
