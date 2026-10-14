@@ -730,9 +730,11 @@ func run() error {
 		logger.Error().Err(err).Msg("queue decode check sweep")
 	}
 
-	// And one invariant check, which counts rows that break a rule Schall's
-	// data keeps and logs them. A failure to queue it does not stop startup.
-	if err := store.EnsureInvariantCheckQueued(ctx, time.Now()); err != nil {
+	// And one invariant check now, which counts rows that break a rule
+	// Schall's data keeps and logs them. A check already queued for later is
+	// brought forward, so every start reads the data the new code sees. A
+	// failure to queue it does not stop startup.
+	if err := store.QueueInvariantCheck(ctx, time.Now()); err != nil {
 		logger.Error().Err(err).Msg("queue invariant check")
 	}
 

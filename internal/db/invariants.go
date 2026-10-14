@@ -409,7 +409,8 @@ func (q *Queries) RecordInvariantCounts(ctx context.Context, checkedAt time.Time
 
 // QueueInvariantCheck schedules the next invariant check, in the shape
 // QueueDecodeSweep uses. Migration 00128's partial unique index keeps it to
-// one check at a time.
+// one check at a time, and a queued check moves to the earlier time. Startup
+// asks for now, so a check queued for tomorrow runs at once.
 func (q *Queries) QueueInvariantCheck(ctx context.Context, runAfter time.Time) error {
 	_, err := q.db.Exec(ctx, `
 		INSERT INTO jobs (kind, payload, max_attempts, run_after)
@@ -420,19 +421,6 @@ func (q *Queries) QueueInvariantCheck(ctx context.Context, runAfter time.Time) e
 		SET run_after = least(jobs.run_after, EXCLUDED.run_after),
 		    updated_at = now()
 		WHERE jobs.status = 'queued'
-	`, runAfter)
-	return err
-}
-
-// EnsureInvariantCheckQueued adds a check only when none is queued and none is
-// running. Startup is the only caller.
-func (q *Queries) EnsureInvariantCheckQueued(ctx context.Context, runAfter time.Time) error {
-	_, err := q.db.Exec(ctx, `
-		INSERT INTO jobs (kind, payload, max_attempts, run_after)
-		VALUES ('check_invariants', '{}'::jsonb, 3, $1)
-		ON CONFLICT (kind)
-		    WHERE kind = 'check_invariants' AND status IN ('queued', 'running')
-		DO NOTHING
 	`, runAfter)
 	return err
 }

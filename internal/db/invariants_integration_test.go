@@ -422,3 +422,29 @@ func TestAWantSettledOnAMappedFileWithNoIdentityKeepsTheInvariant(t *testing.T) 
 
 	assertCounts(t, countsByName(ctx, t, store), map[string]int64{})
 }
+
+// The daily check queued itself for tomorrow, and the restart onto new code on
+// 2026-10-14 left it there: startup has to run it now.
+func TestQueueingAnInvariantCheckNowBringsATomorrowsCheckForward(t *testing.T) {
+	ctx, pool, store := invariantStore(t)
+	tomorrow := time.Now().Add(24 * time.Hour)
+	if err := store.QueueInvariantCheck(ctx, tomorrow); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := store.QueueInvariantCheck(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+
+	var queued int
+	var runAfter time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*), max(run_after) FROM jobs
+		WHERE kind = 'check_invariants' AND status = 'queued'
+	`).Scan(&queued, &runAfter); err != nil {
+		t.Fatal(err)
+	}
+	if queued != 1 || runAfter.After(now.Add(time.Second)) {
+		t.Fatalf("queued %d checks, the next at %s; want one at %s", queued, runAfter, now)
+	}
+}
