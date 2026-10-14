@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/dbtest"
 	"github.com/pxldi/schall/internal/seed"
 )
@@ -394,5 +395,27 @@ func TestTheShiftedClockReachesAPlainNow(t *testing.T) {
 	}
 	if !shifted {
 		t.Errorf("a query asking for now() read the real clock, not the one shifted %s ahead", aYearOn)
+	}
+}
+
+// The fixture is the collection every browser test reads, so it keeps every
+// rule the invariant check counts. A fixture row that broke one would show the
+// pages a state Schall's own data should never reach.
+func TestTheSeededDatabaseKeepsEveryInvariant(t *testing.T) {
+	pool := dbtest.Setup(t)
+	ctx := context.Background()
+
+	if err := seed.Apply(ctx, pool); err != nil {
+		t.Fatalf("apply seed: %v", err)
+	}
+
+	counts, err := db.New(pool).CountInvariantViolations(ctx)
+	if err != nil {
+		t.Fatalf("count invariant violations: %v", err)
+	}
+	for _, count := range counts {
+		if count.Violations != 0 {
+			t.Errorf("%s: %d rows break %q", count.Name, count.Violations, count.Rule)
+		}
 	}
 }

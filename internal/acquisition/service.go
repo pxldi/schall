@@ -219,6 +219,9 @@ type Store interface {
 	// back rather than waiting for each of their own half-hour clocks.
 	ClearSourceLoggedOut(ctx context.Context) (bool, error)
 	ReleaseStaleFetches(context.Context, uuid.UUID) error
+	ReleaseAllStaleFetches(context.Context) (int64, error)
+	StalledFetches(ctx context.Context, startBy, deliverBy time.Time, limit int32) ([]db.StalledFetch, error)
+	CloseStalledFetch(ctx context.Context, requestID uuid.UUID, fileSummary, targetSummary string) error
 	CompleteAcquiredFile(
 		ctx context.Context, id uuid.UUID, summary, detail string,
 	) (db.AcquiredFileOutcome, error)
@@ -310,6 +313,10 @@ type Service struct {
 	cleaner   FetchCleaner
 	cleaning  sync.Mutex
 	cleanedAt time.Time
+	// stalledAt is the last look for fetches that ran out of time, guarded by
+	// stalling.
+	stalling  sync.Mutex
+	stalledAt time.Time
 	// notices tells connected interfaces that the wants changed. Optional:
 	// without it the views go back to asking on a timer.
 	notices *events.Hub
@@ -526,6 +533,7 @@ func (service *Service) Sweep(ctx context.Context) error {
 		return err
 	}
 	service.cleanFetchFolder(ctx)
+	service.closeStalledFetches(ctx)
 	targets, err := service.store.DueAcquisitionTargets(ctx, service.now(), sweepBatch)
 	if err != nil {
 		return fmt.Errorf("list due acquisition targets: %w", err)

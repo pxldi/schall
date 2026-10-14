@@ -79,6 +79,9 @@ const (
 	// SweepDecodeCheck is fixed by migration 00122, whose partial unique index
 	// is keyed on this exact string.
 	SweepDecodeCheck = "sweep_decode_check"
+	// CheckInvariants is fixed by migration 00128, whose partial unique index
+	// is keyed on this exact string.
+	CheckInvariants = "check_invariants"
 	// SweepUpgradeCandidates is fixed by migration 00072, whose partial unique
 	// index is keyed on this exact string.
 	SweepUpgradeCandidates = "sweep_upgrade_candidates"
@@ -185,6 +188,10 @@ const spectrumIdle = 6 * time.Hour
 // decodeIdle is how long the decode sweep waits once every file is checked. A
 // file's audio only changes when a scan finds new bytes, so nothing is urgent.
 const decodeIdle = 6 * time.Hour
+
+// invariantCheckIdle is how long the invariant check waits before it counts
+// again. Its counts move with imports and decisions, which a day collects.
+const invariantCheckIdle = 24 * time.Hour
 
 // upgradeIdle is how long the upgrade sweep waits when it has walked the whole
 // library and found nothing left under the floor. Nothing about a file's
@@ -589,6 +596,7 @@ type Queue interface {
 	QueueCopyFingerprintSweep(context.Context, time.Time) error
 	QueueSpectrumSweep(context.Context, time.Time) error
 	QueueDecodeSweep(context.Context, time.Time) error
+	QueueInvariantCheck(context.Context, time.Time) error
 	QueueAskAcoustIDAgain(context.Context, time.Time) error
 	QueueJudgeCopiesAgainAfter(context.Context, time.Time, db.JudgeAgainPlace, time.Time) error
 	// StartedFirstAt answers when a job was first started, across the restarts
@@ -939,6 +947,9 @@ type Worker struct {
 	// decodes checks whether each library file's audio decodes. Optional:
 	// without it no file is ever called damaged.
 	decodes DecodeSweeper
+	// invariants counts the rows that break a rule Schall's data keeps.
+	// Optional: without it the check job fails and nothing else changes.
+	invariants InvariantCounter
 	// upgrades looks for files below the quality floor and raises a want for
 	// each one. Optional, and switched off in its own settings by default: an
 	// installation that never opens the setting has this sweep find nothing.
@@ -1192,6 +1203,18 @@ type DecodeSweeper interface {
 // WithDecodeSweeper registers what checks the library's audio for damage.
 func (worker *Worker) WithDecodeSweeper(sweeper DecodeSweeper) *Worker {
 	worker.decodes = sweeper
+	return worker
+}
+
+// InvariantCounter counts, for each rule Schall's data keeps, the rows that
+// break it (db.Invariants).
+type InvariantCounter interface {
+	CountInvariantViolations(context.Context) ([]db.InvariantCount, error)
+}
+
+// WithInvariantCounter registers what the invariant check job reads.
+func (worker *Worker) WithInvariantCounter(counter InvariantCounter) *Worker {
+	worker.invariants = counter
 	return worker
 }
 
@@ -1608,6 +1631,8 @@ func (worker *Worker) process(ctx context.Context, job Job) {
 		worker.processSpectrumSweep(ctx, job)
 	case SweepDecodeCheck:
 		worker.processDecodeSweep(ctx, job)
+	case CheckInvariants:
+		worker.processInvariantCheck(ctx, job)
 	case SweepTranscode:
 		worker.processTranscodeSweep(ctx, job)
 	case SweepDuplicates:
@@ -2065,6 +2090,46 @@ func (worker *Worker) processDecodeSweep(ctx context.Context, job Job) {
 	worker.queueDecodeSweep(ctx, next)
 }
 
+// processInvariantCheck counts the rows breaking each rule in db.Invariants,
+// logs every count above zero as a warning, and schedules the next check
+// after invariantCheckIdle. It only reads: what a count points at is fixed in
+// code, never by this job.
+func (worker *Worker) processInvariantCheck(ctx context.Context, job Job) {
+	if worker.invariants == nil {
+		worker.finishFailed(ctx, job, errors.New("the invariant check is not configured"), false)
+		return
+	}
+	counts, err := worker.invariants.CountInvariantViolations(ctx)
+	if err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("check invariants: %w", err), true)
+		if spent(job, err) {
+			worker.queueInvariantCheck(ctx, worker.now().Add(invariantCheckIdle))
+		}
+		return
+	}
+	broken := 0
+	for _, count := range counts {
+		if count.Violations == 0 {
+			continue
+		}
+		broken++
+		worker.logger.Warn().
+			Str("invariant", count.Name).
+			Str("rule", count.Rule).
+			Int64("violations", count.Violations).
+			Msg("data breaks an invariant")
+	}
+	worker.logger.Info().
+		Int("invariants", len(counts)).
+		Int("broken", broken).
+		Msg("invariant check finished")
+	if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+		return
+	}
+	worker.queueInvariantCheck(ctx, worker.now().Add(invariantCheckIdle))
+}
+
 // upgradeSweepPosition is what one upgrade sweep pass carries to its
 // successor: the file id it stopped at, in the shape lyrics.Position carries a
 // walk's place through the library.
@@ -2476,6 +2541,12 @@ func (worker *Worker) queueCopyFingerprintSweep(ctx context.Context, at time.Tim
 func (worker *Worker) queueAnchorSweep(ctx context.Context, at time.Time) {
 	if err := worker.queue.QueuePreviewAnchorSweep(ctx, at); err != nil {
 		worker.logger.Error().Err(err).Msg("queue preview anchor sweep")
+	}
+}
+
+func (worker *Worker) queueInvariantCheck(ctx context.Context, at time.Time) {
+	if err := worker.queue.QueueInvariantCheck(ctx, at); err != nil {
+		worker.logger.Error().Err(err).Msg("queue invariant check")
 	}
 }
 

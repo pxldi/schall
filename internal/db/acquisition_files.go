@@ -2221,24 +2221,142 @@ func (q *Queries) DeferAcquiredFetch(
 // available another day rather than struck off on something that says nothing
 // about the music.
 func (q *Queries) ReleaseStaleFetches(ctx context.Context, targetID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, `
-		UPDATE acquisition_target_files files
-		SET verdict = 'undelivered',
-		    summary = 'Download ended without the file.',
-		    decided_at = now(), updated_at = now()
-		FROM download_requests requests
-		WHERE files.download_request_id = requests.id
+	_, err := q.db.Exec(ctx, releaseStaleFetches+`
 		  AND files.acquisition_target_id = $1
-		  AND files.verdict = 'fetching'
-		  AND files.decided_by = 'schall'
-		  AND (requests.status IN ('failed', 'cancelled')
-		       OR (requests.status = 'completed'
-		           AND requests.import_status NOT IN ('pending', 'validating')))
 	`, targetID)
 	if err != nil {
 		return fmt.Errorf("release the stale fetches of want %s: %w", targetID, err)
 	}
 	return nil
+}
+
+// ReleaseAllStaleFetches is ReleaseStaleFetches for every want at once. The
+// per-want call only runs while a want is still being looked for, so a want
+// that was settled or removed while its transfer failed kept its copy marked
+// as being fetched for good: 66 of them on the live instance in October 2026.
+// It also frees a copy whose request row is gone.
+func (q *Queries) ReleaseAllStaleFetches(ctx context.Context) (int64, error) {
+	tag, err := q.db.Exec(ctx, releaseStaleFetches)
+	if err != nil {
+		return 0, fmt.Errorf("release the stale fetches: %w", err)
+	}
+	orphaned, err := q.db.Exec(ctx, `
+		UPDATE acquisition_target_files
+		SET verdict = 'undelivered',
+		    summary = 'Download ended without the file.',
+		    decided_at = now(), updated_at = now()
+		WHERE verdict = 'fetching'
+		  AND decided_by = 'schall'
+		  AND download_request_id IS NULL
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("release the fetches without a request: %w", err)
+	}
+	return tag.RowsAffected() + orphaned.RowsAffected(), nil
+}
+
+const releaseStaleFetches = `
+	UPDATE acquisition_target_files files
+	SET verdict = 'undelivered',
+	    summary = 'Download ended without the file.',
+	    decided_at = now(), updated_at = now()
+	FROM download_requests requests
+	WHERE files.download_request_id = requests.id
+	  AND files.verdict = 'fetching'
+	  AND files.decided_by = 'schall'
+	  AND (requests.status IN ('failed', 'cancelled')
+	       OR (requests.status = 'completed'
+	           AND requests.import_status NOT IN ('pending', 'validating')))
+`
+
+// StalledFetch is a want's request that has been open past its deadline.
+type StalledFetch struct {
+	RequestID uuid.UUID
+	TargetID  uuid.UUID
+	// Started is false for a request that was recorded and never handed to
+	// the provider.
+	Started bool
+}
+
+// StalledFetches lists the open requests of wants that have run out of time:
+// recorded and never started before startBy, or started and asked of the peer
+// before deliverBy without arriving. The time a started request is measured
+// from is the last time its files were queued, so a retry starts the clock
+// again.
+func (q *Queries) StalledFetches(
+	ctx context.Context, startBy, deliverBy time.Time, limit int32,
+) ([]StalledFetch, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT requests.id, requests.acquisition_target_id, requests.status = 'started'
+		FROM download_requests requests
+		WHERE requests.acquisition_target_id IS NOT NULL
+		  AND ((requests.status = 'requested' AND requests.requested_at < $1)
+		       OR (requests.status = 'started'
+		           AND coalesce(
+		                   (SELECT max(queued_at) FROM downloads
+		                    WHERE download_request_id = requests.id),
+		                   requests.started_at, requests.requested_at) < $2))
+		ORDER BY requests.requested_at
+		LIMIT $3
+	`, startBy, deliverBy, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list the stalled fetches: %w", err)
+	}
+	defer rows.Close()
+	var stalled []StalledFetch
+	for rows.Next() {
+		var fetch StalledFetch
+		if err := rows.Scan(&fetch.RequestID, &fetch.TargetID, &fetch.Started); err != nil {
+			return nil, fmt.Errorf("read a stalled fetch: %w", err)
+		}
+		stalled = append(stalled, fetch)
+	}
+	return stalled, rows.Err()
+}
+
+// CloseStalledFetch records the copy of a withdrawn request as undelivered,
+// with the sentence that says why, and brings its want back to now when it is
+// still being looked for. The copy rests like any undelivered one, so the next
+// look tries another copy first.
+func (q *Queries) CloseStalledFetch(
+	ctx context.Context, requestID uuid.UUID, fileSummary, targetSummary string,
+) error {
+	return q.inTransaction(ctx, "closing a stalled fetch", func(tx pgx.Tx) error {
+		var targetID uuid.NullUUID
+		if err := tx.QueryRow(ctx, `
+			SELECT acquisition_target_id FROM download_requests WHERE id = $1
+		`, requestID).Scan(&targetID); err != nil {
+			return fmt.Errorf("read the want of request %s: %w", requestID, err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE acquisition_target_files
+			SET verdict = 'undelivered', summary = $2,
+			    decided_at = now(), updated_at = now()
+			WHERE download_request_id = $1
+			  AND verdict = 'fetching'
+			  AND decided_by = 'schall'
+		`, requestID, fileSummary); err != nil {
+			return fmt.Errorf("close the copy of request %s: %w", requestID, err)
+		}
+		if !targetID.Valid {
+			return nil
+		}
+		tag, err := tx.Exec(ctx, `
+			UPDATE acquisition_targets
+			SET summary = $2, `+scheduleLook("now()")+`, updated_at = now()
+			WHERE id = $1 AND `+searchedWant("")+`
+		`, targetID.UUID, targetSummary)
+		if err != nil {
+			return fmt.Errorf("bring want %s back after a stalled fetch: %w", targetID.UUID, err)
+		}
+		if tag.RowsAffected() == 0 {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, queueAcquisitionSweep, time.Now()); err != nil {
+			return fmt.Errorf("ask for a sweep after a stalled fetch for %s: %w", targetID.UUID, err)
+		}
+		return nil
+	})
 }
 
 // FetchAcquiredFileParams is one copy chosen for one want: the offer, and the
