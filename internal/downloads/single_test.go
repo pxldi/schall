@@ -481,6 +481,64 @@ func TestAnUntaggedCandidateNobodyIdentifiedIsHeld(t *testing.T) {
 	}
 }
 
+// A title naming another song, with AcoustID asked and naming nothing and no
+// sample measured, is refused: nothing about the audio speaks for the copy, and
+// the next search costs less than a question.
+func TestACopyWhoseTitleNamesAnotherSongAndNothingHeardIsRefused(t *testing.T) {
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	importer := candidateImporter(store, inbox, libraryPath,
+		&fakeIdentifier{configured: true}, &fakeVerifier{verification: identity.Verification{
+			TitleSaysOtherwise: true, Summary: "Its title disagrees.",
+			Agrees: []string{"artist", "duration"}, Differs: []string{"title"},
+		}})
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.settled == nil || store.settled.Verdict != db.AcquiredFileDiscardedTags {
+		t.Fatalf("verdict = %+v, want it discarded on its title", store.settled)
+	}
+}
+
+// AcoustID left unasked may still name the song, so a differing title alone
+// keeps the copy a question.
+func TestACopyWhoseTitleDiffersIsHeldWhenAcoustIDWasNotAsked(t *testing.T) {
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	importer := candidateImporter(store, inbox, libraryPath, nil, &fakeVerifier{
+		verification: identity.Verification{
+			TitleSaysOtherwise: true, Summary: "Its title disagrees.",
+			Agrees: []string{"artist", "duration"}, Differs: []string{"title"},
+		}})
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.settled == nil || store.settled.Verdict != db.AcquiredFileHeld {
+		t.Fatalf("verdict = %+v, want the copy held", store.settled)
+	}
+}
+
+// When AcoustID names the wanted recording among others, the audio speaks for
+// the copy and its title against it. That is a person's call.
+func TestACopyWhoseTitleDiffersIsHeldWhenAcoustIDNamedTheSong(t *testing.T) {
+	store, inbox, libraryPath, requestID := fetchedCandidate(t, 3)
+	importer := candidateImporter(store, inbox, libraryPath,
+		&fakeIdentifier{configured: true, clusters: []acoustid.Cluster{
+			cluster(0.99, uuid.MustParse(wantedRecording), uuid.New()),
+		}},
+		&fakeVerifier{verification: identity.Verification{
+			TitleSaysOtherwise: true, Summary: "AcoustID names two songs.",
+			Agrees: []string{"artist"}, Differs: []string{"title"},
+		}})
+
+	if err := importer.Import(context.Background(), requestID); err != nil {
+		t.Fatal(err)
+	}
+	if store.settled == nil || store.settled.Verdict != db.AcquiredFileHeld {
+		t.Fatalf("verdict = %+v, want the copy held", store.settled)
+	}
+}
+
 // A file the parser cannot open at all is still nothing to judge. Only absent
 // tags are silence; unreadable bytes stay a transport fact.
 func TestAnUnreadableCandidateStaysUndelivered(t *testing.T) {

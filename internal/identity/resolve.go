@@ -291,6 +291,10 @@ type Verification struct {
 	// identifier naming something else, a credit that is somebody else, or a
 	// length this recording cannot have.
 	Contradicted bool
+	// TitleSaysOtherwise reports the file's title naming another song. It is
+	// not a contradiction on its own, because the audio may still name this
+	// recording; a caller reads it beside what the audio said.
+	TitleSaysOtherwise bool
 	// SameRegistrationUnchecked reports that the audio named another MusicBrainz
 	// row and MusicBrainz could not be asked whether that row holds this same
 	// registered track. The refusal that would otherwise be final rests on that
@@ -967,6 +971,7 @@ func (resolver *Resolver) Verify(
 		AnchorAgrees:        pair.anchorReproduced,
 		WitnessAgrees:       pair.witness == tagmatch.Agrees,
 		Contradicted:        pair.contradicted(),
+		TitleSaysOtherwise:  pair.title == tagmatch.Differs,
 
 		SameRegistrationUnchecked: unchecked,
 		AudioSetAside:             setAside,
