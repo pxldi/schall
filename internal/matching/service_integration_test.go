@@ -2296,3 +2296,108 @@ func TestAFileAnswersTheTracksOfEverySecondRow(t *testing.T) {
 		assertMapsTrack(t, ctx, pool, fileID, track)
 	}
 }
+
+// songShape is one file whose identity is filed under one row of a song, with
+// tracks carrying that row and tracks carrying a second row of it, and a tag
+// that may name either row.
+type songShape struct {
+	ownTracks, secondTracks []string
+	tagSecondRow            bool
+}
+
+func seedSongShape(
+	t *testing.T, ctx context.Context, pool *pgxpool.Pool, shape songShape,
+) (fileID uuid.UUID, tracks []uuid.UUID) {
+	t.Helper()
+	own, second := uuid.New(), uuid.New()
+	for _, sets := range []struct {
+		albums    []string
+		recording uuid.UUID
+	}{{shape.ownTracks, own}, {shape.secondTracks, second}} {
+		for _, album := range sets.albums {
+			recording := sets.recording
+			_, albumID := seedRelease(t, ctx, pool, "Ye", album)
+			tracks = append(tracks, seedTrack(t, ctx, pool, trackFixture{
+				albumID: albumID, title: "The Joy", number: ptr(int32(1)), recordingID: &recording,
+			}))
+		}
+	}
+	fixture := fileFixture{path: "/music/Ye/" + uuid.NewString() + ".mp3"}
+	if shape.tagSecondRow {
+		fixture.recordingID = &second
+	}
+	fileID = seedFile(t, ctx, pool, fixture)
+	insertIdentity(t, ctx, pool, fileID, own)
+	setIdentityMethod(t, ctx, pool, fileID, "same-registration")
+	if err := db.AddSecondRow(ctx, pool, fileID, second); err != nil {
+		t.Fatal(err)
+	}
+	return fileID, tracks
+}
+
+// The shapes live on 2026-10-14 after #114. The files whose tag named the
+// second row went ambiguous and lost every track, because the tag and the
+// identity read as a contradiction.
+func TestAFileWithASecondRowMapsEveryTrackOfTheSong(t *testing.T) {
+	for name, shape := range map[string]songShape{
+		"The Joy: own single, second row on an album, tag on the second row": {
+			ownTracks: []string{"The Joy"}, secondTracks: []string{"GOOD Fridays"}, tagSecondRow: true,
+		},
+		"YUNGXANHOE: two own releases, second row on a third": {
+			ownTracks: []string{"Red", "YUNGXANHOE"}, secondTracks: []string{"In Abundance"}, tagSecondRow: true,
+		},
+		"Power: two own albums, second row on the single and another album": {
+			ownTracks:    []string{"MBDTF", "The /fit/ Workout Mix Volume 2"},
+			secondTracks: []string{"Power", "MBDTF (other edition)"}, tagSecondRow: true,
+		},
+		"own album, second row on a single (#115)": {
+			ownTracks: []string{"Kanye West-Restaurants"}, secondTracks: []string{"Looking for Trouble"},
+		},
+		"own album, second row on a single, tag on the second row": {
+			ownTracks: []string{"HARDX"}, secondTracks: []string{"HARDX (single)"}, tagSecondRow: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			pool := dbtest.Setup(t)
+
+			fileID, tracks := seedSongShape(t, ctx, pool, shape)
+			if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+				t.Fatal(err)
+			}
+
+			assertStatus(t, ctx, pool, fileID, "matched", len(tracks))
+			for _, track := range tracks {
+				assertMapsTrack(t, ctx, pool, fileID, track)
+			}
+		})
+	}
+}
+
+// A tag naming a recording the identity does not answer at all is still a
+// contradiction, second rows or not.
+func TestATagNamingNeitherRowStillContradicts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	fileID, _ := seedSongShape(t, ctx, pool, songShape{
+		ownTracks: []string{"The Joy"}, secondTracks: []string{"GOOD Fridays"},
+	})
+	stranger := uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Ye", "Donda")
+	seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Jail", number: ptr(int32(2)), recordingID: &stranger,
+	})
+	if _, err := pool.Exec(ctx, `UPDATE library_files SET musicbrainz_recording_id = $2 WHERE id = $1`,
+		fileID, stranger); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus(t, ctx, pool, fileID, "ambiguous", 2)
+	assertNoMapping(t, ctx, pool, fileID)
+}
