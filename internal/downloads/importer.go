@@ -125,6 +125,9 @@ type Importer struct {
 	// quality measures what a copy's audio is rather than what it claims. It
 	// decides nothing: see AudioMeasurer.
 	quality AudioMeasurer
+	// decodes refuses a copy whose audio does not decode. Optional: see
+	// DecodeChecker.
+	decodes DecodeChecker
 	// shapes draws the waveform the review queue puts on a held copy's card.
 	// Optional and decides nothing: see WaveformReader.
 	shapes WaveformReader
@@ -648,6 +651,7 @@ func (importer *Importer) validate(ctx context.Context, row db.DownloadImportRow
 	// matching entirely. Matching may add agreement; it may never overrule one.
 	reserved := applyDecisions(files, row)
 	matchRemaining(files, tracks, reserved)
+	importer.checkDecodes(ctx, files)
 	importer.verifyAcoustically(ctx, files, row)
 
 	claimed := make([]bool, len(tracks))
@@ -757,6 +761,23 @@ func (importer *Importer) readFile(
 	}
 	file.damaged, file.settled = false, false
 	return file, nil
+}
+
+// checkDecodes refuses each file whose audio does not decode. It runs before
+// the acoustic check so no AcoustID request is spent on a damaged file. A
+// damaged file is a problem with the bytes, so nobody can decide it away.
+func (importer *Importer) checkDecodes(ctx context.Context, files []inspected) {
+	for index := range files {
+		file := &files[index]
+		if file.damaged || file.source == "" {
+			continue
+		}
+		if damage := importer.damage(ctx, file.source); damage != "" {
+			file.evidence.Problems = append(file.evidence.Problems,
+				fmt.Sprintf("%q has damaged audio: %s", file.request.Name, damage))
+			file.damaged = true
+		}
+	}
 }
 
 // verifyAcoustically checks each matched file against what its audio actually

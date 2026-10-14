@@ -61,8 +61,10 @@ type LibraryFileRow struct {
 	ISRC                   pgtype.Text
 	MissingAt              pgtype.Timestamptz
 	ScanError              pgtype.Text
-	MatchStatus            string
-	MatchCandidateCount    int32
+	// DecodeError is the first audio error a full decode met (migration 00122).
+	DecodeError         pgtype.Text
+	MatchStatus         string
+	MatchCandidateCount int32
 	// DuplicateKeptAt is when somebody said they meant to have this twice. Read
 	// only while MatchStatus is "duplicate": it answers the duplicate question
 	// and nothing else.
@@ -376,7 +378,7 @@ func (q *Queries) ListLibraryFiles(ctx context.Context, params ListLibraryFilesP
 		       page.album_tag, page.title_tag,
 		       page.disc_number, page.track_number,
 		       page.duration_ms, page.musicbrainz_recording_id,
-		       page.isrc, page.missing_at, page.scan_error,
+		       page.isrc, page.missing_at, page.scan_error, page.decode_error,
 		       page.match_status, page.match_candidate_count,
 		       page.duplicate_kept_at,
 		       mapping.method, mapping.confidence,
@@ -432,7 +434,7 @@ func (q *Queries) ListLibraryFiles(ctx context.Context, params ListLibraryFilesP
 			&row.ID, &row.Path, &row.SizeBytes, &row.ModifiedAt,
 			&row.ArtistTag, &row.AlbumTag, &row.TitleTag, &row.DiscNumber,
 			&row.TrackNumber, &row.DurationMS, &row.MusicBrainzRecordingID,
-			&row.ISRC, &row.MissingAt, &row.ScanError, &row.MatchStatus,
+			&row.ISRC, &row.MissingAt, &row.ScanError, &row.DecodeError, &row.MatchStatus,
 			&row.MatchCandidateCount, &row.DuplicateKeptAt,
 			&row.MappingMethod, &row.MappingConfidence,
 			&row.MappingManual, &row.MappedTrackID, &row.ResolutionStatus,

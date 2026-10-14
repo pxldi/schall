@@ -487,6 +487,11 @@ var recurringJobs = []recurringJob{
 		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
 	},
 	{
+		kind:  jobs.SweepDecodeCheck,
+		label: "Damaged audio check",
+		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",
+	},
+	{
 		kind:  jobs.SweepPreviewAnchors,
 		label: "Preview sweep",
 		idle:  "Not scheduled yet. Runs at startup, then reschedules itself.",

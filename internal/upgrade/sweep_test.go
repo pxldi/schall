@@ -106,6 +106,31 @@ func TestSweepDoesNothingWithNoFloorStated(t *testing.T) {
 	}
 }
 
+// A damaged file needs a replacement whatever its bit rate, and whether or not
+// a floor is set. Before the decode check the sweep read nothing without a
+// floor and raised nothing for a file at 320 kbps.
+func TestSweepRaisesAWantForADamagedFileWithNoFloor(t *testing.T) {
+	damaged := candidate("/music/track.mp3", 320)
+	damaged.Damaged = true
+	store := &fakeStore{
+		settings:   db.UpgradeSettingsRow{Enabled: true},
+		candidates: []db.UpgradeCandidateRow{damaged, candidate("/music/other.mp3", 320)},
+	}
+	service := NewService(store, zerolog.Nop())
+
+	result, err := service.Sweep(context.Background(), uuid.Nil)
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if result.Raised != 1 || len(store.raised) != 1 {
+		t.Fatalf("raised %d wants; want one, for the damaged file", result.Raised)
+	}
+	if raised := store.raised[0]; raised.LibraryFileID != damaged.FileID ||
+		raised.Summary != "Your copy's audio is damaged." {
+		t.Fatalf("raised %+v; want the damaged file with the damaged summary", raised)
+	}
+}
+
 func TestSweepRaisesAWantForAFileBelowTheFloor(t *testing.T) {
 	below := candidate("/music/track.mp3", 128)
 	store := &fakeStore{

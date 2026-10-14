@@ -425,6 +425,7 @@ func (sweep *TranscodeSweep) recordShrink(
 		    loudness_measured_at = NULL,
 		    spectral_cutoff_hz = NULL, audio_encoder = NULL,
 		    transcode_suspected = NULL, spectrum_read_at = NULL,
+		    decode_error = NULL, decode_checked_at = NULL,
 		    updated_at = now()
 		WHERE id = $1
 	`, file.id, destination, info.Size(), written.DurationMS,

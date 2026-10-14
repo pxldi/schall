@@ -203,3 +203,89 @@ func TestSweepRaisesAWantForASettledFileBelowTheFloorEndToEnd(t *testing.T) {
 		t.Fatalf("upgrade_of_library_file_id = %v, want %v", upgradeOf, fileID)
 	}
 }
+
+func setDecodeError(t *testing.T, pool *pgxpool.Pool, fileID uuid.UUID, decodeError *string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE library_files SET decode_error = $2, decode_checked_at = now() WHERE id = $1
+	`, fileID, decodeError); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A resolved, fingerprint-settled 320 kbps file is above any floor. It is a
+// candidate only because its audio is damaged.
+func TestADamagedFileAtFullBitRateIsAnUpgradeCandidate(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootID := libraryRoot(t, pool)
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/damaged.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "fingerprint", recordingID: uuid.New(),
+	})
+	damage := "Header missing"
+	setDecodeError(t, pool, fileID, &damage)
+
+	candidates, err := db.New(pool).UpgradeCandidates(context.Background(), uuid.Nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].FileID != fileID || !candidates[0].Damaged {
+		t.Fatalf("candidates = %+v; want the damaged file, marked damaged", candidates)
+	}
+}
+
+func TestACleanFileAtFullBitRateIsNotMarkedDamaged(t *testing.T) {
+	pool := dbtest.Setup(t)
+	rootID := libraryRoot(t, pool)
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/clean.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "fingerprint", recordingID: uuid.New(),
+	})
+	setDecodeError(t, pool, fileID, nil)
+
+	candidates, err := db.New(pool).UpgradeCandidates(context.Background(), uuid.Nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].Damaged {
+		t.Fatalf("candidates = %+v; want the clean file listed and not damaged", candidates)
+	}
+}
+
+// A damaged file gets a want with no floor set at all.
+func TestSweepRaisesAWantForADamagedFileEndToEnd(t *testing.T) {
+	pool := dbtest.Setup(t)
+	enableUpgrades(t, pool)
+	rootID := libraryRoot(t, pool)
+	recordingID, cleanRecordingID := uuid.New(), uuid.New()
+	fileID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/damaged.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "fingerprint", recordingID: recordingID,
+	})
+	damage := "Header missing"
+	setDecodeError(t, pool, fileID, &damage)
+	cleanID := insertFile(t, pool, rootID, seededFile{
+		path: "/music/clean.mp3", bitRateKbps: bitRate(320),
+		resolved: true, settledProof: "fingerprint", recordingID: cleanRecordingID,
+	})
+	setDecodeError(t, pool, cleanID, nil)
+
+	service := NewService(db.New(pool), zerolog.Nop())
+	if _, err := service.Sweep(context.Background(), uuid.Nil); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	var summary string
+	var upgradeOf uuid.NullUUID
+	if err := pool.QueryRow(context.Background(), `
+		SELECT summary, upgrade_of_library_file_id FROM acquisition_targets
+		WHERE musicbrainz_recording_id = $1 AND status <> 'superseded'
+	`, recordingID).Scan(&summary, &upgradeOf); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "Your copy's audio is damaged." || upgradeOf.UUID != fileID {
+		t.Fatalf("want = %q for %v; want the damaged summary for %s", summary, upgradeOf, fileID)
+	}
+	if wantExists(t, pool, cleanRecordingID) {
+		t.Fatal("a want was raised for a clean file with no floor set")
+	}
+}

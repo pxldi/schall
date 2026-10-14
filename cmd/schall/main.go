@@ -24,6 +24,7 @@ import (
 	"github.com/pxldi/schall/internal/config"
 	"github.com/pxldi/schall/internal/coverart"
 	"github.com/pxldi/schall/internal/db"
+	"github.com/pxldi/schall/internal/decode"
 	"github.com/pxldi/schall/internal/dedupe"
 	"github.com/pxldi/schall/internal/deezer"
 	"github.com/pxldi/schall/internal/downloads"
@@ -389,6 +390,10 @@ func run() error {
 		// transcode of the right recording is still the right recording.
 		WithSpectrumSweeper(spectrum.NewService(store,
 			spectrum.NewReader(spectrum.Options{FFmpegPath: cfg.FFmpegPath}), logger)).
+		// And whether each library file's audio decodes from start to end. The
+		// upgrade sweep asks for a replacement of a file that does not.
+		WithDecodeSweeper(decode.NewService(store,
+			decode.NewChecker(decode.Options{FFmpegPath: cfg.FFmpegPath}), logger)).
 		// And the sweep that looks back at files acquired before a bit-rate
 		// floor was set, or before it was raised, and raises an ordinary want
 		// for each one under it. It ships switched off, in its own settings.
@@ -497,6 +502,9 @@ func run() error {
 			// is written into the evidence for the person reading the review
 			// queue and is passed to nothing that admits or refuses a copy.
 			WithAudioMeasurer(spectrum.NewReader(spectrum.Options{FFmpegPath: cfg.FFmpegPath})).
+			// And whether the copy's audio decodes at all. A damaged copy is
+			// refused before anything is asked about what it is.
+			WithDecodeChecker(decode.NewChecker(decode.Options{FFmpegPath: cfg.FFmpegPath})).
 			// And the shape of that audio, read once and kept on the copy, for the
 			// card a person reads it on. It is a picture and decides nothing.
 			WithWaveforms(waveform.NewReader(waveform.Options{FFmpegPath: cfg.FFmpegPath})).
@@ -706,6 +714,14 @@ func run() error {
 	// decoder a second time.
 	if err := store.EnsureSpectrumSweepQueued(ctx, time.Now()); err != nil {
 		return fmt.Errorf("queue audio spectrum sweep: %w", err)
+	}
+
+	// And one decode check, which decodes each library file in full to find
+	// damaged audio. A pass already on the books keeps its time. A failure to
+	// queue it is logged and does not stop startup: the check only feeds the
+	// upgrade sweep.
+	if err := store.EnsureDecodeSweepQueued(ctx, time.Now()); err != nil {
+		logger.Error().Err(err).Msg("queue decode check sweep")
 	}
 
 	// And one upgrade sweep, which walks the library's files against the

@@ -528,6 +528,11 @@ func (scanner *Scanner) upsertFile(
 		    audio_encoder = NULL,
 		    transcode_suspected = NULL,
 		    spectrum_read_at = NULL,
+		    -- Whether the audio decodes is a fact about the old bytes too.
+		    -- Clearing decode_checked_at puts the file back in front of the
+		    -- decode sweep.
+		    decode_error = NULL,
+		    decode_checked_at = NULL,
 		    scanned_at = EXCLUDED.scanned_at,
 		    missing_at = NULL,
 		    scan_error = EXCLUDED.scan_error,

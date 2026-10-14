@@ -201,6 +201,11 @@ var stillness = []quiet{
 		SELECT count(*) FROM library_files
 		WHERE missing_at IS NULL AND sample_rate_hz IS NOT NULL
 		  AND spectrum_read_at IS NULL`},
+	// The decode sweep decodes every present file nobody has checked. None of
+	// the fixture's files is on disc, so every one is stamped as checked.
+	{"files waiting for a decode check", `
+		SELECT count(*) FROM library_files
+		WHERE missing_at IS NULL AND decode_checked_at IS NULL`},
 	// The upgrade sweep looks for library files below the stored bit-rate
 	// floor and ships switched off, in its own settings — the same reasoning
 	// as listenbrainz_settings above. A fixture that shipped it enabled would

@@ -89,12 +89,11 @@ type Result struct {
 }
 
 // Sweep reads one page of candidates starting after the given file id and
-// raises a want for every one under the floor.
+// raises a want for every one under the floor, and for every one whose audio
+// is damaged.
 //
-// A pass that is switched off, or whose preferences state no floor at all,
-// reads nothing: there is no question to ask a file that no floor applies to,
-// so the walk is skipped rather than run to conclude nothing for every file in
-// the library.
+// A pass that is switched off reads nothing. A pass with no floor still walks
+// the library, because a damaged file needs a replacement whatever the floor.
 func (service *Service) Sweep(ctx context.Context, after uuid.UUID) (Result, error) {
 	settings, err := service.store.UpgradeSettings(ctx)
 	if err != nil {
@@ -107,9 +106,6 @@ func (service *Service) Sweep(ctx context.Context, after uuid.UUID) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
-	if !hasAFloor(preferences) {
-		return Result{}, nil
-	}
 
 	candidates, err := service.store.UpgradeCandidates(ctx, after, sweepBatch)
 	if err != nil {
@@ -118,10 +114,16 @@ func (service *Service) Sweep(ctx context.Context, after uuid.UUID) (Result, err
 	result := Result{Looked: len(candidates), More: len(candidates) == sweepBatch}
 	for _, candidate := range candidates {
 		result.Next = candidate.FileID
-		if !belowFloor(candidate, preferences) {
+		summary := ""
+		switch {
+		case candidate.Damaged:
+			summary = damagedSummary
+		case hasAFloor(preferences) && belowFloor(candidate, preferences):
+			summary = raiseSummary
+		default:
 			continue
 		}
-		raised, err := service.raise(ctx, candidate)
+		raised, err := service.raise(ctx, candidate, summary)
 		if err != nil {
 			return result, err
 		}
@@ -177,18 +179,23 @@ func (service *Service) CountBelowFloor(ctx context.Context) (int, error) {
 // want's initial summary says.
 const raiseSummary = "Your copy is below your bit rate floor."
 
+// damagedSummary is the sentence a want raised for a damaged file carries.
+const damagedSummary = "Your copy's audio is damaged."
+
 // raise asks for an upgrade want to exist for one candidate and reports
 // whether one now does — false covers both a manual "not wanted" decision and
 // a live want the recording already had for some other reason, neither of
 // which this sweep raised.
-func (service *Service) raise(ctx context.Context, candidate db.UpgradeCandidateRow) (bool, error) {
+func (service *Service) raise(
+	ctx context.Context, candidate db.UpgradeCandidateRow, summary string,
+) (bool, error) {
 	params := db.CreateUpgradeTargetParams{
 		LibraryFileID: candidate.FileID,
 		RecordingID:   candidate.RecordingID,
 		EntryArtist:   candidate.ArtistName,
 		EntryTitle:    candidate.TrackTitle,
 		EntryAlbum:    candidate.ReleaseTitle,
-		Summary:       raiseSummary,
+		Summary:       summary,
 	}
 	if candidate.DurationMS > 0 {
 		params.EntryDurationMS = pgtype.Int4{Int32: int32(candidate.DurationMS), Valid: true}
@@ -201,7 +208,7 @@ func (service *Service) raise(ctx context.Context, candidate db.UpgradeCandidate
 		service.logger.Debug().
 			Str("library_file_id", candidate.FileID.String()).
 			Str("musicbrainz_recording_id", candidate.RecordingID.String()).
-			Msg("a file is below the bit rate floor, but somebody already said not to pursue its recording")
+			Msg("a file needs a better copy, but somebody already said not to pursue its recording")
 		return false, nil
 	}
 	if err != nil {

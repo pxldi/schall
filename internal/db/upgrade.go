@@ -98,6 +98,9 @@ type UpgradeCandidateRow struct {
 	ReleaseTitle string
 	DurationMS   int
 	ISRC         string
+	// Damaged is a file whose audio did not decode (migration 00122). It is a
+	// candidate whatever its bit rate.
+	Damaged bool
 }
 
 // upgradeStandBackDays is how many days a file stands back from being
@@ -125,7 +128,9 @@ const upgradeStandBackDays = 30
 //
 // A file with no stated bit rate is left out rather than treated as under the
 // floor. Silence is not agreement, in either direction: it says nothing about
-// whether this file is worth upgrading, so it is not read as a "yes".
+// whether this file is worth upgrading, so it is not read as a "yes". A
+// damaged file is the exception: its bit rate does not matter, so it is listed
+// with a bit rate of 0.
 //
 // The exclusion for "something is already pursuing this" is scoped to the
 // recording and to the statuses that are actually in flight
@@ -142,19 +147,20 @@ func (q *Queries) UpgradeCandidates(
 ) ([]UpgradeCandidateRow, error) {
 	rows, err := q.db.Query(ctx, fmt.Sprintf(`
 		SELECT
-			files.id, files.path, files.bit_rate_kbps,
+			files.id, files.path, coalesce(files.bit_rate_kbps, 0),
 			identities.musicbrainz_recording_id,
 			coalesce(nullif(identities.artist_name, ''), files.artist_tag, ''),
 			coalesce(nullif(identities.track_title, ''), files.title_tag, ''),
 			coalesce(identities.release_title, ''),
 			coalesce(files.measured_duration_ms, files.duration_ms, 0),
-			coalesce(identities.isrc, '')
+			coalesce(identities.isrc, ''),
+			files.decode_error IS NOT NULL
 		FROM library_files files
 		JOIN library_file_identities identities
 		    ON identities.library_file_id = files.id
 		WHERE files.missing_at IS NULL
 		  AND files.resolution_status = 'resolved'
-		  AND files.bit_rate_kbps IS NOT NULL
+		  AND (files.bit_rate_kbps IS NOT NULL OR files.decode_error IS NOT NULL)
 		  AND identities.kind = 'external'
 		  AND identities.musicbrainz_recording_id IS NOT NULL
 		  AND (
@@ -184,6 +190,7 @@ func (q *Queries) UpgradeCandidates(
 			&candidate.FileID, &candidate.Path, &candidate.BitRateKbps,
 			&candidate.RecordingID, &candidate.ArtistName, &candidate.TrackTitle,
 			&candidate.ReleaseTitle, &candidate.DurationMS, &candidate.ISRC,
+			&candidate.Damaged,
 		); err != nil {
 			return nil, err
 		}

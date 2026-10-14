@@ -75,6 +75,25 @@ func (importer *Importer) WithAudioMeasurer(measurer AudioMeasurer) *Importer {
 	return importer
 }
 
+// DecodeChecker decodes a copy's whole audio stream and returns the first
+// audio error, or "" when it decoded cleanly. It is the same check the library's
+// decode sweep runs (internal/decode).
+//
+// It says nothing about which recording a copy is. It refuses a copy that would
+// play with clicks or gaps, so an upgrade want raised for a damaged file is not
+// filled with another damaged copy.
+type DecodeChecker interface {
+	Available() bool
+	Check(ctx context.Context, path string) (string, error)
+}
+
+// WithDecodeChecker registers what refuses a damaged copy. Without one, or
+// without ffmpeg, no copy is refused for its audio being damaged.
+func (importer *Importer) WithDecodeChecker(checker DecodeChecker) *Importer {
+	importer.decodes = checker
+	return importer
+}
+
 // WaveformReader draws the shape of a copy's audio: two hundred numbers the
 // review queue's card plots so a person can see where the music is before
 // pressing play.
@@ -137,7 +156,10 @@ const (
 	// the want's minimum bit rate (ADR 0038 §7). The want keeps searching.
 	belowWantFloorSummary = "Right song, below the bit rate floor. Accept it or wait for a better copy."
 	undeliveredSummary    = "File didn't arrive as offered."
-	waitingNextSummary    = "Not in your library yet. Trying the next copy."
+	// What a copy whose audio does not decode is told. The detail after it is
+	// ffmpeg's own first error.
+	damagedSummary     = "Audio is damaged."
+	waitingNextSummary = "Not in your library yet. Trying the next copy."
 	// What a copy is told when MusicBrainz has deleted or merged away the
 	// recording it was fetched to be checked against. Not a judgement about the
 	// file: verification never ran, because there was nothing left to check it
@@ -204,6 +226,14 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 		return importer.settle(ctx, row, evidence, nil, db.AcquiredFileUndelivered,
 			undeliveredSummary, strings.Join(evidence.Problems, "; "),
 			"discarded", "failed")
+	}
+
+	// A copy whose audio does not decode is refused before anything is asked
+	// about what it is. It says nothing about the recording, so the verdict is
+	// the transfer's: the copy did not arrive whole.
+	if damage := importer.damage(ctx, file.source); damage != "" {
+		return importer.settle(ctx, row, evidence, nil, db.AcquiredFileUndelivered,
+			damagedSummary, damage, "discarded", "failed")
 	}
 
 	// The copy's own fingerprint, computed once here and read by every comparison
@@ -320,6 +350,22 @@ func (importer *Importer) ImportOne(ctx context.Context, requestID uuid.UUID) er
 			uploadUnmatchedSummary, verification.Summary)
 	}
 	return importer.hold(ctx, row, file.source, evidence, undecidedSummary, verification.Summary)
+}
+
+// damage decodes a fetched copy and returns ffmpeg's first audio error, or ""
+// for a clean decode. A check that could not run refuses nothing: it is logged
+// and the copy is judged as it would have been before the check existed.
+func (importer *Importer) damage(ctx context.Context, source string) string {
+	if importer.decodes == nil || !importer.decodes.Available() {
+		return ""
+	}
+	damage, err := importer.decodes.Check(ctx, source)
+	if err != nil {
+		importer.logger.Warn().Err(err).Str("file", filepath.Base(source)).
+			Msg("could not decode a fetched copy to check it")
+		return ""
+	}
+	return damage
 }
 
 // uploadSaidOtherAudio reports a comparison that ran against an upload found by

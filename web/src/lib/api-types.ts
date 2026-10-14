@@ -778,6 +778,8 @@ export interface LibraryFile {
   isrc?: string;
   missingAt?: string;
   scanError?: string;
+  /** The first audio error a full decode met. Set on a damaged file. */
+  decodeError?: string;
   matchStatus: 'matched' | 'unmatched' | 'ambiguous' | 'duplicate';
   matchCandidateCount: number;
   /** Set when somebody said they meant to have this twice. Only meaningful
