@@ -410,6 +410,29 @@ func (repository *Repository) MergeAlbumInto(ctx context.Context, from, into, re
 	`, into); err != nil {
 		return fmt.Errorf("clear unmatched tracks of album %s: %w", into, err)
 	}
+	// A moving track nothing is matched to only holds a place the save after
+	// this writes again. One whose files are all matched to the kept track at
+	// the same place already is the same song twice: the same file on both
+	// copies of one release (G.R.E.Y.G.O.D.S.), and it would otherwise stop the
+	// merge it is the reason for.
+	if _, err := transaction.Exec(ctx, `
+		DELETE FROM tracks AS moving
+		WHERE moving.album_id = $1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM track_mappings mine
+		      WHERE mine.track_id = moving.id
+		        AND NOT EXISTS (
+		            SELECT 1 FROM tracks AS kept
+		            JOIN track_mappings theirs ON theirs.track_id = kept.id
+		            WHERE kept.album_id = $2
+		              AND kept.disc_number = moving.disc_number
+		              AND kept.track_number = moving.track_number
+		              AND theirs.library_file_id = mine.library_file_id
+		        )
+		  )
+	`, from, into); err != nil {
+		return fmt.Errorf("clear tracks of album %s that %s already holds: %w", from, into, err)
+	}
 	var collides bool
 	if err := transaction.QueryRow(ctx, `
 		SELECT EXISTS (
@@ -490,6 +513,48 @@ func (repository *Repository) MergeAlbumInto(ctx context.Context, from, into, re
 	return transaction.Commit(ctx)
 }
 
+// AlbumForReleaseGroup answers the album standing for a release group other
+// than albumID, or uuid.Nil when there is none.
+func (repository *Repository) AlbumForReleaseGroup(ctx context.Context, albumID, releaseGroupID uuid.UUID) (uuid.UUID, error) {
+	var holder uuid.UUID
+	err := repository.pool.QueryRow(ctx, `
+		SELECT id FROM albums WHERE musicbrainz_release_group_id = $2 AND id <> $1
+	`, albumID, releaseGroupID).Scan(&holder)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, nil
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("find the album for release group %s: %w", releaseGroupID, err)
+	}
+	return holder, nil
+}
+
+// MoveAlbumToReleaseGroup files an album under the release group MusicBrainz
+// merged its own into, when no other album stands for that group. The artist
+// refresh then finds it there instead of adding the group a second time.
+func (repository *Repository) MoveAlbumToReleaseGroup(ctx context.Context, albumID, releaseGroupID uuid.UUID) error {
+	if _, err := repository.pool.Exec(ctx, `
+		UPDATE albums SET musicbrainz_release_group_id = $2, updated_at = now() WHERE id = $1
+	`, albumID, releaseGroupID); err != nil {
+		return fmt.Errorf("move album %s to release group %s: %w", albumID, releaseGroupID, err)
+	}
+	return nil
+}
+
+// QueueAlbumRefresh asks for an album's track list to be read again.
+func (repository *Repository) QueueAlbumRefresh(ctx context.Context, albumID uuid.UUID) error {
+	if _, err := repository.pool.Exec(ctx, `
+		INSERT INTO jobs (kind, payload)
+		VALUES ('refresh_album_metadata', jsonb_build_object('albumId', $1::text))
+		ON CONFLICT (kind, (payload->>'albumId'))
+		    WHERE kind = 'refresh_album_metadata' AND status IN ('queued', 'running')
+		DO NOTHING
+	`, albumID); err != nil {
+		return fmt.Errorf("queue release refresh %s: %w", albumID, err)
+	}
+	return nil
+}
+
 func (repository *Repository) SaveReleaseCatalogue(ctx context.Context, albumID uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
 	transaction, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -507,7 +572,16 @@ func (repository *Repository) SaveReleaseCatalogue(ctx context.Context, albumID 
 		return fmt.Errorf("load representative preference: %w", err)
 	}
 	if preferredReleaseID.Valid && preferredReleaseID.UUID != catalogue.Edition.ID {
-		return errors.New("representative edition changed during refresh")
+		if preferredReleaseID.UUID != catalogue.Edition.MergedFrom {
+			return errors.New("representative edition changed during refresh")
+		}
+		// MusicBrainz merged the release a person chose into this one, so the
+		// choice follows it.
+		if _, err := transaction.Exec(ctx, `
+			UPDATE albums SET preferred_musicbrainz_release_id = $2, updated_at = now() WHERE id = $1
+		`, albumID, catalogue.Edition.ID); err != nil {
+			return fmt.Errorf("follow merged release %s: %w", catalogue.Edition.MergedFrom, err)
+		}
 	}
 	selectedManually := preferredReleaseID.Valid
 	selectionReason := catalogue.Edition.SelectionReason

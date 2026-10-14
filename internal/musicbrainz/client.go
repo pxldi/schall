@@ -86,8 +86,11 @@ type ReleaseCatalogue struct {
 	// Empty and nil are different answers. Empty means MusicBrainz was asked and
 	// holds no votes; nil means the lookup could not be made, and the column is
 	// left alone.
-	Genres   []string
-	Metadata json.RawMessage
+	Genres []string
+	// MergedInto is the release group MusicBrainz answered with when it is not
+	// the one asked for: the album's group was merged into it.
+	MergedInto uuid.UUID
+	Metadata   json.RawMessage
 }
 
 type ReleaseEdition struct {
@@ -100,6 +103,10 @@ type ReleaseEdition struct {
 	MediaCount      int
 	TrackCount      int
 	SelectionReason string
+	// MergedFrom is the release ID the lookup asked for when MusicBrainz
+	// answered with another one, which is how a merged-away release reads. ID is
+	// then the release it was merged into.
+	MergedFrom uuid.UUID
 	// Credits is the artists this edition is credited to, in the order
 	// MusicBrainz credits them. A browse never asks for credits, so an edition
 	// that came from one has none — absent is silence about the credit, not a
@@ -461,23 +468,36 @@ func (client *Client) ReleaseCatalogue(ctx context.Context, releaseGroupID, sele
 	if err != nil {
 		return ReleaseCatalogue{}, fmt.Errorf("look up MusicBrainz release: %w", err)
 	}
+	// A refresh asks again for the edition it chose last time, and MusicBrainz
+	// answers a merged-away release with the one it was merged into. Keeping the
+	// ID that was asked for left the album on a release no longer anywhere, so
+	// the album already holding the real one was never found (G.R.E.Y.G.O.D.S.
+	// stood twice).
+	var mergedFrom uuid.UUID
+	if answered, parseErr := uuid.Parse(payload.ID); parseErr == nil && answered != releaseID {
+		mergedFrom, releaseID = releaseID, answered
+	}
 
 	// The release lookup above carries no release-group genres, so they are read
 	// from the release group itself. A release group MusicBrainz no longer holds
 	// leaves them alone rather than failing a refresh that has its tracks.
 	var genres []string
+	var groupMergedInto uuid.UUID
 	switch group, groupErr := client.ReleaseGroup(ctx, releaseGroupID); {
 	case groupErr == nil:
 		genres = group.ReleaseGroup.Genres
+		groupMergedInto = group.MergedInto
 	case errors.Is(groupErr, ErrNotFound):
 	default:
 		return ReleaseCatalogue{}, groupErr
 	}
 
 	catalogue := ReleaseCatalogue{
-		Genres: genres,
+		Genres:     genres,
+		MergedInto: groupMergedInto,
 		Edition: ReleaseEdition{
 			ID:              releaseID,
+			MergedFrom:      mergedFrom,
 			Title:           strings.TrimSpace(payload.Title),
 			Status:          payload.Status,
 			Country:         payload.Country,
