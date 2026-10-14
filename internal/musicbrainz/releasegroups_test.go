@@ -227,3 +227,25 @@ func TestReleaseGroupNotFound(t *testing.T) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }
+
+// Only a 404 says MusicBrainz removed the group. A group it still holds but
+// credits to nobody must not read as removed, or an album would be merged away
+// on it.
+func TestOnlyA404ReadsAsARemovedReleaseGroup(t *testing.T) {
+	removed := testClient(t, func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusNotFound)
+	})
+	if _, err := removed.ReleaseGroup(context.Background(),
+		mustUUID("3f4d1c0a-2f9e-4a4c-8a2b-1c9d0e5f6a7b")); !errors.Is(err, ErrReleaseGroupRemoved) {
+		t.Fatalf("404 error = %v, want ErrReleaseGroupRemoved", err)
+	}
+
+	uncredited := testClient(t, func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(`{"id":"3f4d1c0a-2f9e-4a4c-8a2b-1c9d0e5f6a7b","title":"OK Computer","artist-credit":[]}`))
+	})
+	_, err := uncredited.ReleaseGroup(context.Background(),
+		mustUUID("3f4d1c0a-2f9e-4a4c-8a2b-1c9d0e5f6a7b"))
+	if !errors.Is(err, ErrNotFound) || errors.Is(err, ErrReleaseGroupRemoved) {
+		t.Fatalf("uncredited error = %v, want ErrNotFound and not ErrReleaseGroupRemoved", err)
+	}
+}
