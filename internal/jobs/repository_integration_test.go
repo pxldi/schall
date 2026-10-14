@@ -1183,8 +1183,8 @@ func TestAnAlbumNamesItsReleaseGroupAndItsChosenEdition(t *testing.T) {
 		    SELECT id, $2, 'Dummy' FROM artist
 		    RETURNING id
 		)
-		INSERT INTO release_editions (album_id, musicbrainz_release_id, title, selection_reason)
-		SELECT id, $3, 'Dummy', 'Earliest official edition' FROM album
+		INSERT INTO release_editions (album_id, musicbrainz_release_id, title, selection_reason, track_count)
+		SELECT id, $3, 'Dummy', 'Earliest official edition', 11 FROM album
 		RETURNING album_id
 	`, uuid.New(), releaseGroupID, releaseID).Scan(&albumID); err != nil {
 		t.Fatal(err)
@@ -1197,6 +1197,69 @@ func TestAnAlbumNamesItsReleaseGroupAndItsChosenEdition(t *testing.T) {
 	if gotGroup != releaseGroupID || gotRelease != releaseID {
 		t.Fatalf("ids = (%s, %s), want (%s, %s)", gotGroup, gotRelease, releaseGroupID, releaseID)
 	}
+}
+
+// An edition chosen with no tracks is chosen again. Reading the same empty
+// edition again left Yeat's ADL and three more albums with no tracks after
+// every refresh.
+func TestAnEditionWithNoTracksNamesNoRelease(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	releaseGroupID := uuid.New()
+	albumID := insertAlbumWithEmptyEdition(ctx, t, pool, releaseGroupID, nil)
+
+	gotGroup, gotRelease, err := NewRepository(pool).AlbumMusicBrainzIDs(ctx, albumID)
+	if err != nil {
+		t.Fatalf("AlbumMusicBrainzIDs() error = %v", err)
+	}
+	if gotGroup != releaseGroupID || gotRelease != uuid.Nil {
+		t.Fatalf("ids = (%s, %s), want the group alone", gotGroup, gotRelease)
+	}
+}
+
+// The edition a person picked is read again even when it has no tracks.
+// Manual decisions win.
+func TestAnEditionAPersonPickedIsNamedWithNoTracks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	picked := uuid.New()
+	albumID := insertAlbumWithEmptyEdition(ctx, t, pool, uuid.New(), &picked)
+
+	_, gotRelease, err := NewRepository(pool).AlbumMusicBrainzIDs(ctx, albumID)
+	if err != nil {
+		t.Fatalf("AlbumMusicBrainzIDs() error = %v", err)
+	}
+	if gotRelease != picked {
+		t.Fatalf("release = %s, want the picked %s", gotRelease, picked)
+	}
+}
+
+func insertAlbumWithEmptyEdition(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, releaseGroupID uuid.UUID, preferred *uuid.UUID,
+) uuid.UUID {
+	t.Helper()
+	var albumID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		WITH artist AS (
+		    INSERT INTO artists (musicbrainz_id, name, sort_name)
+		    VALUES ($1, 'Yeat', 'Yeat')
+		    RETURNING id
+		), album AS (
+		    INSERT INTO albums (artist_id, musicbrainz_release_group_id, title, preferred_musicbrainz_release_id)
+		    SELECT id, $2, 'ADL', $3 FROM artist
+		    RETURNING id
+		)
+		INSERT INTO release_editions (album_id, musicbrainz_release_id, title, selection_reason)
+		SELECT id, coalesce($3, gen_random_uuid()), 'ADL', 'Earliest official edition' FROM album
+		RETURNING album_id
+	`, uuid.New(), releaseGroupID, preferred).Scan(&albumID); err != nil {
+		t.Fatal(err)
+	}
+	return albumID
 }
 
 // An album nobody has refreshed yet has no edition, and the refresh is exactly

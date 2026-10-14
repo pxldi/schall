@@ -3901,15 +3901,28 @@ func (worker *Worker) processAlbum(ctx context.Context, job Job) {
 		// writes the empty genre list for the reason the artist refresh above
 		// does: four such release groups kept the genre backfill counting work it
 		// could never finish (issue #494).
-		answered := errors.Is(err, musicbrainz.ErrNoUsableEditions)
-		if answered {
+		//
+		// The job completes, because MusicBrainz answered. As a failure the
+		// release page said reading the track list failed, when MusicBrainz
+		// lists no tracks for it.
+		if errors.Is(err, musicbrainz.ErrNoUsableEditions) {
 			if markErr := worker.queue.MarkAlbumGenresAsked(ctx, payload.AlbumID); markErr != nil {
 				worker.logger.Error().Err(markErr).
 					Str("album_id", payload.AlbumID.String()).
 					Msg("record that the release genres were asked for")
 			}
+			if completeErr := worker.queue.Complete(ctx, job); completeErr != nil {
+				worker.logger.Error().Err(completeErr).Str("job_id", job.ID.String()).Msg("complete job")
+				return
+			}
+			worker.logger.Info().
+				Str("job_id", job.ID.String()).
+				Str("album_id", payload.AlbumID.String()).
+				Str("release_group_id", releaseGroupID.String()).
+				Msg("musicbrainz lists no tracks for this release")
+			return
 		}
-		worker.finishFailed(ctx, job, fmt.Errorf("fetch release catalogue: %w", err), !answered)
+		worker.finishFailed(ctx, job, fmt.Errorf("fetch release catalogue: %w", err), true)
 		return
 	}
 	// albumID is the album the catalogue is saved to. It is the one this job

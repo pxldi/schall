@@ -296,8 +296,8 @@ func TestReleaseCatalogueSelectsEarliestOfficialEditionAndIngestsTracks(t *testi
 			_, _ = response.Write([]byte(`{
 				"release-count":2,
 				"releases":[
-					{"id":"` + laterReleaseID.String() + `","title":"Dummy","status":"Official","date":"1995-01-01","country":"US"},
-					{"id":"` + earlyReleaseID.String() + `","title":"Dummy","status":"Official","date":"1994-08-22","country":"GB"}
+					{"id":"` + laterReleaseID.String() + `","title":"Dummy","status":"Official","date":"1995-01-01","country":"US","media":[{"track-count":1}]},
+					{"id":"` + earlyReleaseID.String() + `","title":"Dummy","status":"Official","date":"1994-08-22","country":"GB","media":[{"track-count":1}]}
 				]
 			}`))
 		case "/release/" + earlyReleaseID.String():
@@ -799,7 +799,7 @@ func TestReleaseCatalogueReportsAFailureLookingUpTheEdition(t *testing.T) {
 	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/release" {
 			_, _ = response.Write([]byte(`{"release-count":1,"releases":[{"id":"` +
-				uuid.New().String() + `","title":"Dummy","status":"Official"}]}`))
+				uuid.New().String() + `","title":"Dummy","status":"Official","media":[{"track-count":1}]}]}`))
 			return
 		}
 		response.WriteHeader(http.StatusInternalServerError)
@@ -817,7 +817,7 @@ func TestAnEditionKeepsTheTitleItWasBrowsedUnder(t *testing.T) {
 	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/release" {
 			_, _ = response.Write([]byte(`{"release-count":1,"releases":[{"id":"` +
-				releaseID.String() + `","title":"Dummy","status":"Official"}]}`))
+				releaseID.String() + `","title":"Dummy","status":"Official","media":[{"track-count":1}]}]}`))
 			return
 		}
 		_, _ = response.Write([]byte(`{"id":"` + releaseID.String() + `","title":"","media":[]}`))
@@ -896,8 +896,8 @@ func TestTheEarliestAvailableEditionStandsInWhenNoneIsOfficial(t *testing.T) {
 	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/release" {
 			_, _ = response.Write([]byte(`{"release-count":2,"releases":[
-				{"id":"` + late.String() + `","title":"Dummy","status":"Bootleg","date":"2001-01-01"},
-				{"id":"` + early.String() + `","title":"Dummy","status":"Promotion","date":"1994-08-22"}
+				{"id":"` + late.String() + `","title":"Dummy","status":"Bootleg","date":"2001-01-01","media":[{"track-count":1}]},
+				{"id":"` + early.String() + `","title":"Dummy","status":"Promotion","date":"1994-08-22","media":[{"track-count":1}]}
 			]}`))
 			return
 		}
@@ -1076,8 +1076,8 @@ func TestArtistURLRelationsReportsAFailureRatherThanNoRelations(t *testing.T) {
 func TestAnOfficialEditionIsPreferredToAnEarlierUnofficialOne(t *testing.T) {
 	official := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 	edition := chosenEdition(t, `{"release-count":2,"releases":[
-		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Bootleg","date":"1990-01-01"},
-		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22"}
+		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Bootleg","date":"1990-01-01","media":[{"track-count":1}]},
+		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22","media":[{"track-count":1}]}
 	]}`)
 
 	if edition.ID != official {
@@ -1090,8 +1090,8 @@ func TestAnOfficialEditionIsPreferredToAnEarlierUnofficialOne(t *testing.T) {
 func TestAnEditionSayingWhereItCameOutIsPreferredToOneThatDoesNot(t *testing.T) {
 	documented := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 	edition := chosenEdition(t, `{"release-count":2,"releases":[
-		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Official","date":"1994-08-22"},
-		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22","country":"GB"}
+		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Official","date":"1994-08-22","media":[{"track-count":1}]},
+		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22","country":"GB","media":[{"track-count":1}]}
 	]}`)
 
 	if edition.ID != documented {
@@ -1103,12 +1103,63 @@ func TestAnEditionSayingWhereItCameOutIsPreferredToOneThatDoesNot(t *testing.T) 
 // ingest, or a release would move between editions for no reason.
 func TestEditionsAlikeInEveryWayAreChosenBetweenByIdentifier(t *testing.T) {
 	edition := chosenEdition(t, `{"release-count":2,"releases":[
-		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22"},
-		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Official","date":"1994-08-22"}
+		{"id":"22222222-2222-4222-8222-222222222222","title":"Dummy","status":"Official","date":"1994-08-22","media":[{"track-count":1}]},
+		{"id":"11111111-1111-4111-8111-111111111111","title":"Dummy","status":"Official","date":"1994-08-22","media":[{"track-count":1}]}
 	]}`)
 
 	if edition.ID != uuid.MustParse("11111111-1111-4111-8111-111111111111") {
 		t.Fatalf("edition = %s, want the stable identifier tie-break", edition.ID)
+	}
+}
+
+// An edition with no tracks entered gives an album with no tracks. Yeat's ADL
+// has 15 editions on one day, 9 of them empty, and the identifier tie-break
+// chose an empty one.
+func TestAnEditionWithNoTracksEnteredIsPassedOver(t *testing.T) {
+	edition := chosenEdition(t, `{"release-count":2,"releases":[
+		{"id":"11111111-1111-4111-8111-111111111111","title":"ADL","status":"Official","date":"2026-03-27","media":[{"track-count":0}]},
+		{"id":"22222222-2222-4222-8222-222222222222","title":"ADL","status":"Official","date":"2026-03-27","media":[{"track-count":21}]}
+	]}`)
+
+	if edition.ID != uuid.MustParse("22222222-2222-4222-8222-222222222222") {
+		t.Fatalf("edition = %s, want the edition with a track list", edition.ID)
+	}
+}
+
+// The track counts come on the browse itself, so passing over empty editions
+// costs no request.
+func TestTheEditionBrowseAsksForTrackCounts(t *testing.T) {
+	var include string
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release" {
+			include = request.URL.Query().Get("inc")
+		}
+		_, _ = response.Write([]byte(`{"release-count":0,"releases":[]}`))
+	})
+
+	_, _ = client.ReleaseCatalogue(context.Background(), uuid.New(), uuid.Nil)
+
+	if include != "media" {
+		t.Errorf("inc = %q, want media", include)
+	}
+}
+
+// A release group whose every edition has no tracks entered has no track list
+// to read. Future's "Rock Star" has one bootleg edition with no media.
+func TestAGroupWhoseEditionsHaveNoTracksHasNoUsableEditions(t *testing.T) {
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release" {
+			_, _ = response.Write([]byte(`{"release-count":1,"releases":[{"id":"` + uuid.NewString() +
+				`","title":"Rock Star","status":"Bootleg","media":[]}]}`))
+			return
+		}
+		t.Errorf("asked %s, want no lookup of an edition with no tracks", request.URL.Path)
+		response.WriteHeader(http.StatusInternalServerError)
+	})
+
+	_, err := client.ReleaseCatalogue(context.Background(), uuid.New(), uuid.Nil)
+	if !errors.Is(err, ErrNoUsableEditions) {
+		t.Errorf("error = %v, want no usable editions", err)
 	}
 }
 
@@ -1252,7 +1303,7 @@ func TestReleaseCatalogueReadsTheReleasesOfTheGroupAMergeLeadsTo(t *testing.T) {
 		case "/release":
 			if request.URL.Query().Get("release-group") == survivor.String() {
 				_, _ = response.Write([]byte(`{"release-count":1,"releases":[{"id":"` + releaseID.String() +
-					`","title":"Torquay Hotel","status":"Official"}]}`))
+					`","title":"Torquay Hotel","status":"Official","media":[{"track-count":1}]}]}`))
 				return
 			}
 			_, _ = response.Write([]byte(`{"release-count":0,"releases":[]}`))

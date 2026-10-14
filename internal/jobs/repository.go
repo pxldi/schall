@@ -183,7 +183,10 @@ func (repository *Repository) AlbumMusicBrainzIDs(ctx context.Context, albumID u
 		SELECT albums.musicbrainz_release_group_id,
 		       coalesce(albums.preferred_musicbrainz_release_id, release_editions.musicbrainz_release_id)
 		FROM albums
+		-- An edition chosen with no tracks is chosen again, because reading it
+		-- again only gives the same empty list. A person's own choice stays.
 		LEFT JOIN release_editions ON release_editions.album_id = albums.id
+		                          AND release_editions.track_count > 0
 		WHERE albums.id = $1
 	`, albumID).Scan(&releaseGroupID, &selectedReleaseID)
 	if err != nil {
