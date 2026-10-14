@@ -215,3 +215,63 @@ func TestOnlyAnAnswerAfterTheWantSettledListsItAgain(t *testing.T) {
 		t.Errorf("every lost want = %+v, want the one", all)
 	}
 }
+
+// A want with no copy of its own settled on a file the library then filed as
+// another song, and no row MusicBrainz holds makes the two one song. Placebo
+// "Every You Every Me" settled on what AcoustID calls "Bright Lights". The want
+// is looked for again, and only a copy AcoustID proves will settle it.
+func TestASettledWantWithNoCopyIsLookedForWhenItsFileIsAnotherSong(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	hunter := &fakeHunter{}
+	service := hunting(pool, hunter, &fakeFetcher{}, true)
+	fileID := ownedFile(ctx, t, pool, filed)
+	target := createWant(ctx, t, service, wanted)
+	settledYesterday(ctx, t, pool, target.ID, fileID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	looked := targetRow(ctx, t, service, target.ID)
+	if looked.Status != "pending" || looked.AcquiredLibraryFileID.Valid {
+		t.Fatalf("status = %s file = %v (%q), want a pending want holding no file",
+			looked.Status, looked.AcquiredLibraryFileID, looked.Summary)
+	}
+	if len(hunter.queries) == 0 {
+		t.Errorf("searches = 0, want the song looked for again")
+	}
+}
+
+// A file the library has no answer for is silence. A want with no copy that
+// settled on it stays settled and is not looked for.
+func TestASettledWantWithNoCopyStaysOnAFileWithNoAnswer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted := uuid.New()
+	hunter := &fakeHunter{}
+	service := hunting(pool, hunter, &fakeFetcher{}, true)
+	fileID := ownedFile(ctx, t, pool, wanted)
+	if _, err := pool.Exec(ctx, `DELETE FROM library_file_identities WHERE library_file_id = $1`,
+		fileID); err != nil {
+		t.Fatal(err)
+	}
+	target := createWant(ctx, t, service, wanted)
+	settledYesterday(ctx, t, pool, target.ID, fileID)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if settled := targetRow(ctx, t, service, target.ID); settled.Status != "acquired" {
+		t.Errorf("status = %s (%q), want acquired", settled.Status, settled.Summary)
+	}
+	if len(hunter.queries) != 0 {
+		t.Errorf("searches = %d, want none", len(hunter.queries))
+	}
+}

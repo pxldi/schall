@@ -30,12 +30,12 @@ type LostWant struct {
 // identity, a mapping onto a track, or a second row. A file gone from disk or
 // deleted is the removals' business and not listed here.
 //
-// changedOnly keeps the wants holding a copy whose file the library answered
-// again after they settled, or has no answer for at all. A want can settle on
-// purpose against a file filed under another row (a clean edition held as the
-// explicit one, ADR 0032), and without this every sweep would open it again. A
-// want with no copy costs MusicBrainz lookups to judge, so it is left to the
-// full list.
+// changedOnly keeps the wants whose file the library answered again after they
+// settled, and the wants holding a copy whose file has no answer at all. A want
+// can settle on purpose against a file filed under another row (a clean edition
+// held as the explicit one, ADR 0032), and without this every sweep would open
+// it again. A want with no copy whose file has no answer is silence, and is
+// never listed.
 func (q *Queries) LostWants(ctx context.Context, limit int32, changedOnly bool) ([]LostWant, error) {
 	rows, err := q.db.Query(ctx, `
 		SELECT`+acquisitionTargetColumns+`,
@@ -55,14 +55,19 @@ func (q *Queries) LostWants(ctx context.Context, limit int32, changedOnly bool) 
 		WHERE acquisition_targets.status = 'acquired'
 		  AND acquisition_targets.musicbrainz_recording_id IS NOT NULL
 		  AND acquisition_targets.source IS NULL
+		  -- A want with no copy whose file has no answer is silence.
+		  AND (settled_identity.id IS NOT NULL OR EXISTS (
+		      SELECT 1 FROM acquisition_target_files files
+		      WHERE files.acquisition_target_id = acquisition_targets.id
+		        AND files.verdict = 'accepted'
+		        AND files.library_file_id = settled_on.id))
 		  AND (NOT $2::boolean
-		       OR (EXISTS (
-		               SELECT 1 FROM acquisition_target_files files
-		               WHERE files.acquisition_target_id = acquisition_targets.id
-		                 AND files.verdict = 'accepted'
-		                 AND files.library_file_id = settled_on.id)
-		           AND (settled_identity.id IS NULL
-		                OR settled_identity.created_at > acquisition_targets.acquired_at)))
+		       OR settled_identity.created_at > acquisition_targets.acquired_at
+		       OR (settled_identity.id IS NULL AND EXISTS (
+		           SELECT 1 FROM acquisition_target_files files
+		           WHERE files.acquisition_target_id = acquisition_targets.id
+		             AND files.verdict = 'accepted'
+		             AND files.library_file_id = settled_on.id)))
 		  AND NOT EXISTS (
 		      SELECT 1
 		      FROM recording_id_aliases(acquisition_targets.musicbrainz_recording_id) wanted (id)
@@ -121,17 +126,4 @@ func (q *Queries) ReopenLostWant(ctx context.Context, id uuid.UUID, summary stri
 		return false, fmt.Errorf("reopen want %s: %w", id, err)
 	}
 	return tag.RowsAffected() == 1, nil
-}
-
-// MoveSettledFile points a settled want at the file that holds its recording
-// now. The want stays acquired; only the file it names changes.
-func (q *Queries) MoveSettledFile(ctx context.Context, id, fileID uuid.UUID, summary string) error {
-	if _, err := q.db.Exec(ctx, `
-		UPDATE acquisition_targets
-		SET acquired_library_file_id = $2, summary = $3, updated_at = now()
-		WHERE id = $1 AND status = 'acquired'
-	`, id, fileID, summary); err != nil {
-		return fmt.Errorf("point want %s at file %s: %w", id, fileID, err)
-	}
-	return nil
 }

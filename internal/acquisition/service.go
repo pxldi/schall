@@ -243,7 +243,6 @@ type Store interface {
 	// The settled wants whose file the library has since filed as another song.
 	LostWants(ctx context.Context, limit int32, changedOnly bool) ([]db.LostWant, error)
 	ReopenLostWant(ctx context.Context, id uuid.UUID, summary string) (bool, error)
-	MoveSettledFile(ctx context.Context, id, fileID uuid.UUID, summary string) error
 	// QueueFileResolution asks the library what one of its files is. A want
 	// whose copy nobody has asked about yet waits for the answer rather than
 	// stopping on the silence.
