@@ -1611,8 +1611,36 @@ func sharedIdentifier(entry graded, conclusive []graded) string {
 	return "another song fits just as well"
 }
 
+// coverage says which rows a search by name returned out of every row
+// MusicBrainz holds under that title and artist.
+type coverage int
+
+const (
+	// seenEveryRow is a search that returned every row.
+	seenEveryRow coverage = iota
+	// seenEveryRowOnTheAlbum is a search that stopped short, where a second
+	// search returned every row on the album the evidence names. A row neither
+	// search returned is on some other album.
+	seenEveryRowOnTheAlbum
+	// seenSomeRows is a search that stopped short, with nothing known about the
+	// rows it did not return.
+	seenSomeRows
+)
+
 // decide concludes what a file is from everything the providers returned.
 func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
+	return decideAmong(evidence, recordings, seenEveryRow)
+}
+
+// decideAmong is decide for recordings that may not be every row MusicBrainz
+// holds under the evidence's title and artist.
+//
+// A row the search did not return may fit by title, artist and length exactly
+// as well as any row it did, so no row is the only one that fits. The album can
+// still single one out, but only where every row on that album was read: then
+// each row left unread is on another album, which is the refusal namedByRelease
+// asks of every other candidate.
+func decideAmong(evidence Evidence, recordings []musicbrainz.Recording, seen coverage) Outcome {
 	found := make([]graded, 0, len(recordings))
 	conclusive := make([]graded, 0, 2)
 	identified := false
@@ -1682,6 +1710,18 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 			}
 		}
 		conclusive = named
+	}
+
+	if seen != seenEveryRow && !identified && len(conclusive) > 0 {
+		if seen == seenEveryRowOnTheAlbum {
+			if named := namedByRelease(conclusive); named != nil {
+				return resolvedOutcome(evidence, named.recording, named.pair, named.level, "release")
+			}
+		}
+		return Outcome{
+			Status: StatusNeedsReview, Candidates: candidates,
+			Summary: "More songs share this title than Schall can compare. Pick one.",
+		}
 	}
 
 	switch {

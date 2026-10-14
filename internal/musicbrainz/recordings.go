@@ -122,6 +122,9 @@ type RecordingQuery struct {
 	ISRC   string
 	Artist string
 	Title  string
+	// Release narrows a search by name to rows on a release of this title. It is
+	// read only beside a title, never on its own.
+	Release string
 }
 
 // usable reports whether there is anything to ask the provider about. A file
@@ -333,6 +336,9 @@ func luceneQuery(query RecordingQuery) string {
 	clauses := []string{"recording:" + lucenePhrase(query.Title)}
 	if artist := strings.TrimSpace(query.Artist); artist != "" {
 		clauses = append(clauses, "artist:"+lucenePhrase(artist))
+	}
+	if release := strings.TrimSpace(query.Release); release != "" {
+		clauses = append(clauses, "release:"+lucenePhrase(release))
 	}
 	return strings.Join(clauses, " AND ")
 }

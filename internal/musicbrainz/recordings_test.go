@@ -140,6 +140,24 @@ func TestSearchRecordingsQuotesAndEscapesEvidence(t *testing.T) {
 	}
 }
 
+// A search narrowed to an album asks for rows on a release of that title.
+func TestSearchRecordingsAsksForTheAlbumBesideTheTitle(t *testing.T) {
+	var gotQuery string
+	client := testClient(t, func(response http.ResponseWriter, request *http.Request) {
+		gotQuery = request.URL.Query().Get("query")
+		_, _ = response.Write([]byte(`{"count": 0, "recordings": []}`))
+	})
+	if _, err := client.SearchRecordings(context.Background(), RecordingQuery{
+		Artist: "Nirvana", Title: "Lithium", Release: `Nevermind "Deluxe"`,
+	}, 100); err != nil {
+		t.Fatalf("SearchRecordings() error = %v", err)
+	}
+	want := `recording:"Lithium" AND artist:"Nirvana" AND release:"Nevermind \"Deluxe\""`
+	if gotQuery != want {
+		t.Errorf("query = %q, want %q", gotQuery, want)
+	}
+}
+
 func TestSearchRecordingsRefusesWithoutEvidence(t *testing.T) {
 	client := testClient(t, func(response http.ResponseWriter, _ *http.Request) {
 		t.Error("provider was asked without anything to ask about")
