@@ -437,6 +437,9 @@ type HeldTwiceCopy struct {
 	// identified, and byHand that somebody decided it themselves.
 	mapped bool
 	byHand bool
+	// unprovenDamaged is a damaged copy whose identity for this recording is
+	// not settled. Its audio may be other music, so judge never offers it up.
+	unprovenDamaged bool
 	// Release is where this copy sits: the catalogue release it is mapped to
 	// on, failing that the album its own tags claim. It is what usually tells
 	// the album copy from the single.
@@ -485,7 +488,7 @@ func (q *Queries) RecordingsHeldTwice(ctx context.Context, kept bool, limit, off
 	}
 	result.Total = total
 
-	rows, err := q.db.Query(ctx, heldTwiceQuery, kept, limit, offset)
+	rows, err := q.db.Query(ctx, heldTwiceQuery, kept, limit, offset, settledProofs)
 	if err != nil {
 		return HeldTwice{}, err
 	}
@@ -506,7 +509,7 @@ func (q *Queries) RecordingsHeldTwice(ctx context.Context, kept bool, limit, off
 			&copied.ID, &copied.Path, &copied.SizeBytes, &duration, &keptAt,
 			&byMapping, &byIdentity, &byHand,
 			&bitRate, &sampleRate, &channels, &measured, &cutoff, &suspected,
-			&release, &albumTag, &copied.AnswersOther,
+			&release, &albumTag, &copied.AnswersOther, &copied.unprovenDamaged,
 		); err != nil {
 			return HeldTwice{}, err
 		}
@@ -788,6 +791,15 @@ SELECT page.recording_id, page.title, page.artist,
            WHERE mapping.library_file_id = library_files.id
              AND other_track.musicbrainz_recording_id IS NOT NULL
              AND other_track.musicbrainz_recording_id <> page.recording_id
+       ),
+       library_files.decode_error IS NOT NULL AND NOT copies.by_hand AND NOT EXISTS (
+           SELECT 1 FROM library_file_identities settled
+           WHERE settled.library_file_id = library_files.id
+             AND settled.musicbrainz_recording_id = page.recording_id
+             AND (
+                 settled.is_manual
+                 OR regexp_replace(settled.method, '-and-release$', '') = ANY ($4::text[])
+             )
        )
 FROM page
 JOIN copies ON copies.recording_id = page.recording_id
