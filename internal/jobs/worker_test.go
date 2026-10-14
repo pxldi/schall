@@ -97,10 +97,13 @@ type fakeQueue struct {
 	// saveErrOnce fails the next catalogue save only, and albumGroups names
 	// the release group of an album that is not the one musicBrainzID names.
 	// merged records the albums merged away, and mergeErr breaks a merge.
-	saveErrOnce          error
-	albumGroups          map[uuid.UUID]uuid.UUID
-	merged               []uuid.UUID
-	mergeErr             error
+	saveErrOnce error
+	albumGroups map[uuid.UUID]uuid.UUID
+	merged      []uuid.UUID
+	mergedInto  uuid.UUID
+	mergeErr    error
+	// savedTo is the album the last release catalogue was saved to.
+	savedTo              uuid.UUID
 	completeErr          error
 	cancelErr            error
 	scheduleErr          error
@@ -271,19 +274,21 @@ func (queue *fakeQueue) AlbumMusicBrainzIDs(_ context.Context, albumID uuid.UUID
 	}
 	return queue.musicBrainzID, uuid.Nil, queue.err
 }
-func (queue *fakeQueue) MergeAlbumInto(_ context.Context, from, _, _ uuid.UUID) error {
+func (queue *fakeQueue) MergeAlbumInto(_ context.Context, from, into, _ uuid.UUID) error {
 	if queue.mergeErr != nil {
 		return queue.mergeErr
 	}
 	queue.merged = append(queue.merged, from)
+	queue.mergedInto = into
 	return nil
 }
 func (queue *fakeQueue) SaveArtistCatalogue(_ context.Context, _ uuid.UUID, catalogue musicbrainz.ArtistCatalogue) error {
 	queue.catalogue = catalogue
 	return queue.saveErr
 }
-func (queue *fakeQueue) SaveReleaseCatalogue(_ context.Context, _ uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
+func (queue *fakeQueue) SaveReleaseCatalogue(_ context.Context, albumID uuid.UUID, catalogue musicbrainz.ReleaseCatalogue) error {
 	queue.release = catalogue
+	queue.savedTo = albumID
 	if err := queue.saveErrOnce; err != nil {
 		queue.saveErrOnce = nil
 		return err
@@ -604,6 +609,8 @@ type fakeProvider struct {
 	// releaseGroupErr is separate so an ingest can fail while the other
 	// provider calls succeed.
 	releaseGroupErr error
+	// releaseGroups answers a lookup of one release group in particular.
+	releaseGroups map[uuid.UUID]musicbrainz.ReleaseGroupDetail
 }
 
 type fakeScanner struct {
@@ -721,7 +728,10 @@ func (provider fakeProvider) ArtistCatalogue(context.Context, uuid.UUID) (musicb
 	return provider.catalogue, provider.err
 }
 
-func (provider fakeProvider) ReleaseGroup(context.Context, uuid.UUID) (musicbrainz.ReleaseGroupDetail, error) {
+func (provider fakeProvider) ReleaseGroup(_ context.Context, id uuid.UUID) (musicbrainz.ReleaseGroupDetail, error) {
+	if detail, ok := provider.releaseGroups[id]; ok {
+		return detail, nil
+	}
 	if provider.releaseGroupErr != nil {
 		return musicbrainz.ReleaseGroupDetail{}, provider.releaseGroupErr
 	}
@@ -5482,6 +5492,38 @@ func TestAReleaseRefreshMergesTheAlbumMusicBrainzMovedItsReleaseFrom(t *testing.
 				t.Fatalf("completed = %s failed = %s, want the refresh done", queue.completed, queue.failed)
 			}
 		})
+	}
+}
+
+// An album whose own release group MusicBrainz merged into the group another
+// album already stands for is folded into that album, and the catalogue is
+// saved there. Before, the stale album's refresh followed the merge to a
+// release the other album held and failed every day (triple j "Torquay
+// Hotel").
+func TestAReleaseRefreshFoldsAnAlbumWhoseGroupWasMergedIntoTheHolders(t *testing.T) {
+	jobID, staleID, holderID := uuid.New(), uuid.New(), uuid.New()
+	staleGroup, holderGroup := uuid.New(), uuid.New()
+	payload, _ := json.Marshal(map[string]uuid.UUID{"albumId": staleID})
+	queue := &fakeQueue{
+		musicBrainzID: staleGroup,
+		albumGroups:   map[uuid.UUID]uuid.UUID{holderID: holderGroup},
+		saveErrOnce:   &EditionHeldError{ReleaseID: uuid.New(), AlbumID: holderID},
+	}
+	worker := NewWorker(queue, fakeProvider{releaseGroups: map[uuid.UUID]musicbrainz.ReleaseGroupDetail{
+		holderGroup: {},
+		staleGroup:  {MergedInto: holderGroup},
+	}}, zerolog.Nop())
+
+	worker.process(context.Background(), Job{
+		ID: jobID, Kind: RefreshAlbumMetadata, Payload: payload, Attempts: 1, MaxAttempts: 3,
+	})
+
+	if len(queue.merged) != 1 || queue.merged[0] != staleID || queue.mergedInto != holderID {
+		t.Fatalf("merged %v into %s, want %s into %s", queue.merged, queue.mergedInto, staleID, holderID)
+	}
+	if queue.savedTo != holderID || queue.completed != jobID {
+		t.Fatalf("saved to %s, completed %s, want the catalogue saved to %s and the job done",
+			queue.savedTo, queue.completed, holderID)
 	}
 }
 

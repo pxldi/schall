@@ -351,10 +351,10 @@ func (err *EditionHeldError) Unwrap() error { return ErrEditionHeldByAnotherAlbu
 // matched track where the album holding the release keeps one of its own.
 var ErrAlbumsCannotMerge = errors.New("both albums hold matched tracks at the same place")
 
-// MergeAlbumInto moves the album holding releaseID onto into and removes the
-// emptied row. The refresh calls it only after MusicBrainz said the holder's
-// release group is gone or merged into into's, so this is MusicBrainz's own
-// decision carried out. Tracks keep their IDs, so the files mapped to them and
+// MergeAlbumInto moves album from onto into and removes the emptied row. One
+// of the two holds releaseID. The refresh calls it only after MusicBrainz said
+// from's release group is gone or merged into into's, so this is MusicBrainz's
+// own decision carried out. Tracks keep their IDs, so the files mapped to them and
 // the wants on their recordings stay where they were. Nothing on disk is
 // touched.
 func (repository *Repository) MergeAlbumInto(ctx context.Context, from, into, releaseID uuid.UUID) error {
@@ -381,17 +381,20 @@ func (repository *Repository) MergeAlbumInto(ctx context.Context, from, into, re
 	if locked != 2 {
 		return fmt.Errorf("merge album %s into %s: %w", from, into, pgx.ErrNoRows)
 	}
-	// The release may have changed hands since the refresh looked.
+	// The release may have changed hands since the refresh looked. Either album
+	// may hold it: the one going when its group was merged away, or the one
+	// staying when the album being refreshed is the one that is gone.
 	var holds bool
 	if err := transaction.QueryRow(ctx, `
 		SELECT EXISTS (
-		    SELECT 1 FROM release_editions WHERE album_id = $1 AND musicbrainz_release_id = $2
+		    SELECT 1 FROM release_editions
+		    WHERE album_id IN ($1, $2) AND musicbrainz_release_id = $3
 		)
-	`, from, releaseID).Scan(&holds); err != nil {
-		return fmt.Errorf("check album %s holds release %s: %w", from, releaseID, err)
+	`, from, into, releaseID).Scan(&holds); err != nil {
+		return fmt.Errorf("check albums %s and %s hold release %s: %w", from, into, releaseID, err)
 	}
 	if !holds {
-		return fmt.Errorf("album %s no longer holds release %s", from, releaseID)
+		return fmt.Errorf("neither album %s nor %s holds release %s", from, into, releaseID)
 	}
 
 	// Unmatched tracks on into are what the save after this would remove or
