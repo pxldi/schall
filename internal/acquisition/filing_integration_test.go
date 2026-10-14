@@ -337,6 +337,64 @@ func TestAWantIsSettledByACopyFiledUnderARowOfOneNameAndOneLength(t *testing.T) 
 	}
 }
 
+// secondRowsOfFile reads the other rows a file answers.
+func secondRowsOfFile(
+	ctx context.Context, t *testing.T, pool *pgxpool.Pool, fileID uuid.UUID,
+) []uuid.UUID {
+	t.Helper()
+	rows, err := db.SecondRows(ctx, pool, fileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
+// Re-filing a copy under the want's row keeps the row it left. Its tracks lost
+// the file before: traence track 7 said "Fetched once, file gone" over a file
+// Schall had just read as its music.
+func TestARefiledCopyKeepsTheRowItWasFiledUnder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	service := filingService(pool, twoRowsOfOneName(wanted, filed))
+	target := createWant(ctx, t, service, wanted)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, wanted)
+	filedAs(ctx, t, pool, fileID, filed, false)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if rows := secondRowsOfFile(ctx, t, pool, fileID); len(rows) != 1 || rows[0] != filed {
+		t.Errorf("second rows = %v, want %s", rows, filed)
+	}
+}
+
+// A merge is not a second row. MusicBrainz says the two identifiers are one
+// recording, and the aliases already answer for the retired one.
+func TestAMergedRowIsNotKeptAsASecondRow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	wanted, filed := uuid.New(), uuid.New()
+	service := filingService(pool, mergedRowsOf(wanted, filed))
+	target := createWant(ctx, t, service, wanted)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, wanted)
+	provenBy(ctx, t, pool, target.ID, "title-artist-duration")
+	filedAs(ctx, t, pool, fileID, filed, false)
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if rows := secondRowsOfFile(ctx, t, pool, fileID); len(rows) != 0 {
+		t.Errorf("second rows = %v, want none for a merge", rows)
+	}
+}
+
 // The same two rows with nothing having proved the copy. The library file was
 // admitted on its own tags, which is what a stranger writes into a file, so
 // nothing says the audio on the disc is this want's music. Two rows of one name

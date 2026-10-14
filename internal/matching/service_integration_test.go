@@ -2174,3 +2174,125 @@ func TestAnISRCDoesNotLinkATrackTheProvenIdentityContradicts(t *testing.T) {
 	}
 	assertUnmatched(t, ctx, pool, fileID)
 }
+
+// seedRefiledSingle is "Nichts hittet mehr" on 2026-09-05: one song entered
+// twice in MusicBrainz, on an album and on a single, and one file a want's copy
+// re-filed from the album's row to the single's.
+func seedRefiledSingle(
+	t *testing.T, ctx context.Context, pool *pgxpool.Pool,
+) (albumTrack, singleTrack, fileID uuid.UUID) {
+	t.Helper()
+	albumRow, singleRow := uuid.New(), uuid.New()
+	_, albumID := seedRelease(t, ctx, pool, "Souly", "traence")
+	albumTrack = seedTrack(t, ctx, pool, trackFixture{
+		albumID: albumID, title: "Nichts hittet mehr", number: ptr(int32(7)), recordingID: &albumRow,
+	})
+	_, singleID := seedRelease(t, ctx, pool, "Souly", "Nichts hittet mehr")
+	singleTrack = seedTrack(t, ctx, pool, trackFixture{
+		albumID: singleID, title: "Nichts hittet mehr", number: ptr(int32(1)), recordingID: &singleRow,
+	})
+	fileID = seedFile(t, ctx, pool, fileFixture{path: "/music/Souly/07 Nichts Hittet Mehr.mp3"})
+	insertIdentity(t, ctx, pool, fileID, singleRow)
+	setIdentityMethod(t, ctx, pool, fileID, "same-registration")
+	if err := db.AddSecondRow(ctx, pool, fileID, albumRow); err != nil {
+		t.Fatal(err)
+	}
+	return albumTrack, singleTrack, fileID
+}
+
+func assertMapsTrack(
+	t *testing.T, ctx context.Context, pool *pgxpool.Pool, fileID, trackID uuid.UUID,
+) {
+	t.Helper()
+	var found bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM track_mappings WHERE library_file_id = $1 AND track_id = $2)
+	`, fileID, trackID).Scan(&found); err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatalf("file %s does not map track %s", fileID, trackID)
+	}
+}
+
+// A file re-filed under the single's row still answers the album track it was
+// filed under before. Before the second row was kept, traence track 7 lost it.
+func TestARefiledFileKeepsTheTrackOfTheRowItLeft(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	albumTrack, _, fileID := seedRefiledSingle(t, ctx, pool)
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMapsTrack(t, ctx, pool, fileID, albumTrack)
+}
+
+// The row the file is filed under keeps its track as well.
+func TestARefiledFileKeepsTheTrackOfTheRowItIsFiledUnder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	_, singleTrack, fileID := seedRefiledSingle(t, ctx, pool)
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus(t, ctx, pool, fileID, "matched", 2)
+	assertMapsTrack(t, ctx, pool, fileID, singleTrack)
+}
+
+// A copy proven to be the album's own row keeps the album track. The second row
+// only fills a gap and never contests it.
+func TestASecondRowLeavesTheTrackToAFileProvenAsThatRow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	albumTrack, singleTrack, fileID := seedRefiledSingle(t, ctx, pool)
+	var albumRow uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT musicbrainz_recording_id FROM tracks WHERE id = $1`,
+		albumTrack).Scan(&albumRow); err != nil {
+		t.Fatal(err)
+	}
+	albumCopy := seedFile(t, ctx, pool, fileFixture{path: "/music/Souly/traence/07.mp3"})
+	insertIdentity(t, ctx, pool, albumCopy, albumRow)
+	service := NewService(pool, zerolog.Nop())
+	for _, id := range []uuid.UUID{fileID, albumCopy} {
+		if err := service.ReconcileFile(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertMapping(t, ctx, pool, fileID, singleTrack, "resolved_identity", false)
+	assertMapping(t, ctx, pool, albumCopy, albumTrack, "resolved_identity", false)
+}
+
+// One song under three rows, as "Pissy Pamper" is: the one file answers the
+// tracks of every row it was read as.
+func TestAFileAnswersTheTracksOfEverySecondRow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	albumTrack, singleTrack, fileID := seedRefiledSingle(t, ctx, pool)
+	thirdRow := uuid.New()
+	_, compilationID := seedRelease(t, ctx, pool, "Souly", "Sampler")
+	compilationTrack := seedTrack(t, ctx, pool, trackFixture{
+		albumID: compilationID, title: "Nichts hittet mehr", number: ptr(int32(3)), recordingID: &thirdRow,
+	})
+	if err := db.AddSecondRow(ctx, pool, fileID, thirdRow); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMappingCount(t, ctx, pool, fileID, 3)
+	for _, track := range []uuid.UUID{albumTrack, singleTrack, compilationTrack} {
+		assertMapsTrack(t, ctx, pool, fileID, track)
+	}
+}

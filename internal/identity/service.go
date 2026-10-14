@@ -730,6 +730,30 @@ func (service *Service) FileAsAcquired(
 		return ErrDecidedByHand
 	}
 
+	// The rows the file answers now. Where they are rows of the same registered
+	// track, the file goes on answering them: the tracks that carry them would
+	// otherwise lose a file Schall has just read as their music. A merge needs
+	// none of this, because the aliases answer for the retired row.
+	var kept []uuid.UUID
+	if proof.SecondRow && !proof.Merged {
+		var left uuid.NullUUID
+		err = transaction.QueryRow(ctx, `
+			SELECT musicbrainz_recording_id FROM library_file_identities
+			WHERE library_file_id = $1
+		`, fileID).Scan(&left)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if left.Valid {
+			kept = append(kept, left.UUID)
+		}
+		earlier, err := db.SecondRows(ctx, transaction, fileID)
+		if err != nil {
+			return err
+		}
+		kept = append(kept, earlier...)
+	}
+
 	// Written as an identity nobody decided by hand. A person's answer is theirs
 	// alone, and recording this as one would put a decision in front of them that
 	// they never made and could not withdraw as their own.
@@ -737,6 +761,11 @@ func (service *Service) FileAsAcquired(
 		ctx, transaction, fileID, &filed, false, StatusResolved, filed.Summary)
 	if err != nil {
 		return err
+	}
+	for _, row := range kept {
+		if err := db.AddSecondRow(ctx, transaction, fileID, row); err != nil {
+			return err
+		}
 	}
 	if err := queueReleaseGroupIngest(ctx, transaction, filed.ReleaseGroupID); err != nil {
 		return err
