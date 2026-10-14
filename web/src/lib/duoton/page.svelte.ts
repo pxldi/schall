@@ -47,6 +47,12 @@ export function resolveCover(cover: CoverRef): ResolvedCover {
  *  the house inks, short enough to sit behind the top bar and a page header. */
 export const DEFAULT_PRINT_HEIGHT = 9;
 
+/** The print's height in rem for a page's request, or for no request. */
+export function printHeight(request: PagePrint | null | undefined): number {
+  if (!request) return DEFAULT_PRINT_HEIGHT;
+  return request.height ?? (request.mode === 'single' ? 22 : 15);
+}
+
 class DuotonPage {
   covers = $state<ResolvedCover[]>([]);
   mode = $state<'strip' | 'single'>('strip');
@@ -69,7 +75,7 @@ function apply(request: PagePrint | null | undefined) {
   const mode = request?.mode ?? 'strip';
   duoton.covers = covers;
   duoton.mode = mode;
-  duoton.height = request?.height ?? (request ? (mode === 'single' ? 22 : 15) : DEFAULT_PRINT_HEIGHT);
+  duoton.height = printHeight(request);
   duoton.claimed = !!request;
 
   const run = ++generation;

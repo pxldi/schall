@@ -635,3 +635,16 @@ describe('a file named in the address bar', () => {
     );
   });
 });
+
+describe('the print', () => {
+  it('takes the stored inks of the release the question came from', async () => {
+    const { duoton } = await import('$lib/duoton');
+    const inked = want('copies');
+    inked.target.originAlbumId = 'ffffffff-0000-4000-8000-000000000006';
+    inked.inks = { dark: '#0d1420', light: '#f2b48c' };
+    piles.wants = [inked];
+    await open('Evensong');
+
+    await waitFor(() => expect(duoton.inks).toEqual({ dark: '#0d1420', light: '#f2b48c' }));
+  });
+});

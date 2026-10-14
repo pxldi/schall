@@ -344,8 +344,9 @@
 }
 
 /* Registered so a change of inks eases rather than cuts: an unregistered custom
-   property cannot be interpolated. Two arriving steps, because a whole page
-   changing colour is the largest arrival there is and nobody waits on it. */
+   property cannot be interpolated. One arriving step, the same as the page
+   rising into place, so the colours change with the page. At two steps they
+   were still moving after the page had settled and read as loading late. */
 @property --color-duo-dark {
   syntax: '<color>';
   inherits: true;
@@ -360,8 +361,14 @@
 
 html {
   transition:
-    --color-duo-dark calc(var(--motion-enter) * 2) var(--motion-ease-arrive),
-    --color-duo-light calc(var(--motion-enter) * 2) var(--motion-ease-arrive);
+    --color-duo-dark var(--motion-enter) var(--motion-ease-arrive),
+    --color-duo-light var(--motion-enter) var(--motion-ease-arrive);
+}
+
+/* The first inks the application shows are cut in (AppShell): there is no
+   page before them to change from, only the house inks of an empty frame. */
+html[data-inks-cut] {
+  transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

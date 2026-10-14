@@ -128,3 +128,56 @@ func TestAnArtistPageCarriesItsLeadReleasesInks(t *testing.T) {
 		t.Fatalf("inks = %+v, want the lead release's inks", detail.Inks)
 	}
 }
+
+func TestADownloadRowCarriesItsReleasesInks(t *testing.T) {
+	inked := uuid.New()
+	store := downloadStore()
+	store.inks = []db.ReleaseInksRow{{AlbumID: inked, InkDark: "#0d1420", InkLight: "#f2b48c"}}
+	store.requests = []db.DownloadRequestRow{
+		{ID: uuid.New(), AlbumID: uuid.NullUUID{UUID: inked, Valid: true}, Status: "started"},
+		{ID: uuid.New(), Status: "started"},
+	}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(), WithSourceProvider(&fakeProvider{}))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/downloads", nil))
+	var body struct {
+		Items []downloadRequestResponse `json:"items"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(body.Items))
+	}
+	if first := body.Items[0].Inks; first == nil || first.Dark != "#0d1420" || first.Light != "#f2b48c" {
+		t.Fatalf("first row inks = %+v, want the release's stored inks", first)
+	}
+	if body.Items[1].Inks != nil {
+		t.Fatalf("second row inks = %+v, want none for a request with no release", body.Items[1].Inks)
+	}
+}
+
+func TestAReviewItemCarriesTheInksOfTheReleaseItCameFrom(t *testing.T) {
+	origin := uuid.New()
+	targets := &fakeAcquisitionTargets{
+		target: db.AcquisitionTargetRow{ID: uuid.New(), OriginAlbumID: uuid.NullUUID{UUID: origin, Valid: true}},
+	}
+	store := &fakeStore{inks: []db.ReleaseInksRow{{AlbumID: origin, InkDark: "#0d1420", InkLight: "#f2b48c"}}}
+	handler := NewAPI(store, fakeDatabase{}, &fakeArtistSearcher{}, zerolog.Nop(), WithAcquisitionTargets(targets))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/review-queue", nil))
+	var body struct {
+		Items []reviewItemResponse `json:"items"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	if inks := body.Items[0].Inks; inks == nil || inks.Dark != "#0d1420" || inks.Light != "#f2b48c" {
+		t.Fatalf("inks = %+v, want the origin release's stored inks", inks)
+	}
+}

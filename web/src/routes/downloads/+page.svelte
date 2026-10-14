@@ -193,7 +193,7 @@
     for (const item of [...moving, ...rest]) {
       if (!item.albumId || albums.has(item.albumId)) continue;
       albums.add(item.albumId);
-      covers.push(item.albumId);
+      covers.push({ src: coverSrc(item.albumId), seed: item.albumId, inks: item.inks });
       if (covers.length === 6) break;
     }
     return { covers, height: 15 };
