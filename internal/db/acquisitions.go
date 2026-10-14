@@ -799,8 +799,9 @@ func (q *Queries) nextTargetDue(ctx context.Context, status string) (pgtype.Time
 // OwnedFileForRecording reports a present library file already proven to be
 // this recording, if the library holds one.
 //
-// Only decided identities count: a resolved identity, or a mapping onto a
-// catalogue track carrying the recording. The identifier a file merely has in
+// Only decided identities count: a resolved identity, a second row of the
+// same song that identity answers (AddSecondRow), or a mapping onto a catalogue
+// track carrying the recording. The identifier a file merely has in
 // its own tags is deliberately not read here — an uncorroborated tag is exactly
 // what identity resolution exists to grade, and answering from it would be a
 // second, weaker answer to a question that already has one.
@@ -817,7 +818,11 @@ func (q *Queries) OwnedFileForRecording(
 		LEFT JOIN tracks ON tracks.id = track_mappings.track_id
 		WHERE library_files.missing_at IS NULL
 		  AND (library_file_identities.musicbrainz_recording_id = $1
-		       OR tracks.musicbrainz_recording_id = $1)
+		       OR tracks.musicbrainz_recording_id = $1
+		       OR EXISTS (
+		           SELECT 1 FROM library_file_second_rows second_row
+		           WHERE second_row.identity_id = library_file_identities.id
+		             AND second_row.musicbrainz_recording_id = $1))
 		ORDER BY library_files.created_at, library_files.id
 		LIMIT 1
 	`, recordingID).Scan(&fileID)

@@ -2194,9 +2194,7 @@ func seedRefiledSingle(
 	fileID = seedFile(t, ctx, pool, fileFixture{path: "/music/Souly/07 Nichts Hittet Mehr.mp3"})
 	insertIdentity(t, ctx, pool, fileID, singleRow)
 	setIdentityMethod(t, ctx, pool, fileID, "same-registration")
-	if _, err := pool.Exec(ctx, `
-		UPDATE library_file_identities SET second_row_recording_id = $2 WHERE library_file_id = $1
-	`, fileID, albumRow); err != nil {
+	if err := db.AddSecondRow(ctx, pool, fileID, albumRow); err != nil {
 		t.Fatal(err)
 	}
 	return albumTrack, singleTrack, fileID
@@ -2271,4 +2269,30 @@ func TestASecondRowLeavesTheTrackToAFileProvenAsThatRow(t *testing.T) {
 
 	assertMapping(t, ctx, pool, fileID, singleTrack, "resolved_identity", false)
 	assertMapping(t, ctx, pool, albumCopy, albumTrack, "resolved_identity", false)
+}
+
+// One song under three rows, as "Pissy Pamper" is: the one file answers the
+// tracks of every row it was read as.
+func TestAFileAnswersTheTracksOfEverySecondRow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+
+	albumTrack, singleTrack, fileID := seedRefiledSingle(t, ctx, pool)
+	thirdRow := uuid.New()
+	_, compilationID := seedRelease(t, ctx, pool, "Souly", "Sampler")
+	compilationTrack := seedTrack(t, ctx, pool, trackFixture{
+		albumID: compilationID, title: "Nichts hittet mehr", number: ptr(int32(3)), recordingID: &thirdRow,
+	})
+	if err := db.AddSecondRow(ctx, pool, fileID, thirdRow); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewService(pool, zerolog.Nop()).ReconcileFile(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMappingCount(t, ctx, pool, fileID, 3)
+	for _, track := range []uuid.UUID{albumTrack, singleTrack, compilationTrack} {
+		assertMapsTrack(t, ctx, pool, fileID, track)
+	}
 }

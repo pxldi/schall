@@ -730,11 +730,13 @@ func (service *Service) FileAsAcquired(
 		return ErrDecidedByHand
 	}
 
-	// The row the file is filed under now. Where it is a second row of the same
-	// registered track, the file goes on answering it: the tracks that carry it
-	// would otherwise lose a file Schall has just read as their music.
-	var left uuid.NullUUID
+	// The rows the file answers now. Where they are rows of the same registered
+	// track, the file goes on answering them: the tracks that carry them would
+	// otherwise lose a file Schall has just read as their music. A merge needs
+	// none of this, because the aliases answer for the retired row.
+	var kept []uuid.UUID
 	if proof.SecondRow && !proof.Merged {
+		var left uuid.NullUUID
 		err = transaction.QueryRow(ctx, `
 			SELECT musicbrainz_recording_id FROM library_file_identities
 			WHERE library_file_id = $1
@@ -742,6 +744,14 @@ func (service *Service) FileAsAcquired(
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		if left.Valid {
+			kept = append(kept, left.UUID)
+		}
+		earlier, err := db.SecondRows(ctx, transaction, fileID)
+		if err != nil {
+			return err
+		}
+		kept = append(kept, earlier...)
 	}
 
 	// Written as an identity nobody decided by hand. A person's answer is theirs
@@ -752,11 +762,8 @@ func (service *Service) FileAsAcquired(
 	if err != nil {
 		return err
 	}
-	if left.Valid && left.UUID != recordingID {
-		if _, err := transaction.Exec(ctx, `
-			UPDATE library_file_identities SET second_row_recording_id = $2
-			WHERE library_file_id = $1
-		`, fileID, left.UUID); err != nil {
+	for _, row := range kept {
+		if err := db.AddSecondRow(ctx, transaction, fileID, row); err != nil {
 			return err
 		}
 	}

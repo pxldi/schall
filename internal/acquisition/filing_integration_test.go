@@ -337,18 +337,16 @@ func TestAWantIsSettledByACopyFiledUnderARowOfOneNameAndOneLength(t *testing.T) 
 	}
 }
 
-// secondRowOfFile reads the row a re-filing moved the file off.
-func secondRowOfFile(
+// secondRowsOfFile reads the other rows a file answers.
+func secondRowsOfFile(
 	ctx context.Context, t *testing.T, pool *pgxpool.Pool, fileID uuid.UUID,
-) uuid.NullUUID {
+) []uuid.UUID {
 	t.Helper()
-	var second uuid.NullUUID
-	if err := pool.QueryRow(ctx, `
-		SELECT second_row_recording_id FROM library_file_identities WHERE library_file_id = $1
-	`, fileID).Scan(&second); err != nil {
-		t.Fatalf("read the second row of file %s: %v", fileID, err)
+	rows, err := db.SecondRows(ctx, pool, fileID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return second
+	return rows
 }
 
 // Re-filing a copy under the want's row keeps the row it left. Its tracks lost
@@ -369,8 +367,8 @@ func TestARefiledCopyKeepsTheRowItWasFiledUnder(t *testing.T) {
 		t.Fatalf("Sweep() error = %v", err)
 	}
 
-	if second := secondRowOfFile(ctx, t, pool, fileID); !second.Valid || second.UUID != filed {
-		t.Errorf("second row = %v, want %s", second, filed)
+	if rows := secondRowsOfFile(ctx, t, pool, fileID); len(rows) != 1 || rows[0] != filed {
+		t.Errorf("second rows = %v, want %s", rows, filed)
 	}
 }
 
@@ -392,8 +390,8 @@ func TestAMergedRowIsNotKeptAsASecondRow(t *testing.T) {
 		t.Fatalf("Sweep() error = %v", err)
 	}
 
-	if second := secondRowOfFile(ctx, t, pool, fileID); second.Valid {
-		t.Errorf("second row = %s, want none for a merge", second.UUID)
+	if rows := secondRowsOfFile(ctx, t, pool, fileID); len(rows) != 0 {
+		t.Errorf("second rows = %v, want none for a merge", rows)
 	}
 }
 
