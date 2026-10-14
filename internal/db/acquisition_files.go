@@ -1657,6 +1657,10 @@ type AcquiredCopyFiling struct {
 	// catalogue's bookkeeping; whether the file is this want's music is what
 	// admitted the file, and that is this.
 	ProvenMethod string
+	// LeadingCluster is every recording AcoustID's leading cluster named for the
+	// copy, read under the same condition as ProvenMethod. A cluster naming two
+	// rows is AcoustID saying they are one piece of audio.
+	LeadingCluster []uuid.UUID
 }
 
 // AcquiredCopyFiling reads what the library says about the file a want's
@@ -1731,6 +1735,13 @@ func (q *Queries) AcquiredCopyFiling(
 		}
 		if judgedAgainstThisWant {
 			filing.ProvenMethod = decoded.Method
+			if decoded.Acoustic != nil && len(decoded.Acoustic.Clusters) > 0 {
+				for _, id := range decoded.Acoustic.Clusters[0].RecordingIDs {
+					if parsed, err := uuid.Parse(id); err == nil {
+						filing.LeadingCluster = append(filing.LeadingCluster, parsed)
+					}
+				}
+			}
 		}
 	}
 	return filing, nil

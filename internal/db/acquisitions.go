@@ -2139,3 +2139,83 @@ func (q *Queries) EnsurePreviewAnchorSweepQueued(ctx context.Context, runAfter t
 	`, runAfter)
 	return err
 }
+
+// OwnedRecordingsTitled lists the recordings a present library file is proven
+// to be, in the same two ways OwnedFileForRecording reads, whose title matches
+// this one once case and punctuation are set aside. The title only picks which
+// MusicBrainz rows are worth asking about; it proves nothing (ADR 0031).
+func (q *Queries) OwnedRecordingsTitled(
+	ctx context.Context, title string, except uuid.UUID,
+) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, `
+		WITH wanted AS (
+			SELECT regexp_replace(lower($1::text), '[^[:alnum:]]', '', 'g') AS title
+		)
+		SELECT DISTINCT owned.recording_id
+		FROM (
+			SELECT library_file_identities.musicbrainz_recording_id AS recording_id,
+			       library_file_identities.track_title AS title
+			FROM library_file_identities
+			JOIN library_files ON library_files.id = library_file_identities.library_file_id
+			WHERE library_files.missing_at IS NULL
+			  AND library_file_identities.musicbrainz_recording_id IS NOT NULL
+			UNION ALL
+			SELECT tracks.musicbrainz_recording_id, tracks.title
+			FROM tracks
+			JOIN track_mappings ON track_mappings.track_id = tracks.id
+			JOIN library_files ON library_files.id = track_mappings.library_file_id
+			WHERE library_files.missing_at IS NULL
+			  AND tracks.musicbrainz_recording_id IS NOT NULL
+		) owned, wanted
+		WHERE wanted.title <> ''
+		  AND regexp_replace(lower(owned.title), '[^[:alnum:]]', '', 'g') = wanted.title
+		  AND owned.recording_id <> $2
+		ORDER BY owned.recording_id
+		LIMIT 20
+	`, title, except)
+	if err != nil {
+		return nil, fmt.Errorf("read owned recordings titled %q: %w", title, err)
+	}
+	defer rows.Close()
+	owned := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		owned = append(owned, id)
+	}
+	return owned, rows.Err()
+}
+
+// TargetsStoppedOnAWaitingCopy lists the wants that stopped fetching because a
+// copy they hold waits for a person (StopWhileACopyWaits). Nothing sweeps them,
+// so this is how the library gets asked about them again.
+func (q *Queries) TargetsStoppedOnAWaitingCopy(
+	ctx context.Context, limit int32,
+) ([]AcquisitionTargetRow, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT`+acquisitionTargetColumns+`
+		FROM acquisition_targets
+		WHERE status = 'pending'
+		  AND next_attempt_at IS NULL
+		  AND musicbrainz_recording_id IS NOT NULL
+		  AND origin <> 'upgrade'
+		  AND`+wantHoldsAnUnansweredCopy+`
+		ORDER BY updated_at, id
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list wants stopped on a waiting copy: %w", err)
+	}
+	defer rows.Close()
+	targets := make([]AcquisitionTargetRow, 0)
+	for rows.Next() {
+		var target AcquisitionTargetRow
+		if err := scanAcquisitionTargetInto(rows, &target); err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	return targets, rows.Err()
+}
