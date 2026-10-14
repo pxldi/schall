@@ -124,7 +124,9 @@ const upgradeStandBackDays = 30
 // A settled identity is exactly the set internal/db/witness.go reads for a
 // library witness (settledProofs): a manual decision, AcoustID at the leading
 // cluster, measured audio, or a chain resting on one of those. Nothing merely
-// tagged, and nothing still unresolved, is offered here.
+// tagged, and nothing still unresolved, is offered here, with one exception: a
+// damaged file is offered on any resolved identity, because the replacement
+// compares the two files' audio before it deletes a file that is not settled.
 //
 // A file with no stated bit rate is left out rather than treated as under the
 // floor. Silence is not agreement, in either direction: it says nothing about
@@ -166,6 +168,25 @@ func (q *Queries) UpgradeCandidates(
 		  AND (
 		      identities.is_manual
 		      OR regexp_replace(identities.method, '-and-release$', '') = ANY ($1::text[])
+		      -- A damaged file is offered on any identity that names a
+		      -- recording. The replacement deletes it only once the new copy's
+		      -- audio agrees with it (library.ReplaceIfBetter). A file whose
+		      -- recording already has an undamaged copy is left out: that pair
+		      -- is on the duplicates screen, and another want would fetch a
+		      -- third copy.
+		      OR (
+		          files.decode_error IS NOT NULL
+		          AND NOT EXISTS (
+		              SELECT 1 FROM library_files others
+		              JOIN library_file_identities other_identities
+		                  ON other_identities.library_file_id = others.id
+		              WHERE others.id <> files.id
+		                AND others.missing_at IS NULL
+		                AND others.decode_error IS NULL
+		                AND other_identities.musicbrainz_recording_id
+		                    = identities.musicbrainz_recording_id
+		          )
+		      )
 		  )
 		  AND files.id > $2
 		  AND (files.upgrade_refused_at IS NULL

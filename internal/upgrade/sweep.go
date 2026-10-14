@@ -4,9 +4,11 @@
 //
 // It decides nothing about what a file is. A file only qualifies here once
 // something has already proven what recording it holds — the same settled
-// proofs internal/db/witness.go reads for a library witness — and once it
-// qualifies, the only thing this package does is raise a want. Whether a copy
-// that arrives for that want is the right recording is proven exactly as
+// proofs internal/db/witness.go reads for a library witness. A damaged file
+// also qualifies on any identity that names a recording, because
+// library.ReplaceIfBetter deletes such a file only when its audio agrees with
+// the copy that arrives. Once a file qualifies, the only thing this package
+// does is raise a want. Whether a copy that arrives for that want is the right recording is proven exactly as
 // every other want is proven: AcoustID at the leading cluster, the anchor, or
 // a settled library witness. This package widens what gets looked for. It
 // admits nothing that the matching rules did not already admit.

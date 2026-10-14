@@ -948,6 +948,21 @@ func compareWitness(witness *WitnessComparison, recording musicbrainz.Recording)
 		!recording.Answers(witness.RecordingID) {
 		return tagmatch.Unknown
 	}
+	if WitnessAgrees(witness) {
+		return tagmatch.Agrees
+	}
+	return tagmatch.Unknown
+}
+
+// WitnessAgrees reports whether one measured comparison between a settled
+// file and another file says the two hold the same audio. It does not ask
+// which recording either file is; compareWitness asks that first. The upgrade
+// replacement reads it too, so a file is never deleted on a looser rule than
+// the one a library witness admits a copy on.
+func WitnessAgrees(witness *WitnessComparison) bool {
+	if witness == nil {
+		return false
+	}
 	// The rate alone is not enough. It is read only over the span the two
 	// fingerprints share, so a copy that hit the length limit while decoding, or
 	// one many times longer than the settled file, can measure as close as a
@@ -956,22 +971,19 @@ func compareWitness(witness *WitnessComparison, recording musicbrainz.Recording)
 	// Both lengths have to be known, from a decode and never a tag, and they
 	// have to agree within the same tolerance a duration tag would.
 	if witness.CandidateDurationMS <= 0 || witness.FileDurationMS <= 0 {
-		return tagmatch.Unknown
+		return false
 	}
 	if abs(witness.CandidateDurationMS-witness.FileDurationMS) > DurationToleranceMS {
-		return tagmatch.Unknown
+		return false
 	}
 	if witness.Comparison != nil {
 		if !witness.Comparison.WindowsAgree() ||
 			!comparisonCovers(witness.ReferenceCoverageSeconds, witness.FileDurationMS) ||
 			!comparisonCovers(witness.CandidateCoverageSeconds, witness.CandidateDurationMS) {
-			return tagmatch.Unknown
+			return false
 		}
 	}
-	if chromaprint.Read(witness.Rate) == chromaprint.SameAudio {
-		return tagmatch.Agrees
-	}
-	return tagmatch.Unknown
+	return chromaprint.Read(witness.Rate) == chromaprint.SameAudio
 }
 
 func comparisonCovers(coverageSeconds, durationMS int) bool {

@@ -24,6 +24,7 @@ const upgradeRemovedBy = "the automatic quality upgrade"
 // not being better than the file it was fetched to replace.
 const (
 	upgradeReplacedReason  = "a better copy of this recording was verified and replaced this one"
+	upgradeAgreedReason    = "a better copy of this recording was verified, its audio matched this damaged file, and it replaced this one"
 	upgradeDiscardedReason = "this copy was fetched for an upgrade want and was not better than the file it was meant to replace"
 	uploadRemovedBy        = "the person who uploaded a better copy"
 	uploadReplacedReason   = "a better copy of this recording was uploaded and replaced this one"
@@ -48,6 +49,14 @@ type upgradeCandidate struct {
 	present     bool
 	// damaged is a file whose audio did not decode (library_files.decode_error).
 	damaged bool
+	// settled says the file's identity rests on one of db.SettledProof's
+	// proofs. A file that is not settled is deleted only once its audio agrees
+	// with the copy replacing it.
+	settled bool
+	// durationMS is the file's own length, measured or tagged; 0 is unknown.
+	durationMS int
+	// witnessFingerprint is the kept "<seconds>:<base64>" fingerprint, or "".
+	witnessFingerprint string
 }
 
 // ReplaceIfBetter carries out what a proven upgrade want exists for.
@@ -59,6 +68,11 @@ type upgradeCandidate struct {
 // before it ever reached here. All this does is ask whether the new file is
 // actually a better copy of the music both files already agree they are, and
 // carry out a deletion under a recorded licence either way.
+//
+// A damaged file reaches here on an identity that may not be settled. That
+// file is deleted only when its own audio agrees with the new copy's on the
+// library witness rule (audioAgrees). Otherwise both files stay, and the pair
+// is left on the duplicates screen.
 //
 // "Better" is deliberately narrow: a lossless file beats a lossy one outright,
 // and between two lossy files a higher bitrate wins. A lower bitrate, or the
@@ -118,7 +132,19 @@ func (remover *Remover) ReplaceIfBetter(
 	}
 
 	if better(old, fresh) {
-		replaced, err := remover.replaceCandidate(ctx, old, fresh, upgradeReplacedReason, fresh.path, upgradeRemovedBy)
+		reason := upgradeReplacedReason
+		// Only a damaged file reaches here without a settled identity
+		// (db.UpgradeCandidates). Its identity may be wrong, so it is deleted
+		// only when its own audio agrees with the proven copy.
+		if !old.settled {
+			agrees, why := remover.audioAgrees(ctx, old, fresh)
+			if !agrees {
+				remover.keepBoth(ctx, old, fresh, why)
+				return false, nil
+			}
+			reason = upgradeAgreedReason
+		}
+		replaced, err := remover.replaceCandidate(ctx, old, fresh, reason, fresh.path, upgradeRemovedBy)
 		if err != nil {
 			if errors.Is(err, ErrReplacementMissing) {
 				remover.logger.Warn().
@@ -320,7 +346,10 @@ func (remover *Remover) upgradeCandidateByID(
 		SELECT files.id, files.path, roots.path, files.size_bytes,
 		       coalesce(files.bit_rate_kbps, 0),
 		       identities.musicbrainz_recording_id,
-		       files.decode_error IS NOT NULL
+		       files.decode_error IS NOT NULL,
+		       coalesce(identities.method, ''), coalesce(identities.is_manual, false),
+		       coalesce(files.measured_duration_ms, files.duration_ms, 0),
+		       coalesce(files.witness_fingerprint, '')
 		FROM library_files files
 		JOIN library_roots roots ON roots.id = files.library_root_id
 		LEFT JOIN library_file_identities identities
@@ -336,12 +365,16 @@ func (remover *Remover) upgradeCandidateByID(
 		return upgradeCandidate{}, rows.Err()
 	}
 	var candidate upgradeCandidate
+	var method string
+	var manual bool
 	if err := rows.Scan(&candidate.id, &candidate.path, &candidate.rootPath,
 		&candidate.size, &candidate.bitRateKbps, &candidate.recordingID,
-		&candidate.damaged); err != nil {
+		&candidate.damaged, &method, &manual, &candidate.durationMS,
+		&candidate.witnessFingerprint); err != nil {
 		return upgradeCandidate{}, err
 	}
 	candidate.present = true
+	candidate.settled = candidate.recordingID.Valid && db.SettledProof(method, manual)
 	return candidate, rows.Err()
 }
 

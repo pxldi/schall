@@ -325,3 +325,30 @@ func TestAnyWillDoRefusesWhereTheCopiesAreNotShownToBeTheSameAudio(t *testing.T)
 		}
 	})
 }
+
+// The upgrade keeps a damaged file beside its replacement when their audio did
+// not agree. The judgement reads no audio, so it must not delete that file in
+// the upgrade's place.
+func TestJudgeRefusesADamagedCopyNothingProved(t *testing.T) {
+	damaged := copyOf("/music/old.mp3", 128, 44100, 2, 214000)
+	damaged.unprovenDamaged = true
+	copies := []HeldTwiceCopy{damaged, copyOf("/music/new.mp3", 320, 44100, 2, 214000)}
+
+	verdict, decided := judge(copies)
+	if decided {
+		t.Fatal("a damaged copy nothing proved was offered up for removal")
+	}
+	if verdict != unprovenDamagedVerdict {
+		t.Fatalf("verdict = %q", verdict)
+	}
+}
+
+func TestAnyWillDoRefusesADamagedCopyNothingProved(t *testing.T) {
+	damaged := copyOf("/music/old.mp3", 320, 44100, 2, 214000)
+	damaged.unprovenDamaged = true
+	copies := []HeldTwiceCopy{damaged, copyOf("/music/new.mp3", 320, 44100, 2, 214000)}
+
+	if _, chosen := ChooseKeeperWhenAnyWillDo(copies); chosen {
+		t.Fatal("a keeper was chosen beside a damaged copy nothing proved")
+	}
+}

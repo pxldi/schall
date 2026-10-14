@@ -173,7 +173,10 @@ func run() error {
 	// What takes a file back out again, once somebody has decided the library
 	// holds the same music twice. It is given the matcher so the copy that stays
 	// is judged again with the other one gone.
-	libraryRemover := library.NewRemover(pool, logger).WithMatcher(matchService)
+	libraryRemover := library.NewRemover(pool, logger).WithMatcher(matchService).
+		WithFingerprinter(chromaprint.NewFingerprinter(chromaprint.Options{
+			FpcalcPath: cfg.FpcalcPath, FFmpegPath: cfg.FFmpegPath,
+		}))
 	// One gate for every slskd client this process builds. A client is made afresh
 	// from the stored settings for each search, so the bounds on how much, how
 	// fast and how repetitively this process searches have to live outside them

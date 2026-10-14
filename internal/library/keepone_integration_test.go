@@ -24,7 +24,7 @@ func identifiedAsRecording(t *testing.T, pool *pgxpool.Pool, fileID, recordingID
 	if _, err := pool.Exec(context.Background(), `
 		INSERT INTO library_file_identities (
 			library_file_id, kind, musicbrainz_recording_id, method, summary
-		) VALUES ($1, 'external', $2, 'acoustid', 'the audio is this recording')
+		) VALUES ($1, 'external', $2, 'fingerprint', 'the audio is this recording')
 	`, fileID, recordingID); err != nil {
 		t.Fatal(err)
 	}

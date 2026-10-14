@@ -54,6 +54,22 @@ var settledProofs = []string{
 	"manual", "fingerprint", "fingerprint-and-identifier", "library-witness",
 }
 
+// SettledProof reports whether an identity's method is one of settledProofs,
+// read the way the SQL here reads it: a manual decision counts, and a release
+// ending is cut off first.
+func SettledProof(method string, manual bool) bool {
+	if manual {
+		return true
+	}
+	base, _ := strings.CutSuffix(method, MethodSingledOutByRelease)
+	for _, proof := range settledProofs {
+		if base == proof {
+			return true
+		}
+	}
+	return false
+}
+
 // SettledWitnesses lists the files the library already holds that are proven to
 // be this recording and can be compared against.
 //
