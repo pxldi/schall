@@ -297,6 +297,13 @@ func contradictedTracks(ctx context.Context, transaction pgx.Tx, fileID uuid.UUI
 		  AND identity.musicbrainz_recording_id IS NOT NULL
 		  AND identity.musicbrainz_recording_id NOT IN (
 		      SELECT recording_id_aliases(file.musicbrainz_recording_id))
+		  -- A tag naming another row of the song the identity answers agrees
+		  -- with it (automaticCandidates, known).
+		  AND NOT EXISTS (
+		      SELECT 1 FROM library_file_second_rows second_row
+		      WHERE second_row.identity_id = identity.id
+		        AND file.musicbrainz_recording_id IN (
+		            SELECT recording_id_aliases(second_row.musicbrainz_recording_id)))
 	`, fileID).Scan(&count)
 	return count, err
 }
@@ -887,10 +894,25 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		    -- own tag names and the one a resolution proved for its audio. They
 		    -- are kept apart because either one contradicting a track voids the
 		    -- pair, and because the two can contradict each other.
+		    --
+		    -- A tag naming another row of the same song that the identity
+		    -- answers (migration 00126) is the tag agreeing with the identity.
+		    -- Schall writes the row it is filed under into the tag, so a file
+		    -- re-filed onto a second row carries the first one until it is
+		    -- tagged again.
 		    SELECT file.musicbrainz_recording_id AS tag_recording_id,
 		           (SELECT identity.musicbrainz_recording_id
 		            FROM library_file_identities identity
-		            WHERE identity.library_file_id = file.id) AS identity_recording_id
+		            WHERE identity.library_file_id = file.id) AS identity_recording_id,
+		           EXISTS (
+		               SELECT 1
+		               FROM library_file_identities identity
+		               JOIN library_file_second_rows second_row
+		                   ON second_row.identity_id = identity.id
+		               WHERE identity.library_file_id = file.id
+		                 AND file.musicbrainz_recording_id IN (
+		                     SELECT recording_id_aliases(second_row.musicbrainz_recording_id))
+		           ) AS tag_is_second_row
 		    FROM file
 		), split AS (
 		    -- A file whose tag names one recording and whose audio was proven to
@@ -901,7 +923,8 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		               known.tag_recording_id IS NOT NULL
 		               AND known.identity_recording_id IS NOT NULL
 		               AND known.identity_recording_id NOT IN (
-		                   SELECT recording_id_aliases(known.tag_recording_id)),
+		                   SELECT recording_id_aliases(known.tag_recording_id))
+		               AND NOT known.tag_is_second_row,
 		               false) AS contradicted
 		    FROM known
 		), wins AS (
@@ -953,10 +976,15 @@ func automaticCandidates(ctx context.Context, transaction pgx.Tx, fileID uuid.UU
 		                  SELECT recording_id_aliases(file.musicbrainz_recording_id))) AS file_count
 		    FROM file
 		    CROSS JOIN split
+		    CROSS JOIN known
 		    JOIN tracks ON tracks.musicbrainz_recording_id IN (
 		        SELECT recording_id_aliases(file.musicbrainz_recording_id))
 		    WHERE file.musicbrainz_recording_id IS NOT NULL
 		      AND NOT split.contradicted
+		      -- A tag naming a second row leaves the file to its identity, which
+		      -- links that row and its own together below. Linking by the tag
+		      -- here would outrank them and take the file off its own tracks.
+		      AND NOT known.tag_is_second_row
 		    UNION ALL
 		    -- An identity the providers proved for a file that carries no
 		    -- identifier of its own is an identifier all the same. It is how
