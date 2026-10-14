@@ -690,6 +690,17 @@ func (service *Service) attempt(
 	// The library holds files by recording, and this want has none to ask about.
 	if target.Origin != "upgrade" && !onAnchor {
 		held, err := service.heldAlready(ctx, target)
+		// MusicBrainz not answering about one want's rows is about that want.
+		// It waits and asks again; the rest of the pass carries on, and nothing
+		// is fetched while nobody knows whether the library holds the song.
+		if errors.Is(err, errSecondRowUnasked) {
+			service.logger.Warn().Err(err).
+				Str("acquisition_target_id", target.ID.String()).
+				Dur("deferred_for", throttleDelay).
+				Msg("MusicBrainz could not be asked whether the library holds a want's song")
+			return false, service.store.RescheduleAcquisitionTarget(
+				ctx, target.ID, unaskedSummary, service.now().Add(throttleDelay))
+		}
 		if err != nil || held {
 			return false, err
 		}

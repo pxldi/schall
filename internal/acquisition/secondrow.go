@@ -16,6 +16,11 @@ import (
 // recording of the same title cost a cached MusicBrainz lookup each.
 const waitingCopyReview = 500
 
+// errSecondRowUnasked reports that MusicBrainz could not be asked about the
+// rows a want and an owned file name. It says nothing about the library, so
+// the want waits and asks again rather than going looking or failing the pass.
+var errSecondRowUnasked = errors.New("MusicBrainz could not be asked about a second row")
+
 // RowReader reads one MusicBrainz recording. *identity.Resolver is one, and a
 // resolver that is not leaves the second-row question unasked.
 type RowReader interface {
@@ -50,7 +55,7 @@ func (service *Service) ownedSecondRow(
 		return uuid.NullUUID{}, nil
 	}
 	if err != nil {
-		return uuid.NullUUID{}, fmt.Errorf("look up recording %s: %w", wantedID, err)
+		return uuid.NullUUID{}, fmt.Errorf("%w: look up recording %s: %w", errSecondRowUnasked, wantedID, err)
 	}
 	for _, ownedID := range candidates {
 		owned, err := reader.Recording(ctx, ownedID)
@@ -58,7 +63,8 @@ func (service *Service) ownedSecondRow(
 			continue
 		}
 		if err != nil {
-			return uuid.NullUUID{}, fmt.Errorf("look up owned recording %s: %w", ownedID, err)
+			return uuid.NullUUID{}, fmt.Errorf("%w: look up owned recording %s: %w",
+				errSecondRowUnasked, ownedID, err)
 		}
 		if owned.ID != wanted.ID && !identity.SameRegistrationByNameAndLength(wanted, owned) {
 			continue
