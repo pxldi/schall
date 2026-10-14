@@ -837,3 +837,85 @@ func TestKeepingOneCopyWithdrawsWhatTheDoomedFileAdmitted(t *testing.T) {
 		t.Errorf("status = %q, want the admitted file to be a question again", status)
 	}
 }
+
+// A want settled on the copy that goes is answered by the copy that stays.
+// Before, the want's link fell to nothing and the release page read "Fetched
+// once, file gone" for music the library still held.
+func TestKeepingOneCopyMovesAWantSettledOnTheDoomedFileToTheKeeper(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+
+	keeperID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Portishead", "Dummy", "roads.flac"), "Portishead", "Dummy")
+	spareID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Singles", "roads.mp3"), "Portishead", "Roads")
+	identifiedAsRecording(t, pool, keeperID, recordingID)
+	identifiedAsRecording(t, pool, spareID, recordingID)
+	var targetID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO acquisition_targets (
+			origin, entry_artist, entry_title, musicbrainz_recording_id,
+			status, acquired_at, acquired_library_file_id, summary
+		)
+		VALUES ('manual', 'Portishead', 'Roads', $1, 'acquired', now(), $2, 'In your library.')
+		RETURNING id
+	`, recordingID, spareID).Scan(&targetID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewRemover(pool, zerolog.Nop()).KeepOne(ctx, recordingID, keeperID, []uuid.UUID{spareID}, DuplicateScreenRemovalActor); err != nil {
+		t.Fatal(err)
+	}
+
+	var status string
+	var acquired uuid.NullUUID
+	if err := pool.QueryRow(ctx, `
+		SELECT status, acquired_library_file_id FROM acquisition_targets WHERE id = $1
+	`, targetID).Scan(&status, &acquired); err != nil {
+		t.Fatal(err)
+	}
+	if status != "acquired" || !acquired.Valid || acquired.UUID != keeperID {
+		t.Fatalf("want = %s on %v, want acquired on the kept copy %v", status, acquired, keeperID)
+	}
+}
+
+// A playlist entry the doomed copy answered follows it to the keeper, as it
+// does when an upgrade replaces a file.
+func TestKeepingOneCopyMovesAPlaylistEntryToTheKeeper(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+
+	keeperID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Portishead", "Dummy", "roads.flac"), "Portishead", "Dummy")
+	spareID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Singles", "roads.mp3"), "Portishead", "Roads")
+	identifiedAsRecording(t, pool, keeperID, recordingID)
+	identifiedAsRecording(t, pool, spareID, recordingID)
+	var playlistID, entryID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO playlists (source, name) VALUES ('manual', 'A playlist') RETURNING id
+	`).Scan(&playlistID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO playlist_entries (playlist_id, position, entry_title, owned_library_file_id)
+		VALUES ($1, 1, 'Roads', $2)
+		RETURNING id
+	`, playlistID, spareID).Scan(&entryID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewRemover(pool, zerolog.Nop()).KeepOne(ctx, recordingID, keeperID, []uuid.UUID{spareID}, DuplicateScreenRemovalActor); err != nil {
+		t.Fatal(err)
+	}
+
+	var owned uuid.NullUUID
+	if err := pool.QueryRow(ctx,
+		`SELECT owned_library_file_id FROM playlist_entries WHERE id = $1`, entryID,
+	).Scan(&owned); err != nil {
+		t.Fatal(err)
+	}
+	if !owned.Valid || owned.UUID != keeperID {
+		t.Fatalf("playlist entry owned file = %v, want the kept copy %v", owned, keeperID)
+	}
+}

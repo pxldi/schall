@@ -437,15 +437,11 @@ func (remover *Remover) replaceCandidate(
 		removedBy, reason).Scan(&removalID); err != nil {
 		return false, fmt.Errorf("record the removal of %s: %w", locked.path, err)
 	}
-	// A playlist entry that already resolved to the doomed file follows it to
-	// the survivor, so a person's playlist keeps pointing at owned music
-	// rather than reading "not yet obtained" the moment the doomed file is
-	// gone.
-	if _, err := transaction.Exec(ctx, `
-		UPDATE playlist_entries SET owned_library_file_id = $2, updated_at = now()
-		WHERE owned_library_file_id = $1
-	`, locked.id, kept.id); err != nil {
-		return false, fmt.Errorf("carry a playlist's reference to the surviving file: %w", err)
+	// A want settled on the doomed file and a playlist entry that resolved to
+	// it follow it to the survivor, so neither reads "file gone" or "not yet
+	// obtained" for music the library still holds.
+	if err := db.CarryToKeptFile(ctx, transaction, locked.id, kept.id); err != nil {
+		return false, err
 	}
 	// Deliberately no identity.WithdrawAdmittedBy here. That call is for taking
 	// a decision back; the doomed file's identity was never wrong; it is only

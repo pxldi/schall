@@ -345,3 +345,136 @@ func TestRemovingAFileWithdrawsWhatItAdmitted(t *testing.T) {
 		t.Errorf("summary = %q, want %q", summary, db.RearmedByADeletionSummary)
 	}
 }
+
+// copyReachingFileThroughItsTransfer is the second accepted copy of a want: it
+// was imported and the scan linked its transfer to the library file by path,
+// but the copy never recorded that file, because the want had already settled
+// on another copy, or had not yet got to this one.
+func copyReachingFileThroughItsTransfer(
+	t *testing.T, pool *pgxpool.Pool, targetID, fileID uuid.UUID, path string,
+) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	requestID, copyID := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO download_requests (
+			id, acquisition_target_id, provider, source_username, source_directory,
+			file_count, expected_track_count, total_size_bytes, format, score, files,
+			status, import_status, import_path, imported_at
+		)
+		VALUES ($1, $2, 'slskd', 'other peer', 'Music/Portishead', 1, 1, 25000000,
+		        'flac', 0.8, '[]'::jsonb, 'completed', 'imported', '/music', now())
+	`, requestID, targetID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO downloads (
+			download_request_id, provider, remote_path, source_username, status,
+			local_path, library_file_id
+		)
+		VALUES ($1, 'slskd', 'Music\Portishead\05 copy.flac', 'other peer', 'completed', $2, $3)
+	`, requestID, path, fileID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_target_files (
+			id, acquisition_target_id, provider, source_username, remote_path, file_name,
+			verdict, summary, download_request_id
+		)
+		VALUES ($1, $2, 'slskd', 'other peer', 'Music\Portishead\05 copy.flac', '05 copy.flac',
+		        'accepted', 'Proven by its audio.', $3)
+	`, copyID, targetID, requestID); err != nil {
+		t.Fatal(err)
+	}
+	return copyID
+}
+
+// A copy that never recorded its file is still written down as gone when that
+// file is deleted. Before, it kept reading as a copy on its way into the
+// library, and a want holding it waited for a file that was never coming.
+func TestRemovingAFileRecordsItOnACopyThatReachedItOnlyThroughItsTransfer(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+
+	path := filepath.Join(rootPath, "Portishead", "Dummy", "glory box.flac")
+	fileID := libraryFile(t, pool, rootID, path, "Portishead", "Dummy")
+	otherID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Portishead", "Dummy", "glory box.mp3"), "Portishead", "Dummy")
+	targetID := wantStoppedOnFile(t, pool, otherID)
+	copyID := copyReachingFileThroughItsTransfer(t, pool, targetID, fileID, path)
+
+	if _, err := NewRemover(pool, zerolog.Nop()).Remove(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	var removed bool
+	if err := pool.QueryRow(ctx, `
+		SELECT file_removed_at IS NOT NULL FROM acquisition_target_files WHERE id = $1
+	`, copyID).Scan(&removed); err != nil {
+		t.Fatal(err)
+	}
+	if !removed {
+		t.Fatal("the copy whose file was deleted does not say so")
+	}
+}
+
+// A copy of another remote file in the same request did not become the deleted
+// file, so it is not marked.
+func TestRemovingAFileLeavesACopyOfAnotherRemoteFileAlone(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+
+	path := filepath.Join(rootPath, "Portishead", "Dummy", "glory box.flac")
+	fileID := libraryFile(t, pool, rootID, path, "Portishead", "Dummy")
+	otherID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Portishead", "Dummy", "glory box.mp3"), "Portishead", "Dummy")
+	targetID := wantStoppedOnFile(t, pool, otherID)
+	copyID := copyReachingFileThroughItsTransfer(t, pool, targetID, fileID, path)
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_target_files SET remote_path = 'Music\Portishead\06.flac' WHERE id = $1
+	`, copyID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewRemover(pool, zerolog.Nop()).Remove(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	var removed bool
+	if err := pool.QueryRow(ctx, `
+		SELECT file_removed_at IS NOT NULL FROM acquisition_target_files WHERE id = $1
+	`, copyID).Scan(&removed); err != nil {
+		t.Fatal(err)
+	}
+	if removed {
+		t.Fatal("a copy of a different remote file was marked as deleted")
+	}
+}
+
+// The want holding such a copy is given its next look back, as it is when the
+// copy recorded its file.
+func TestRemovingAFileLetsAWantWhoseCopyReachedItThroughItsTransferLookAgain(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+
+	path := filepath.Join(rootPath, "Portishead", "Dummy", "glory box.flac")
+	fileID := libraryFile(t, pool, rootID, path, "Portishead", "Dummy")
+	otherID := libraryFile(t, pool, rootID, filepath.Join(rootPath, "Portishead", "Dummy", "glory box.mp3"), "Portishead", "Dummy")
+	targetID := wantStoppedOnFile(t, pool, otherID)
+	copyReachingFileThroughItsTransfer(t, pool, targetID, fileID, path)
+
+	if _, err := NewRemover(pool, zerolog.Nop()).Remove(ctx, fileID); err != nil {
+		t.Fatal(err)
+	}
+
+	var due bool
+	if err := pool.QueryRow(ctx, `
+		SELECT next_attempt_at IS NOT NULL FROM acquisition_targets WHERE id = $1
+	`, targetID).Scan(&due); err != nil {
+		t.Fatal(err)
+	}
+	if !due {
+		t.Fatal("the want has no next look, so nothing will ever look for it again")
+	}
+}

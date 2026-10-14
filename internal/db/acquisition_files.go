@@ -1963,6 +1963,22 @@ const (
 	RearmedByAResolutionSummary = "Library identified the file. Checking again."
 )
 
+// copyBecameFile is "this copy became library file $1". A copy records its file
+// when the want settles on it. A second accepted copy of a want that had
+// already settled never does, and neither does a copy whose file went before
+// the want got to it. For those, the transfer of the same remote file answers:
+// the scan links it to the library file by path. Read only through the link,
+// the duplicates sweep deleted their files and left them reading as copies
+// still on their way into the library.
+func copyBecameFile(prefix string) string {
+	return `(` + prefix + `library_file_id = $1 OR (` + prefix + `library_file_id IS NULL
+	    AND ` + prefix + `verdict = 'accepted'
+	    AND EXISTS (SELECT 1 FROM downloads
+	                WHERE downloads.download_request_id = ` + prefix + `download_request_id
+	                  AND downloads.remote_path = ` + prefix + `remote_path
+	                  AND downloads.library_file_id = $1)))`
+}
+
 // RecordFileRemoved writes down that this file is gone, on every copy that
 // became it.
 //
@@ -1985,9 +2001,38 @@ func RecordFileRemoved(ctx context.Context, tx pgx.Tx, fileID uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `
 		UPDATE acquisition_target_files
 		SET file_removed_at = now(), updated_at = now()
-		WHERE library_file_id = $1 AND file_removed_at IS NULL
+		WHERE file_removed_at IS NULL AND `+copyBecameFile("acquisition_target_files.")+`
 	`, fileID); err != nil {
 		return fmt.Errorf("record that the file of the copies of %s is gone: %w", fileID, err)
+	}
+	return nil
+}
+
+// CarryToKeptFile moves what pointed at a deleted copy of a recording onto the
+// copy of it that stays: the wants settled on it and the playlist entries it
+// answered.
+//
+// Both said "this recording is in the library, here", and with a kept copy that
+// is still true. Left to the foreign keys they fall back to holding nothing, and
+// an acquired want holding nothing reads as "Fetched once, file gone" for music
+// the library still has. The copies that became the deleted file are not moved:
+// they did not become the kept file, and RecordFileRemoved writes down what
+// happened to theirs.
+//
+// Call it only where the caller has proven, under the same lock, that the kept
+// file is a copy of the same recording, and before the deleted row goes.
+func CarryToKeptFile(ctx context.Context, tx pgx.Tx, doomedID, keptID uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `
+		UPDATE acquisition_targets SET acquired_library_file_id = $2, updated_at = now()
+		WHERE acquired_library_file_id = $1
+	`, doomedID, keptID); err != nil {
+		return fmt.Errorf("carry the wants settled on %s to %s: %w", doomedID, keptID, err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE playlist_entries SET owned_library_file_id = $2, updated_at = now()
+		WHERE owned_library_file_id = $1
+	`, doomedID, keptID); err != nil {
+		return fmt.Errorf("carry the playlist entries owned by %s to %s: %w", doomedID, keptID, err)
 	}
 	return nil
 }
@@ -2026,7 +2071,7 @@ func RearmWantsHoldingFile(
 		      SELECT 1 FROM acquisition_target_files
 		      WHERE acquisition_target_files.acquisition_target_id = acquisition_targets.id
 		        AND acquisition_target_files.verdict = 'accepted'
-		        AND acquisition_target_files.library_file_id = $1
+		        AND `+copyBecameFile("acquisition_target_files.")+`
 		  )
 	`, fileID, summary)
 	if err != nil {
