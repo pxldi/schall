@@ -1665,6 +1665,19 @@ func decide(evidence Evidence, recordings []musicbrainz.Recording) Outcome {
 		candidates = append(candidates, candidate)
 	}
 
+	// The file's own recording ID or ISRC names a recording that something else
+	// contradicts. Tags that fit another recording do not outweigh that, so no
+	// answer that the identifier does not name is taken on its own.
+	if identified {
+		named := conclusive[:0:0]
+		for _, entry := range conclusive {
+			if entry.pair.identifies() {
+				named = append(named, entry)
+			}
+		}
+		conclusive = named
+	}
+
 	switch {
 	case len(conclusive) == 1:
 		return resolvedOutcome(
