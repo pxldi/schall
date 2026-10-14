@@ -407,27 +407,31 @@
       </label>
     </form>
 
-    <PillSelect
-      options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
-      value={genre}
-      onchange={setGenre}
-      label="Which genre"
-      quiet
-      prefix="Genre"
-    />
+    <!-- Genre, sort and Clear filters move as one block, so a narrow window puts
+         the search box on one line and all of them on the next, never one alone. -->
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <PillSelect
+        options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
+        value={genre}
+        onchange={setGenre}
+        label="Which genre"
+        quiet
+        prefix="Genre"
+      />
 
-    <PillSelect
-      options={sorts.map((option) => ({ value: option.value, name: option.label }))}
-      value={sort}
-      onchange={(value) => setSort(value as Sort)}
-      label="How to sort artists"
-      quiet
-      prefix="Sort"
-    />
+      <PillSelect
+        options={sorts.map((option) => ({ value: option.value, name: option.label }))}
+        value={sort}
+        onchange={(value) => setSort(value as Sort)}
+        label="How to sort artists"
+        quiet
+        prefix="Sort"
+      />
 
-    {#if hasFilters}
-      <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
-    {/if}
+      {#if hasFilters}
+        <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
+      {/if}
+    </div>
   </div>
 </ControlRail>
 
