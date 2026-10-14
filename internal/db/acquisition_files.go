@@ -3387,6 +3387,14 @@ func (q *Queries) copiesToJudgeAgain(
 		           AND lower(copies.file_name) ~ '\.(flac|wav|aiff?|wv|ape)$'
 		           AND (copies.evidence->'disc' IS NULL
 		                OR coalesce(copies.evidence->'disc'->>'unavailable', '') <> ''))
+		       -- A held copy whose title or length names another song. With no
+		       -- audio check for it these are refused now (ADR 0002 amendment),
+		       -- and most belong to wants with no anchor, which no branch above
+		       -- reaches.
+		       OR (copies.verdict = 'held' AND EXISTS (
+		              SELECT 1 FROM jsonb_array_elements_text(
+		                  coalesce(copies.evidence->'differs', '[]'::jsonb)) differs(field)
+		              WHERE differs.field = 'title' OR differs.field LIKE 'duration (%'))
 		       OR ($1::uuid IS NOT NULL AND`+libraryCanSpeakForTheWant+`))
 		  AND requests.status = 'completed'
 		  AND requests.import_status <> 'validating'

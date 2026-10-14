@@ -613,3 +613,43 @@ func TestAHeldLosslessCopyIsOfferedUntilItIsLookedUpInAccurateRip(t *testing.T) 
 		})
 	}
 }
+
+// A held copy whose title names another song is offered again even when its
+// want has no sample, because the importer now refuses it when no audio check
+// spoke for it.
+func TestAHeldCopyWhoseTitleDiffersIsOfferedWithoutASample(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
+		`{"acoustic": {"recordingIds": []}, "differs": ["title"], "disc": {}}`)
+
+	offered, err := queries.CopiesToJudgeAgain(ctx)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgain() error = %v", err)
+	}
+	if len(offered) != 1 || offered[0].RequestID != requestID {
+		t.Fatalf("offered = %+v, want the held copy back", offered)
+	}
+}
+
+// A held copy that differs only on its release is not offered: no rule refuses
+// it, and judging it again would reach the same question. Its disc was already
+// looked up, so the AccurateRip branch does not offer it either.
+func TestAHeldCopyWhoseReleaseDiffersIsNotOfferedWithoutASample(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	queries, targetID, requestID := fetchedForAWant(ctx, t, pool)
+	settledCopy(ctx, t, pool, targetID, requestID, AcquiredFileHeld,
+		`{"acoustic": {"recordingIds": []}, "differs": ["release"], "disc": {}}`)
+
+	offered, err := queries.CopiesToJudgeAgain(ctx)
+	if err != nil {
+		t.Fatalf("CopiesToJudgeAgain() error = %v", err)
+	}
+	if len(offered) != 0 {
+		t.Fatalf("offered = %+v, want nothing", offered)
+	}
+}
