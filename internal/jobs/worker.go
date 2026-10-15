@@ -2612,7 +2612,26 @@ func (worker *Worker) processListensSync(ctx context.Context, job Job) {
 		return
 	}
 	if err != nil {
-		worker.finishFailed(ctx, job, fmt.Errorf("sync listens: %w", err), true)
+		cause := fmt.Errorf("sync listens: %w", err)
+		// A ListenBrainz outage loses nothing: the next pass reads on from the
+		// newest stored listen. Recording it as a failed job made 19 failed rows
+		// from 7 to 11 October out of 502s and dropped connections on their
+		// side, so a spent outage ends the job and only the wait is longer.
+		// Anything else, a 404 for an unknown account included, still fails.
+		if failure := Classify(cause); failure.Temporary() && job.Attempts >= job.MaxAttempts && ctx.Err() == nil {
+			worker.logger.Warn().Err(cause).
+				Str("job_id", job.ID.String()).
+				Str("cause", failure.Key).
+				Dur("next_in", listensUnreachable).
+				Msg("listenbrainz unreachable, listens sync waits")
+			if err := worker.queue.Complete(ctx, job); err != nil {
+				worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+				return
+			}
+			worker.queueListensSync(ctx, worker.now().Add(listensUnreachable))
+			return
+		}
+		worker.finishFailed(ctx, job, cause, true)
 		if spent(job, err) {
 			worker.queueListensSync(ctx, worker.now().Add(listensUnreachable))
 		}

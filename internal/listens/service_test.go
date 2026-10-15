@@ -194,3 +194,32 @@ func TestSyncReadsOnBelowTheOldestListenUntilTheFloor(t *testing.T) {
 		t.Errorf("result = %+v, inserted %d", result, len(store.inserted))
 	}
 }
+
+// Below the account's first listen there is nothing, and asking every five
+// minutes anyway was one of the ways a sync failed when ListenBrainz did.
+func TestSyncDoesNotReadBelowTheAccountsFirstListen(t *testing.T) {
+	now := time.Date(2026, time.October, 15, 0, 0, 0, 0, time.UTC)
+	first := time.Date(2026, time.January, 10, 16, 43, 11, 0, time.UTC)
+	var asked []string
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		asked = append(asked, request.URL.RawQuery)
+		_, _ = response.Write([]byte(fmt.Sprintf(
+			`{"payload":{"count":0,"listens":[],"oldest_listen_ts":%d}}`, first.Unix())))
+	}))
+	defer server.Close()
+
+	store := &fakeStore{settings: enabled(), bounds: db.ListenBounds{
+		Count:  4195,
+		Oldest: pgtype.Timestamptz{Time: first, Valid: true},
+		Newest: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+	}}
+	service := NewService(store, "schall-test/0.0", zerolog.Nop()).
+		WithEndpoint(server.URL, nil, func() time.Time { return now })
+
+	if _, err := service.Sync(context.Background()); err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if len(asked) != 1 || strings.Contains(asked[0], "max_ts") {
+		t.Fatalf("asked %v, want the forward page alone", asked)
+	}
+}

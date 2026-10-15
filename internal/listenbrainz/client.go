@@ -593,7 +593,9 @@ func (err *HTTPError) Error() string {
 	if err.Message == "" {
 		return fmt.Sprintf("listenbrainz returned HTTP %d", err.StatusCode)
 	}
-	return fmt.Sprintf("listenbrainz refused the request: %s", err.Message)
+	// The status stays in the sentence: a failed job keeps only this text, and
+	// the status is what tells an outage (5xx) from a refusal (4xx) there.
+	return fmt.Sprintf("listenbrainz returned HTTP %d: %s", err.StatusCode, err.Message)
 }
 
 // Unwrap names the statuses that mean "not now" as backpressure, and the one
@@ -699,14 +701,22 @@ type Listen struct {
 // ErrNoListens is the service saying the account has no listens in the range.
 var ErrNoListens = errors.New("listenbrainz has no listens for this account")
 
+// ListensPage is one page of an account's history, and the moment of the
+// account's first listen, which the service sends with every page, the empty
+// ones too. OldestListenedAt is zero when it was not sent.
+type ListensPage struct {
+	Listens          []Listen
+	OldestListenedAt time.Time
+}
+
 // Listens reads one page of the account's history, newest first, at most
 // count entries (the service caps a page at 1000). A zero minTS or maxTS is
 // not sent, which is how the caller asks from the beginning or up to now.
 func (client *Client) Listens(
 	ctx context.Context, username string, minTS, maxTS time.Time, count int,
-) ([]Listen, error) {
+) (ListensPage, error) {
 	if strings.TrimSpace(username) == "" {
-		return nil, errors.New("listenbrainz username is required")
+		return ListensPage{}, errors.New("listenbrainz username is required")
 	}
 	query := url.Values{}
 	if !minTS.IsZero() {
@@ -720,7 +730,8 @@ func (client *Client) Listens(
 	}
 	var payload struct {
 		Payload struct {
-			Listens []struct {
+			OldestListenTS int64 `json:"oldest_listen_ts"`
+			Listens        []struct {
 				ListenedAt int64 `json:"listened_at"`
 				Metadata   struct {
 					ArtistName  string `json:"artist_name"`
@@ -739,12 +750,16 @@ func (client *Client) Listens(
 	path := "/1/user/" + url.PathEscape(username) + "/listens"
 	err := client.get(ctx, client.baseURL, path, query, ErrNoListens, &payload)
 	if errors.Is(err, ErrNoListens) {
-		return nil, nil
+		return ListensPage{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return ListensPage{}, err
 	}
 
+	var page ListensPage
+	if payload.Payload.OldestListenTS > 0 {
+		page.OldestListenedAt = time.Unix(payload.Payload.OldestListenTS, 0).UTC()
+	}
 	listens := make([]Listen, 0, len(payload.Payload.Listens))
 	for _, entry := range payload.Payload.Listens {
 		artist := strings.TrimSpace(entry.Metadata.ArtistName)
@@ -770,7 +785,8 @@ func (client *Client) Listens(
 		}
 		listens = append(listens, listen)
 	}
-	return listens, nil
+	page.Listens = listens
+	return page, nil
 }
 
 // ErrNoPopularity is the service saying it has no listen counts for the artist

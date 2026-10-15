@@ -2209,6 +2209,64 @@ func TestAListensSyncThatFailedAfterStoringARecordingAsksForTheOwnSweep(t *testi
 	}
 }
 
+// runSpentListensSync is runListensSync on the job's last attempt.
+func runSpentListensSync(t *testing.T, err error) (*fakeQueue, uuid.UUID, time.Time) {
+	t.Helper()
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).
+		WithListens(fakeListensSyncer{err: err})
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	worker.now = func() time.Time { return now }
+	jobID := uuid.New()
+	worker.process(context.Background(), Job{ID: jobID, Kind: SyncListens, Attempts: 3, MaxAttempts: 3})
+	return queue, jobID, now
+}
+
+// The next pass reads on from the newest stored listen, so an outage on the
+// ListenBrainz side loses nothing and is no failed job. These are the errors
+// the live jobs table held from 7 to 11 October 2026.
+func TestAListensSyncSpentByAListenBrainzOutageEndsWithoutAFailure(t *testing.T) {
+	for _, outage := range []error{
+		errors.New("read listens after 2026-10-07T12:47:15Z: listenbrainz returned HTTP 502"),
+		errors.New(`read listens after 2026-10-07T12:47:15Z: Get "https://api.listenbrainz.org/1/user/listener/listens?count=500": unexpected EOF`),
+		errors.New("read listens before 2026-01-10T16:43:11Z: listenbrainz returned HTTP 500: An unknown error occured."),
+	} {
+		queue, jobID, now := runSpentListensSync(t, outage)
+		if queue.failed != uuid.Nil || queue.completed != jobID {
+			t.Errorf("%v: failed = %s, completed = %s, want the job completed", outage, queue.failed, queue.completed)
+		}
+		if !queue.listensSyncQueuedFor.Equal(now.Add(listensUnreachable)) {
+			t.Errorf("%v: next sync at %s, want %s", outage, queue.listensSyncQueuedFor, now.Add(listensUnreachable))
+		}
+	}
+}
+
+func TestAListensSyncWithAttemptsLeftRetriesAnOutage(t *testing.T) {
+	queue := &fakeQueue{}
+	worker := NewWorker(queue, fakeProvider{}, zerolog.Nop()).
+		WithListens(fakeListensSyncer{err: errors.New("read listens after x: listenbrainz returned HTTP 502")})
+	worker.now = func() time.Time { return time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC) }
+	jobID := uuid.New()
+	worker.process(context.Background(), Job{ID: jobID, Kind: SyncListens, Attempts: 1, MaxAttempts: 3})
+
+	if queue.retried != jobID || queue.completed != uuid.Nil {
+		t.Fatalf("retried = %s, completed = %s, want a retry", queue.retried, queue.completed)
+	}
+}
+
+// An unknown account is an answer, and the person has to change the username.
+func TestAListensSyncRefusedByListenBrainzStillFails(t *testing.T) {
+	queue, jobID, now := runSpentListensSync(t,
+		errors.New("read listens after x: listenbrainz returned HTTP 404: Cannot find user: listener"))
+
+	if queue.failed != jobID || queue.completed != uuid.Nil {
+		t.Fatalf("failed = %s, completed = %s, want the job failed", queue.failed, queue.completed)
+	}
+	if !queue.listensSyncQueuedFor.Equal(now.Add(listensUnreachable)) {
+		t.Errorf("next sync at %s, want %s", queue.listensSyncQueuedFor, now.Add(listensUnreachable))
+	}
+}
+
 func TestAnOwnRecommendationPassThatSpentItsRetriesQueuesTheNextDay(t *testing.T) {
 	queue, jobID, now := runOwnSweep(t, &fakeOwnRecommendationSweeper{err: errors.New("database went away")},
 		recommendations.OwnSweepPosition{}, 3)
