@@ -3,6 +3,7 @@
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import Icon from '$lib/components/Icon.svelte';
   import { page } from '$app/state';
+  import { untrack } from 'svelte';
   import {
     api,
     ApiError,
@@ -54,6 +55,9 @@
   let { show }: { show: 'sources' | 'library' | 'automation' } = $props();
 
   const queryClient = useQueryClient();
+  // Each settings route renders its own instance, so the category is fixed
+  // for the life of this component.
+  const showing = untrack(() => show);
   const settings = createQuery({ queryKey: ['slskd-settings'], queryFn: api.slskdSettings });
   const imports = createQuery({ queryKey: ['import-settings'], queryFn: api.importSettings });
   const spotify = createQuery({ queryKey: ['spotify-settings'], queryFn: api.spotifySettings });
@@ -73,7 +77,7 @@
   const libraryReleases = createQuery({
     queryKey: ['releases', 'library-head'],
     queryFn: () => api.releases({ scope: 'library', limit: 8 }),
-    enabled: show === 'library'
+    enabled: showing === 'library'
   });
 
   // A passing connection check says a service answers. The jobs that use it
@@ -81,7 +85,7 @@
   const failedJobs = createQuery({
     queryKey: ['jobs-failed'],
     queryFn: api.failedJobs,
-    enabled: show === 'sources'
+    enabled: showing === 'sources'
   });
   const failures = (source: SourceName) => failedThisWeek($failedJobs.data, source);
 
