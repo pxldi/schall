@@ -937,3 +937,41 @@ func TestAValidationWhoseImportFailedForGoodIsNotQueuedAgain(t *testing.T) {
 		t.Fatalf("import jobs = %d, want only the failed one", queued)
 	}
 }
+
+// A file filed where an earlier download's file used to be takes the path over.
+// The earlier file has gone, or the import could not have written there: this
+// is a damaged copy being replaced, or a song fetched again after its first
+// copy was removed. The unique path used to refuse the import outright.
+func TestAnImportTakesOverAPathAnEarlierDownloadStillNamed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	const path = "/music/Artist/Album/01.flac"
+	imported := map[string]ImportedDownloadFile{`Music\Album\01.flac`: {LocalPath: path}}
+
+	queries, earlierID := importedRelease(ctx, t, pool)
+	if _, err := queries.ClaimDownloadImport(ctx, earlierID); err != nil {
+		t.Fatal(err)
+	}
+	if err := queries.CompleteDownloadImport(ctx, earlierID, "/music", "/music/Artist/Album", imported); err != nil {
+		t.Fatal(err)
+	}
+	_, laterID := importedRelease(ctx, t, pool)
+	if _, err := queries.ClaimDownloadImport(ctx, laterID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := queries.CompleteDownloadImport(ctx, laterID, "/music", "/music/Artist/Album", imported); err != nil {
+		t.Fatalf("CompleteDownloadImport() error = %v", err)
+	}
+
+	var holder uuid.UUID
+	if err := pool.QueryRow(ctx,
+		"SELECT download_request_id FROM downloads WHERE local_path = $1", path,
+	).Scan(&holder); err != nil {
+		t.Fatal(err)
+	}
+	if holder != laterID {
+		t.Fatalf("path held by %s, want the later download %s", holder, laterID)
+	}
+}

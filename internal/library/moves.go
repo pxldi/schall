@@ -899,6 +899,14 @@ func (mover *Mover) check(ctx context.Context, tx pgx.Tx, move claimedMove) (str
 // the player (ADR 0010), and download_import_reviews.detail is the
 // audited line saying where an import landed.
 func followPath(ctx context.Context, tx pgx.Tx, from, to string) error {
+	// A move only runs onto an empty destination, so a download still naming
+	// that path describes a file that has gone and would otherwise refuse the move.
+	if _, err := tx.Exec(ctx, `
+		UPDATE downloads SET local_path = NULL, library_file_id = NULL, updated_at = now()
+		WHERE local_path = $1
+	`, to); err != nil {
+		return fmt.Errorf("release the download provenance left at %s: %w", to, err)
+	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE downloads SET local_path = $2, updated_at = now() WHERE local_path = $1
 	`, from, to); err != nil {
