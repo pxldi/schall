@@ -173,7 +173,7 @@ func TestTheMigrationLeavesAnImportWhoseWantWasRemoved(t *testing.T) {
 	fixture := newRetryPathFixture(t)
 	targetID := fixture.want()
 	requestID := fixture.setAside(targetID, `Music\Pashanim\01.flac`, refusedByAnOldPath)
-	fixture.exec(`UPDATE `+retryPathSchema+`.acquisition_targets SET status = 'not_wanted' WHERE id = $1`, targetID)
+	fixture.exec(`UPDATE `+retryPathSchema+`.acquisition_targets SET status = 'not_wanted', not_wanted_at = now() WHERE id = $1`, targetID)
 
 	fixture.migrate()
 
