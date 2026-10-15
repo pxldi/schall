@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, setup, waitFor, within } from '@tes
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { AcquiredCopy, AcquisitionCandidate, DownloadRequest, ReviewItem } from '$lib/api';
 
-// What the review screen is now: three kinds and nothing else, one card grid
-// or row-list per question, right-aligned footer buttons in a fixed order.
+// What the review screen is now: three kinds and nothing else, the actions in
+// the panel's header in a fixed order, and copies compared in one table.
 // Identity, match and duplicate questions moved to Library; this file no
 // longer opens on them at all.
 
@@ -257,89 +257,108 @@ async function open(text: string) {
   await screen.findAllByText(text);
 }
 
+/** The names of the buttons in the panel's header, in order. */
+function headerActions() {
+  const header = screen.getByRole('heading', { level: 2 }).closest('header')!;
+  return within(header)
+    .getAllByRole('button')
+    .map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim());
+}
+
 describe('the three kinds Review holds', () => {
-  it('shows a downloaded question with Skip, Don\'t want, None of these and Accept, in order', async () => {
+  it('heads a downloaded question with None, Skip, Wrong song and Remove, in order', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const footer = screen.getByRole('button', { name: 'Accept copy' }).closest('footer')!;
-    const labels = within(footer)
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove', 'None of these', 'Accept copy']);
+    expect(headerActions()).toEqual(['None of these', 'Skip', 'Wrong song', 'Remove']);
   });
 
-  it('does not make Accept copy the main action when the chosen copy has a field that differs', async () => {
+  it('puts an Accept under every copy', async () => {
+    piles.wants = [
+      { ...want('copies'), copies: [copy({ id: 'copy-1' }), copy({ id: 'copy-2', name: 'evensong-2.flac' })] }
+    ];
+    await open('Evensong');
+
+    expect(screen.getByRole('button', { name: 'Accept Copy 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept Copy 2' })).toBeTruthy();
+  });
+
+  it('makes Accept on the chosen copy the main action', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    expect(screen.getByRole('button', { name: 'Accept Copy 1' }).getAttribute('data-variant')).toBe(
+      'primary'
+    );
+  });
+
+  it('does not make Accept the main action when the chosen copy has a field that differs', async () => {
     const differing = copy();
     differing.evidence = { ...differing.evidence!, agrees: ['title'], differs: ['artist'] };
     piles.wants = [{ ...want('copies'), copies: [differing] }];
     await open('Evensong');
 
-    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
+    expect(screen.getByRole('button', { name: 'Accept Copy 1' }).getAttribute('data-variant')).toBe(
       'outline'
     );
   });
 
-  it('shows a version question with Skip, Don\'t want and Use, in order', async () => {
+  it('heads a version question with Use version, Skip and Remove, in order', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
-    const footer = screen.getByRole('button', { name: 'Use version' }).closest('footer')!;
-    const labels = within(footer)
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove', 'Use version']);
+    expect(headerActions()).toEqual(['Use version', 'Skip', 'Remove']);
   });
 
-  it('shows a folder question with Check again before Skip', async () => {
+  it('heads a folder question with Check again before Skip', async () => {
     piles.downloads = [download()];
     await open('Signal Fires');
 
-    const footer = screen.getByRole('button', { name: 'Check again' }).closest('footer')!;
-    const labels = within(footer)
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Check again', 'Skip']);
+    expect(headerActions()).toEqual(['Check again', 'Skip']);
   });
 
-  it('carries a wrong song link on a downloaded question', async () => {
-    piles.wants = [want('copies')];
-    await open('Evensong');
-    expect(screen.getByRole('button', { name: 'Wrong song' })).toBeTruthy();
-  });
-
-  it('puts the wanted entry beside the copies, with Wrong song on it', async () => {
+  it('shows what was wished in its own column beside the copies', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const card = screen.getByText('On your wishlist').parentElement!.parentElement!;
-    expect(within(card).getByText('Nine Lanterns')).toBeTruthy();
-    expect(within(card).getByRole('button', { name: 'Wrong song' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Wrong song' }).closest('footer')).toBeNull();
+    const wished = screen.getByText('Wished').closest('th')!;
+    const album = screen.getByText('Nine Lanterns').closest('td')!;
+    expect(wished.cellIndex).toBe(album.cellIndex);
   });
 
-  // At the foot of the card, a 753 px window opened with Wrong song under the
-  // sticky decision bar.
-  it('heads the wanted entry with Wrong song, before what the entry says', async () => {
-    piles.wants = [want('copies')];
+  it('marks a copy field the grader found to differ', async () => {
+    const differing = copy();
+    differing.evidence = {
+      ...differing.evidence!,
+      observed: { ...differing.evidence!.observed, album: 'Nine Lanterns (Deluxe)' },
+      agrees: ['title'],
+      differs: ['album']
+    };
+    piles.wants = [{ ...want('copies'), copies: [differing] }];
     await open('Evensong');
 
-    const wrong = screen.getByRole('button', { name: 'Wrong song' });
-    const album = screen.getByText('Nine Lanterns');
-    expect(wrong.compareDocumentPosition(album) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Nine Lanterns (Deluxe)').getAttribute('aria-invalid')).toBe('true');
   });
 
-  it('keeps the reason for a missing sample behind a disclosure', async () => {
+  it('keeps the reason for a missing sample in the cell tooltip', async () => {
     const reason = 'This entry carries no ISRC, and a preview is only ever fetched by ISRC.';
     const item = want('copies');
     item.target.anchorUnavailable = reason;
     piles.wants = [item];
     await open('Evensong');
 
-    expect(screen.getAllByText('No sample')).toHaveLength(1);
-    const details = screen.getByText(reason).closest('details')!;
-    expect(details.open).toBe(false);
-    expect(within(details).getByText('Why no sample')).toBeTruthy();
+    expect(screen.queryByText(reason)).toBeNull();
+    expect(within(screen.getByRole('table')).getByText('None').closest('td')!.getAttribute('title')).toBe(
+      reason
+    );
+  });
+
+  it('names why a question is here beside its title', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    const header = screen.getByRole('heading', { level: 2 }).closest('header')!;
+    expect(within(header).getByText('No audio check')).toBeTruthy();
   });
 
   it('carries no wrong song link on a version question', async () => {
@@ -355,19 +374,23 @@ describe('the three kinds Review holds', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Review' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Evensong' })).toBeTruthy();
   });
+
+  it('puts the volume beside the player', async () => {
+    piles.wants = [want('copies')];
+    await open('Evensong');
+
+    const volume = screen.getByRole('slider', { name: 'Volume' });
+    const meter = screen.getByRole('meter', { name: 'Level' });
+    expect(volume.closest('div')).toBe(meter.parentElement);
+  });
 });
 
 describe('a stopped want', () => {
-  it('shows "In your library" with no None of these button', async () => {
+  it('heads the question with Skip, Wrong song and Remove, and no None of these', async () => {
     piles.wants = [stoppedWant()];
     await open('In your library');
 
-    expect(screen.queryByRole('button', { name: 'None of these' })).toBeNull();
-    const footer = screen.getByRole('button', { name: 'Accept copy' }).closest('footer')!;
-    const labels = within(footer)
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim());
-    expect(labels).toEqual(['Skip', 'Remove', 'Accept copy']);
+    expect(headerActions()).toEqual(['Skip', 'Wrong song', 'Remove']);
   });
 
   it('shows the file it is filed as', async () => {
@@ -377,7 +400,7 @@ describe('a stopped want', () => {
     expect(screen.getByText('as “OUT WEST (feat. Young Thug)”')).toBeTruthy();
   });
 
-  it('marks the credit row in fail colour where the file disagrees with the want', async () => {
+  it('marks the credit in fail colour where the file disagrees with the want', async () => {
     piles.wants = [stoppedWant()];
     await open('In your library');
 
@@ -385,26 +408,26 @@ describe('a stopped want', () => {
     expect(credit.getAttribute('aria-invalid')).toBe('true');
   });
 
-  it('does not make Accept copy the main action when the credit names somebody else', async () => {
+  it('does not make Accept the main action when the credit names somebody else', async () => {
     piles.wants = [stoppedWant()];
     await open('In your library');
 
-    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
-      'outline'
-    );
+    expect(
+      screen.getByRole('button', { name: 'Accept In your library' }).getAttribute('data-variant')
+    ).toBe('outline');
   });
 
-  it('makes Accept copy the main action when the credit and title agree', async () => {
+  it('makes Accept the main action when the credit and title agree', async () => {
     const stopped = stoppedWant();
     piles.wants = [{ ...stopped, fileArtist: 'JACKBOYS', fileTitle: 'OUT WEST' }];
     await open('In your library');
 
-    expect(screen.getByRole('button', { name: 'Accept copy' }).getAttribute('data-variant')).toBe(
-      'primary'
-    );
+    expect(
+      screen.getByRole('button', { name: 'Accept In your library' }).getAttribute('data-variant')
+    ).toBe('primary');
   });
 
-  it('renders a credit-only stopped want as an ordinary downloaded card', async () => {
+  it('renders a credit-only stopped want as an ordinary downloaded question', async () => {
     piles.wants = [creditOnlyStoppedWant()];
     await open('Evensong');
 
@@ -414,35 +437,42 @@ describe('a stopped want', () => {
 });
 
 describe('the rail', () => {
-  it('filters by kind and counts every chip', async () => {
+  it('counts the questions behind each reason', async () => {
     piles.wants = [want('copies'), want('resolution', 'ffffffff-0000-4000-8000-000000000009')];
     await open('Evensong');
 
     expect(screen.getByRole('button', { name: 'All 2' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Downloaded 1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Version 1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Folder 0' })).toBeTruthy();
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Version 1' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Use version' })).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'No audio check 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Which version 1' })).toBeTruthy();
   });
-});
 
-describe('a filter that matches nothing', () => {
-  it('keeps the rail so another kind can be chosen', async () => {
+  it('lists no reason the queue holds none of', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Folder 0' }));
-    expect(await screen.findByText('Nothing of this kind')).toBeTruthy();
-    expect(screen.queryByText('Nothing to decide')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'All 1' }));
-    await waitFor(() => expect(screen.queryByText('Nothing of this kind')).toBeNull());
+    expect(screen.queryByRole('button', { name: /^Folder/ })).toBeNull();
+  });
+
+  it('opens the questions of the reason chosen', async () => {
+    piles.wants = [want('copies'), want('resolution', 'ffffffff-0000-4000-8000-000000000009')];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Which version 1' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Use version' })).toBeTruthy());
+  });
+
+  it('leaves All in the rail while a reason is chosen', async () => {
+    piles.wants = [want('copies'), want('resolution', 'ffffffff-0000-4000-8000-000000000009')];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Which version 1' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'All 2' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Use version' })).toBeNull());
   });
 });
 
 describe('a queue longer than one page', () => {
-  it('shows an empty kind at once when the count says there is none', async () => {
+  it('marks a reason count as partial while pages remain unread', async () => {
     const first = want('copies');
     vi.stubGlobal(
       'fetch',
@@ -466,10 +496,8 @@ describe('a queue longer than one page', () => {
     );
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Version 0' }));
-    expect(await screen.findByText('Nothing of this kind')).toBeTruthy();
-    expect(screen.queryByLabelText('Reading more of the queue')).toBeNull();
-    expect(screen.queryByText('Loading more…')).toBeNull();
+    expect(screen.getByRole('button', { name: 'All 300' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'No audio check 1+' })).toBeTruthy();
   });
 
   it('keeps the loaded questions when the next page fails', async () => {
@@ -497,10 +525,10 @@ describe('a queue longer than one page', () => {
 
     expect(await screen.findByText("Couldn't load the library.")).toBeTruthy();
     expect(screen.getAllByText('Evensong').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Accept copy' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept Copy 1' })).toBeTruthy();
   });
 
-  it('counts from the server and reads the next page near the end', async () => {
+  it('counts All from the server and reads on to count the reasons', async () => {
     const first = want('copies');
     const second = want('copies', 'ffffffff-0000-4000-8000-000000000042');
     vi.stubGlobal(
@@ -530,14 +558,14 @@ describe('a queue longer than one page', () => {
     );
     await open('Evensong');
 
-    // The Folder figure is the server's, not the length of a page it sent.
+    // The figure is the server's, not the length of a page it sent.
     expect(screen.getByRole('button', { name: 'All 8534' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Folder 8532' })).toBeTruthy();
-    // One row loaded and one more on the server is inside the read-ahead
-    // window, so the second page is asked for at the offset the first ended.
+    // The second page is asked for at the offset the first ended, and its
+    // question joins the count.
     await waitFor(() =>
       expect(requested.some((url) => url.startsWith('/api/v1/review-queue?limit=100&offset=1'))).toBe(true)
     );
+    expect(await screen.findByRole('button', { name: 'No audio check 2' })).toBeTruthy();
   });
 });
 
@@ -580,11 +608,11 @@ describe('the Enter shortcut', () => {
     expect(requested.some((url) => url.endsWith('/accept'))).toBe(false);
   });
 
-  it('does not accept a copy when Enter lands on the card\'s Play control', async () => {
+  it('does not accept a copy when Enter lands on a copy\'s Play control', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    const play = screen.getByRole('button', { name: /^Play /});
+    const play = screen.getByRole('button', { name: 'Play Copy 1' });
     play.focus();
     await fireEvent.keyDown(play, { key: 'Enter' });
 
@@ -592,7 +620,7 @@ describe('the Enter shortcut', () => {
   });
 });
 
-describe('the copy grid as a radio group', () => {
+describe('the copy columns as a radio group', () => {
   it('moves the checked copy with ArrowRight', async () => {
     piles.wants = [
       { ...want('copies'), copies: [copy({ id: 'copy-1' }), copy({ id: 'copy-2', name: 'evensong-2.flac' })] }

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, setup, waitFor } from '@testing-lib
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { AcquiredCopy, AcquisitionTarget, ReviewItem } from '$lib/api';
 
-// Two ways to decide faster: a whole album from one batch, and listening
+// Two ways to decide faster: a whole album from one batch, and stepping
 // through the queue with Y and N. Each still sends the requests the single
 // view sends, one per answer, and these tests hold them to that.
 
@@ -207,12 +207,11 @@ describe('deciding an album at once', () => {
   });
 });
 
-describe('listening mode', () => {
+describe('the keys', () => {
   it('accepts the chosen copy on Y', async () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
     await fireEvent.keyDown(window, { key: 'y' });
 
     await waitFor(() => expect(writes().length).toBe(1));
@@ -223,43 +222,53 @@ describe('listening mode', () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
     await fireEvent.keyDown(window, { key: 'n' });
 
     await waitFor(() => expect(writes().length).toBe(1));
     expect(writes()[0]).toEqual({ method: 'POST', url: '/api/v1/acquisition-targets/a/none-of-these' });
   });
 
-  it('sends nothing for Y or N outside listening mode', async () => {
+  it('sends nothing for Y or N while the volume has focus', async () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
 
-    await fireEvent.keyDown(window, { key: 'y' });
-    await fireEvent.keyDown(window, { key: 'n' });
+    const volume = screen.getByRole('slider', { name: 'Volume' });
+    volume.focus();
+    await fireEvent.keyDown(volume, { key: 'y' });
+    await fireEvent.keyDown(volume, { key: 'n' });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(writes()).toEqual([]);
   });
 
-  it('plays nothing by itself when the mode opens', async () => {
+  it('plays nothing by itself when the page opens', async () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
     const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
-    // A key on the page first, so the browser would let audio start.
-    await fireEvent.keyDown(window, { key: 'x' });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
     play.mockClear();
     await fireEvent(document.querySelector('audio')!, new Event('loadedmetadata'));
 
     expect(play).not.toHaveBeenCalled();
   });
 
+  it('plays the next question by itself once the reader has played one', async () => {
+    wants = [want('a', 'Evensong', 'Nine Lanterns'), want('b', 'Watchfire', 'Nine Lanterns')];
+    await open('Evensong');
+
+    await fireEvent.keyDown(window, { key: ' ' });
+    await fireEvent.keyDown(window, { key: 'j' });
+    await screen.findByRole('heading', { level: 2, name: 'Watchfire' });
+    const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
+    play.mockClear();
+    await fireEvent(document.querySelector('audio')!, new Event('loadedmetadata'));
+
+    expect(play).toHaveBeenCalled();
+  });
+
   it('pauses a playing copy on Space', async () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
     const pause = HTMLMediaElement.prototype.pause as ReturnType<typeof vi.fn>;
     const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
     pause.mockClear();
@@ -275,7 +284,6 @@ describe('listening mode', () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Listening mode' }));
     const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
     play.mockClear();
     await fireEvent.keyDown(window, { key: ' ' });

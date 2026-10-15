@@ -12,6 +12,7 @@ import {
   listenFrom,
   questionsFrom,
   rankCopies,
+  reasonOf,
   tierOf,
   verdict,
   waitingLabel
@@ -569,5 +570,67 @@ describe('deciding an album at once', () => {
     });
 
     expect(batchProof(disagreed)).toBe('');
+  });
+});
+
+describe('reasonOf', () => {
+  const asked = (item: ReviewItem) => questionsFrom({ wants: [item], imports: [] })[0];
+  const held = (extra: Partial<AcquiredCopy['evidence']> = {}, path = 'Music/Ascension Day.flac') =>
+    copy({
+      verdict: 'held',
+      path,
+      evidence: { name: 'Ascension Day.flac', agrees: [], differs: [], problems: [], ...extra }
+    });
+
+  it('names a copy nothing could listen to', () => {
+    expect(reasonOf(asked(want({ copies: [held()] })))).toBe('nocheck');
+  });
+
+  it('names a copy AcoustID named some recording for', () => {
+    const named = held({ acoustic: { recordingIds: ['other'], agrees: false } });
+    expect(reasonOf(asked(want({ copies: [named] })))).toBe('acoustid');
+  });
+
+  it('names audio whose leading cluster holds several recordings', () => {
+    const shared = held({
+      acoustic: { recordingIds: ['a', 'b'], clusters: [{ recordingIds: ['a', 'b'], score: 0.9 }] }
+    });
+    expect(reasonOf(asked(want({ copies: [shared] })))).toBe('same');
+  });
+
+  it('names a sample measured with no answer', () => {
+    const between = held({ anchor: { rate: 0.2, measured: true } });
+    expect(reasonOf(asked(want({ copies: [between] })))).toBe('sample');
+  });
+
+  it('names a copy whose path says live when the wish does not', () => {
+    expect(reasonOf(asked(want({ copies: [held({}, 'Music/Live at Reading/Ascension Day.flac')] })))).toBe(
+      'live'
+    );
+  });
+
+  it('does not call a copy live for a word that only contains live', () => {
+    expect(reasonOf(asked(want({ copies: [held({}, 'Music/Oliver/Ascension Day.flac')] })))).toBe('nocheck');
+  });
+
+  it('names a want that is still waiting before anything its copies say', () => {
+    const shared = held({
+      acoustic: { recordingIds: ['a', 'b'], clusters: [{ recordingIds: ['a', 'b'], score: 0.9 }] }
+    });
+    expect(reasonOf(asked(want({ copies: [shared], waitingFor: 'musicbrainz' })))).toBe('waiting');
+  });
+
+  it('names a stopped want whose file is filed as another recording', () => {
+    const filed = copy({ verdict: 'accepted', libraryFileId: 'file-1' });
+    expect(reasonOf(asked(want({ kind: 'stopped', copies: [filed] })))).toBe('library');
+  });
+
+  it('names a version question by its kind', () => {
+    expect(reasonOf(asked(want({ kind: 'resolution' })))).toBe('version');
+  });
+
+  it('names a folder question by its kind', () => {
+    const folder = questionsFrom({ wants: [], imports: [download({ importEvidence: evidence })] })[0];
+    expect(reasonOf(folder)).toBe('folder');
   });
 });
