@@ -138,16 +138,19 @@ func (service *Service) Sync(ctx context.Context) (Result, error) {
 	if bounds.Count == 0 {
 		return service.backfill(ctx, client, username, service.now())
 	}
-	result, err := service.forward(ctx, client, username, bounds.Newest.Time)
+	result, accountOldest, err := service.forward(ctx, client, username, bounds.Newest.Time)
 	if err != nil || result.More {
 		return result, err
 	}
 	// A first run that stopped at its page budget left older history unread,
 	// and the oldest row says how far it got. Reading on below it, until the
 	// floor, is what makes a history longer than one run's budget complete.
-	// An account younger than the floor costs one empty page per run here.
+	// Once the oldest row is the account's first listen there is nothing below
+	// it. Asking anyway cost a second request every five minutes, and two of
+	// the nineteen failed syncs from 7 to 11 October were that empty read.
 	floor := service.now().Add(-backfillDays * 24 * time.Hour)
-	if bounds.Oldest.Valid && bounds.Oldest.Time.After(floor) {
+	reachedFirstListen := !accountOldest.IsZero() && !bounds.Oldest.Time.After(accountOldest)
+	if bounds.Oldest.Valid && bounds.Oldest.Time.After(floor) && !reachedFirstListen {
 		older, err := service.backfill(ctx, client, username, bounds.Oldest.Time)
 		result.Fetched += older.Fetched
 		result.Stored += older.Stored
@@ -158,22 +161,27 @@ func (service *Service) Sync(ctx context.Context) (Result, error) {
 	return result, nil
 }
 
+// forward reads the listens after from, and says when the account's first
+// listen was, as the service reported it (zero when it did not).
 func (service *Service) forward(
 	ctx context.Context, client *listenbrainz.Client, username string, from time.Time,
-) (Result, error) {
+) (Result, time.Time, error) {
 	var result Result
+	var accountOldest time.Time
 	minTS := from
 	for page := 0; page < pagesPerRun; page++ {
-		listens, err := client.Listens(ctx, username, minTS, time.Time{}, pageSize)
+		answer, err := client.Listens(ctx, username, minTS, time.Time{}, pageSize)
 		if err != nil {
-			return result, fmt.Errorf("read listens after %s: %w", minTS.Format(time.RFC3339), err)
+			return result, accountOldest, fmt.Errorf("read listens after %s: %w", minTS.Format(time.RFC3339), err)
 		}
+		accountOldest = answer.OldestListenedAt
+		listens := answer.Listens
 		if len(listens) == 0 {
-			return result, nil
+			return result, accountOldest, nil
 		}
 		stored, err := service.store.InsertListens(ctx, converted(listens))
 		if err != nil {
-			return result, err
+			return result, accountOldest, err
 		}
 		result.Fetched += len(listens)
 		result.Stored += stored.Stored
@@ -185,12 +193,12 @@ func (service *Service) forward(
 			}
 		}
 		if len(listens) < pageSize || !newest.After(minTS) {
-			return result, nil
+			return result, accountOldest, nil
 		}
 		minTS = newest
 	}
 	result.More = true
-	return result, nil
+	return result, accountOldest, nil
 }
 
 func (service *Service) backfill(
@@ -200,10 +208,11 @@ func (service *Service) backfill(
 	maxTS := from
 	floor := service.now().Add(-backfillDays * 24 * time.Hour)
 	for page := 0; page < pagesPerRun; page++ {
-		listens, err := client.Listens(ctx, username, time.Time{}, maxTS, pageSize)
+		answer, err := client.Listens(ctx, username, time.Time{}, maxTS, pageSize)
 		if err != nil {
 			return result, fmt.Errorf("read listens before %s: %w", maxTS.Format(time.RFC3339), err)
 		}
+		listens := answer.Listens
 		if len(listens) == 0 {
 			return result, nil
 		}

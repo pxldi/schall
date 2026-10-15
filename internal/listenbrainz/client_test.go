@@ -624,10 +624,11 @@ func TestListensReadsAPageWithItsMapping(t *testing.T) {
 		]}}`))
 	})
 
-	listens, err := client.Listens(context.Background(), "listener", time.Time{}, time.Unix(1788627200, 0), 2)
+	page, err := client.Listens(context.Background(), "listener", time.Time{}, time.Unix(1788627200, 0), 2)
 	if err != nil {
 		t.Fatalf("Listens() error = %v", err)
 	}
+	listens := page.Listens
 	if len(listens) != 1 {
 		t.Fatalf("read %d listens, want 1 (the one with no artist name is dropped)", len(listens))
 	}
@@ -646,13 +647,35 @@ func TestListensReadsAPageWithItsMapping(t *testing.T) {
 	}
 }
 
+func TestListensReadsTheAccountsFirstListen(t *testing.T) {
+	client := newTestClient(t, func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(`{"payload":{"count":0,"listens":[],"oldest_listen_ts":1768063391}}`))
+	})
+	page, err := client.Listens(context.Background(), "listener", time.Unix(1792005468, 0), time.Time{}, 10)
+	if err != nil {
+		t.Fatalf("Listens() error = %v", err)
+	}
+	if !page.OldestListenedAt.Equal(time.Unix(1768063391, 0)) {
+		t.Errorf("oldest = %v", page.OldestListenedAt)
+	}
+}
+
+// A failed job keeps only the error's text, and the status in it is what
+// tells a ListenBrainz outage from a refusal.
+func TestARefusalKeepsItsStatusInTheText(t *testing.T) {
+	err := (&HTTPError{StatusCode: 500, Message: "An unknown error occured."}).Error()
+	if err != "listenbrainz returned HTTP 500: An unknown error occured." {
+		t.Errorf("Error() = %q", err)
+	}
+}
+
 func TestListensTreatsNoContentAsAnEmptyPage(t *testing.T) {
 	client := newTestClient(t, func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
 	})
-	listens, err := client.Listens(context.Background(), "listener", time.Time{}, time.Time{}, 10)
-	if err != nil || len(listens) != 0 {
-		t.Fatalf("Listens() = %v, %v; want an empty page and no error", listens, err)
+	page, err := client.Listens(context.Background(), "listener", time.Time{}, time.Time{}, 10)
+	if err != nil || len(page.Listens) != 0 {
+		t.Fatalf("Listens() = %v, %v; want an empty page and no error", page, err)
 	}
 }
 
