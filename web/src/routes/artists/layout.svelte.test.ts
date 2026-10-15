@@ -1,12 +1,14 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, setup } from '@testing-library/svelte';
 import { createRawSnippet, flushSync } from 'svelte';
+import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 
-// The root layout. SvelteKit keeps a page component when only its route
+// The artists layout. SvelteKit keeps a page component when only its route
 // parameters change, so going from one artist to another from the command
 // palette used to leave the page holding the first artist's id: its data,
 // and every action on it, stayed on the first artist. What is asserted here
-// is that the page is drawn afresh when the parameters change, and only then.
+// is that the page is drawn afresh when the parameters change, and only then,
+// and that the list beside it stays put.
 //
 // The boundaries stubbed are SvelteKit's own modules and `fetch`.
 
@@ -18,6 +20,9 @@ vi.mock('$app/state', async () => {
     page: {
       get params() {
         return Object.fromEntries(params);
+      },
+      get route() {
+        return { id: params.has('id') ? '/artists/[id]' : '/artists' };
       },
       get url() {
         return new URL(search.get('url')!);
@@ -62,7 +67,8 @@ function drawn() {
     }
   }));
   page.go('http://localhost/artists/a', { id: 'a' });
-  render(Layout, { props: { children } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(Layout, { props: { children } }, { wrapper: QueryClientProvider, wrapperProps: { client } });
   return () => mounts;
 }
 
@@ -77,6 +83,17 @@ describe('the page under the layout', () => {
     flushSync();
 
     expect(mounts()).toBe(before + 1);
+  });
+
+  it('keeps the artists list beside it when the artist changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    drawn();
+    const list = await screen.findByRole('navigation', { name: 'Artists' });
+
+    page.go('http://localhost/artists/b', { id: 'b' });
+    flushSync();
+
+    expect(screen.getByRole('navigation', { name: 'Artists' })).toBe(list);
   });
 
   it('is kept when only the query string changes', async () => {
