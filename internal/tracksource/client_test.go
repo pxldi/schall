@@ -305,3 +305,92 @@ func TestAlbumTrackAddressesRefusesAnEntryWithNoAddress(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotATrack", err)
 	}
 }
+
+// fetchingFromSoundCloud is a client whose yt-dlp writes one track and reports
+// the arguments it was run with and the sign-in it found beside its output.
+func fetchingFromSoundCloud(t *testing.T, token string) (*Client, *[]string, *string) {
+	t.Helper()
+	client := NewClient(Options{Path: "/fake/yt-dlp", SoundCloudToken: token})
+	client.real = false
+	var gotArgs []string
+	var netrc string
+	client.run = func(_ context.Context, _ string, args ...string) ([]byte, []byte, error) {
+		gotArgs = args
+		for index, arg := range args {
+			if arg == "--netrc-location" {
+				data, err := os.ReadFile(args[index+1])
+				if err != nil {
+					t.Fatal(err)
+				}
+				info, err := os.Stat(args[index+1])
+				if err != nil || info.Mode().Perm() != 0o600 {
+					t.Fatalf("sign-in file mode = %v (%v), want readable by Schall alone", info.Mode(), err)
+				}
+				netrc = string(data)
+			}
+		}
+		output := args[len(args)-2]
+		path := strings.TrimSuffix(output, "%(id)s.%(ext)s") + "293.flac"
+		if err := os.WriteFile(path, []byte("flac audio"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return nil, nil, nil
+	}
+	return client, &gotArgs, &netrc
+}
+
+func TestFetchFromSoundCloudPrefersTheUploadersOriginalFile(t *testing.T) {
+	client, gotArgs, _ := fetchingFromSoundCloud(t, "")
+
+	if _, err := client.Fetch(context.Background(), Track{
+		Source: SoundCloud, ID: "293", URL: "https://soundcloud.com/abo/illegal-edit",
+	}, filepath.Join(t.TempDir(), "want")); err != nil {
+		t.Fatal(err)
+	}
+
+	if (*gotArgs)[0] != "-f" || (*gotArgs)[1] != "download/bestaudio" {
+		t.Fatalf("args = %q, want the original file before the stream", *gotArgs)
+	}
+}
+
+func TestFetchFromSoundCloudSignsInWithTheTokenOffTheCommandLine(t *testing.T) {
+	client, gotArgs, netrc := fetchingFromSoundCloud(t, "2-123456-abc")
+	directory := filepath.Join(t.TempDir(), "want")
+
+	fetched, err := client.Fetch(context.Background(), Track{
+		Source: SoundCloud, ID: "293", URL: "https://soundcloud.com/abo/illegal-edit",
+	}, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if *netrc != "machine soundcloud login oauth password 2-123456-abc\n" {
+		t.Fatalf("sign-in = %q, want the token as the oauth password", *netrc)
+	}
+	for _, arg := range *gotArgs {
+		if strings.Contains(arg, "2-123456-abc") {
+			t.Fatalf("args = %q, want the token kept off the command line", *gotArgs)
+		}
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Name != "293.flac" || len(entries) != 1 {
+		t.Fatalf("fetched %q, folder holds %v, want only the track and no sign-in left", fetched.Name, entries)
+	}
+}
+
+func TestFetchFromYouTubeNeverReceivesTheSoundCloudToken(t *testing.T) {
+	client, gotArgs, netrc := fetchingFromSoundCloud(t, "2-123456-abc")
+
+	if _, err := client.Fetch(context.Background(), Track{
+		Source: YouTube, ID: "293", URL: "https://www.youtube.com/watch?v=293",
+	}, filepath.Join(t.TempDir(), "want")); err != nil {
+		t.Fatal(err)
+	}
+
+	if *netrc != "" || (*gotArgs)[1] != "bestaudio" {
+		t.Fatalf("args = %q, sign-in = %q, want the stream and no sign-in", *gotArgs, *netrc)
+	}
+}

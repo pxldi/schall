@@ -273,7 +273,9 @@ func run() error {
 	// a fetched file is the recording a want was waiting for. One set of rules
 	// decides all three, so none of them can be loosened on its own.
 	resolver := identity.NewResolver(musicBrainzClient).WithAliases(store)
-	trackSources := tracksource.NewClient(tracksource.Options{Path: cfg.YtdlpPath})
+	trackSources := tracksource.NewClient(tracksource.Options{
+		Path: cfg.YtdlpPath, SoundCloudToken: cfg.SoundCloudToken,
+	})
 	acquisitionService := acquisition.NewService(store, logger).
 		WithResolver(resolver).
 		WithMatcher(matchService).

@@ -1235,10 +1235,22 @@ func (importer *Importer) importOnAnchor(
 	key, keyed := db.SourceKeyOf(row)
 	switch {
 	case verification.Admitted && keyed:
+		summary := verification.Summary
 		if below, reason := importer.belowFloor(row, file.source); below {
-			return importer.hold(ctx, row, file.source, evidence, belowWantFloorSummary, reason)
+			switch {
+			case fromTheLink(row, key):
+				// The link's own copy is the best it serves. It is taken, and
+				// the want goes on looking for a better one once it is in the
+				// library (owner's decision, 2026-10-15).
+				summary += " " + reason
+			case row.Upgrade:
+				// The file this copy may replace is the floor that counts:
+				// the upgrader keeps whichever of the two is better.
+			default:
+				return importer.hold(ctx, row, file.source, evidence, belowWantFloorSummary, reason)
+			}
 		}
-		return importer.admitOnAnchor(ctx, row, file, evidence, key, verification.Summary)
+		return importer.admitOnAnchor(ctx, row, file, evidence, key, summary)
 	case verification.Refused:
 		return importer.refuse(ctx, row, evidence,
 			db.AcquiredFileDiscardedAudio, anchorRefusedSummary, verification.Summary)
@@ -1254,6 +1266,13 @@ func (importer *Importer) importOnAnchor(
 			uploadUnmatchedSummary, verification.Summary)
 	}
 	return importer.hold(ctx, row, file.source, evidence, undecidedSummary, verification.Summary)
+}
+
+// fromTheLink reports a copy Schall fetched from the address the want is keyed
+// to, as opposed to one a peer shared. A fetched copy records the service as
+// its provider and the key as its user (db.RecordSourceFetch).
+func fromTheLink(row db.TargetImportRow, key db.ImportSource) bool {
+	return row.Provider == key.Source && row.SourceUsername == key.ExternalID
 }
 
 // belowFloor reports whether a copy falls below its want's minimum bit rate,

@@ -268,6 +268,10 @@ type TargetImportRow struct {
 	// MinimumBitrate is the want's floor in kbit/s, zero where it has none.
 	SourceKey      *ImportSource
 	MinimumBitrate int
+	// Upgrade is a want raised to replace a file the library already holds. A
+	// copy for it is compared against that file once imported, so its floor is
+	// the file it may replace.
+	Upgrade bool
 }
 
 // SourceKeyOf is the source identity key a copy for a want with no recording
@@ -388,6 +392,7 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 		       coalesce(targets.anchor_views, 0),
 		       coalesce(targets.source, ''), coalesce(targets.external_id, ''),
 		       coalesce(targets.external_url, ''), coalesce(targets.minimum_bitrate, 0),
+		       targets.origin = 'upgrade',
 		       -- The one genre written into this file: the leading community
 		       -- vote on the release group the want was resolved through, or
 		       -- the artist's where that release group has none. Empty where
@@ -423,7 +428,7 @@ func (q *Queries) ClaimTargetImport(ctx context.Context, requestID uuid.UUID) (T
 		&result.AnchorReference, &result.AnchorSeconds,
 		&result.AnchorLabel, &result.AnchorViews,
 		&sourceKey.Source, &sourceKey.ExternalID, &sourceKey.ExternalURL, &result.MinimumBitrate,
-		&result.Genre,
+		&result.Upgrade, &result.Genre,
 	); err != nil {
 		return result, err
 	}

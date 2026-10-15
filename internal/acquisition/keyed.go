@@ -62,6 +62,10 @@ const (
 	// sourceFetchedSummary is what a keyed want says while the track fetched
 	// from its address waits to be checked.
 	sourceFetchedSummary = "Nobody shares it. Checking the copy from the link."
+	// What a want says while it looks for a better copy than the one it holds,
+	// and while it waits after a copy that was no better.
+	keyedUpgradeSummary             = "In your library. Looking for a better copy."
+	keyedUpgradeStandingBackSummary = "In your library. No better copy yet, looking again in 30 days."
 )
 
 // WithTrackSources registers what reads an address, and the fingerprinter its
@@ -243,8 +247,12 @@ func nameAfterWant(got tracksource.Fetched, target db.AcquisitionTargetRow) trac
 // fetchesFromSource reports whether this installation can fetch the want's
 // track from its address: the want is keyed, and a fetcher and its folder are
 // registered.
+//
+// A want looking for a better copy than the one it holds never fetches: the
+// address's own copy is the one it holds.
 func (service *Service) fetchesFromSource(target db.AcquisitionTargetRow) bool {
-	return target.Source != "" && service.fetches != nil && service.fetchRoot != ""
+	return target.Source != "" && target.Origin != "upgrade" &&
+		service.fetches != nil && service.fetchRoot != ""
 }
 
 // onlyFromSource is a round for a keyed want on an installation with no peer

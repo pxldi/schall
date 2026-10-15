@@ -112,6 +112,7 @@ var Invariants = []Invariant{
 			SELECT count(*) FROM acquisition_targets AS want
 			WHERE want.status IN ('unresolved', 'pending', 'searching', 'awaiting_review')
 			  AND want.source IS NOT NULL
+			  AND want.origin <> 'upgrade'
 			  AND EXISTS (
 			      SELECT 1 FROM library_file_identities AS identity
 			      JOIN library_files AS file ON file.id = identity.library_file_id AND file.missing_at IS NULL

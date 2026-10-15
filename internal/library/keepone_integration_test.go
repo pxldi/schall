@@ -70,7 +70,8 @@ type removalRow struct {
 	keptPath    string
 	removedBy   string
 	reason      string
-	recordingID uuid.UUID
+	recordingID uuid.NullUUID
+	sourceKey   string
 	unlinkedAt  pgtype.Timestamptz
 	unlinkError string
 }
@@ -79,7 +80,7 @@ func removals(t *testing.T, pool *pgxpool.Pool) []removalRow {
 	t.Helper()
 	rows, err := pool.Query(context.Background(), `
 		SELECT library_path, size_bytes, kept_library_file_id, kept_path,
-		       removed_by, reason, musicbrainz_recording_id,
+		       removed_by, reason, musicbrainz_recording_id, coalesce(source_key, ''),
 		       unlinked_at, unlink_error
 		FROM library_file_removals
 		ORDER BY library_path
@@ -93,7 +94,7 @@ func removals(t *testing.T, pool *pgxpool.Pool) []removalRow {
 	for rows.Next() {
 		var row removalRow
 		if err := rows.Scan(&row.path, &row.sizeBytes, &row.keptFileID, &row.keptPath,
-			&row.removedBy, &row.reason, &row.recordingID,
+			&row.removedBy, &row.reason, &row.recordingID, &row.sourceKey,
 			&row.unlinkedAt, &row.unlinkError); err != nil {
 			t.Fatal(err)
 		}
@@ -196,7 +197,7 @@ func TestKeepingOneCopyRecordsWhyEachFileWent(t *testing.T) {
 	if row.sizeBytes != 14 {
 		t.Fatalf("removal size = %d, want 14", row.sizeBytes)
 	}
-	if row.recordingID != recordingID {
+	if row.recordingID.UUID != recordingID {
 		t.Fatalf("removal recording = %v, want %v", row.recordingID, recordingID)
 	}
 	if !row.keptFileID.Valid || row.keptFileID.UUID != keeperID {

@@ -103,19 +103,25 @@ type Track struct {
 
 type Options struct {
 	// Path is the yt-dlp binary. Empty means yt-dlp on PATH.
-	Path           string
-	LookupTimeout  time.Duration
-	ExcerptTimeout time.Duration
-	FetchTimeout   time.Duration
+	Path string
+	// SoundCloudToken is the oauth_token of a signed-in SoundCloud account.
+	// SoundCloud hands the uploader's original file (often FLAC or WAV) only to
+	// a signed-in account; without one, Fetch takes the stream, which is AAC at
+	// 160 kbit/s at best.
+	SoundCloudToken string
+	LookupTimeout   time.Duration
+	ExcerptTimeout  time.Duration
+	FetchTimeout    time.Duration
 }
 
 type Client struct {
-	path           string
-	lookupTimeout  time.Duration
-	excerptTimeout time.Duration
-	fetchTimeout   time.Duration
-	run            func(ctx context.Context, path string, args ...string) ([]byte, []byte, error)
-	real           bool
+	path            string
+	soundCloudToken string
+	lookupTimeout   time.Duration
+	excerptTimeout  time.Duration
+	fetchTimeout    time.Duration
+	run             func(ctx context.Context, path string, args ...string) ([]byte, []byte, error)
+	real            bool
 }
 
 func NewClient(options Options) *Client {
@@ -136,12 +142,13 @@ func NewClient(options Options) *Client {
 		path = defaultPath
 	}
 	return &Client{
-		path:           path,
-		lookupTimeout:  lookupTimeout,
-		excerptTimeout: excerptTimeout,
-		fetchTimeout:   fetchTimeout,
-		run:            runCommand,
-		real:           true,
+		path:            path,
+		soundCloudToken: strings.TrimSpace(options.SoundCloudToken),
+		lookupTimeout:   lookupTimeout,
+		excerptTimeout:  excerptTimeout,
+		fetchTimeout:    fetchTimeout,
+		run:             runCommand,
+		real:            true,
 	}
 }
 
@@ -320,10 +327,25 @@ func (client *Client) Fetch(ctx context.Context, track Track, directory string) 
 
 	ctx, cancel := context.WithTimeout(ctx, client.fetchTimeout)
 	defer cancel()
+	args := []string{"-f", "bestaudio"}
+	if track.Source == SoundCloud {
+		// "download" is the uploader's original file, offered where the track
+		// allows downloads and only to a signed-in account. It is preferred
+		// over the stream whenever it is there.
+		args[1] = "download/bestaudio"
+		if client.soundCloudToken != "" {
+			netrc, err := writeNetrc(staging, client.soundCloudToken)
+			if err != nil {
+				return Fetched{}, err
+			}
+			defer os.Remove(netrc)
+			args = append(args, "--netrc", "--netrc-location", netrc)
+		}
+	}
 	output := filepath.Join(staging, "%(id)s.%(ext)s")
-	_, stderr, runErr := client.run(ctx, client.path,
-		"-f", "bestaudio", "--remux-video", "webm>opus",
+	args = append(args, "--remux-video", "webm>opus",
 		"--no-warnings", "--no-playlist", "--no-mtime", "-o", output, track.URL)
+	_, stderr, runErr := client.run(ctx, client.path, args...)
 	if err := client.commandError(ctx, stderr, runErr); err != nil {
 		return Fetched{}, err
 	}
@@ -334,7 +356,7 @@ func (client *Client) Fetch(ctx context.Context, track Track, directory string) 
 	}
 	var name string
 	for _, entry := range entries {
-		if !entry.Type().IsRegular() {
+		if !entry.Type().IsRegular() || entry.Name() == netrcName {
 			continue
 		}
 		if name != "" {
@@ -357,6 +379,25 @@ func (client *Client) Fetch(ctx context.Context, track Track, directory string) 
 		Path: destination, Name: name, SizeBytes: info.Size(),
 		Extension: strings.ToLower(strings.TrimPrefix(filepath.Ext(name), ".")),
 	}, nil
+}
+
+// netrcName is the file the SoundCloud sign-in is handed to yt-dlp in. yt-dlp
+// reads credentials from a netrc file, which keeps the token off the command
+// line where any process on the machine could read it.
+const netrcName = ".netrc"
+
+// writeNetrc writes the sign-in yt-dlp's SoundCloud extractor expects: the
+// login "oauth" and the token as the password, readable by Schall alone.
+func writeNetrc(directory, token string) (string, error) {
+	if strings.ContainsAny(token, " \t\r\n") {
+		return "", errors.New("the SoundCloud token contains white space")
+	}
+	path := filepath.Join(directory, netrcName)
+	content := "machine soundcloud login oauth password " + token + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return "", fmt.Errorf("write the SoundCloud sign-in for yt-dlp: %w", err)
+	}
+	return path, nil
 }
 
 // answer is the part of yt-dlp's info document Schall reads.
