@@ -340,6 +340,19 @@ describe('the three kinds Review holds', () => {
     expect(screen.getByText('Nine Lanterns (Deluxe)').getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('ticks an album the copy names the same as the wish when the grader left it unjudged', async () => {
+    const same = copy();
+    same.evidence = {
+      ...same.evidence!,
+      observed: { ...same.evidence!.observed, album: 'Nine Lanterns' }
+    };
+    piles.wants = [{ ...want('copies'), copies: [same] }];
+    await open('Evensong');
+
+    const cells = screen.getAllByText('Nine Lanterns').map((node) => node.closest('td')!);
+    expect(cells.map((cell) => cell.title)).toEqual(['', 'Agrees']);
+  });
+
   it('keeps the reason for a missing sample in the cell tooltip', async () => {
     const reason = 'This entry carries no ISRC, and a preview is only ever fetched by ISRC.';
     const item = want('copies');

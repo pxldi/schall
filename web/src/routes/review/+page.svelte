@@ -795,6 +795,7 @@
           label={`${column.heading} · ${column.filed ? 'in your library' : (column.copy.origin?.label ?? column.copy.username)}`}
           name={current?.title ?? ''}
           autoplay={heard}
+          onstart={() => (heard = true)}
         />
       {/key}
     {/if}

@@ -18,7 +18,8 @@
     waveformOf,
     label,
     name,
-    autoplay = false
+    autoplay = false,
+    onstart
   }: {
     src: string;
     /** The review copy whose waveform to draw. A library file has none. */
@@ -30,6 +31,8 @@
     /** Set once the reader has played something on this page: the next
      * question's copy then starts by itself, a third of the way in. */
     autoplay?: boolean;
+    /** Called each time playing starts, from a press or by itself. */
+    onstart?: () => void;
   } = $props();
 
   let audioEl = $state<HTMLAudioElement | null>(null);
@@ -136,6 +139,7 @@
     wire();
     void context?.resume().catch(() => undefined);
     listening.sounding = src;
+    onstart?.();
     void audioEl.play().catch(() => undefined);
   }
 

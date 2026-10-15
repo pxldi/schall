@@ -55,6 +55,14 @@
         ? { text: fileSide, mark: 'bad', tip: 'Differs' }
         : { text: fileSide, mark: 'ok', tip: 'Agrees' };
 
+  // Not every grading path judges the album, and a song may be on several
+  // releases, so a different album is not marked against a copy. The same
+  // name still earns its tick, so the row does not read as unknown.
+  const sameAlbum = (value: Cell, wished: string | undefined): Cell =>
+    value.mark === 'plain' && wished?.trim() && !namesDiffer(value.text, wished)
+      ? { ...value, mark: 'ok', tip: 'Agrees' }
+      : value;
+
   function acoustid(copy: AcquiredCopy): Cell {
     const acoustic = copy.evidence?.acoustic;
     if (!acoustic) return { text: '—', mark: 'none', tip: 'Not asked' };
@@ -145,7 +153,10 @@
       icon: 'release',
       wished: plain(target.album),
       copies: per(({ copy, filed }) =>
-        filed ? plain(want.fileReleaseTitle) : judged(copy, 'album', copy.evidence?.observed?.album)
+        sameAlbum(
+          filed ? plain(want.fileReleaseTitle) : judged(copy, 'album', copy.evidence?.observed?.album),
+          target.album
+        )
       )
     });
     if (target.isrc || columns.some(({ copy }) => copy.evidence?.observed?.isrc)) {

@@ -265,6 +265,20 @@ describe('the keys', () => {
     expect(play).toHaveBeenCalled();
   });
 
+  it('plays the next question by itself once the reader pressed the play button', async () => {
+    wants = [want('a', 'Evensong', 'Nine Lanterns'), want('b', 'Watchfire', 'Nine Lanterns')];
+    await open('Evensong');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Play Evensong' }));
+    await fireEvent.keyDown(window, { key: 'j' });
+    await screen.findByRole('heading', { level: 2, name: 'Watchfire' });
+    const play = HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>;
+    play.mockClear();
+    await fireEvent(document.querySelector('audio')!, new Event('loadedmetadata'));
+
+    expect(play).toHaveBeenCalled();
+  });
+
   it('pauses a playing copy on Space', async () => {
     wants = [want('a', 'Evensong', 'Nine Lanterns')];
     await open('Evensong');
