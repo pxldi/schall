@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -210,30 +209,13 @@ func (service *Service) fetchFromSource(
 	return true, nil
 }
 
-// maxFetchedNameBytes keeps a fetched file's name, extension included, under
-// the 255 bytes most filesystems allow, with room for the importer to add a
-// number when two copies share a name.
-const maxFetchedNameBytes = 200
-
 // nameAfterWant renames a fetched track after the song it was fetched for,
 // "Artist - Title.ext". yt-dlp names it by the service's number for the track,
 // and the importer files a copy under the name it arrived with, so without this
 // the library held "2114819991.m4a". A rename that fails keeps the number.
 func nameAfterWant(got tracksource.Fetched, target db.AcquisitionTargetRow) tracksource.Fetched {
-	base := library.SafeComponent(target.EntryTitle)
-	if artist := library.SafeComponent(target.EntryArtist); artist != "" && base != "" {
-		base = artist + " - " + base
-	}
-	if base == "" || got.Extension == "" {
-		return got
-	}
-	limit := maxFetchedNameBytes - len(got.Extension) - 1
-	for len(base) > limit {
-		_, size := utf8.DecodeLastRuneInString(base)
-		base = base[:len(base)-size]
-	}
-	name := strings.TrimRight(base, ". ") + "." + got.Extension
-	if name == got.Name {
+	name := library.TrackFileName(target.EntryArtist, target.EntryTitle, got.Extension)
+	if name == "" || name == got.Name {
 		return got
 	}
 	path := filepath.Join(filepath.Dir(got.Path), name)

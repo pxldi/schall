@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // The placeholders a layout template may name. They are the fields both
@@ -244,4 +245,30 @@ func SafeComponent(value string) string {
 		return symbol
 	}, strings.TrimSpace(value))
 	return strings.Trim(value, ". ")
+}
+
+// maxTrackFileNameBytes keeps a track's file name, extension included, under the
+// 255 bytes most filesystems allow, with room for an importer to add a number
+// when two copies share a name.
+const maxTrackFileNameBytes = 200
+
+// TrackFileName is the name a single track is filed under, "Artist - Title.ext".
+// It is empty when there is no title or no extension to name it with, and the
+// caller keeps the name the file already has. A long name is cut on a rune
+// boundary.
+func TrackFileName(artist, title, extension string) string {
+	base := SafeComponent(title)
+	if artist := SafeComponent(artist); artist != "" && base != "" {
+		base = artist + " - " + base
+	}
+	extension = strings.TrimPrefix(extension, ".")
+	if base == "" || extension == "" {
+		return ""
+	}
+	limit := maxTrackFileNameBytes - len(extension) - 1
+	for len(base) > limit {
+		_, size := utf8.DecodeLastRuneInString(base)
+		base = base[:len(base)-size]
+	}
+	return strings.TrimRight(base, ". ") + "." + extension
 }

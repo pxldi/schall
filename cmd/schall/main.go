@@ -268,7 +268,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("set up the SoundCloud client: %w", err)
 	}
-	soundCloudService := soundcloud.NewService(pool, soundCloudClient, logger)
+	soundCloudService := soundcloud.NewService(pool, soundCloudClient, logger).WithFiler(libraryMover)
 	// The same resolver answers what a file is, what an entry names, and whether
 	// a fetched file is the recording a want was waiting for. One set of rules
 	// decides all three, so none of them can be loosened on its own.

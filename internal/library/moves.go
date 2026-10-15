@@ -154,7 +154,7 @@ func (mover *Mover) Plan(ctx context.Context) (PlanResult, error) {
 	if err != nil {
 		return PlanResult{}, err
 	}
-	candidates, absent, err := mover.candidates(ctx)
+	candidates, absent, err := mover.candidates(ctx, uuid.NullUUID{})
 	if err != nil {
 		return PlanResult{}, err
 	}
@@ -216,6 +216,67 @@ func (mover *Mover) Plan(ctx context.Context) (PlanResult, error) {
 	return result, nil
 }
 
+// FileOne moves one file to where the layout puts it, under the name given, and
+// returns the path it ends up at. It is the layout migration for a single file
+// somebody has just named, so the folder agrees with the name at once rather
+// than after the next migration somebody remembers to run.
+//
+// The move is planned and applied as a run of one, through the same journal,
+// checks and sidecar handling as a migration. A file the layout cannot place,
+// a destination already taken, or a refused move leaves the file where it is,
+// and its current path is returned with no error: the naming stands either way.
+func (mover *Mover) FileOne(ctx context.Context, fileID uuid.UUID, name string) (string, error) {
+	template, err := mover.template(ctx)
+	if err != nil {
+		return "", err
+	}
+	found, _, err := mover.candidates(ctx, uuid.NullUUID{UUID: fileID, Valid: true})
+	if err != nil {
+		return "", err
+	}
+	if len(found) == 0 {
+		return "", fmt.Errorf("read the file %s to file it: %w", fileID, pgx.ErrNoRows)
+	}
+	file := found[0]
+	if name == "" {
+		name = filepath.Base(file.path)
+	}
+	fields, named := file.fields()
+	if !named || (template.UsesIdentifier() && fields.ID == "") {
+		return file.path, nil
+	}
+	destination := filepath.Join(file.rootPath, template.Render(fields), name)
+	if destination == file.path {
+		return file.path, nil
+	}
+	runID := uuid.New()
+	if _, err := mover.pool.Exec(ctx, `
+		INSERT INTO library_file_moves (run_id, library_file_id, from_path, to_path, status)
+		VALUES ($1, $2, $3, $4, 'planned')
+	`, runID, fileID, file.path, destination); err != nil {
+		return "", fmt.Errorf("plan the move of %s: %w", file.path, err)
+	}
+	if _, err := mover.applyNext(ctx, runID); err != nil {
+		return "", err
+	}
+	// The layout page shows the latest run, and a run of one is not the
+	// migration somebody planned there. A row still planned is a rename whose
+	// commit did not survive, and it stays for the next run to finish.
+	if _, err := mover.pool.Exec(ctx, `
+		DELETE FROM library_file_moves WHERE run_id = $1 AND status <> 'planned'
+	`, runID); err != nil {
+		mover.logger.Warn().Err(err).Str("run_id", runID.String()).
+			Msg("clear the journal of a single file's move")
+	}
+	var path string
+	if err := mover.pool.QueryRow(ctx, `
+		SELECT path FROM library_files WHERE id = $1
+	`, fileID).Scan(&path); err != nil {
+		return "", fmt.Errorf("read where %s was filed: %w", fileID, err)
+	}
+	return path, nil
+}
+
 // fields says what to render this file's folder from, and whether it can be
 // rendered at all.
 //
@@ -262,10 +323,11 @@ func (file candidate) fields() (Fields, bool) {
 }
 
 // candidates reads every file a run could move, together with everything the
-// template might name it after. It also counts the files that are recorded as
-// gone: a migration has nothing to rename for them, and saying so is better
-// than a plan that silently covers less than the library.
-func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
+// template might name it after, or only the file named by only. It also counts
+// the files that are recorded as gone: a migration has nothing to rename for
+// them, and saying so is better than a plan that silently covers less than the
+// library.
+func (mover *Mover) candidates(ctx context.Context, only uuid.NullUUID) ([]candidate, int, error) {
 	rows, err := mover.pool.Query(ctx, `
 		SELECT files.id, files.path, roots.path,
 		       coalesce(files.artist_tag, ''), coalesce(files.album_tag, ''),
@@ -411,8 +473,9 @@ func (mover *Mover) candidates(ctx context.Context) ([]candidate, int, error) {
 			       AND on_the_identified_release AND albums_identified = 1)
 		) matched ON true
 		WHERE files.missing_at IS NULL
+		  AND ($2::uuid IS NULL OR files.id = $2)
 		ORDER BY files.path
-	`, albumFirstFrom)
+	`, albumFirstFrom, only)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read the library for a layout migration: %w", err)
 	}

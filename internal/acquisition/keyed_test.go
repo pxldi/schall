@@ -231,9 +231,9 @@ func TestALongFetchedTrackNameIsShortenedToFitTheFilesystem(t *testing.T) {
 		EntryArtist: "Ä", EntryTitle: strings.Repeat("ü", 300),
 	})
 
-	if len(got.Name) > maxFetchedNameBytes || !utf8.ValidString(got.Name) ||
+	if len(got.Name) > 200 || !utf8.ValidString(got.Name) ||
 		!strings.HasSuffix(got.Name, ".m4a") {
 		t.Fatalf("name = %q (%d bytes), want valid UTF-8 under %d bytes", got.Name, len(got.Name),
-			maxFetchedNameBytes)
+			200)
 	}
 }
