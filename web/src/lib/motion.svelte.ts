@@ -14,7 +14,6 @@
 // own `fade`, which takes a number of milliseconds rather than reading CSS.
 
 import { untrack } from 'svelte';
-import { afterNavigate } from '$app/navigation';
 import { reducedMotion } from '$lib/utils';
 
 // changed watches one value and says whether it has just become something else.
@@ -121,31 +120,3 @@ export function leave(
   };
 }
 
-// pageTransitions lets a new page rise into place when the reader goes to
-// another address. The page is drawn the moment it is ready and the motion
-// runs over it, so changing page never waits on an animation. View
-// transitions held a still of the old page until the new one had rendered and
-// only then animated, which made every page change take most of a second. The
-// print at the top fades between covers on its own (Print.svelte) and the
-// chrome's inks transition in CSS.
-//
-// Only a change of path is a new page. A filter, a tab or a pager writes the
-// query string, and the list under it already settles on its own; moving the
-// whole screen for it would make every press of a filter feel like a reload.
-// A reader who asked for less motion gets the cut.
-//
-// Call it once from the root layout, while it is setting up.
-export function pageTransitions() {
-  afterNavigate((navigation) => {
-    if (navigation.type === 'enter') return;
-    if (!navigation.to || navigation.from?.url.pathname === navigation.to.url.pathname) return;
-    const ms = motionMs('enter');
-    const view = document.querySelector('.page-view');
-    if (!ms || !view || typeof view.animate !== 'function') return;
-    const ease = getComputedStyle(document.documentElement).getPropertyValue('--motion-ease-arrive').trim();
-    view.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], {
-      duration: ms,
-      easing: ease || 'ease-out'
-    });
-  });
-}

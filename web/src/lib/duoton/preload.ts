@@ -4,16 +4,18 @@ import { queriesRestored, queryClient } from '$lib/query-client';
 import { loadPicture } from './paint';
 import { printHeight, resolveCover, type PagePrint } from './page.svelte';
 
-/** How long a page change waits for the page's data and print pictures. A
- *  slower answer opens the page on its placeholders, as before. */
-export const PRELOAD_WAIT_MS = 400;
+/** How long a page change waits for the page's data. A slower answer opens
+ *  the page on its placeholders. Waiting 400 ms for the print pictures as well
+ *  made a click on a release or an artist feel ignored. */
+export const PRELOAD_WAIT_MS = 250;
 
 // A page whose data arrived after it was drawn showed itself in the previous
-// page's inks and then changed colour, and its print came in later again, once
-// the covers had loaded. A route's load calls this instead, so the page opens
-// with its data, its inks and its print pictures together. SvelteKit runs
-// loads when a link is hovered (`data-sveltekit-preload-data` in app.html), so
-// by the click the wait is usually over.
+// page's inks and then changed colour. A route's load calls this instead, so
+// the page opens with its data and its inks together. The print pictures start
+// loading at the same time and are not waited for: the print paints over the
+// bare ink when they land. SvelteKit runs loads when a link is hovered
+// (`data-sveltekit-preload-data` in app.html), so by the click the wait is
+// usually over.
 export async function preloadPage<T, K extends QueryKey>(
   options: FetchQueryOptions<T, Error, T, K>,
   print?: (data: T) => PagePrint | undefined
@@ -22,7 +24,7 @@ export async function preloadPage<T, K extends QueryKey>(
     await queriesRestored;
     const data = await queryClient.ensureQueryData(options);
     const request = print?.(data);
-    if (request) await warmPrint(request);
+    if (request) void warmPrint(request);
   })().catch(() => undefined);
   await Promise.race([ready, new Promise((resolve) => setTimeout(resolve, PRELOAD_WAIT_MS))]);
 }

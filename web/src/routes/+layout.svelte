@@ -4,7 +4,6 @@
   import { page } from '$app/state';
   import { connectEvents } from '$lib/events';
   import { trackNavigation } from '$lib/navigation.svelte';
-  import { pageTransitions } from '$lib/motion.svelte';
   import { queriesRestored, queryClient } from '$lib/query-client';
   import AppShell from '$lib/components/AppShell.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -27,7 +26,6 @@
   // arrived would otherwise start listening after the navigation it needed to
   // hear about.
   trackNavigation();
-  pageTransitions();
 </script>
 
 <QueryClientProvider client={queryClient}>

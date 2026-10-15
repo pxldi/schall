@@ -3,7 +3,7 @@
 // Ported from the prototype the ADR was accepted on.
 
 import { clampInks, hexToRgb, inksFromPixels, mix, type Inks } from './inks';
-import { coverAt } from '$lib/cover-size';
+import { coverAt, coverMissing, markCoverMissing } from '$lib/cover-size';
 
 function hash(seed: string): number {
   let h = 2166136261;
@@ -113,12 +113,17 @@ export function loadPicture(src: string): Promise<HTMLImageElement | undefined> 
   let found = pictures.get(src);
   if (!found) {
     found = new Promise((resolve) => {
-      if (typeof Image === 'undefined') return resolve(undefined);
+      if (typeof Image === 'undefined' || coverMissing(src)) return resolve(undefined);
       const image = new Image();
       image.crossOrigin = 'anonymous';
       image.decoding = 'async';
       image.onload = () => resolve(image.naturalWidth ? image : undefined);
-      image.onerror = () => resolve(undefined);
+      image.onerror = () => {
+        // A remote picture that refuses CORS fails here too, and still shows
+        // in a plain image tag.
+        if (src.startsWith('/api/')) markCoverMissing(src);
+        resolve(undefined);
+      };
       image.src = src;
     });
     pictures.set(src, found);

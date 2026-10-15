@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { printPictureWidth } from './cover-size';
+import { coverMissing, markCoverMissing, printPictureWidth } from './cover-size';
 
 // A print softens its covers on a canvas half its size, so it asks for the
 // smallest stored width that still covers what it draws.
@@ -22,5 +22,14 @@ describe('the width a print asks its covers at', () => {
 
   it('is the stored picture when a hero is taller than 256', () => {
     expect(printPictureWidth('single', 1, 1400, 320)).toBeUndefined();
+  });
+});
+
+describe('a missing cover', () => {
+  it('is known missing at every size once one size failed', () => {
+    markCoverMissing('/api/v1/albums/gone/cover?size=128');
+    expect(coverMissing('/api/v1/albums/gone/cover')).toBe(true);
+    expect(coverMissing('/api/v1/albums/gone/cover?size=256')).toBe(true);
+    expect(coverMissing('/api/v1/albums/here/cover')).toBe(false);
   });
 });

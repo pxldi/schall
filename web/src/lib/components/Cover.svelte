@@ -1,22 +1,5 @@
 <script module lang="ts">
-  const missingSources = new Set<string>();
-
-  // Pictures that land close together are shown together. A grid of covers
-  // answered over a few dozen milliseconds then fades up as one, instead of
-  // one picture after another in whatever order the network answered.
-  const REVEAL_WINDOW_MS = 120;
-  let waiting: (() => void)[] = [];
-  let revealTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function revealSoon(show: () => void) {
-    waiting.push(show);
-    revealTimer ??= setTimeout(() => {
-      const due = waiting;
-      waiting = [];
-      revealTimer = undefined;
-      for (const reveal of due) reveal();
-    }, REVEAL_WINDOW_MS);
-  }
+  import { coverMissing, markCoverMissing } from '$lib/cover-size';
 </script>
 
 <script lang="ts">
@@ -32,16 +15,16 @@
   // forty of them reads as flashing, because forty hard cuts at forty
   // unpredictable moments is what flashing is.
   //
-  // So each picture fades up over the arriving step once its bytes are ready,
-  // together with any other picture that landed in the same short window, so a
-  // grid resolves in one or two steps rather than forty. A picture the browser
-  // already holds is drawn at once. The box under it is already the right size
-  // and colour, so nothing moves — only the picture resolves into a frame that
-  // was always there.
+  // So each picture fades up over the state step once its bytes are ready. It
+  // used to wait 120 ms for its neighbours and fade over 280 ms, and covers
+  // read as arriving late. A picture the browser already holds is drawn at
+  // once. The box under it is already the right size and colour, so nothing
+  // moves.
   //
   // A missing picture is drawn as generated art when the caller gives a seed
-  // (ADR Duoton), or as the text fallback a caller supplies. The source is remembered so a known absence is not asked
-  // for again after a component remounts.
+  // (ADR Duoton), or as the text fallback a caller supplies. The absence is
+  // remembered for the picture at every size, so a missing cover is not asked
+  // for again by another component or after a remount.
 
   let {
     src,
@@ -82,7 +65,7 @@
       stage = 'shown';
     }
   }
-  const missing = $derived(!src || stage === 'missing' || missingSources.has(src));
+  const missing = $derived(!src || stage === 'missing' || coverMissing(src));
 
   // Covers are stored 500 pixels wide and most are drawn at 40 to 100. The API
   // makes 128 and 256 on request, and the browser picks by the size the image
@@ -111,12 +94,11 @@
     data-state={stage}
     use:held
     onload={() => {
-      if (stage === 'shown') return;
-      revealSoon(() => live && (stage = 'shown'));
+      if (live) stage = 'shown';
     }}
     onerror={() => {
       stage = 'missing';
-      if (src) missingSources.add(src);
+      if (src) markCoverMissing(src);
       onmissing?.();
     }}
     class="cover-arrive {stage === 'shown' ? 'is-here' : ''} {instant ? 'is-instant' : ''} {className}"

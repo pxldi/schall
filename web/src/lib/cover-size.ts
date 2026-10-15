@@ -29,3 +29,22 @@ export function printPictureWidth(
   }
   return widthFor(width > height * 1.4 ? height : Math.ceil(width / 2));
 }
+
+// Pictures the server answered 404 for, by their address without a size. A
+// cover with no picture was asked for three times on one page (128, 256 and
+// 500 pixels) by the grid, the print and the hero.
+const missingCovers = new Set<string>();
+
+function base(src: string): string {
+  return src.replace(/[?&]size=\d+$/, '');
+}
+
+/** Whether a picture is known to be missing, at any size. */
+export function coverMissing(src: string): boolean {
+  return missingCovers.has(base(src));
+}
+
+/** Remembers that a picture is missing, at every size. */
+export function markCoverMissing(src: string): void {
+  missingCovers.add(base(src));
+}
