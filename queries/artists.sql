@@ -928,6 +928,22 @@ WHERE artists.musicbrainz_id IS NOT NULL
 ORDER BY artist_images.fetched_at ASC NULLS FIRST, artists.created_at
 LIMIT sqlc.arg(batch);
 
+-- name: SourceArtistsMissingImage :many
+-- Uploaders on a service, which MusicBrainz has never heard of, with no picture
+-- yet. Their own page is the one place a picture of them is declared.
+SELECT artists.id, artists.source::text AS source, artists.external_id::text AS external_id
+FROM artists
+LEFT JOIN artist_images ON artist_images.artist_id = artists.id
+WHERE artists.musicbrainz_id IS NULL
+  AND artists.source IS NOT NULL
+  AND artists.external_id IS NOT NULL
+  AND (
+    artist_images.artist_id IS NULL
+    OR (artist_images.image IS NULL AND artist_images.fetched_at < sqlc.arg(chain_changed))
+  )
+ORDER BY artist_images.fetched_at ASC NULLS FIRST, artists.created_at
+LIMIT sqlc.arg(batch);
+
 -- name: HeldReleaseTitles :many
 -- The artist's releases the library has any of, most held first, for the
 -- sentence an artist nobody follows is explained by. It is read each time

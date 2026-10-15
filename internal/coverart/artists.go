@@ -319,6 +319,25 @@ func (artists *Artists) fromPages(
 	return Artwork{}, ErrNoArtwork
 }
 
+// UploaderPicture returns the picture an uploader's own page declares, for an
+// artist row that is an account on a service rather than a MusicBrainz artist.
+// externalID is the key that row is found by, "soundcloud:https://soundcloud.com/abo":
+// the account's own page, so the page asked is the one the row already names.
+// An account keyed any other way, a number or a YouTube channel, has no page
+// here to read and answers ErrNoArtwork.
+func (artists *Artists) UploaderPicture(ctx context.Context, source, externalID string) (Artwork, error) {
+	page := strings.TrimPrefix(strings.TrimSpace(externalID), source+":")
+	link, ok := artistPage(page)
+	if !ok || link.source != source {
+		return Artwork{}, ErrNoArtwork
+	}
+	pictureURL, err := artists.pagePicture(ctx, link.page, link.imageHost)
+	if err != nil {
+		return Artwork{}, err
+	}
+	return artists.fetch(ctx, pictureURL, link.source)
+}
+
 func (artists *Artists) fetch(ctx context.Context, address, source string) (Artwork, error) {
 	artwork, err := artists.images.fetch(ctx, artists.images.httpClient, address, maxImageBytes)
 	if err != nil {

@@ -19,11 +19,12 @@ import (
 // fakeCoverStore holds the releases waiting to be pictured and what was written
 // back about them.
 type fakeCoverStore struct {
-	waiting        []db.ReleasesMissingCoverArtRow
-	saved          []db.SaveReleaseCoverArtParams
-	artistsWaiting []db.ArtistsMissingImageRow
-	savedArtists   []db.SaveArtistImageParams
-	smallArtists   []db.SmallArtistImagesRow
+	waiting          []db.ReleasesMissingCoverArtRow
+	saved            []db.SaveReleaseCoverArtParams
+	artistsWaiting   []db.ArtistsMissingImageRow
+	uploadersWaiting []db.SourceArtistsMissingImageRow
+	savedArtists     []db.SaveArtistImageParams
+	smallArtists     []db.SmallArtistImagesRow
 	// askedArtists is how the artists waiting were asked for, which is where the
 	// day the chain last changed reaches the database.
 	askedArtists []db.ArtistsMissingImageParams
@@ -63,6 +64,12 @@ func (store *fakeCoverStore) ArtistsMissingImage(
 ) ([]db.ArtistsMissingImageRow, error) {
 	store.askedArtists = append(store.askedArtists, params)
 	return store.artistsWaiting, store.listArtistsErr
+}
+
+func (store *fakeCoverStore) SourceArtistsMissingImage(
+	_ context.Context, _ db.SourceArtistsMissingImageParams,
+) ([]db.SourceArtistsMissingImageRow, error) {
+	return store.uploadersWaiting, nil
 }
 
 func (store *fakeCoverStore) SaveArtistImage(
@@ -555,5 +562,51 @@ func TestAnArtistTheCallerGaveUpDuringIsNotRecorded(t *testing.T) {
 	if len(store.savedArtists) != 0 {
 		t.Errorf("saved = %+v, want nothing written about an artist nobody asked about",
 			store.savedArtists)
+	}
+}
+
+// A SoundCloud uploader has no MusicBrainz relations to follow. The pass reads
+// the picture their own page declares.
+func TestASweepPicturesASoundCloudUploaderFromTheirPage(t *testing.T) {
+	uploader := uuid.New()
+	store := &fakeCoverStore{uploadersWaiting: []db.SourceArtistsMissingImageRow{{
+		ID: uploader, Source: "soundcloud", ExternalID: "soundcloud:https://soundcloud.com/part-time-killer",
+	}}}
+	sweeper := artistSweeperFor(t, store, func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/part-time-killer" {
+			_, _ = response.Write([]byte(
+				`<html><head><meta property="og:image" content="https://i1.sndcdn.com/avatars-t500x500.jpg">`))
+			return
+		}
+		response.Header().Set("Content-Type", "image/jpeg")
+		_, _ = response.Write(aPicture(1))
+	})
+
+	if _, err := sweeper.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(store.savedArtists) != 1 || store.savedArtists[0].ArtistID != uploader ||
+		len(store.savedArtists[0].Image) == 0 || store.savedArtists[0].Source != NameSoundCloud {
+		t.Fatalf("saved = %+v, want the uploader pictured from their page", store.savedArtists)
+	}
+}
+
+// An uploader keyed by a number names no page. They are remembered as having no
+// picture, and nothing is asked.
+func TestAnUploaderWithNoPageIsRememberedAsHavingNoPicture(t *testing.T) {
+	uploader := uuid.New()
+	store := &fakeCoverStore{uploadersWaiting: []db.SourceArtistsMissingImageRow{{
+		ID: uploader, Source: "youtube", ExternalID: "youtube:UC123",
+	}}}
+	sweeper := artistSweeperFor(t, store, func(http.ResponseWriter, *http.Request) {
+		t.Error("a service was asked about an uploader with no page")
+	})
+
+	if _, err := sweeper.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+	if len(store.savedArtists) != 1 || store.savedArtists[0].Image != nil ||
+		store.savedArtists[0].Source != NameNobody {
+		t.Fatalf("saved = %+v, want the absence recorded", store.savedArtists)
 	}
 }
