@@ -861,13 +861,17 @@ func (service *Service) completeAcquired(
 		// for another moment. Going looking now would fetch a second copy of
 		// exactly the music that just arrived, so the want stands back instead
 		// and the scan finishing is what brings it round again.
-		if target.Summary == strandedSummary {
+		if outcome.Awaiting && target.Summary == strandedSummary {
 			// Already reported as stranded. The copy is checked again on the
 			// same cadence as one still inside its patience, without a second
 			// warning or attempt row.
 			return true, service.store.RescheduleAcquisitionTarget(
 				ctx, target.ID, strandedSummary, service.now().Add(importedDelay))
 		}
+		// A want stranded on a copy that is no longer awaited (its file was
+		// found gone and the copy stamped removed) goes on below and looks
+		// again. Before, the stranded summary alone held it, and five wants
+		// rescheduled themselves every minute for weeks (2026-10-15).
 		if outcome.Awaiting {
 			if service.now().Sub(outcome.AwaitingSince) >= importedPatience {
 				return true, service.abandonTheWait(ctx, target)
