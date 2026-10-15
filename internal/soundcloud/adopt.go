@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/pxldi/schall/internal/db"
+	"github.com/pxldi/schall/internal/library"
 	"github.com/pxldi/schall/internal/tagging"
 )
 
@@ -44,15 +46,29 @@ type Tracks interface {
 	Artwork(ctx context.Context, artworkURL string) ([]byte, string, error)
 }
 
+// Filer moves a file to where the library layout puts it, under a new name.
+// library.Mover is the implementation.
+type Filer interface {
+	FileOne(ctx context.Context, fileID uuid.UUID, name string) (string, error)
+}
+
 // Service records that one file in the library is one track on SoundCloud.
 type Service struct {
 	pool   *pgxpool.Pool
 	tracks Tracks
+	filer  Filer
 	logger zerolog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, tracks Tracks, logger zerolog.Logger) *Service {
 	return &Service{pool: pool, tracks: tracks, logger: logger}
+}
+
+// WithFiler files a named track in the layout's folder as "Artist - Title".
+// Without one the file stays where it was uploaded.
+func (service *Service) WithFiler(filer Filer) *Service {
+	service.filer = filer
+	return service
 }
 
 // Adopted is what was decided, in the words the interface shows.
@@ -165,7 +181,28 @@ func (service *Service) Adopt(
 	}
 
 	service.writeTags(ctx, fileID, adopted, image)
+	adopted.Path = service.file(ctx, fileID, adopted)
 	return adopted, nil
+}
+
+// file moves the named track out of the folder it was uploaded to and into the
+// one the layout gives its artist, as "Artist - Title.ext". An upload with no
+// tags is filed under Unknown by the scan, and before this it stayed there
+// after somebody had named it. A move that fails is logged: the naming stands,
+// and the next layout migration can still place the file.
+func (service *Service) file(ctx context.Context, fileID uuid.UUID, adopted Adopted) string {
+	if service.filer == nil || ctx.Err() != nil {
+		return adopted.Path
+	}
+	name := library.TrackFileName(adopted.Naming.Artist, adopted.Naming.Title,
+		filepath.Ext(adopted.Path))
+	path, err := service.filer.FileOne(ctx, fileID, name)
+	if err != nil {
+		service.logger.Warn().Err(err).Str("file_id", fileID.String()).
+			Str("path", adopted.Path).Msg("file a SoundCloud track in its artist's folder")
+		return adopted.Path
+	}
+	return path
 }
 
 // AdoptAtPath is Adopt for a caller that knows the file only by where it sits
