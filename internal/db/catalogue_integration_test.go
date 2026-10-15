@@ -2748,6 +2748,38 @@ func TestALibraryRowIsDescribedByTheMappingMadeByHand(t *testing.T) {
 	}
 }
 
+// A matched file without an album tag still names its album: the release its
+// mapped track is on. The Files list showed "–" for those.
+func TestALibraryRowNamesTheReleaseItsTrackIsOn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	seedRecordingOnTwoReleases(t, ctx, pool)
+	mapTheFileOntoBothReleases(t, ctx, pool)
+	if _, err := pool.Exec(ctx, `UPDATE library_files SET album_tag = NULL`); err != nil {
+		t.Fatalf("clear album tag: %v", err)
+	}
+
+	page, err := New(pool).ListLibraryFiles(ctx, ListLibraryFilesParams{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListLibraryFiles() error = %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("list = %v, want the one file listed once", listedFilePaths(page.Items))
+	}
+	row := page.Items[0]
+	var want string
+	if err := pool.QueryRow(ctx, `
+		SELECT albums.title FROM tracks JOIN albums ON albums.id = tracks.album_id
+		WHERE tracks.id = $1
+	`, row.MappedTrackID.UUID).Scan(&want); err != nil {
+		t.Fatalf("read the mapped track's release: %v", err)
+	}
+	if !row.MappedAlbumTitle.Valid || row.MappedAlbumTitle.String != want || !row.MappedAlbumID.Valid {
+		t.Errorf("album = %q (id set %v), want %q", row.MappedAlbumTitle.String, row.MappedAlbumID.Valid, want)
+	}
+}
+
 // The release page opens with one release and what is known about it, including
 // the edition chosen for it, so it reads as one thing rather than a title with
 // facts arriving separately.

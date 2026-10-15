@@ -86,7 +86,11 @@ export const COUNT_GAP_MS = 10_000;
 // Counts: the navigation's badges and the Wishlist tab's figure. Four topics
 // reach them, and with downloads running the Artists page read the dashboard
 // four times in ten seconds for figures nobody watches change.
-const counts = [['dashboard'], ['wants', 'looking', 'count']];
+//
+// The review queue waits on the same gap. Every want a sweep settles is a
+// notice, and Review read `/review-queue?limit=100` three times as it opened.
+// A question the reader answers is re-read at once by the page itself.
+const counts = [['dashboard'], ['wants', 'looking', 'count'], ['review-queue']];
 
 function startsWith(key: readonly unknown[], prefix: readonly unknown[]) {
   return prefix.every((part, index) => key[index] === part);

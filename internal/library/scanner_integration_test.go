@@ -1118,6 +1118,37 @@ func TestAFileWhoseTagsWillNotParseIsIndexedWithTheReason(t *testing.T) {
 	}
 }
 
+// A WAV with no tags plays. The scan indexes it without a scan error, so the
+// library does not list it as unreadable.
+func TestAFileWithNoTagsIsIndexedWithoutAScanError(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootPath := musicFolder(t, pool)
+	path := filepath.Join(rootPath, "01 Roads.wav")
+	data := make([]byte, 1024)
+	copy(data, "RIFF")
+	copy(data[8:], "WAVE")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := NewScanner(pool).Scan(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Errors != 0 || result.Updated != 1 {
+		t.Fatalf("scan = %#v, want the file indexed and no failure counted", result)
+	}
+	var scanError *string
+	if err := pool.QueryRow(ctx,
+		`SELECT scan_error FROM library_files WHERE path = $1`, path).Scan(&scanError); err != nil {
+		t.Fatal(err)
+	}
+	if scanError != nil {
+		t.Fatalf("scan_error = %q, want none for a file that only lacks tags", *scanError)
+	}
+}
+
 // A managed copy becomes a library file the moment a scan reaches it, and the
 // download it came from has to point at that row: it is the provenance every
 // later decision about the file rests on.

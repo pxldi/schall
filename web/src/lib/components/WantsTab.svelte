@@ -10,7 +10,8 @@
     type Query
   } from '@tanstack/svelte-query';
   import { api, lookingFor, type AcquisitionTarget, type AcquisitionTargets } from '$lib/api';
-  import { relativeTime, sinceTime } from '$lib/utils';
+  import { fileFormat, relativeTime, sinceTime } from '$lib/utils';
+  import type { IconName } from '$lib/icons';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
@@ -210,13 +211,6 @@
     upgrade: 'quality upgrade'
   };
 
-  // The last path segment, for naming the file an upgrade want exists to
-  // replace without showing its full path.
-  function fileName(path: string) {
-    const parts = path.split('/');
-    return parts[parts.length - 1] || path;
-  }
-
   function name(want: AcquisitionTarget) {
     return want.artist ? `${want.artist} — ${want.title}` : want.title;
   }
@@ -229,6 +223,13 @@
     return want.waitingOnYou === true;
   }
 
+  // The file being replaced, by its format. Its name repeats the song title
+  // above it, as a raw file name like 02-deftones-..._(midnight_airport_version)-dsp.mp3.
+  function upgradeOf(path: string) {
+    const format = fileFormat(path);
+    return format ? `upgrade of your ${format}` : 'upgrade';
+  }
+
   // Where the want came from, and what has been tried for it. Three facts at
   // most: any more and the line is read as a paragraph and skipped.
   function detail(want: AcquisitionTarget) {
@@ -238,7 +239,7 @@
     if (waitingOnYou(want)) return want.summary;
     const parts = [
       want.origin === 'upgrade' && want.upgradeOfPath
-        ? `upgrade of ${fileName(want.upgradeOfPath)}`
+        ? upgradeOf(want.upgradeOfPath)
         : (origins[want.origin] ?? 'added by you')
     ];
     if (want.album) parts.push(want.album);
@@ -286,6 +287,12 @@
     stopped: 'Nothing removed'
   };
 </script>
+
+{#snippet RowAction(label: string, icon: IconName, pending: boolean, act: () => void)}
+  <Button variant="ghost" size="xs" icon title={label} aria-label={label} disabled={pending} onclick={act}>
+    <Icon name={icon} size="sm" />
+  </Button>
+{/snippet}
 
 <div class="flex flex-col gap-4 px-6 py-5">
   <Segmented
@@ -384,43 +391,18 @@
               {/if}
             </span>
 
+            <!-- One icon button per row, whichever action it is, so the column
+                 keeps one width. A text link beside a wide outline button made
+                 the rows jump. The words are the tooltip and the name. -->
             <span class="ml-auto flex shrink-0 items-center md:ml-0 md:justify-end">
               {#if want.floorWaivedAt}
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={$keepFloor.isPending}
-                  onclick={() => $keepFloor.mutate(want.id)}
-                >
-                  Keep the floor
-                </Button>
+                {@render RowAction('Keep the floor', 'undo', $keepFloor.isPending, () => $keepFloor.mutate(want.id))}
               {:else if want.status === 'pending' && want.belowFloorSince}
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={$takeBest.isPending}
-                  onclick={() => $takeBest.mutate(want.id)}
-                >
-                  Take best available
-                </Button>
+                {@render RowAction('Take best available', 'download', $takeBest.isPending, () => $takeBest.mutate(want.id))}
               {:else if want.status === 'not_wanted'}
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={$resume.isPending}
-                  onclick={() => $resume.mutate(want.id)}
-                >
-                  Add back
-                </Button>
+                {@render RowAction('Add back', 'plus', $resume.isPending, () => $resume.mutate(want.id))}
               {:else}
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={$stop.isPending}
-                  onclick={() => $stop.mutate(want.id)}
-                >
-                  <Icon name="dismiss" size="sm" /> Remove
-                </Button>
+                {@render RowAction('Remove', 'dismiss', $stop.isPending, () => $stop.mutate(want.id))}
               {/if}
             </span>
           </div>

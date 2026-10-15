@@ -789,6 +789,10 @@ export interface LibraryFile {
   mappingConfidence?: number;
   mappingManual: boolean;
   mappedTrackId?: string;
+  /** The release the matched track is on, for a file whose own tags may name
+   * no album. */
+  mappedAlbumId?: string;
+  mappedAlbumTitle?: string;
   resolutionStatus: ResolutionStatus;
   resolutionSummary?: string;
   identityTitle?: string;

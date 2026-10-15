@@ -949,3 +949,83 @@ describe('a settings read that fails', () => {
     );
   });
 });
+
+// Settings › Sources said "Connected · checked 61d ago" for slskd and hid a
+// week of failed ListenBrainz syncs. Opening it checks a stale service again,
+// and the jobs that use a service report their failures beside it.
+describe('Sources status', () => {
+  const longAgo = new Date(Date.now() - 61 * 24 * 60 * 60 * 1000).toISOString();
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  let posted: string[] = [];
+
+  beforeEach(() => {
+    posted = [];
+    const slskd = {
+      configured: true,
+      enabled: true,
+      connectionStatus: 'ok',
+      lastCheckedAt: longAgo
+    };
+    const listenbrainz = {
+      configured: true,
+      enabled: true,
+      username: 'poldi',
+      connectionStatus: 'ok',
+      lastCheckedAt: new Date().toISOString()
+    };
+    const failed = {
+      causes: [{ cause: 'other', title: '', detail: '', jobCount: 2, firstFailedAt: null, lastFailedAt: null }],
+      items: ['a', 'b'].map((id) => ({
+        id,
+        kind: 'sync_listens',
+        lane: 'general',
+        attempts: 6,
+        maxAttempts: 6,
+        error: 'sync listens: listenbrainz is reachable but not answering',
+        cause: 'other',
+        failedAt: yesterday,
+        createdAt: yesterday
+      })),
+      total: 2,
+      truncated: false
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (init?.method === 'POST') posted.push(url.pathname);
+        const body: Record<string, unknown> = {
+          '/api/v1/settings/slskd': slskd,
+          '/api/v1/settings/slskd/test': { ...slskd, lastCheckedAt: new Date().toISOString() },
+          '/api/v1/settings/listenbrainz': listenbrainz,
+          '/api/v1/settings/navidrome': { configured: false, enabled: false },
+          '/api/v1/jobs/failed': failed,
+          '/api/v1/settings/source-preferences': preferences()
+        };
+        return new Response(JSON.stringify(body[url.pathname] ?? {}), { status: 200 });
+      })
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('checks a service again when its last check is two months old', async () => {
+    openedSources();
+    await vi.waitFor(() => expect(posted).toContain('/api/v1/settings/slskd/test'));
+  });
+
+  it('leaves a service checked a moment ago alone', async () => {
+    openedSources();
+    await vi.waitFor(() => expect(posted).toContain('/api/v1/settings/slskd/test'));
+    expect(posted).not.toContain('/api/v1/settings/listenbrainz/test');
+  });
+
+  it('shows the failed syncs beside ListenBrainz', async () => {
+    openedSources();
+    const link = await screen.findByRole('link', { name: '2 failed this week' });
+    expect(link.getAttribute('href')).toBe('/settings/jobs');
+  });
+});

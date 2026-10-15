@@ -23,6 +23,7 @@
     type WeeklySettings
   } from '$lib/api';
   import { formatBytes, relativeTime } from '$lib/utils';
+  import { checkIsStale, failedThisWeek, type SourceName } from '$lib/source-health';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import Card from '$lib/components/Card.svelte';
@@ -65,20 +66,24 @@
     queryFn: api.listenBrainzSettings
   });
 
-  // Health reads the same two summaries the rest of the application does, and
-  // the slskd and Navidrome settings already queried above — a summary of what
-  // the sections below configure, not a second source for it.
-  const dashboard = createQuery({
-    queryKey: ['dashboard'],
-    queryFn: api.dashboard,
-    // Every kind of job says over the event stream when it starts and when it
-    // settles, so this is the safety net rather than the mechanism: it covers a
-    // stream blocked by a proxy or dropped without reconnecting yet.
-    refetchInterval: (query) =>
-      (query.state.data?.runningJobCount ?? 0) + (query.state.data?.queuedJobCount ?? 0) > 0
-        ? 15_000
-        : false
+  // The release count is the Library page's own figure, read under the key
+  // that page reads it by. The dashboard's album count is every catalogue
+  // release, followed artists' missing ones included, and read 11,853 beside
+  // a library of 3,352.
+  const libraryReleases = createQuery({
+    queryKey: ['releases', 'library-head'],
+    queryFn: () => api.releases({ scope: 'library', limit: 8 }),
+    enabled: show === 'library'
   });
+
+  // A passing connection check says a service answers. The jobs that use it
+  // say whether the work went through, so Sources counts their failures too.
+  const failedJobs = createQuery({
+    queryKey: ['jobs-failed'],
+    queryFn: api.failedJobs,
+    enabled: show === 'sources'
+  });
+  const failures = (source: SourceName) => failedThisWeek($failedJobs.data, source);
 
   const library = createQuery({
     queryKey: ['library'],
@@ -401,7 +406,13 @@
   // state word and a dim detail. Spotify is not among them — its own section
   // carries its state, because it is the one source with no test cycle, only
   // a connected account.
-  type SourceStatusRow = { name: string; role: Role; state: string; detail: string };
+  type SourceStatusRow = {
+    name: string;
+    role: Role;
+    state: string;
+    detail: string;
+    failed: number;
+  };
 
   const sourceStatusRows = $derived<SourceStatusRow[]>([
     {
@@ -428,7 +439,8 @@
         ? "couldn't read"
         : !$settings.data?.configured
           ? 'not linked'
-          : ago('checked', $settings.data?.lastCheckedAt)
+          : ago('checked', $settings.data?.lastCheckedAt),
+      failed: failures('slskd')
     },
     {
       name: 'Navidrome',
@@ -457,7 +469,8 @@
         ? "couldn't read"
         : !$navidrome.data?.configured
           ? 'not linked'
-          : ago('notified', $navidrome.data?.lastNotifiedAt)
+          : ago('notified', $navidrome.data?.lastNotifiedAt),
+      failed: failures('Navidrome')
     },
     {
       name: 'ListenBrainz',
@@ -483,7 +496,8 @@
         ? "couldn't read"
         : !$listenbrainz.data?.configured
           ? 'not linked'
-          : ago('checked', $listenbrainz.data?.lastCheckedAt)
+          : ago('checked', $listenbrainz.data?.lastCheckedAt),
+      failed: failures('ListenBrainz')
     }
   ]);
 
@@ -705,6 +719,27 @@
   });
 
   const canTestListenBrainz = $derived(Boolean($listenbrainz.data?.configured));
+
+  // "Connected · checked 64d ago" was a reading from two months back. Opening
+  // Sources checks each switched-on service again when its last check is more
+  // than an hour old. Each check is one small read (slskd's state, one
+  // recommendation, a ping), never a search, and runs once per visit.
+  let rechecked = false;
+  $effect(() => {
+    if (show !== 'sources' || rechecked) return;
+    const slskd = $settings.data;
+    const player = $navidrome.data;
+    const listens = $listenbrainz.data;
+    if (!slskd || !player || !listens) return;
+    rechecked = true;
+    if (slskd.configured && slskd.enabled && checkIsStale(slskd.lastCheckedAt)) $test.mutate();
+    if (player.configured && player.enabled && checkIsStale(player.lastCheckedAt)) {
+      $testNavidrome.mutate();
+    }
+    if (listens.configured && listens.enabled && checkIsStale(listens.lastCheckedAt)) {
+      $testListenBrainz.mutate();
+    }
+  });
 
   const listenbrainzConnection = $derived.by((): { role: Role; label: string } => {
     if ($testListenBrainz.isPending) return { role: 'busy', label: 'Testing…' };
@@ -1317,6 +1352,11 @@
           {entry.state}
         </span>
         <span class="min-w-0 truncate text-meta text-ink-3 @xl:flex-1">{entry.detail}</span>
+        {#if entry.failed > 0}
+          <a href="/settings/jobs" class="shrink-0 text-meta font-medium text-fail hover:underline">
+            {entry.failed.toLocaleString()} failed this week
+          </a>
+        {/if}
       </div>
     {/each}
   </div>
@@ -1348,13 +1388,13 @@
       <h2 class="font-display text-lead font-bold text-ink">Status</h2>
     </div>
 
-    {#if $library.isError || $storage.isError || $dashboard.isError}
+    {#if $library.isError || $storage.isError || $libraryReleases.isError}
       <ErrorNote
-        error={$library.error ?? $storage.error ?? $dashboard.error}
+        error={$library.error ?? $storage.error ?? $libraryReleases.error}
         retry={() => {
           if ($library.isError) $library.refetch();
           if ($storage.isError) $storage.refetch();
-          if ($dashboard.isError) $dashboard.refetch();
+          if ($libraryReleases.isError) $libraryReleases.refetch();
         }}
         fallback="Couldn't load the library."
       />
@@ -1375,7 +1415,7 @@
           </span>
         {/if}
       </div>
-      {#if $library.isPending || $dashboard.isPending}
+      {#if $library.isPending || $libraryReleases.isPending}
         <Skeleton class="h-3 w-36" />
       {:else}
         <span class="numeric text-meta font-medium text-ink-4">
@@ -1383,8 +1423,8 @@
             Unavailable
           {:else}
             {($library.data?.fileCount ?? 0).toLocaleString()} files ·
-            {$dashboard.data
-              ? `${$dashboard.data.albumCount.toLocaleString()} releases`
+            {$libraryReleases.data
+              ? `${$libraryReleases.data.total.toLocaleString()} releases`
               : 'releases unavailable'}
           {/if}
         </span>
@@ -2454,8 +2494,13 @@
       {#if $spotify.data?.accountName}
         <span class="text-meta font-medium text-ink-3">as {$spotify.data.accountName}</span>
       {/if}
+      {#if failures('Spotify') > 0}
+        <a href="/settings/jobs" class="text-meta font-medium text-fail hover:underline">
+          {failures('Spotify').toLocaleString()} failed this week
+        </a>
+      {/if}
       <span class="ml-auto text-meta font-medium text-ink-3">
-        {ago('checked', $spotify.data?.lastCheckedAt)}
+        {ago('used', $spotify.data?.lastCheckedAt)}
       </span>
     </div>
 

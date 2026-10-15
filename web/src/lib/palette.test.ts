@@ -359,3 +359,15 @@ describe('minutesSeconds', () => {
     expect(minutesSeconds(undefined)).toBe('');
   });
 });
+
+describe('a release type', () => {
+  it('spells an EP as EP', () => {
+    const results = answer({
+      releases: [{ ...release, title: 'Pretty Blizzard', albumType: 'ep', releaseDate: '2019-01-01' }],
+      totals: { artists: 0, releases: 1, tracks: 0, files: 0, playlists: 0 }
+    });
+    const releases = paletteCategories(results, 'pretty').find((group) => group.key === 'releases');
+    expect(releases?.rows[0].subtitle).toContain('EP');
+    expect(releases?.rows[0].subtitle).not.toContain('Ep ');
+  });
+});

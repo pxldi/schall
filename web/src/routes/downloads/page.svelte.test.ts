@@ -605,3 +605,26 @@ describe('the print', () => {
     await waitFor(() => expect(duoton.inks).toEqual({ dark: '#0d1420', light: '#f2b48c' }));
   });
 });
+
+// "Needs review" said 1,449 beside a Review of 230. The pile is now the one
+// Review asks about, read by Review's own rule.
+describe('the needs-review pile', () => {
+  it('asks the server for the imports Review asks about', async () => {
+    at('/downloads?view=review');
+    answering(() => listing({ counts: counts({ review: 1449, questions: 12 }) }));
+    opened();
+
+    await waitFor(() =>
+      expect(downloadsAsked().some((address) => address.includes('view=questions'))).toBe(true)
+    );
+    at('/downloads');
+  });
+
+  it('counts the pile by the same rule', async () => {
+    answering(() => listing({ counts: counts({ review: 1449, questions: 12 }) }));
+    opened();
+
+    expect(await screen.findByText('12')).toBeTruthy();
+    expect(screen.queryByText('1,449')).toBeNull();
+  });
+});

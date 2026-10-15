@@ -116,17 +116,18 @@ describe('the wants being looked for', () => {
     expect(line.textContent).toContain('3 copies checked');
   });
 
-  // The one thing this feature adds to the tab: an upgrade want says which
-  // file it exists to replace, rather than reading as an ordinary suggestion.
-  it('names the file an upgrade want exists to replace', async () => {
+  // An upgrade want says what it replaces, rather than reading as an ordinary
+  // suggestion. The format says it: the file name repeated the title above it
+  // as a raw name like 02-deftones-you've_seen_the_butcher-dsp.mp3.
+  it('names the format of the file an upgrade want exists to replace', async () => {
     answering({
-      looking: [want({ origin: 'upgrade', upgradeOfPath: '/music/Talk Talk/roads.mp3' })]
+      looking: [want({ origin: 'upgrade', upgradeOfPath: '/music/Talk Talk/02-talk_talk-roads-dsp.mp3' })]
     });
 
     opened();
 
-    const line = await screen.findByText(/upgrade of roads\.mp3/);
-    expect(line.textContent).toContain('upgrade of roads.mp3');
+    const line = await screen.findByText(/upgrade of your MP3/);
+    expect(line.textContent).not.toContain('02-talk_talk-roads-dsp.mp3');
   });
 
   it('shows why a want has no sample', async () => {

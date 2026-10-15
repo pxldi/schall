@@ -73,6 +73,10 @@ type LibraryFileRow struct {
 	MappingConfidence pgtype.Float4
 	MappingManual     bool
 	MappedTrackID     uuid.NullUUID
+	// MappedAlbumID and MappedAlbumTitle name the release the mapping's track
+	// is on, so a matched file without an album tag still shows its album.
+	MappedAlbumID     uuid.NullUUID
+	MappedAlbumTitle  pgtype.Text
 	ResolutionStatus  string
 	ResolutionSummary pgtype.Text
 	IdentityTitle     pgtype.Text
@@ -383,6 +387,7 @@ func (q *Queries) ListLibraryFiles(ctx context.Context, params ListLibraryFilesP
 		       page.duplicate_kept_at,
 		       mapping.method, mapping.confidence,
 		       coalesce(mapping.is_manual, false), mapping.track_id,
+		       mapping.album_id, mapping.album_title,
 		       page.resolution_status, page.resolution_summary,
 		       page.transcoded_from_format, page.original_size_bytes,
 		       library_file_identities.track_title, library_file_identities.artist_name,
@@ -406,8 +411,11 @@ func (q *Queries) ListLibraryFiles(ctx context.Context, params ListLibraryFilesP
 		-- the order 00033's own down-migration keeps a file's mapping by.
 		LEFT JOIN LATERAL (
 		    SELECT track_mappings.method, track_mappings.confidence,
-		           track_mappings.is_manual, track_mappings.track_id
+		           track_mappings.is_manual, track_mappings.track_id,
+		           albums.id AS album_id, albums.title AS album_title
 		    FROM track_mappings
+		    JOIN tracks ON tracks.id = track_mappings.track_id
+		    JOIN albums ON albums.id = tracks.album_id
 		    WHERE track_mappings.library_file_id = page.id
 		    ORDER BY track_mappings.is_manual DESC, track_mappings.created_at,
 		             track_mappings.id
@@ -437,8 +445,9 @@ func (q *Queries) ListLibraryFiles(ctx context.Context, params ListLibraryFilesP
 			&row.ISRC, &row.MissingAt, &row.ScanError, &row.DecodeError, &row.MatchStatus,
 			&row.MatchCandidateCount, &row.DuplicateKeptAt,
 			&row.MappingMethod, &row.MappingConfidence,
-			&row.MappingManual, &row.MappedTrackID, &row.ResolutionStatus,
-			&row.ResolutionSummary,
+			&row.MappingManual, &row.MappedTrackID,
+			&row.MappedAlbumID, &row.MappedAlbumTitle,
+			&row.ResolutionStatus, &row.ResolutionSummary,
 			&row.TranscodedFromFormat, &row.OriginalSizeBytes,
 			&row.IdentityTitle, &row.IdentityArtist,
 			&row.IdentityManual, &row.IdentitySource, &row.IdentityURL,
