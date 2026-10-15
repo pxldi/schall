@@ -130,6 +130,20 @@ describe('the wants being looked for', () => {
     expect(line.textContent).not.toContain('02-talk_talk-roads-dsp.mp3');
   });
 
+  // One song held on a single and on an album is two upgrade rows with the
+  // same title. The album tells them apart.
+  it('names the album of the file an upgrade want replaces', async () => {
+    answering({
+      looking: [
+        want({ origin: 'upgrade', album: 'traence', upgradeOfPath: '/music/Souly/traence/05 Dónde.mp3' })
+      ]
+    });
+
+    opened();
+
+    expect(await screen.findByText(/upgrade of your MP3 on traence/)).toBeTruthy();
+  });
+
   it('shows why a want has no sample', async () => {
     const reason = "No upload matched this entry's name and length.";
     answering({ looking: [want({ anchorUnavailable: reason, anchorNextAttemptAt: null })] });

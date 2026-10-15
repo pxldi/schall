@@ -208,6 +208,10 @@ describe('relativeTime', () => {
     expect(ago(2)).toBe('just now');
   });
 
+  it('reads a moment ago as just now rather than in 0s', () => {
+    expect(relativeTime(new Date(at - 200).toISOString(), at)).toBe('just now');
+  });
+
   it('counts back in one unit at a time', () => {
     expect(ago(6)).toBe('6s ago');
     expect(ago(3 * 60)).toBe('3m ago');
