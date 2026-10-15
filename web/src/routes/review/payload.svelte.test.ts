@@ -291,7 +291,7 @@ describe('what a review answer sends', () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    expect(await press('Accept copy')).toEqual({
+    expect(await press('Accept Copy 1')).toEqual({
       method: 'POST',
       url: `/api/v1/review-queue/copies/${COPY}/accept`,
       body: null
@@ -329,7 +329,7 @@ describe('what a review answer sends', () => {
     piles.wants = [want('stopped')];
     await open('Evensong');
 
-    expect(await press('Accept copy')).toEqual({
+    expect(await press('Accept Copy 1')).toEqual({
       method: 'POST',
       url: `/api/v1/review-queue/copies/${COPY}/accept`,
       body: null
@@ -356,7 +356,7 @@ describe('what a review answer sends', () => {
     ];
     await open('In your library');
 
-    expect(await press('Accept copy')).toEqual({
+    expect(await press('Accept In your library')).toEqual({
       method: 'POST',
       url: `/api/v1/review-queue/wants/${TARGET}/accept-file`,
       body: null
@@ -457,10 +457,10 @@ describe('what a review answer sends', () => {
     });
     await open('Evensong');
 
-    await press('Accept copy');
+    await press('Accept Copy 1');
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    const accept = screen.getByRole('button', { name: 'Accept copy' }) as HTMLButtonElement;
+    const accept = screen.getByRole('button', { name: 'Accept Copy 1' }) as HTMLButtonElement;
     expect(accept.disabled).toBe(true);
   });
 
@@ -474,7 +474,7 @@ describe('what a review answer sends', () => {
     });
     await open('Evensong');
 
-    await press('Accept copy');
+    await press('Accept Copy 1');
     expect(await screen.findByText(/review copy not found/i)).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 

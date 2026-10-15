@@ -7,6 +7,7 @@ import type {
   LibraryFile,
   ReviewItem
 } from '$lib/api';
+import type { IconName } from '$lib/icons';
 
 /** The three questions Review holds.
  *
@@ -133,6 +134,110 @@ export function questionsFrom(sources: {
 
   return questions;
 }
+
+// ---- why a question is here ----------------------------------------------
+
+/** Why a question sits in Review, as one name a reader can filter by. It is
+ * read from the evidence the question already carries and decides nothing:
+ * every question is answered the same way whatever its reason. The order
+ * follows `review-reasons/review-now.sql`, which sorted the live queue the
+ * same way, so a reason here names the same pile there. */
+export type ReasonKey =
+  | 'nocheck'
+  | 'acoustid'
+  | 'same'
+  | 'sample'
+  | 'live'
+  | 'credit'
+  | 'library'
+  | 'version'
+  | 'folder'
+  | 'waiting';
+
+/** The rail lists them in this order, the piles a person answers first at
+ * the top and the ones still waiting on something else at the foot. */
+export const REASONS: Record<ReasonKey, { label: string; icon: IconName; tip: string }> = {
+  nocheck: {
+    label: 'No audio check',
+    icon: 'listen',
+    tip: 'Nothing could check the audio: no sample and no AcoustID answer. Listen and decide.'
+  },
+  acoustid: {
+    label: 'AcoustID unsure',
+    icon: 'fingerprint',
+    tip: 'AcoustID named another recording, or its answer was too weak to count.'
+  },
+  same: {
+    label: 'Audio also elsewhere',
+    icon: 'link',
+    tip: 'AcoustID says this audio also belongs to another recording.'
+  },
+  sample: {
+    label: 'Sample unsure',
+    icon: 'search-check',
+    tip: 'Against the shop preview the copy sits between the same and different.'
+  },
+  live: { label: 'Sounds live', icon: 'alert', tip: 'The copy looks like a live recording.' },
+  credit: {
+    label: 'Credit differs',
+    icon: 'artist',
+    tip: 'Only the artist credit differs from what you asked for.'
+  },
+  library: {
+    label: 'Filed as other song',
+    icon: 'library',
+    tip: 'The file is already in your library, filed as another recording.'
+  },
+  version: {
+    label: 'Which version',
+    icon: 'track',
+    tip: 'Several recordings fit this entry. Choose the one you meant.'
+  },
+  folder: { label: 'Folder', icon: 'folder-add', tip: 'Some files in a downloaded folder need a track.' },
+  waiting: {
+    label: 'Waiting',
+    icon: 'waiting',
+    tip: 'Still waiting on something else. It is judged again by itself when that arrives.'
+  }
+};
+
+const LIVE = /\blive\b/i;
+
+export function reasonOf(question: Question): ReasonKey {
+  if (question.kind === 'folder') return 'folder';
+  if (question.kind === 'version') return 'version';
+  const want = question.want;
+  if (!want) return 'nocheck';
+  if (want.waitingFor) return 'waiting';
+  if (want.kind === 'stopped') return isCreditOnlyStopped(want) ? 'credit' : 'library';
+  const held = want.copies.filter((copy) => copy.verdict === 'held');
+  const copies = held.length > 0 ? held : want.copies;
+  if (copies.some((copy) => (copy.evidence?.acoustic?.clusters?.[0]?.recordingIds?.length ?? 0) > 1)) {
+    return 'same';
+  }
+  if (copies.some((copy) => copy.evidence?.anchor?.measured && copy.evidence.anchor.agrees === undefined)) {
+    return 'sample';
+  }
+  if (!LIVE.test(want.target.title) && copies.some((copy) => LIVE.test(copy.path))) return 'live';
+  const unheard = (copy: AcquiredCopy) =>
+    (copy.evidence?.acoustic?.recordingIds?.length ?? 0) === 0 && !copy.evidence?.anchor?.measured;
+  if (copies.every(unheard)) return 'nocheck';
+  return 'acoustid';
+}
+
+/** One column of Review's comparison: a copy, or the want's file already in
+ * the library. */
+export type CopyColumn = {
+  heading: string;
+  copy: AcquiredCopy;
+  /** Separate rips that sound like this one, the copy shown included. */
+  rips: number;
+  /** The want's file already in the library, compared by its own credit. */
+  filed?: boolean;
+  /** Something in the evidence speaks against this copy, so its Accept is
+   * not drawn as the main action. */
+  doubted: boolean;
+};
 
 // ---- deciding an album at once, and listening through -------------------
 
