@@ -860,7 +860,15 @@ describe('an artist nobody follows', () => {
     await screen.findByRole('heading', { name: 'Talk Talk' });
 
     expect(screen.queryByText(/nothing counts as missing/)).toBeNull();
-    expect(screen.getByText(/Not followed/)).toBeTruthy();
+  });
+
+  it('says not following once, on the follow control', async () => {
+    answering(detail({ followed: false, followedAt: null }));
+    opened();
+    await screen.findByRole('heading', { name: 'Talk Talk' });
+
+    expect(screen.queryByText(/won't add their new releases/)).toBeNull();
+    expect(screen.getAllByText(/Not following/).length).toBeGreaterThan(0);
   });
 });
 

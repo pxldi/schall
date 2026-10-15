@@ -113,12 +113,13 @@ describe('connectEvents', () => {
 
     stream.announce('acquisitions');
 
-    // The counts are read after the views, on a gap of their own.
+    // The counts, and the review queue with them, are read after the views,
+    // on a gap of their own.
     expect(asked(invalidateQueries)).toEqual([
-      'review-queue',
       'wants',
       'global-search',
       ...queue,
+      'review-queue',
       'wants/looking/count',
       'dashboard'
     ]);
@@ -189,6 +190,28 @@ describe('connectEvents', () => {
       vi.advanceTimersByTime(COUNT_GAP_MS);
 
       expect(asked(invalidateQueries).filter((key) => key === 'dashboard')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review read its queue three times as it opened, once per settled want.
+  it('reads the review queue at most once in the count gap', () => {
+    vi.useFakeTimers();
+    try {
+      const { invalidateQueries, stream } = connect();
+
+      stream.announce('acquisitions');
+      invalidateQueries.mockClear();
+      for (let i = 0; i < 5; i++) {
+        stream.announce('acquisitions');
+        vi.advanceTimersByTime(NOTICE_GAP_MS);
+      }
+      expect(asked(invalidateQueries)).not.toContain('review-queue');
+
+      vi.advanceTimersByTime(COUNT_GAP_MS);
+
+      expect(asked(invalidateQueries).filter((key) => key === 'review-queue')).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

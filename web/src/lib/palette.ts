@@ -297,7 +297,10 @@ function fileState(
   return { role: 'idle', mark: { icon: 'file-unknown', label: 'Not matched' } };
 }
 
+// MusicBrainz writes release types in lower case. `ep` is an abbreviation, so
+// capitalising its first letter drew `Ep`.
 function capitalised(value: string) {
+  if (value.toLowerCase() === 'ep') return 'EP';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 

@@ -37,7 +37,6 @@
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import SoundCloudTrackModal from '$lib/components/SoundCloudTrackModal.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
-  import StateMark from '$lib/components/StateMark.svelte';
   import StateTag from '$lib/components/StateTag.svelte';
   import * as Table from '$lib/components/ui/table';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -814,9 +813,21 @@
               </Table.Cell>
 
               <Table.Cell>
-                <span class="block max-w-40 truncate text-meta text-ink-2" data-truncated="true">
-                  {file.albumTag ?? '—'}
-                </span>
+                <!-- A matched file is on a catalogue release, and that release
+                     is its album whether or not the file's own tags name one. -->
+                {#if file.mappedAlbumId && file.mappedAlbumTitle}
+                  <a
+                    href="/releases/{file.mappedAlbumId}"
+                    class="block max-w-40 truncate text-meta text-ink-2 hover:text-ink"
+                    data-truncated="true"
+                  >
+                    {file.mappedAlbumTitle}
+                  </a>
+                {:else}
+                  <span class="block max-w-40 truncate text-meta text-ink-2" data-truncated="true">
+                    {file.albumTag ?? '—'}
+                  </span>
+                {/if}
               </Table.Cell>
 
               <Table.Cell>
@@ -848,15 +859,19 @@
                   {#if file.decodeError && !file.missingAt}
                     <StateIcon icon="alert" label="Damaged audio" role="fail" note={file.decodeError} />
                   {/if}
+                  <!-- How it was matched is the tick's tooltip. As a line of
+                       text it was cut off in a column this narrow. -->
                   {#if standing.kind === 'tick'}
-                    <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
-                    {#if file.matchStatus === 'matched'}
-                      <span class="max-w-44 truncate text-meta text-ink-2" title={standing.title}>
-                        {file.mappingManual
+                    <StateIcon
+                      icon="check"
+                      role="ok"
+                      label={file.matchStatus !== 'matched'
+                        ? 'Identified'
+                        : file.mappingManual
                           ? 'Manual match'
                           : `Matched by ${matchMethodName(file.mappingMethod)}`}
-                      </span>
-                    {/if}
+                      note={standing.title}
+                    />
                   {:else}
                     <StateTag tone={standing.tone} title={standing.title}>{standing.label}</StateTag>
                   {/if}
@@ -933,16 +948,6 @@
                 </span>
               </Table.Cell>
             </Table.Row>
-
-            {#if file.scanError}
-              <Table.Row class="hover:bg-transparent">
-                <Table.Cell colspan={columnCount} class="pt-0">
-                  <span class="block max-w-160 truncate text-meta text-fail" title={file.scanError}>
-                    {file.scanError}
-                  </span>
-                </Table.Cell>
-              </Table.Row>
-            {/if}
 
             {#if open}
               <Table.Row class="hover:bg-transparent">

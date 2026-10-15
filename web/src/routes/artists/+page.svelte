@@ -351,7 +351,9 @@
          line that counts this half. -->
     <a href="/artists/labels" class="transition hover:text-ink">
       <span class="underline underline-offset-3">
-      {#if labelsTotal !== undefined}
+      <!-- No labels followed is no count: "0 labels" read as a fact about
+           nothing. The link stays, as the way to follow one. -->
+      {#if labelsTotal}
         <span class="numeric">{labelsTotal.toLocaleString()}</span>
         {labelsTotal === 1 ? 'label' : 'labels'}
       {:else}

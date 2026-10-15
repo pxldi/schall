@@ -124,11 +124,17 @@
   // Imported and All hold thousands of rows, and reading a whole pile at once
   // sent megabytes for the first screenful. The pile is read PAGE rows at a
   // time, and the next page as the reader nears the end of the list.
+  // "Needs review" is the pile Review asks about, read by Review's own rule
+  // (the `questions` view): a paused import that recorded what it compared.
+  // The wider `review` view also held every copy whose want Review shows as
+  // one card, and a copy that stopped before comparing anything, so the chip
+  // said 1,449 beside a Review of 230.
+  const serverView = (name: DownloadView) => (name === 'review' ? 'questions' : name);
   const downloads = createInfiniteQuery(
     toStore(() => ({
       queryKey: ['downloads', 'list', view, asked],
       queryFn: ({ pageParam }: { pageParam: number }) =>
-        api.downloads({ view, q: asked || undefined, limit: PAGE, offset: pageParam }),
+        api.downloads({ view: serverView(view), q: asked || undefined, limit: PAGE, offset: pageParam }),
       initialPageParam: 0,
       getNextPageParam: (last: DownloadRequests) =>
         last.items.length > 0 && last.offset + last.items.length < last.total
@@ -278,7 +284,7 @@
   // it are never two different reads.
   const views = $derived([
     { value: 'open', name: 'Open', count: counts?.open },
-    { value: 'review', name: 'Needs review', count: counts?.review },
+    { value: 'review', name: 'Needs review', count: counts?.questions },
     { value: 'imported', name: 'Imported', count: counts?.imported },
     { value: 'discarded', name: progress.discarded, count: counts?.discarded },
     { value: 'failed', name: 'Failed', count: counts?.failed },
@@ -299,7 +305,7 @@
   const nothingRequested = $derived(counts?.all === 0);
   // A search that finds nothing is its own reason, not the pile's.
   const nothingMatches = $derived(
-    Boolean(search.trim()) && filteredItems.length === 0 && (counts?.[view] ?? 0) > 0
+    Boolean(search.trim()) && filteredItems.length === 0 && (counts?.[serverView(view)] ?? 0) > 0
   );
   const emptyHeading = $derived(
     nothingMatches

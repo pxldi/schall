@@ -263,9 +263,8 @@
     return kindNames[kind] ?? kind.replaceAll('_', ' ');
   }
 
-  // A job row says `job 48044` out loud, and a Schall job is a UUID. The leading
-  // group is enough to tell two rows apart and to find one in the server log,
-  // which is what an identifier in a row is for.
+  // A Schall job is a UUID. The leading group is enough to find one in the
+  // server log, so it sits in the tooltip: nobody reads it in the row.
   function shortId(id: string) {
     return id.split('-')[0] ?? id;
   }
@@ -886,8 +885,8 @@
                     {attemptsOf(job.status, job.attempts, job.maxAttempts)}
                   </span>
 
-                  <span class="numeric truncate text-meta text-ink-3">
-                    job {shortId(job.id)} · {state.when}
+                  <span class="numeric truncate text-meta text-ink-3" title="job {shortId(job.id)}">
+                    {state.when}
                   </span>
 
                   <!-- A running job has an empty action column: it is being
@@ -1069,8 +1068,8 @@
                         <span class="truncate text-body text-ink" title={primaryOf(failure)}>
                           {primaryOf(failure)}
                         </span>
-                        <span class="numeric truncate text-meta text-ink-3">
-                          job {shortId(failure.id)} · {jobRow.when}
+                        <span class="numeric truncate text-meta text-ink-3" title="job {shortId(failure.id)}">
+                          {jobRow.when}
                         </span>
                       </span>
 

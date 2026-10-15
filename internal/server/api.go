@@ -1175,6 +1175,8 @@ type libraryFileResponse struct {
 	MappingConfidence      *float32   `json:"mappingConfidence,omitempty"`
 	MappingManual          bool       `json:"mappingManual"`
 	MappedTrackID          *uuid.UUID `json:"mappedTrackId,omitempty"`
+	MappedAlbumID          *uuid.UUID `json:"mappedAlbumId,omitempty"`
+	MappedAlbumTitle       *string    `json:"mappedAlbumTitle,omitempty"`
 	ResolutionStatus       string     `json:"resolutionStatus"`
 	ResolutionSummary      *string    `json:"resolutionSummary,omitempty"`
 	IdentityTitle          *string    `json:"identityTitle,omitempty"`
@@ -1307,6 +1309,8 @@ func libraryFileResponseFrom(file db.LibraryFileRow) libraryFileResponse {
 		MappingMethod:     textPointer(file.MappingMethod),
 		MappingConfidence: float32Pointer(file.MappingConfidence),
 		MappingManual:     file.MappingManual, MappedTrackID: nullableUUID(file.MappedTrackID),
+		MappedAlbumID:          nullableUUID(file.MappedAlbumID),
+		MappedAlbumTitle:       textPointer(file.MappedAlbumTitle),
 		ResolutionStatus:       file.ResolutionStatus,
 		ResolutionSummary:      textPointer(file.ResolutionSummary),
 		IdentityTitle:          textPointer(file.IdentityTitle),

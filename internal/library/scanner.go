@@ -268,7 +268,7 @@ func (scanner *Scanner) scanRoot(
 		}
 
 		metadata := readTags(path)
-		if metadata.Error != "" {
+		if metadata.scanError() != "" {
 			result.Errors++
 		}
 		fileID, err = scanner.upsertFile(ctx, rootID, path, info, metadata, startedAt)
@@ -571,7 +571,7 @@ func (scanner *Scanner) upsertFile(
 		RETURNING id
 	`, rootID, path, info.Size(), databaseTime(info.ModTime()), metadata.Artist, metadata.Album,
 		metadata.Title, metadata.DiscNumber, metadata.TrackNumber, metadata.DurationMS,
-		metadata.MusicBrainzRecordingID, metadata.ISRC, scannedAt, metadata.Error).Scan(&fileID)
+		metadata.MusicBrainzRecordingID, metadata.ISRC, scannedAt, metadata.scanError()).Scan(&fileID)
 	if err == nil {
 		err = scanner.linkDownloadProvenance(ctx, path, fileID)
 	}
@@ -614,6 +614,16 @@ func isSupported(path string) bool {
 
 func databaseTime(value time.Time) time.Time {
 	return value.Truncate(time.Microsecond)
+}
+
+// scanError is what the file's row records as wrong with it. A file with no
+// tags at all is not one: AIFF and WAV usually carry none and play fine, and
+// recording the reader's "no tags found" listed them as unreadable.
+func (tags extractedTags) scanError() string {
+	if tags.TagsAbsent {
+		return ""
+	}
+	return tags.Error
 }
 
 func readTags(path string) extractedTags {

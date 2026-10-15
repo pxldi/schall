@@ -689,13 +689,8 @@
         <span class="text-body font-semibold text-ink">
           {$artist.data.catalogueSummary ?? 'Here because you have their music.'}
         </span>
-        <!-- What not following means. It used to say "nothing counts as
-             missing", above a Missing count and a Want missing button that
-             both still apply: the grid counts against the monitor level
-             whether or not anybody follows the artist. -->
-        <span class="text-meta text-ink-2">
-          Not followed. Schall won't add their new releases.
-        </span>
+        <!-- Not following is said once, by the follow control beside the
+             title. A second sentence here repeated it. -->
       </div>
     {/if}
 
