@@ -2597,6 +2597,54 @@ func TestAWantStopsWaitingForALibraryRowThatIsNotComing(t *testing.T) {
 	}
 }
 
+// A want stranded on a copy whose file was later found gone looks again. Five
+// wants stayed on "Imported copy missing from your library. Downloads paused."
+// for weeks after their copies were stamped removed, rescheduling themselves
+// every minute and never searching.
+func TestAWantStrandedOnACopyFoundGoneLooksAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	hunter := &fakeHunter{}
+	service := hunting(pool, hunter, &fakeFetcher{}, true)
+
+	recordingID := uuid.New()
+	target := createWantWithDuration(ctx, t, service, recordingID, 301_000)
+	fileID := acceptedCopy(ctx, t, pool, target.ID, recordingID)
+	if _, err := pool.Exec(ctx, `
+		UPDATE downloads SET library_file_id = NULL WHERE library_file_id = $1
+	`, fileID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_target_files SET file_removed_at = now()
+		WHERE acquisition_target_id = $1
+	`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets SET summary = $2, next_attempt_at = now() - interval '1 minute'
+		WHERE id = $1
+	`, target.ID, strandedSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	looked, err := service.Target(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if looked.Summary == strandedSummary {
+		t.Errorf("summary = %q, want the want no longer stranded", looked.Summary)
+	}
+	if len(hunter.queries) == 0 {
+		t.Errorf("searches = 0, want the song looked for again")
+	}
+}
+
 // Until then it waits, quietly and briefly. A scan takes minutes, and going
 // looking in the meantime would fetch a second copy of music already on the disc.
 func TestAWantWaitsWhileTheScanIsStillCatchingUp(t *testing.T) {
