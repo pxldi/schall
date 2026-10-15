@@ -393,7 +393,7 @@ func (service *Service) hunt(
 		// by a list.
 		// Lossy copies were on offer and this want takes only lossless ones.
 		// No setting can change that, so the reader is sent to none.
-		if lossless && refusedAsLossy(belowFloor) {
+		if lossless.losslessOnly && refusedAsLossy(belowFloor) {
 			return service.settleAttempt(ctx, target, "none", onlyLossySummary,
 				fmt.Sprintf("%s Searched %q.", onlyLossyDetail, text))
 		}
@@ -662,7 +662,7 @@ func (service *Service) chooseFrom(
 	taken sources.Offer,
 	takenPaths map[string]bool,
 	preferences sources.Preferences,
-	losslessOnly bool,
+	losslessOnly lossBar,
 ) (sources.Offer, bool) {
 	verdicts, err := service.verdictsFor(ctx, sibling.ID)
 	if err != nil {
@@ -713,7 +713,7 @@ func (service *Service) choose(
 	wanted sources.QueryTrack,
 	open map[db.Peer]int,
 	preferences sources.Preferences,
-	losslessOnly bool,
+	losslessOnly lossBar,
 ) (sources.Offer, bool, bool, []sources.Refused, error) {
 	verdicts, err := service.verdictsFor(ctx, target.ID)
 	if err != nil {
@@ -741,25 +741,30 @@ func (service *Service) choose(
 // acceptableOffers takes the files under the user's bitrate floor out of the
 // reading order, and reports them. A want that takes only lossless copies
 // (losslessOnly) also loses every file whose extension is not lossless,
-// including a file of no stated format.
+// including a file of no stated format, unless the bar lets a lossy file in
+// at its bit rate.
 func acceptableOffers(
-	offers []sources.Offer, preferences sources.Preferences, losslessOnly bool,
+	offers []sources.Offer, preferences sources.Preferences, losslessOnly lossBar,
 ) ([]sources.Offer, []sources.Refused) {
-	if !preferences.Stated() && !losslessOnly {
+	if !preferences.Stated() && !losslessOnly.losslessOnly {
 		return offers, nil
 	}
 	kept := make([]sources.Offer, 0, len(offers))
 	var refused []sources.Refused
 	for _, offer := range offers {
-		if losslessOnly && !sources.Lossless(offer.File.Extension) {
+		if losslessOnly.refuses(offer.File) {
 			format := strings.ToUpper(strings.TrimPrefix(offer.File.Extension, "."))
 			if format == "" {
 				format = "A file of no stated format"
 			}
+			reason := format + " is not lossless, and this want needs a lossless copy"
+			if losslessOnly.lossyFromKbps > 0 {
+				reason = fmt.Sprintf("%s is under %d kbps, and this want needs a lossless copy or one at %d kbps",
+					format, losslessOnly.lossyFromKbps, losslessOnly.lossyFromKbps)
+			}
 			refused = append(refused, sources.Refused{
 				Username: offer.Username, Directory: offer.Directory,
-				Format: offer.File.Extension, Kind: sources.RefusedLossy,
-				Reason: format + " is not lossless, and this want needs a lossless copy",
+				Format: offer.File.Extension, Kind: sources.RefusedLossy, Reason: reason,
 			})
 			continue
 		}
@@ -854,6 +859,11 @@ func (service *Service) verdictsFor(
 	if err != nil {
 		return offerVerdicts{}, fmt.Errorf("read what was tried for want %s: %w", targetID, err)
 	}
+	earlier, err := service.store.UndeliveredBeforeWant(ctx, targetID)
+	if err != nil {
+		return offerVerdicts{}, fmt.Errorf("read what failed to arrive before want %s: %w", targetID, err)
+	}
+	judged = append(judged, earlier...)
 	verdicts := offerVerdicts{
 		settled:     make(map[string]bool, len(judged)),
 		rested:      make(map[string]time.Time, len(judged)),

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pxldi/schall/internal/sources"
+	"github.com/pxldi/schall/internal/transcode"
 )
 
 // QueueUpgradeSweep asks for the next page of the library to be checked
@@ -237,10 +238,30 @@ func damagedLossless(alias string, param int) string {
 		alias, param)
 }
 
+// LossyStandInKbps is the lowest bit rate at which a lossy copy may replace a
+// damaged lossless file, or 0 when none may. While the import settings
+// re-encode lossless arrivals, every lossless copy is filed at the re-encode
+// rate anyway, so a lossy copy at that rate or above ends up the same file
+// (owner's decision, 2026-10-15). With re-encoding off, only lossless counts.
+func (q *Queries) LossyStandInKbps(ctx context.Context) (int, error) {
+	settings, err := q.ImportSettings(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("read the import settings: %w", err)
+	}
+	if !settings.TranscodeEnabled {
+		return 0, nil
+	}
+	policy := transcode.Policy{
+		Enabled: true, Target: settings.TranscodeTarget,
+		Bitrate: settings.TranscodeBitrate, When: settings.TranscodeWhen,
+	}
+	return policy.NominalKbps(), nil
+}
+
 // UpgradeOfDamagedLossless reports whether the file an upgrade want exists to
 // replace is a damaged lossless file. Such a want takes only lossless copies,
-// because ReplaceIfBetter never lets a lossy copy replace that file. A file
-// that is gone reads as false.
+// or lossy ones at LossyStandInKbps, because ReplaceIfBetter lets nothing else
+// replace that file. A file that is gone reads as false.
 func (q *Queries) UpgradeOfDamagedLossless(ctx context.Context, fileID uuid.UUID) (bool, error) {
 	var damaged bool
 	err := q.db.QueryRow(ctx, fmt.Sprintf(`

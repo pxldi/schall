@@ -58,12 +58,31 @@ func TestAcceptableOffersKeepsOnlyLosslessFilesForALosslessOnlyWant(t *testing.T
 	unknown := sources.Offer{Username: "unknown"}
 
 	kept, refused := acceptableOffers(
-		[]sources.Offer{mp3, flac, unknown}, sources.Preferences{}, true)
+		[]sources.Offer{mp3, flac, unknown}, sources.Preferences{}, lossBar{losslessOnly: true})
 
 	if len(kept) != 1 || kept[0].Username != "flac" {
 		t.Fatalf("kept = %+v, want the FLAC only", kept)
 	}
 	if len(refused) != 2 || refused[0].Kind != sources.RefusedLossy || refused[1].Kind != sources.RefusedLossy {
 		t.Fatalf("refused = %+v, want the MP3 and the unknown file refused as lossy", refused)
+	}
+}
+
+// With re-encoding on, a lossy copy at the re-encode rate stands in for a
+// lossless one. One below it, or of no stated rate, is still refused.
+func TestAcceptableOffersLetsALossyFileInAtTheReencodeRate(t *testing.T) {
+	flac := sources.Offer{Username: "flac", File: sources.File{Extension: "flac"}}
+	at := sources.Offer{Username: "at", File: sources.File{Extension: "mp3", BitRate: 320}}
+	under := sources.Offer{Username: "under", File: sources.File{Extension: "mp3", BitRate: 256}}
+	unrated := sources.Offer{Username: "unrated", File: sources.File{Extension: "mp3"}}
+
+	kept, refused := acceptableOffers([]sources.Offer{flac, at, under, unrated},
+		sources.Preferences{}, lossBar{losslessOnly: true, lossyFromKbps: 320})
+
+	if len(kept) != 2 || kept[0].Username != "flac" || kept[1].Username != "at" {
+		t.Fatalf("kept = %+v, want the FLAC and the 320 kbps MP3", kept)
+	}
+	if len(refused) != 2 || refused[0].Kind != sources.RefusedLossy || refused[1].Kind != sources.RefusedLossy {
+		t.Fatalf("refused = %+v, want the 256 kbps and the unrated MP3 refused as lossy", refused)
 	}
 }

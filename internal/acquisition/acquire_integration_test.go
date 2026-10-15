@@ -762,6 +762,46 @@ func TestACopyThatFailedToArriveRestsBeforeBeingAskedForAgain(t *testing.T) {
 	}
 }
 
+// A want that replaced another starts with that want's undelivered copies
+// still resting. An upgrade want is superseded each time its copy is refused,
+// and the fresh one asked the same peer for the file it had refused to send
+// seven minutes earlier.
+func TestACopyThatFailedToArriveForTheWantThisOneReplacedStillRests(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := dbtest.Setup(t)
+	failed := sources.File{
+		Path: `Music\failed.flac`, Name: "Glory Box.flac", DurationSeconds: 301,
+	}
+	fetcher := &fakeFetcher{}
+	service := hunting(pool, &fakeHunter{candidates: offering(failed)}, fetcher, true)
+	earlier := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if err := db.New(pool).RecordAcquiredFile(ctx, db.RecordAcquiredFileParams{
+		AcquisitionTargetID: earlier.ID, Provider: "slskd", SourceUsername: "peer",
+		RemotePath: failed.Path, FileName: failed.Name,
+		Verdict: db.AcquiredFileUndelivered, Summary: "the bytes did not arrive",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	later := createWantWithDuration(ctx, t, service, uuid.New(), 301_000)
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets
+		SET status = 'superseded', superseded_by_id = $2, next_attempt_at = NULL
+		WHERE id = $1
+	`, earlier.ID, later.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep() error = %v", err)
+	}
+
+	if len(fetcher.started) != 0 {
+		t.Fatalf("started %d transfers, want the copy the replaced want could not get left alone",
+			len(fetcher.started))
+	}
+}
+
 // Every copy found for this want disagreed on the artist credit alone. The want
 // stops and puts the copies in the review queue instead of searching again.
 func TestAWantWithCreditOnlyRefusalsStopsForReview(t *testing.T) {

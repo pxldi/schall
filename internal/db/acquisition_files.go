@@ -825,6 +825,38 @@ func (q *Queries) AcquisitionTargetFiles(
 	return scanAcquiredFiles(rows)
 }
 
+// UndeliveredBeforeWant reads the copies that failed to arrive for the wants
+// this want superseded, however many times over. An upgrade want is superseded
+// by a fresh one each time its copy is refused, and the fresh one started with
+// no history, so it asked the same peer for the same file that peer had just
+// refused to send. Only undelivered copies are carried: they are about the
+// file, while every other verdict answered the old want's own question.
+func (q *Queries) UndeliveredBeforeWant(
+	ctx context.Context, targetID uuid.UUID,
+) ([]AcquisitionTargetFileRow, error) {
+	rows, err := q.db.Query(ctx, `
+		WITH RECURSIVE earlier AS (
+			SELECT id FROM acquisition_targets WHERE superseded_by_id = $1
+			UNION
+			SELECT targets.id FROM acquisition_targets targets
+			JOIN earlier ON targets.superseded_by_id = earlier.id
+		)
+		SELECT id, acquisition_target_id, provider, source_username, remote_path,
+		       file_name, size_bytes, verdict, decided_by, summary, evidence,
+		       download_request_id, library_file_id, decided_at,
+		       audio_fingerprint, audio_fingerprint_seconds, waveform
+		FROM acquisition_target_files
+		WHERE acquisition_target_id IN (SELECT id FROM earlier)
+		  AND verdict = 'undelivered'
+		ORDER BY decided_at DESC, id
+	`, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("read what failed to arrive before want %s: %w", targetID, err)
+	}
+	defer rows.Close()
+	return scanAcquiredFiles(rows)
+}
+
 // WantsHoldingSeveralHeldCopies lists the wants with more than one copy still
 // waiting for an answer, which are the only wants a duplicate can be in.
 func (q *Queries) WantsHoldingSeveralHeldCopies(ctx context.Context) ([]uuid.UUID, error) {
