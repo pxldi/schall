@@ -34,8 +34,12 @@ var (
 	// ErrNotATrack reports an address yt-dlp does not read as one track on one
 	// of the three services: a playlist, a set, an album, a profile, or a site
 	// Schall does not take addresses from.
-	ErrNotATrack   = errors.New("that address is not a single track on SoundCloud, YouTube or Bandcamp")
-	ErrGone        = errors.New("the service no longer has that track")
+	ErrNotATrack = errors.New("that address is not a single track on SoundCloud, YouTube or Bandcamp")
+	ErrGone      = errors.New("the service no longer has that track")
+	// ErrLocked reports a track the service serves only encrypted. SoundCloud
+	// serves many label releases this way, and yt-dlp can read neither its
+	// details nor its audio.
+	ErrLocked      = errors.New("the service locks that track")
 	ErrRateLimited = errors.New("yt-dlp was rate limited")
 )
 
@@ -484,6 +488,8 @@ func (client *Client) commandError(ctx context.Context, stderr []byte, runErr er
 		return fmt.Errorf("%w: %s", ErrRateLimited, firstLine(string(stderr)))
 	case errors.Is(runErr, exec.ErrNotFound):
 		return fmt.Errorf("%w: %s", ErrUnavailable, client.path)
+	case strings.Contains(message, "drm protected"):
+		return fmt.Errorf("%w: %s", ErrLocked, firstLine(string(stderr)))
 	case strings.Contains(message, "unsupported url"):
 		return fmt.Errorf("%w: %s", ErrNotATrack, firstLine(string(stderr)))
 	case strings.Contains(message, "video unavailable"),

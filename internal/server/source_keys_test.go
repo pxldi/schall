@@ -128,6 +128,7 @@ func TestKeyingAWantReportsWhatRefusedIt(t *testing.T) {
 		{tracksource.ErrNotATrack, http.StatusBadRequest},
 		{tracksource.ErrGone, http.StatusNotFound},
 		{tracksource.ErrRateLimited, http.StatusServiceUnavailable},
+		{tracksource.ErrLocked, http.StatusUnprocessableEntity},
 	} {
 		keys := &fakeSourceKeys{err: test.err}
 		response := httptest.NewRecorder()
