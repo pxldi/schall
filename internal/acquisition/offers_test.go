@@ -49,3 +49,21 @@ func TestDisclosedOffersDropsANamedOfferWhoseLengthContradicts(t *testing.T) {
 		t.Fatalf("kept = %+v, want the named file left alone because its length contradicts", kept)
 	}
 }
+
+// A want that takes only lossless copies keeps the FLAC and refuses the MP3
+// and the file of no stated format, each as lossy.
+func TestAcceptableOffersKeepsOnlyLosslessFilesForALosslessOnlyWant(t *testing.T) {
+	flac := sources.Offer{Username: "flac", File: sources.File{Extension: "flac"}}
+	mp3 := sources.Offer{Username: "mp3", File: sources.File{Extension: "mp3", BitRate: 320}}
+	unknown := sources.Offer{Username: "unknown"}
+
+	kept, refused := acceptableOffers(
+		[]sources.Offer{mp3, flac, unknown}, sources.Preferences{}, true)
+
+	if len(kept) != 1 || kept[0].Username != "flac" {
+		t.Fatalf("kept = %+v, want the FLAC only", kept)
+	}
+	if len(refused) != 2 || refused[0].Kind != sources.RefusedLossy || refused[1].Kind != sources.RefusedLossy {
+		t.Fatalf("refused = %+v, want the MP3 and the unknown file refused as lossy", refused)
+	}
+}

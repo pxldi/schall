@@ -357,8 +357,12 @@ func (service *Service) hunt(
 	}
 	// A read that failed is Schall's failure, so it spends no attempt the way
 	// "nobody is sharing it" would.
+	lossless, err := service.losslessOnly(ctx, target)
+	if err != nil {
+		return err
+	}
 	offer, found, heldBack, belowFloor, err := service.choose(
-		ctx, target, candidates, wanted, openAtPeers, preferences)
+		ctx, target, candidates, wanted, openAtPeers, preferences, lossless)
 	if err != nil {
 		return err
 	}
@@ -387,6 +391,12 @@ func (service *Service) hunt(
 		// send the reader to different settings. A file under the floor was
 		// turned away by a number the reader can lower; a format was turned away
 		// by a list.
+		// Lossy copies were on offer and this want takes only lossless ones.
+		// No setting can change that, so the reader is sent to none.
+		if lossless && refusedAsLossy(belowFloor) {
+			return service.settleAttempt(ctx, target, "none", onlyLossySummary,
+				fmt.Sprintf("%s Searched %q.", onlyLossyDetail, text))
+		}
 		if turnedAway, why := belowTheFloor(refused, belowFloor); turnedAway {
 			return service.settleBelowFloor(ctx, target, preferences,
 				fmt.Sprintf("%s Searched %q: %s.",
@@ -620,8 +630,17 @@ func (service *Service) harvest(
 		if sibling.EntryDurationMS.Valid {
 			wanted.DurationSeconds = int(sibling.EntryDurationMS.Int32) / 1000
 		}
+		// Each sibling is held to its own rule. A copy this folder offers may be
+		// right for one want and lossy for another.
+		lossless, err := service.losslessOnly(ctx, sibling)
+		if err != nil {
+			service.logger.Error().Err(err).
+				Str("acquisition_target_id", sibling.ID.String()).
+				Msg("read whether a want sharing a release takes only lossless copies")
+			continue
+		}
 		offer, found := service.chooseFrom(
-			ctx, sibling, candidates, wanted, taken, takenPaths, preferences)
+			ctx, sibling, candidates, wanted, taken, takenPaths, preferences, lossless)
 		if !found {
 			continue
 		}
@@ -643,6 +662,7 @@ func (service *Service) chooseFrom(
 	taken sources.Offer,
 	takenPaths map[string]bool,
 	preferences sources.Preferences,
+	losslessOnly bool,
 ) (sources.Offer, bool) {
 	verdicts, err := service.verdictsFor(ctx, sibling.ID)
 	if err != nil {
@@ -654,7 +674,7 @@ func (service *Service) chooseFrom(
 	// A file taken along for a neighbouring want is held to the same floor as
 	// the one that prompted the search. Nothing is fetched under it, whoever it
 	// is for.
-	offers, _ := acceptableOffers(sources.OffersFor(candidates, wanted), preferences)
+	offers, _ := acceptableOffers(sources.OffersFor(candidates, wanted), preferences, losslessOnly)
 	return verdicts.pick(service.now(), disclosedOffers(offers),
 		func(offer sources.Offer) bool {
 			return offer.Named &&
@@ -693,6 +713,7 @@ func (service *Service) choose(
 	wanted sources.QueryTrack,
 	open map[db.Peer]int,
 	preferences sources.Preferences,
+	losslessOnly bool,
 ) (sources.Offer, bool, bool, []sources.Refused, error) {
 	verdicts, err := service.verdictsFor(ctx, target.ID)
 	if err != nil {
@@ -703,7 +724,7 @@ func (service *Service) choose(
 	// counting it would tell the reader to lower a number that would change
 	// nothing.
 	offers, belowFloor := acceptableOffers(
-		disclosedOffers(sources.OffersFor(candidates, wanted)), preferences)
+		disclosedOffers(sources.OffersFor(candidates, wanted)), preferences, losslessOnly)
 	if offer, found := verdicts.pick(service.now(), offers, func(offer sources.Offer) bool {
 		return open[peerOf(offer)] < peerFileBudget
 	}); found {
@@ -718,16 +739,30 @@ func (service *Service) choose(
 }
 
 // acceptableOffers takes the files under the user's bitrate floor out of the
-// reading order, and reports them.
+// reading order, and reports them. A want that takes only lossless copies
+// (losslessOnly) also loses every file whose extension is not lossless,
+// including a file of no stated format.
 func acceptableOffers(
-	offers []sources.Offer, preferences sources.Preferences,
+	offers []sources.Offer, preferences sources.Preferences, losslessOnly bool,
 ) ([]sources.Offer, []sources.Refused) {
-	if !preferences.Stated() {
+	if !preferences.Stated() && !losslessOnly {
 		return offers, nil
 	}
 	kept := make([]sources.Offer, 0, len(offers))
 	var refused []sources.Refused
 	for _, offer := range offers {
+		if losslessOnly && !sources.Lossless(offer.File.Extension) {
+			format := strings.ToUpper(strings.TrimPrefix(offer.File.Extension, "."))
+			if format == "" {
+				format = "A file of no stated format"
+			}
+			refused = append(refused, sources.Refused{
+				Username: offer.Username, Directory: offer.Directory,
+				Format: offer.File.Extension, Kind: sources.RefusedLossy,
+				Reason: format + " is not lossless, and this want needs a lossless copy",
+			})
+			continue
+		}
 		reason, kind := preferences.RefuseFile(offer.File.Extension, offer.File.BitRate)
 		if reason == "" {
 			kept = append(kept, offer)
@@ -760,6 +795,16 @@ func disclosedOffers(offers []sources.Offer) []sources.Offer {
 		}
 	}
 	return kept
+}
+
+// refusedAsLossy reports whether any file was turned away for being lossy.
+func refusedAsLossy(refused []sources.Refused) bool {
+	for _, one := range refused {
+		if one.Kind == sources.RefusedLossy {
+			return true
+		}
+	}
+	return false
 }
 
 // belowTheFloor reports whether the bitrate floor is the whole reason this want
@@ -1378,6 +1423,10 @@ const (
 	// "nobody is sharing this" would send somebody looking at the network.
 	refusedByPreferenceSummary = "No copy in a format you accept. Change format preferences."
 	refusedByPreferenceDetail  = "No copy in a format you accept."
+	// Said of an upgrade want for a damaged lossless file that found, or was
+	// handed, only lossy copies. A lossy copy never replaces that file.
+	onlyLossySummary = "Found only a lossy copy. Still looking for a lossless one."
+	onlyLossyDetail  = "Only lossy copies on offer, and this file needs a lossless one."
 	// Said of a want peers are sharing copies of, every one of which is under
 	// the bitrate the user set as their lowest. It names the floor for the same
 	// reason: the floor is the one thing that can change the answer, and the
