@@ -317,12 +317,15 @@ func (service *Service) fileNobodyAnswered(
 		return service.store.RescheduleAcquisitionTarget(
 			ctx, target.ID, importedSummary, service.now().Add(importedDelay))
 	}
-	service.logger.Error().
+	// A warning, because what follows handles it: the copy's proof is written
+	// back, or the want stops for a person. Live these were files that lost
+	// their identity before resolution learned to keep proof (2026-10-14/15).
+	service.logger.Warn().
 		Str("acquisition_target_id", target.ID.String()).
 		Str("library_file_id", filing.LibraryFileID.String()).
 		Str("wanted_recording_id", target.MusicBrainzRecordingID.UUID.String()).
 		Str("resolution_status", filing.ResolutionStatus).
-		Msg("a library file the library has finished with carries no identity")
+		Msg("a library file the library has finished with carries no identity, so the copy's proof is asked")
 	// The copy's own proof is the only thing that can put the file under this
 	// recording. A row with no method, or one judged against a recording the want
 	// no longer names, has nothing to write down, so the want stops and asks.
