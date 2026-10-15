@@ -357,3 +357,119 @@ func TestUpgradeCandidatesExcludesAFileWhoseRecordingIsPursuedThroughAnotherFile
 		t.Fatal("f1 was offered as a candidate while its own want for it is in flight")
 	}
 }
+
+// damagedCandidate turns a candidate file into one whose audio did not decode,
+// at the extension given.
+func damagedCandidate(t *testing.T, pool *pgxpool.Pool, fileID uuid.UUID, extension string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE library_files
+		SET path = regexp_replace(path, '\.mp3$', '.' || $2::text),
+		    decode_error = 'Header missing', decode_checked_at = now()
+		WHERE id = $1
+	`, fileID, extension); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The live state of 2026-10-15: a lossy copy fetched for a damaged FLAC was
+// discarded, the FLAC got the stand-back, and its want ended acquired with no
+// replacement. CreateUpgradeTarget supersedes that want once the sweep offers
+// the FLAC again (TestCreateUpgradeTargetSupersedesAnAcquiredWant).
+func TestUpgradeCandidatesOffersADamagedLosslessFileAgainDespiteTheStandBack(t *testing.T) {
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	ctx := context.Background()
+	recordingID := uuid.New()
+
+	fileID := candidateFile(t, pool, recordingID)
+	damagedCandidate(t, pool, fileID, "flac")
+	wantID, _, err := queries.CreateUpgradeTarget(ctx, CreateUpgradeTargetParams{
+		LibraryFileID: fileID, RecordingID: recordingID,
+		EntryArtist: "Hum", EntryTitle: "Scraper", Summary: "Your copy's audio is damaged.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets
+		SET status = 'acquired', acquired_at = now(), next_attempt_at = NULL,
+		    summary = 'In your library.'
+		WHERE id = $1
+	`, wantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE library_files SET upgrade_refused_at = now() WHERE id = $1`, fileID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := queries.UpgradeCandidates(ctx, uuid.Nil, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsID(candidateFileIDs(rows), fileID) {
+		t.Fatal("a damaged FLAC stood back after a lossy copy was refused for it")
+	}
+}
+
+// A damaged lossy file keeps the stand-back: a lower bit rate copy refused for
+// it would otherwise be fetched again on the next pass.
+func TestUpgradeCandidatesKeepsADamagedLossyFileStandingBack(t *testing.T) {
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	ctx := context.Background()
+
+	fileID := candidateFile(t, pool, uuid.New())
+	damagedCandidate(t, pool, fileID, "mp3")
+	if _, err := pool.Exec(ctx,
+		`UPDATE library_files SET upgrade_refused_at = now() WHERE id = $1`, fileID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := queries.UpgradeCandidates(ctx, uuid.Nil, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsID(candidateFileIDs(rows), fileID) {
+		t.Fatal("a damaged MP3 refused moments ago was offered as a candidate again")
+	}
+}
+
+func TestUpgradeOfDamagedLosslessIsTrueOnlyForADamagedLosslessFile(t *testing.T) {
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	ctx := context.Background()
+
+	damagedFLAC := candidateFile(t, pool, uuid.New())
+	damagedCandidate(t, pool, damagedFLAC, "FLAC")
+	damagedMP3 := candidateFile(t, pool, uuid.New())
+	damagedCandidate(t, pool, damagedMP3, "mp3")
+	soundFLAC := candidateFile(t, pool, uuid.New())
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_files SET path = regexp_replace(path, '\.mp3$', '.flac') WHERE id = $1
+	`, soundFLAC); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, check := range []struct {
+		name   string
+		fileID uuid.UUID
+		want   bool
+	}{
+		{"damaged FLAC", damagedFLAC, true},
+		{"damaged MP3", damagedMP3, false},
+		{"sound FLAC", soundFLAC, false},
+		{"no file", uuid.New(), false},
+	} {
+		got, err := queries.UpgradeOfDamagedLossless(ctx, check.fileID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != check.want {
+			t.Errorf("%s: UpgradeOfDamagedLossless() = %v, want %v", check.name, got, check.want)
+		}
+	}
+}

@@ -43,17 +43,15 @@ describe('a picture that has not arrived', () => {
     await vi.waitFor(() => expect(image()?.getAttribute('data-state')).toBe('shown'));
   });
 
-  it('is shown with the other pictures that landed beside it', async () => {
+  // Pictures used to wait 120 ms for their neighbours, which made covers read
+  // as arriving late.
+  it('is shown without waiting for the pictures beside it', async () => {
     const first = draw();
-    const second = draw({ src: '/api/v1/albums/two/cover' });
+    draw({ src: '/api/v1/albums/two/cover' });
 
     await fireEvent.load(first.image()!);
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(first.image()?.getAttribute('data-state')).toBe('loading');
-    await fireEvent.load(second.image()!);
 
-    await vi.waitFor(() => expect(first.image()?.getAttribute('data-state')).toBe('shown'));
-    expect(second.image()?.getAttribute('data-state')).toBe('shown');
+    expect(first.image()?.getAttribute('data-state')).toBe('shown');
   });
 
   it('is left to the browser to fetch when it is below the fold', () => {
@@ -144,5 +142,14 @@ describe('the sizes a cover is offered at', () => {
     const { image } = draw({ src: 'https://example.com/cover.jpg' });
 
     expect(image()?.hasAttribute('srcset')).toBe(false);
+  });
+});
+
+describe('a picture another size of which is missing', () => {
+  it('is not asked for again', async () => {
+    const gone = draw({ src: '/api/v1/albums/gone-everywhere/cover?size=128' });
+    await fireEvent.error(gone.image()!);
+
+    expect(draw({ src: '/api/v1/albums/gone-everywhere/cover' }).image()).toBeNull();
   });
 });

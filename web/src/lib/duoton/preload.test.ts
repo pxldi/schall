@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { queryClient } from '$lib/query-client';
@@ -41,5 +42,18 @@ describe('a page change', () => {
     await expect(
       preloadPage({ queryKey: ['preload', 'fails'], queryFn: () => Promise.reject(new Error('down')), retry: false })
     ).resolves.toBeUndefined();
+  });
+
+  // Waiting for the print pictures as well made a click feel ignored.
+  it('opens without waiting for the print pictures', async () => {
+    vi.useFakeTimers();
+    let opened = false;
+    void preloadPage({ queryKey: ['preload', 'print'], queryFn: () => Promise.resolve({}) }, () => ({
+      covers: ['an-album-whose-cover-never-lands']
+    })).then(() => (opened = true));
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(opened).toBe(true);
   });
 });

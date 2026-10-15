@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pxldi/schall/internal/sources"
 )
 
 // QueueUpgradeSweep asks for the next page of the library to be checked
@@ -112,14 +113,15 @@ type UpgradeCandidateRow struct {
 // Soulseek bans a client that searches the same thing repeatedly (issue
 // #193's shape), so this is the same "stand back" reasoning the acquisition
 // ladder already uses, flattened to one number because a file is reconsidered
-// rarely rather than on a schedule.
+// rarely rather than on a schedule. A damaged lossless file never stands back:
+// its want refuses lossy copies, so it cannot fetch the refused copy again.
 const upgradeStandBackDays = 30
 
 // UpgradeCandidates lists files with a settled identity whose bit rate is
 // known, whose recording nothing is currently pursuing, and which did not
-// just have a copy refused for not being good enough, ordered by id for
-// keyset pagination — after is the last id read, or the nil UUID for the
-// first page.
+// just have a copy refused for not being good enough (a damaged lossless file
+// is listed either way), ordered by id for keyset pagination — after is the
+// last id read, or the nil UUID for the first page.
 //
 // A settled identity is exactly the set internal/db/witness.go reads for a
 // library witness (settledProofs): a manual decision, AcoustID at the leading
@@ -190,7 +192,12 @@ func (q *Queries) UpgradeCandidates(
 		  )
 		  AND files.id > $2
 		  AND (files.upgrade_refused_at IS NULL
-		       OR files.upgrade_refused_at < now() - interval '%d days')
+		       OR files.upgrade_refused_at < now() - interval '%d days'
+		       -- A damaged lossless file does not stand back. Its want takes
+		       -- only lossless copies, so a search cannot fetch the same
+		       -- refused copy again. Files a lossy copy put on the stand-back
+		       -- before that rule are offered again here.
+		       OR %s)
 		  AND NOT EXISTS (
 		      SELECT 1 FROM acquisition_targets targets
 		      WHERE targets.musicbrainz_recording_id = identities.musicbrainz_recording_id
@@ -198,7 +205,8 @@ func (q *Queries) UpgradeCandidates(
 		  )
 		ORDER BY files.id
 		LIMIT $3
-	`, upgradeStandBackDays), settledProofs, after, limit)
+	`, upgradeStandBackDays, damagedLossless("files", 4)),
+		settledProofs, after, limit, sources.LosslessFormats())
 	if err != nil {
 		return nil, fmt.Errorf("list files the upgrade sweep may still look at: %w", err)
 	}
@@ -218,6 +226,34 @@ func (q *Queries) UpgradeCandidates(
 		candidates = append(candidates, candidate)
 	}
 	return candidates, rows.Err()
+}
+
+// damagedLossless is the SQL test for a library file whose audio did not
+// decode and whose extension is one sources.Lossless accepts. param is the
+// placeholder number that carries sources.LosslessFormats().
+func damagedLossless(alias string, param int) string {
+	return fmt.Sprintf(
+		`(%[1]s.decode_error IS NOT NULL AND lower(substring(%[1]s.path from '\.([^./]+)$')) = ANY ($%[2]d::text[]))`,
+		alias, param)
+}
+
+// UpgradeOfDamagedLossless reports whether the file an upgrade want exists to
+// replace is a damaged lossless file. Such a want takes only lossless copies,
+// because ReplaceIfBetter never lets a lossy copy replace that file. A file
+// that is gone reads as false.
+func (q *Queries) UpgradeOfDamagedLossless(ctx context.Context, fileID uuid.UUID) (bool, error) {
+	var damaged bool
+	err := q.db.QueryRow(ctx, fmt.Sprintf(`
+		SELECT %s FROM library_files files
+		WHERE files.id = $1 AND files.missing_at IS NULL
+	`, damagedLossless("files", 2)), fileID, sources.LosslessFormats()).Scan(&damaged)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read whether library file %s is damaged and lossless: %w", fileID, err)
+	}
+	return damaged, nil
 }
 
 // ErrRecordingNotWanted means a person already said stop pursuing this

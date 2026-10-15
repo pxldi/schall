@@ -37,6 +37,10 @@ const (
 // nothing, so nothing is deleted or discarded when this is returned.
 var ErrReplacementMissing = errors.New("the replacement copy is not readable on disk")
 
+// ErrCopyNotBetter means ReplaceIfBetter discarded the fetched copy because it
+// was not better than the file it was meant to replace. The old file stays.
+var ErrCopyNotBetter = errors.New("the fetched copy was not better than the file it was meant to replace")
+
 // upgradeCandidate is what ReplaceIfBetter needs to know about one side of the
 // comparison.
 type upgradeCandidate struct {
@@ -83,16 +87,17 @@ type upgradeCandidate struct {
 // being offered as a candidate again for a while (db.upgradeStandBackDays). That
 // stand-back is what stops a recording with no better copy on offer from being
 // searched again on every single pass — the file it would otherwise raise a
-// want for is right here, imported, and not good enough, over and over.
+// want for is right here, imported, and not good enough, over and over. A
+// damaged lossless file gets no stand-back, because its want refuses lossy
+// copies before it fetches them.
 //
 // The switch is read again here, not only at sweep time (migration 00072's
 // upgrade_settings): turning it off has to stop deletions immediately,
 // including for a want that was already in flight when it was switched off.
 //
 // It reports whether the old file was replaced by a genuinely better copy.
-// False covers both "nothing to do" and "a worse copy was discarded" — the
-// caller logs only the case that matters to a person watching this feature
-// work, and both outcomes are recorded in the database either way.
+// A worse copy that was discarded returns ErrCopyNotBetter, so the caller can
+// tell the want its copy is gone.
 func (remover *Remover) ReplaceIfBetter(
 	ctx context.Context, oldFileID, newFileID uuid.UUID,
 ) (bool, error) {
@@ -194,19 +199,25 @@ func (remover *Remover) ReplaceIfBetter(
 		}
 		return false, err
 	}
-	if discarded {
+	if !discarded {
+		return false, nil
+	}
+	// A damaged lossless file gets no stand-back. Its want takes only lossless
+	// copies (acquisition.losslessOnly), so the next search cannot fetch the
+	// copy just refused, and the file must not wait a month with damaged audio.
+	if !old.damaged || !sources.Lossless(extension(old.path)) {
 		if _, err := remover.pool.Exec(ctx,
 			`UPDATE library_files SET upgrade_refused_at = now() WHERE id = $1`, old.id,
 		); err != nil {
 			remover.logger.Warn().Err(err).Str("library_file_id", old.id.String()).
 				Msg("record that an upgrade copy for this file was not good enough")
 		}
-		remover.logger.Info().
-			Str("library_file_id", old.id.String()).
-			Str("discarded_library_file_id", fresh.id.String()).
-			Msg("a fetched copy was not a genuine upgrade and was discarded")
 	}
-	return false, nil
+	remover.logger.Info().
+		Str("library_file_id", old.id.String()).
+		Str("discarded_library_file_id", fresh.id.String()).
+		Msg("a fetched copy was not a genuine upgrade and was discarded")
+	return false, ErrCopyNotBetter
 }
 
 // ReplaceOwnedWithUpload replaces one present copy when an automatic upload
