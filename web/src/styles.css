@@ -1008,7 +1008,8 @@ a {
     animation: schall-rise var(--motion-enter) var(--motion-ease-arrive) backwards;
   }
 
-  /* A picture, once its own bytes have arrived. Every cover and every artist
+  /* A picture, once its own bytes have arrived, over the state step: the
+     arriving step made covers read as late. Every cover and every artist
      photograph was drawn at full opacity the instant it decoded, in whatever
      order the network answered, so a grid of forty of them read as flashing —
      forty hard cuts at forty unpredictable moments is what flashing is.
@@ -1026,7 +1027,7 @@ a {
      of its own is the nausea `--motion-stagger` is documented against. */
   .cover-arrive {
     opacity: 0;
-    transition: opacity var(--motion-enter) var(--motion-ease-arrive);
+    transition: opacity var(--motion-state) var(--motion-ease-arrive);
   }
 
   .cover-arrive.is-here {

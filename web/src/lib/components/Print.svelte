@@ -25,6 +25,22 @@
     }
     return () => (job.cancelled = true);
   }
+
+  // Finished prints, by what they show and the size they were painted at. Going
+  // back to a page, or a card scrolling back into view, draws its print from
+  // here in the same frame instead of queueing a repaint. A hero is about 2 MB,
+  // a card a tenth of that.
+  const PAINTED_KEPT = 80;
+  const painted = new Map<string, HTMLCanvasElement>();
+  function keep(key: string, canvas: HTMLCanvasElement) {
+    const copy = document.createElement('canvas');
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    copy.getContext('2d')?.drawImage(canvas, 0, 0);
+    painted.delete(key);
+    painted.set(key, copy);
+    if (painted.size > PAINTED_KEPT) painted.delete(painted.keys().next().value!);
+  }
 </script>
 
 <script lang="ts">
@@ -68,6 +84,15 @@
   let front = 0;
   let size = $state({ width: 0, height: 0 });
   let sources = $state<PrintSource[]>([]);
+  // Whether every picture in `sources` has answered, so the paint is final and
+  // worth keeping.
+  let complete = $state(false);
+  // The covers `sources` was loaded for, which can trail `refsKey` while new
+  // pictures load.
+  let sourcesFor = '';
+  // What the front canvas shows, so a print already drawn from the kept copy
+  // is not painted again.
+  let shown = '';
 
   const pair = $derived(inks ? clampInks(inks) : duoton.inks);
   // With no covers at all the print is generated art seeded from the page, so
@@ -83,7 +108,7 @@
 
   // How long a print waits for its pictures before it is drawn with what has
   // arrived. Until then the previous print, or the bare ink, stays up.
-  const WAIT_MS = 600;
+  const WAIT_MS = 250;
 
   // A box that is resized repaints once its size has held this long. A window
   // being dragged repainted on every step, and a screenshot that briefly
@@ -99,15 +124,17 @@
   );
 
   $effect(() => {
-    void refsKey;
+    const forKey = refsKey;
     const width = pictureWidth;
     if (!width) return;
     const wanted = untrack(() => refs);
     let live = true;
     const loaded: (HTMLImageElement | undefined)[] = wanted.map(() => undefined);
-    const commit = () => {
+    const commit = (final: boolean) => {
       if (!live) return;
+      sourcesFor = forKey;
       sources = wanted.map((ref, i) => ({ seed: ref.seed, inks: ref.inks, image: loaded[i] }));
+      complete = final;
     };
     const pending = wanted.map((ref, i) =>
       ref.src
@@ -117,16 +144,16 @@
         : undefined
     );
     if (!pending.some(Boolean)) {
-      commit();
+      commit(true);
       return () => (live = false);
     }
     // The pictures are drawn together, once, rather than one repaint per
     // picture as each lands. Pictures that are slower than the wait are
     // drawn in a second pass when the last of them arrives.
-    const timer = setTimeout(commit, WAIT_MS);
+    const timer = setTimeout(() => commit(false), WAIT_MS);
     void Promise.all(pending).then(() => {
       clearTimeout(timer);
-      commit();
+      commit(true);
     });
     return () => {
       live = false;
@@ -159,27 +186,55 @@
     };
   });
 
+  // Raises the canvas underneath once something is drawn on it. The first print
+  // on a box cuts in over the bare ink, and a print replacing another fades
+  // over the state step.
+  let drawn = false;
+  function raise(next: HTMLCanvasElement, previous: HTMLCanvasElement, key: string) {
+    front = 1 - front;
+    shown = key;
+    next.style.zIndex = '1';
+    previous.style.zIndex = '0';
+    next.style.opacity = '1';
+    const ms = drawn ? motionMs('state') : 0;
+    drawn = true;
+    if (ms) next.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+  }
+
+  // A print painted before at this size is drawn from the kept copy as soon as
+  // the box is measured, before its pictures have been asked for.
+  $effect(() => {
+    const { width, height } = size;
+    const key = `${refsKey}|${inksKey}|${mode}|${width}x${height}`;
+    if (canvases.length < 2 || !width || !height || shown === key) return;
+    const copy = painted.get(key);
+    if (!copy) return;
+    const next = canvases[1 - front];
+    next.width = width;
+    next.height = height;
+    next.getContext('2d')?.drawImage(copy, 0, 0);
+    raise(next, canvases[front], key);
+  });
+
   // Painting waits for the next frame with room in it, so a size, the covers
   // and the inks changing together cost one paint.
   $effect(() => {
     const { width, height } = size;
     const drawing = sources;
+    const final = complete;
     void inksKey;
     const colours = untrack(() => pair);
     const layout = mode;
     if (canvases.length < 2 || !width || !height || !drawing.length || !canPaint()) return;
+    const key = untrack(() => `${sourcesFor}|${inksKey}|${layout}|${width}x${height}`);
+    if (final && shown === key) return;
     const cancel = schedulePaint(() => {
       const next = canvases[1 - front];
-      const previous = canvases[front];
       next.width = width;
       next.height = height;
       paintPrint(next, drawing, layout, colours);
-      front = 1 - front;
-      next.style.zIndex = '1';
-      previous.style.zIndex = '0';
-      next.style.opacity = '1';
-      const ms = motionMs('enter');
-      if (ms) next.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' });
+      if (final) keep(key, next);
+      raise(next, canvases[front], final ? key : '');
     });
     return cancel;
   });
