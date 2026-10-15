@@ -139,6 +139,7 @@ func TestLookupClassifiesYtdlpFailures(t *testing.T) {
 		{"ERROR: [soundcloud] 293: HTTP Error 404: Not Found", ErrGone},
 		{"ERROR: [youtube] x: Video unavailable", ErrGone},
 		{"ERROR: HTTP Error 429: Too Many Requests", ErrRateLimited},
+		{"ERROR: [soundcloud] 1814709189: This video is DRM protected", ErrLocked},
 	}
 	for _, test := range cases {
 		client, _ := fakeClient("", test.stderr, errors.New("exit status 1"))

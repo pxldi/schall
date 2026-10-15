@@ -89,6 +89,9 @@ func (api *API) sourceKeyProblem(response http.ResponseWriter, err error) bool {
 	case errors.Is(err, tracksource.ErrGone):
 		api.problem(response, http.StatusNotFound, "The service no longer has that track",
 			[]string{"Open the link and check it still plays."})
+	case errors.Is(err, tracksource.ErrLocked):
+		api.problem(response, http.StatusUnprocessableEntity, "The service locks that track",
+			[]string{"Schall can't read locked tracks. Use another link to the same song."})
 	case errors.Is(err, tracksource.ErrRateLimited):
 		api.problem(response, http.StatusServiceUnavailable, "The service is refusing requests",
 			[]string{"Try again in a few minutes."})
