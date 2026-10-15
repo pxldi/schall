@@ -156,8 +156,8 @@ func TestReplaceIfBetterDiscardsTheNewCopyWhenItIsNotBetter(t *testing.T) {
 	identifiedAsRecording(t, pool, newID, recordingID)
 
 	replaced, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID)
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, ErrCopyNotBetter) {
+		t.Fatalf("ReplaceIfBetter() error = %v, want ErrCopyNotBetter", err)
 	}
 	if replaced {
 		t.Fatal("a worse copy was reported as having replaced the old file")

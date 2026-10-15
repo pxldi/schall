@@ -25,6 +25,7 @@ import (
 	"github.com/pxldi/schall/internal/db"
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/identity"
+	"github.com/pxldi/schall/internal/library"
 	"github.com/rs/zerolog"
 )
 
@@ -250,6 +251,10 @@ type Store interface {
 	// Keying a want to an address and setting its floor (ADR 0038).
 	KeyAcquisitionTargetToSource(context.Context, db.KeySourceParams) (db.AcquisitionTargetRow, error)
 	SetAcquisitionTargetMinimumBitrate(ctx context.Context, id uuid.UUID, kbps int) (db.AcquisitionTargetRow, error)
+	// An upgrade want raised for a damaged lossless file takes only lossless
+	// copies, and a lossy copy it was handed anyway leaves it looking.
+	UpgradeOfDamagedLossless(ctx context.Context, fileID uuid.UUID) (bool, error)
+	CreateUpgradeTarget(context.Context, db.CreateUpgradeTargetParams) (uuid.UUID, bool, error)
 	// Fetching a keyed want's track from its address, once (ADR 0038 §6).
 	SourceCopyFetched(ctx context.Context, targetID uuid.UUID) (bool, error)
 	RecordSourceFetch(ctx context.Context, params db.SourceFetchParams) (uuid.UUID, error)
@@ -902,7 +907,15 @@ func (service *Service) completeAcquired(
 		target.Origin == "upgrade" && target.UpgradeOfLibraryFileID.Valid {
 		replaced, err := service.upgrader.ReplaceIfBetter(
 			ctx, target.UpgradeOfLibraryFileID.UUID, outcome.LibraryFileID.UUID)
-		if err != nil {
+		if errors.Is(err, library.ErrCopyNotBetter) {
+			// A failure here leaves the want acquired. The upgrade sweep offers
+			// the damaged file again on its next pass.
+			if err := service.keepLookingForLossless(ctx, target); err != nil {
+				service.logger.Error().Err(err).
+					Str("acquisition_target_id", target.ID.String()).
+					Msg("raise a fresh want after a lossy copy of a damaged file was discarded")
+			}
+		} else if err != nil {
 			service.logger.Error().Err(err).
 				Str("acquisition_target_id", target.ID.String()).
 				Str("old_library_file_id", target.UpgradeOfLibraryFileID.UUID.String()).
@@ -924,6 +937,55 @@ func (service *Service) completeAcquired(
 		return true, service.resolveFiling(ctx, target)
 	}
 	return true, nil
+}
+
+// keepLookingForLossless raises a fresh want when the copy fetched for a
+// damaged lossless file was discarded as no better. Any other upgrade want
+// keeps its acquired status, and its file stands back (library.ReplaceIfBetter).
+//
+// The acquired want is superseded, not reopened: it has an accepted copy, and
+// a want with one never searches again (answeredAlready). The fresh want takes
+// only lossless copies, so it cannot fetch the discarded copy a second time.
+func (service *Service) keepLookingForLossless(
+	ctx context.Context, target db.AcquisitionTargetRow,
+) error {
+	lossless, err := service.losslessOnly(ctx, target)
+	if err != nil || !lossless {
+		return err
+	}
+	_, _, err = service.store.CreateUpgradeTarget(ctx, db.CreateUpgradeTargetParams{
+		LibraryFileID:   target.UpgradeOfLibraryFileID.UUID,
+		RecordingID:     target.MusicBrainzRecordingID.UUID,
+		ReleaseGroupID:  target.MusicBrainzReleaseGroupID,
+		EntryArtist:     target.EntryArtist,
+		EntryTitle:      target.EntryTitle,
+		EntryAlbum:      target.EntryAlbum,
+		EntryDurationMS: target.EntryDurationMS,
+		EntryISRC:       target.EntryISRC,
+		Summary:         onlyLossySummary,
+	})
+	if errors.Is(err, db.ErrRecordingNotWanted) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("look again for a lossless copy for target %s: %w", target.ID, err)
+	}
+	service.logger.Info().
+		Str("acquisition_target_id", target.ID.String()).
+		Str("library_file_id", target.UpgradeOfLibraryFileID.UUID.String()).
+		Msg("a lossy copy of a damaged lossless file was discarded, so the want keeps looking")
+	return nil
+}
+
+// losslessOnly reports whether this want takes only lossless copies: it is an
+// upgrade want raised for a damaged lossless file.
+func (service *Service) losslessOnly(
+	ctx context.Context, target db.AcquisitionTargetRow,
+) (bool, error) {
+	if target.Origin != "upgrade" || !target.UpgradeOfLibraryFileID.Valid {
+		return false, nil
+	}
+	return service.store.UpgradeOfDamagedLossless(ctx, target.UpgradeOfLibraryFileID.UUID)
 }
 
 // abandonTheWait stops a want claiming its copy is on the way in when it plainly

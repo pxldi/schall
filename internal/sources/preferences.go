@@ -2,6 +2,7 @@ package sources
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -85,6 +86,10 @@ const (
 	// RefusedBitRate is a lossy copy under the floor set for its format, or one
 	// whose bitrate the peer never stated while a floor is set.
 	RefusedBitRate = "bit_rate"
+	// RefusedLossy is a lossy copy offered to a want that takes only lossless
+	// ones. No setting causes it: the want was raised for a damaged lossless
+	// file, and a lossy copy can never replace that file.
+	RefusedLossy = "lossy"
 )
 
 // refuse reports why these preferences will not fetch this candidate, and which
@@ -240,6 +245,17 @@ func placing(position int) string {
 // the settings screen so it cannot drift from the one the ranking reads.
 func Lossless(format string) bool {
 	return losslessExtensions[normalFormat(format)]
+}
+
+// LosslessFormats lists the extensions Lossless accepts, sorted, for a query
+// that has to ask the same question of a path in SQL.
+func LosslessFormats() []string {
+	formats := make([]string, 0, len(losslessExtensions))
+	for format := range losslessExtensions {
+		formats = append(formats, format)
+	}
+	sort.Strings(formats)
+	return formats
 }
 
 func normalFormat(format string) string {

@@ -326,3 +326,50 @@ func assertBothKept(
 		t.Fatal("the damaged file does not stand back from the sweep")
 	}
 }
+
+// Live on 2026-10-15: an MP3 fetched for a damaged FLAC was discarded, and the
+// FLAC then stood back for 30 days with no want looking for a lossless copy.
+func TestReplaceIfBetterLeavesADamagedFLACFreeToBeUpgradedAfterALossyCopy(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	switchOnUpgrades(t, pool)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	oldPath := filepath.Join(rootPath, "old.flac")
+	newPath := filepath.Join(rootPath, "new.mp3")
+	oldID := damagedTaggedFile(t, pool, rootID, oldPath, recordingID)
+	newID := provenCopy(t, pool, rootID, newPath, recordingID)
+
+	replaced, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID)
+	if !errors.Is(err, ErrCopyNotBetter) || replaced {
+		t.Fatalf("ReplaceIfBetter() = %v, %v; want the MP3 discarded as no better", replaced, err)
+	}
+	if filePresent(t, pool, newID) || !filePresent(t, pool, oldID) {
+		t.Fatal("the MP3 was kept, or the damaged FLAC was deleted")
+	}
+	if refusedAt(t, pool, oldID) {
+		t.Fatal("the damaged FLAC stands back from the sweep after a lossy copy was refused")
+	}
+}
+
+// A damaged MP3 keeps the stand-back after a lower bit rate copy is refused:
+// its want would fetch that copy again.
+func TestReplaceIfBetterStandsADamagedMP3BackAfterAWorseCopy(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	switchOnUpgrades(t, pool)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	oldPath := filepath.Join(rootPath, "old.mp3")
+	newPath := filepath.Join(rootPath, "new.mp3")
+	oldID := damagedTaggedFile(t, pool, rootID, oldPath, recordingID)
+	newID := upgradeableFile(t, pool, rootID, newPath, 96)
+	identifiedAsRecording(t, pool, newID, recordingID)
+
+	if _, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID); !errors.Is(err, ErrCopyNotBetter) {
+		t.Fatalf("ReplaceIfBetter() error = %v, want ErrCopyNotBetter", err)
+	}
+	if !refusedAt(t, pool, oldID) {
+		t.Fatal("the damaged MP3 does not stand back from the sweep")
+	}
+}
