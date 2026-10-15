@@ -1,7 +1,6 @@
 <script lang="ts">
   import { QueryClientProvider } from '@tanstack/svelte-query';
   import { onMount } from 'svelte';
-  import { page } from '$app/state';
   import { connectEvents } from '$lib/events';
   import { trackNavigation } from '$lib/navigation.svelte';
   import { queriesRestored, queryClient } from '$lib/query-client';
@@ -31,13 +30,10 @@
 <QueryClientProvider client={queryClient}>
   <AppShell>
     {#if restored}
-      <!-- SvelteKit keeps a page when only its parameters change, and the
-           detail pages read their id once. Going from one artist to another
-           would leave the page, its data and its actions on the first. A
-           change of query string keeps the page. -->
-      {#key JSON.stringify(page.params)}
-        {@render children()}
-      {/key}
+      <!-- The detail pages are remounted per id by their section's layout
+           (artists, playlists, releases), below the list that stays beside
+           them. -->
+      {@render children()}
     {/if}
   </AppShell>
   <!-- Mounted here rather than in the shell: it is summoned from every page and

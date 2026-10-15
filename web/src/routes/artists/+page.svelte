@@ -26,6 +26,7 @@
   import ControlRail from '$lib/components/ControlRail.svelte';
   import Hero from '$lib/components/Hero.svelte';
   import { coverSrc, usePagePrint } from '$lib/duoton';
+  import { artistsList } from '$lib/list-memory.svelte';
   import ArtistArt from './ArtistArt.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -123,6 +124,9 @@
   // The address bar follows the list rather than leading it. Every one of these
   // is already set by a press that refetched, so this only records where the
   // reader got to — and that record is what a reload and a shared link restore.
+  $effect(() => {
+    artistsList.choice = { scope, search, tab, genre, sort };
+  });
   $effect(() => {
     keepInUrl(
       opened.pathname,

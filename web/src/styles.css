@@ -1154,6 +1154,48 @@ a {
     background-image: radial-gradient(circle at 3.5px 3.5px, var(--color-busy) 2.6px, transparent 3px);
   }
 
+  /* ── The list beside a detail page (SplitList.svelte) ─────────────────────
+     On a wide window an artist or a playlist opens next to its list. The list
+     sits under the top bar for the height of the window and scrolls inside
+     itself, so it holds still while the detail page scrolls. */
+  @media (min-width: 80rem) {
+    .split {
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr);
+      align-items: start;
+    }
+  }
+
+  .split-rail {
+    position: sticky;
+    top: var(--topbar-height);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--topbar-height));
+    border-right: 1px solid var(--color-line-thin);
+    background: var(--color-ground);
+  }
+
+  .split-row {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.75rem;
+    color: var(--color-ink-2);
+    font-size: var(--text-body);
+  }
+  .split-row:hover,
+  .split-row:focus-visible {
+    color: var(--color-ink);
+    background-color: color-mix(in srgb, var(--color-duo-light) 8%, transparent);
+  }
+  /* The open one carries the halftone row's rule at its left edge. */
+  .split-row[aria-current='page'] {
+    color: var(--color-ink);
+    background-color: color-mix(in srgb, var(--color-duo-light) 8%, transparent);
+    box-shadow: inset 2px 0 0 var(--color-duo-light);
+  }
+
   /* The row under the pointer or keyboard focus takes a wash of the page's
      light ink and a rule at its left edge (ADR Duoton, halftone tables). The
      ink is chrome; the row's state keeps its own colour. */
