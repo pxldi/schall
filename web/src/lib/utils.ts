@@ -328,7 +328,8 @@ export function relativeTime(value: string | null | undefined, now = Date.now())
   const at = new Date(value).getTime();
   if (!Number.isFinite(at)) return '';
   const seconds = Math.round((at - now) / 1000);
-  if (seconds >= 0) return `in ${ahead(seconds)}`;
+  // A moment ago rounds to 0 (or -0, which compares as 0), and read "in 0s".
+  if (seconds > 0) return `in ${ahead(seconds)}`;
   // `just now` is already a whole answer; `just now ago` is not one.
   const back = behind(-seconds);
   return back === 'just now' ? back : `${back} ago`;

@@ -225,9 +225,12 @@
 
   // The file being replaced, by its format. Its name repeats the song title
   // above it, as a raw file name like 02-deftones-..._(midnight_airport_version)-dsp.mp3.
-  function upgradeOf(path: string) {
+  // The album says which copy: one song held twice, on a single and on an
+  // album, is two upgrade rows with the same title.
+  function upgradeOf(path: string, album: string) {
     const format = fileFormat(path);
-    return format ? `upgrade of your ${format}` : 'upgrade';
+    const what = format ? `upgrade of your ${format}` : 'upgrade';
+    return album ? `${what} on ${album}` : what;
   }
 
   // Where the want came from, and what has been tried for it. Three facts at
@@ -239,10 +242,10 @@
     if (waitingOnYou(want)) return want.summary;
     const parts = [
       want.origin === 'upgrade' && want.upgradeOfPath
-        ? upgradeOf(want.upgradeOfPath)
+        ? upgradeOf(want.upgradeOfPath, want.album)
         : (origins[want.origin] ?? 'added by you')
     ];
-    if (want.album) parts.push(want.album);
+    if (want.album && !(want.origin === 'upgrade' && want.upgradeOfPath)) parts.push(want.album);
     if (want.externalUrl) parts.push('keyed');
     else if (want.status === 'unresolved') parts.push('not matched yet');
     else if (want.attempts === 0) parts.push('no copies checked yet');

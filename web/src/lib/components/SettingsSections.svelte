@@ -23,7 +23,7 @@
     type UpgradeSettings,
     type WeeklySettings
   } from '$lib/api';
-  import { formatBytes, relativeTime } from '$lib/utils';
+  import { formatBytes, sinceTime } from '$lib/utils';
   import { checkIsStale, failedThisWeek, type SourceName } from '$lib/source-health';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
@@ -287,7 +287,9 @@
     // Relative, like every other time in the product. The absolute form read
     // "checked 8/3/2026, 4:33:20 PM" — second-level precision on a fact whose
     // whole meaning is "recently or not".
-    const when = relativeTime(value);
+    // Past only: a check the server stamped a second ahead of this clock read
+    // "checked in 0s".
+    const when = sinceTime(value);
     return when ? `${verb} ${when}` : `never ${verb}`;
   }
 
@@ -406,10 +408,8 @@
     }
   ]);
 
-  // The three status rows at the top of Sources: a dot, the name, a coloured
-  // state word and a dim detail. Spotify is not among them — its own section
-  // carries its state, because it is the one source with no test cycle, only
-  // a connected account.
+  // The status rows at the top of Sources: a dot, the name, a coloured state
+  // word and a dim detail, one row per service.
   type SourceStatusRow = {
     name: string;
     role: Role;
@@ -473,7 +473,7 @@
         ? "couldn't read"
         : !$navidrome.data?.configured
           ? 'not linked'
-          : ago('notified', $navidrome.data?.lastNotifiedAt),
+          : `${ago('checked', $navidrome.data?.lastCheckedAt)} · ${ago('notified', $navidrome.data?.lastNotifiedAt)}`,
       failed: failures('Navidrome')
     },
     {
@@ -502,6 +502,27 @@
           ? 'not linked'
           : ago('checked', $listenbrainz.data?.lastCheckedAt),
       failed: failures('ListenBrainz')
+    },
+    // Spotify has no test to run. Its line says when Schall last talked to
+    // it, which is when the stored state was last true.
+    {
+      name: 'Spotify',
+      role: ($spotify.isError || !$spotify.data?.configured || !$spotify.data.connected
+        ? 'idle'
+        : $spotify.data.connectionStatus === 'failed'
+          ? 'fail'
+          : 'ok') as Role,
+      state: $spotify.isError
+        ? 'Unavailable'
+        : !$spotify.data?.configured
+          ? 'Not configured'
+          : !$spotify.data.connected
+            ? 'Not connected'
+            : $spotify.data.connectionStatus === 'failed'
+              ? 'Failed'
+              : 'Connected',
+      detail: $spotify.data?.configured ? ago('used', $spotify.data?.lastCheckedAt) : 'not linked',
+      failed: failures('Spotify')
     }
   ]);
 
@@ -2488,9 +2509,6 @@
 {/snippet}
 
 {#snippet Spotify()}
-  <!-- Spotify has no place in the status rows above: it is the one source
-       with no test cycle, only a connected account, so its own state stays
-       on its own heading. -->
   <section class="flex flex-col gap-1.5 pt-6">
     <div class="flex flex-wrap items-center gap-2.5">
       <h2 class="font-display text-lead font-bold text-ink">Spotify</h2>
@@ -2498,14 +2516,6 @@
       {#if $spotify.data?.accountName}
         <span class="text-meta font-medium text-ink-3">as {$spotify.data.accountName}</span>
       {/if}
-      {#if failures('Spotify') > 0}
-        <a href="/settings/jobs" class="text-meta font-medium text-fail hover:underline">
-          {failures('Spotify').toLocaleString()} failed this week
-        </a>
-      {/if}
-      <span class="ml-auto text-meta font-medium text-ink-3">
-        {ago('used', $spotify.data?.lastCheckedAt)}
-      </span>
     </div>
 
     <form

@@ -996,7 +996,8 @@ describe('Sources status', () => {
         if (init?.method === 'POST') posted.push(url.pathname);
         const body: Record<string, unknown> = {
           '/api/v1/settings/slskd': slskd,
-          '/api/v1/settings/slskd/test': { ...slskd, lastCheckedAt: new Date().toISOString() },
+          // Stamped by a server clock a second ahead of this one.
+          '/api/v1/settings/slskd/test': { ...slskd, lastCheckedAt: new Date(Date.now() + 1000).toISOString() },
           '/api/v1/settings/listenbrainz': listenbrainz,
           '/api/v1/settings/navidrome': { configured: false, enabled: false },
           '/api/v1/jobs/failed': failed,
@@ -1021,6 +1022,18 @@ describe('Sources status', () => {
     openedSources();
     await vi.waitFor(() => expect(posted).toContain('/api/v1/settings/slskd/test'));
     expect(posted).not.toContain('/api/v1/settings/listenbrainz/test');
+  });
+
+  it('reads a check stamped a moment ahead as just now', async () => {
+    openedSources();
+    expect((await screen.findAllByText('checked just now')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/checked in /)).toBeNull();
+  });
+
+  it('lists Spotify among the status rows', async () => {
+    openedSources();
+    await screen.findAllByText('checked just now');
+    expect(screen.getAllByText('Spotify').length).toBeGreaterThan(1);
   });
 
   it('shows the failed syncs beside ListenBrainz', async () => {
