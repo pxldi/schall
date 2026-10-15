@@ -46,6 +46,11 @@ type Config struct {
 	// from an upload, for the anchors of ADR 0029. Empty means no
 	// want is anchored from YouTube.
 	YtdlpPath string
+	// SoundCloudToken is the oauth_token cookie of a signed-in SoundCloud
+	// account. With it, a track fetched from a SoundCloud link is the
+	// uploader's original file where the track offers one. Empty means the
+	// stream.
+	SoundCloudToken string
 	// FFmpegPath is what turns a fetched copy into something a browser will play,
 	// so a review item can be listened to before it is decided about. Configurable
 	// on the same terms as fpcalc; empty means "find ffmpeg on PATH", and not
@@ -104,6 +109,7 @@ func Load() (Config, error) {
 		SourceFetchPath:     strings.TrimSpace(os.Getenv("SCHALL_SOURCE_FETCH_PATH")),
 		FpcalcPath:          strings.TrimSpace(os.Getenv("SCHALL_FPCALC_PATH")),
 		YtdlpPath:           strings.TrimSpace(os.Getenv("SCHALL_YTDLP_PATH")),
+		SoundCloudToken:     strings.TrimSpace(os.Getenv("SCHALL_SOUNDCLOUD_TOKEN")),
 		FFmpegPath:          strings.TrimSpace(os.Getenv("SCHALL_FFMPEG_PATH")),
 		PreviewCachePath: envOrDefault(
 			"SCHALL_PREVIEW_CACHE_PATH", filepath.Join(os.TempDir(), "schall-previews"),
