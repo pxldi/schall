@@ -47,6 +47,7 @@ type Store interface {
 	ReleaseCoversWithoutInks(context.Context, int32) ([]db.ReleaseCoversWithoutInksRow, error)
 	SaveReleaseInks(context.Context, db.SaveReleaseInksParams) (int64, error)
 	ArtistsMissingImage(context.Context, db.ArtistsMissingImageParams) ([]db.ArtistsMissingImageRow, error)
+	SourceArtistsMissingImage(context.Context, db.SourceArtistsMissingImageParams) ([]db.SourceArtistsMissingImageRow, error)
 	SaveArtistImage(context.Context, db.SaveArtistImageParams) error
 	SmallArtistImages(context.Context, int32) ([]db.SmallArtistImagesRow, error)
 	ArtistsMissingBiography(context.Context, int32) ([]db.ArtistsMissingBiographyRow, error)
@@ -175,6 +176,11 @@ func (sweeper *Sweeper) Sweep(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, err
 	}
+	moreUploaders, err := sweeper.pictureUploaders(ctx)
+	if err != nil {
+		return true, err
+	}
+	moreArtists = moreArtists || moreUploaders
 	// And who those people are, at the same pace and under the same rules. It
 	// belongs to this pass because it walks the same artists through the same
 	// chain: MusicBrainz names the Wikidata entity, and the picture is one thing
@@ -329,6 +335,54 @@ func (sweeper *Sweeper) pictureArtists(ctx context.Context) (bool, error) {
 			Source: stored.Source,
 		}); err != nil {
 			return true, fmt.Errorf("cache a picture of artist %s: %w", artist.ID, err)
+		}
+		failures = 0
+	}
+	return len(waiting) == sweepBatch, nil
+}
+
+// pictureUploaders pictures the artist rows that are accounts on a service: a
+// SoundCloud uploader is in the library because a track of theirs is, and
+// MusicBrainz has no relations to follow for them. Their own page declares
+// their picture. Absences and outages are handled as pictureArtists handles them.
+func (sweeper *Sweeper) pictureUploaders(ctx context.Context) (bool, error) {
+	if sweeper.artists == nil {
+		return false, nil
+	}
+	waiting, err := sweeper.store.SourceArtistsMissingImage(ctx, db.SourceArtistsMissingImageParams{
+		ChainChanged: pgtype.Timestamptz{Time: chainChanged, Valid: true},
+		Batch:        sweepBatch,
+	})
+	if err != nil {
+		return false, fmt.Errorf("list uploaders with no picture: %w", err)
+	}
+	failures := 0
+	for index, uploader := range waiting {
+		if index > 0 && !wait(ctx, sweeper.pause) {
+			return true, ctx.Err()
+		}
+		bounded, cancel := context.WithTimeout(ctx, perRelease)
+		artwork, err := sweeper.artists.UploaderPicture(bounded, uploader.Source, uploader.ExternalID)
+		cancel()
+		if err != nil && !errors.Is(err, ErrNoArtwork) {
+			if ctx.Err() != nil {
+				return true, ctx.Err()
+			}
+			failures++
+			if failures >= consecutiveFailures {
+				return true, fmt.Errorf("fetch a picture of uploader %s: %w", uploader.ID, err)
+			}
+			sweeper.logger.Warn().Err(err).
+				Str("artist_id", uploader.ID.String()).
+				Msg("an uploader could not be pictured")
+			continue
+		}
+		stored := Saved(artwork)
+		if err := sweeper.store.SaveArtistImage(ctx, db.SaveArtistImageParams{
+			ArtistID: uploader.ID, Image: stored.Image, ContentType: stored.ContentType,
+			Source: stored.Source,
+		}); err != nil {
+			return true, fmt.Errorf("cache a picture of uploader %s: %w", uploader.ID, err)
 		}
 		failures = 0
 	}

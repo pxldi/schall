@@ -1599,6 +1599,54 @@ func (q *Queries) SmallArtistImages(ctx context.Context, maxBytes int32) ([]Smal
 	return items, nil
 }
 
+const sourceArtistsMissingImage = `-- name: SourceArtistsMissingImage :many
+SELECT artists.id, artists.source::text AS source, artists.external_id::text AS external_id
+FROM artists
+LEFT JOIN artist_images ON artist_images.artist_id = artists.id
+WHERE artists.musicbrainz_id IS NULL
+  AND artists.source IS NOT NULL
+  AND artists.external_id IS NOT NULL
+  AND (
+    artist_images.artist_id IS NULL
+    OR (artist_images.image IS NULL AND artist_images.fetched_at < $1)
+  )
+ORDER BY artist_images.fetched_at ASC NULLS FIRST, artists.created_at
+LIMIT $2
+`
+
+type SourceArtistsMissingImageParams struct {
+	ChainChanged pgtype.Timestamptz `json:"chain_changed"`
+	Batch        int32              `json:"batch"`
+}
+
+type SourceArtistsMissingImageRow struct {
+	ID         uuid.UUID `json:"id"`
+	Source     string    `json:"source"`
+	ExternalID string    `json:"external_id"`
+}
+
+// Uploaders on a service, which MusicBrainz has never heard of, with no picture
+// yet. Their own page is the one place a picture of them is declared.
+func (q *Queries) SourceArtistsMissingImage(ctx context.Context, arg SourceArtistsMissingImageParams) ([]SourceArtistsMissingImageRow, error) {
+	rows, err := q.db.Query(ctx, sourceArtistsMissingImage, arg.ChainChanged, arg.Batch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SourceArtistsMissingImageRow{}
+	for rows.Next() {
+		var i SourceArtistsMissingImageRow
+		if err := rows.Scan(&i.ID, &i.Source, &i.ExternalID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const staleFollowedArtists = `-- name: StaleFollowedArtists :many
 SELECT artists.id
 FROM artists

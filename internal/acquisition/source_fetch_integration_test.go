@@ -132,7 +132,7 @@ func TestAKeyedWantWhoseSearchFindsNothingIsFetchedFromItsAddressOnce(t *testing
 		t.Fatalf("ClaimTargetImport() error = %v", err)
 	}
 	if claimed.Provider != addressedTrack.Source || claimed.SourceDirectory != target.ID.String() ||
-		claimed.File.Name != "293.mp3" {
+		claimed.File.Name != "Portishead - Glory Box.mp3" {
 		t.Fatalf("claimed %s %q %q, want the fetched file", claimed.Provider,
 			claimed.SourceDirectory, claimed.File.Name)
 	}

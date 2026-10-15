@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -164,6 +165,7 @@ func (service *Service) fetchFromSource(
 			Msg("could not fetch a keyed want's track from its address; the next search round asks again")
 		return false, nil
 	}
+	got = nameAfterWant(got, target)
 	if !library.CanHold(got.Name) {
 		service.logger.Warn().
 			Str("acquisition_target_id", target.ID.String()).
@@ -202,6 +204,40 @@ func (service *Service) fetchFromSource(
 		Int64("size_bytes", got.SizeBytes).
 		Msg("fetched a keyed want's track from its address")
 	return true, nil
+}
+
+// maxFetchedNameBytes keeps a fetched file's name, extension included, under
+// the 255 bytes most filesystems allow, with room for the importer to add a
+// number when two copies share a name.
+const maxFetchedNameBytes = 200
+
+// nameAfterWant renames a fetched track after the song it was fetched for,
+// "Artist - Title.ext". yt-dlp names it by the service's number for the track,
+// and the importer files a copy under the name it arrived with, so without this
+// the library held "2114819991.m4a". A rename that fails keeps the number.
+func nameAfterWant(got tracksource.Fetched, target db.AcquisitionTargetRow) tracksource.Fetched {
+	base := library.SafeComponent(target.EntryTitle)
+	if artist := library.SafeComponent(target.EntryArtist); artist != "" && base != "" {
+		base = artist + " - " + base
+	}
+	if base == "" || got.Extension == "" {
+		return got
+	}
+	limit := maxFetchedNameBytes - len(got.Extension) - 1
+	for len(base) > limit {
+		_, size := utf8.DecodeLastRuneInString(base)
+		base = base[:len(base)-size]
+	}
+	name := strings.TrimRight(base, ". ") + "." + got.Extension
+	if name == got.Name {
+		return got
+	}
+	path := filepath.Join(filepath.Dir(got.Path), name)
+	if err := os.Rename(got.Path, path); err != nil {
+		return got
+	}
+	got.Path, got.Name = path, name
+	return got
 }
 
 // fetchesFromSource reports whether this installation can fetch the want's

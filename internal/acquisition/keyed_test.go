@@ -3,7 +3,11 @@ package acquisition
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/pxldi/schall/internal/db"
@@ -177,5 +181,59 @@ func TestSettlingAKeyedWantNamesItsFile(t *testing.T) {
 	}
 	if len(namer.named) != 1 || namer.named[0] != keyed.ID {
 		t.Fatalf("named %v, want only the keyed want's file", namer.named)
+	}
+}
+
+// fetchedByNumber writes a file into a folder the way yt-dlp names it, by the
+// service's number for the track.
+func fetchedByNumber(t *testing.T) tracksource.Fetched {
+	t.Helper()
+	directory := t.TempDir()
+	path := filepath.Join(directory, "2114819991.m4a")
+	if err := os.WriteFile(path, []byte("aac"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return tracksource.Fetched{Path: path, Name: "2114819991.m4a", Extension: "m4a", SizeBytes: 3}
+}
+
+func TestAFetchedTrackIsNamedAfterTheSongItWasFetchedFor(t *testing.T) {
+	got := nameAfterWant(fetchedByNumber(t), db.AcquisitionTargetRow{
+		EntryArtist: "Kendrick Lamar", EntryTitle: "Not Like Us (PTK Extended Edit)",
+	})
+
+	if got.Name != "Kendrick Lamar - Not Like Us (PTK Extended Edit).m4a" {
+		t.Fatalf("name = %q, want artist and title", got.Name)
+	}
+	if _, err := os.Stat(got.Path); err != nil || filepath.Base(got.Path) != got.Name {
+		t.Fatalf("path = %q (%v), want the file renamed on disc", got.Path, err)
+	}
+}
+
+func TestAFetchedTrackNameCannotLeaveItsFolder(t *testing.T) {
+	fetched := fetchedByNumber(t)
+	got := nameAfterWant(fetched, db.AcquisitionTargetRow{EntryArtist: "AC/DC", EntryTitle: "../T.N.T."})
+
+	if filepath.Dir(got.Path) != filepath.Dir(fetched.Path) || strings.Contains(got.Name, "/") {
+		t.Fatalf("path = %q, want the file kept in its folder", got.Path)
+	}
+}
+
+func TestAFetchedTrackForASongWithoutATitleKeepsItsNumber(t *testing.T) {
+	got := nameAfterWant(fetchedByNumber(t), db.AcquisitionTargetRow{EntryArtist: "Kendrick Lamar"})
+
+	if got.Name != "2114819991.m4a" {
+		t.Fatalf("name = %q, want the number kept", got.Name)
+	}
+}
+
+func TestALongFetchedTrackNameIsShortenedToFitTheFilesystem(t *testing.T) {
+	got := nameAfterWant(fetchedByNumber(t), db.AcquisitionTargetRow{
+		EntryArtist: "Ä", EntryTitle: strings.Repeat("ü", 300),
+	})
+
+	if len(got.Name) > maxFetchedNameBytes || !utf8.ValidString(got.Name) ||
+		!strings.HasSuffix(got.Name, ".m4a") {
+		t.Fatalf("name = %q (%d bytes), want valid UTF-8 under %d bytes", got.Name, len(got.Name),
+			maxFetchedNameBytes)
 	}
 }
