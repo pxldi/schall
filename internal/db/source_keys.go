@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/pxldi/schall/internal/sources"
 )
 
 // SourceLookup is what yt-dlp said about the address a want is keyed to, when
@@ -562,4 +563,107 @@ func (q *Queries) RecordSourceFetch(ctx context.Context, params SourceFetchParam
 		return q.WithTx(tx).QueueDownloadImport(ctx, requestID)
 	})
 	return requestID, err
+}
+
+// ErrNoKeyedUpgrade reports a want that cannot be followed by a search for a
+// better copy: it is not a keyed want holding a file under its floor, or a want
+// already follows it.
+var ErrNoKeyedUpgrade = errors.New("this want does not hold a file under its floor")
+
+// KeyedFileUnderFloor reports the file a keyed want was acquired with, when that
+// file is lossy and under the want's floor. A file whose bit rate is unknown is
+// not reported: silence says nothing about whether it is worth replacing.
+func (q *Queries) KeyedFileUnderFloor(ctx context.Context, targetID uuid.UUID) (uuid.NullUUID, error) {
+	var fileID uuid.NullUUID
+	err := q.db.QueryRow(ctx, `
+		SELECT files.id
+		FROM acquisition_targets targets
+		JOIN library_files files ON files.id = targets.acquired_library_file_id
+		WHERE targets.id = $1
+		  AND targets.status = 'acquired'
+		  AND targets.source IS NOT NULL
+		  AND files.missing_at IS NULL
+		  AND files.bit_rate_kbps IS NOT NULL
+		  AND files.bit_rate_kbps < targets.minimum_bitrate
+		  AND NOT lower(substring(files.path from '\.([^./]+)$')) = ANY ($2::text[])
+	`, targetID, sources.LosslessFormats()).Scan(&fileID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.NullUUID{}, nil
+	}
+	return fileID, err
+}
+
+// RaiseKeyedUpgrade follows an acquired keyed want with one that searches for a
+// copy of the same track at the floor, to replace the file the first one holds.
+//
+// It is the keyed form of CreateUpgradeTarget's acquired branch, in the same
+// three steps and for the same reason: the new row cannot point at a row that
+// supersedes it before it exists, and it cannot take the key while the old row
+// still holds it. So the new row is inserted without the key, the old row is
+// superseded by it, and then the new row takes the key, the excerpt and the
+// floor. fileID is the file to replace: the one the want holds, or, for an
+// upgrade want whose copy was discarded as no better, the one it was raised
+// for. searchAt is when the first search runs.
+func (q *Queries) RaiseKeyedUpgrade(
+	ctx context.Context, targetID, fileID uuid.UUID, searchAt time.Time, summary string,
+) (uuid.UUID, error) {
+	var newID uuid.UUID
+	err := q.inTransaction(ctx, "raising a keyed upgrade want", func(tx pgx.Tx) error {
+		var held bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+			    SELECT 1 FROM acquisition_targets
+			    WHERE id = $1 AND status = 'acquired' AND source IS NOT NULL
+			      AND (acquired_library_file_id = $2 OR upgrade_of_library_file_id = $2)
+			) AND NOT EXISTS (
+			    SELECT 1 FROM acquisition_targets
+			    WHERE upgrade_of_library_file_id = $2 AND id <> $1
+			      AND status NOT IN ('not_wanted', 'superseded')
+			)
+			FROM (SELECT 1 FROM acquisition_targets WHERE id = $1 FOR UPDATE) AS locked
+		`, targetID, fileID).Scan(&held); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("read want %s: %w", targetID, err)
+		}
+		if !held {
+			return ErrNoKeyedUpgrade
+		}
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO acquisition_targets (
+				origin, origin_album_id, entry_artist, entry_title, entry_album,
+				entry_duration_ms, entry_isrc, entry_explicit, weekly_only,
+				status, summary
+			)
+			SELECT 'upgrade', origin_album_id, entry_artist, entry_title, entry_album,
+			       entry_duration_ms, entry_isrc, entry_explicit, weekly_only,
+			       'unresolved', $2
+			FROM acquisition_targets WHERE id = $1
+			RETURNING id
+		`, targetID, summary).Scan(&newID); err != nil {
+			return fmt.Errorf("insert the upgrade want for %s: %w", targetID, err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE acquisition_targets
+			SET status = 'superseded', superseded_by_id = $2, updated_at = now()
+			WHERE id = $1
+		`, targetID, newID); err != nil {
+			return fmt.Errorf("supersede want %s: %w", targetID, err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE acquisition_targets AS fresh
+			SET source = old.source, external_id = old.external_id,
+			    external_url = old.external_url, source_lookup = old.source_lookup,
+			    minimum_bitrate = old.minimum_bitrate,
+			    anchor_fingerprint = old.anchor_fingerprint, anchor_source = old.anchor_source,
+			    anchor_reference = old.anchor_reference, anchor_seconds = old.anchor_seconds,
+			    anchor_fetched_at = old.anchor_fetched_at, anchor_label = old.anchor_label,
+			    resolution_method = old.resolution_method, resolved_at = old.resolved_at,
+			    upgrade_of_library_file_id = $3, next_search_at = $4, updated_at = now()
+			FROM acquisition_targets AS old
+			WHERE fresh.id = $2 AND old.id = $1
+		`, targetID, newID, fileID, searchAt); err != nil {
+			return fmt.Errorf("key the upgrade want for %s: %w", targetID, err)
+		}
+		return nil
+	})
+	return newID, err
 }

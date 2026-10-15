@@ -50,7 +50,10 @@ type upgradeCandidate struct {
 	size        int64
 	bitRateKbps int
 	recordingID uuid.NullUUID
-	present     bool
+	// sourceKey is the track the file holds on a service, "soundcloud:293",
+	// for a file that is no MusicBrainz recording. Empty otherwise.
+	sourceKey string
+	present   bool
 	// damaged is a file whose audio did not decode (library_files.decode_error).
 	damaged bool
 	// settled says the file's identity rests on one of db.SettledProof's
@@ -131,8 +134,7 @@ func (remover *Remover) ReplaceIfBetter(
 	// recording and the copy was proven against it — but a manual
 	// re-identification of either file between the want being raised and the
 	// copy arriving is exactly the case this refuses rather than guesses about.
-	if !old.recordingID.Valid || !fresh.recordingID.Valid ||
-		old.recordingID.UUID != fresh.recordingID.UUID {
+	if !sameMusic(old, fresh) {
 		return false, nil
 	}
 
@@ -360,11 +362,14 @@ func (remover *Remover) upgradeCandidateByID(
 		       files.decode_error IS NOT NULL,
 		       coalesce(identities.method, ''), coalesce(identities.is_manual, false),
 		       coalesce(files.measured_duration_ms, files.duration_ms, 0),
-		       coalesce(files.witness_fingerprint, '')
+		       coalesce(files.witness_fingerprint, ''),
+		       coalesce(sources.external_id, '')
 		FROM library_files files
 		JOIN library_roots roots ON roots.id = files.library_root_id
 		LEFT JOIN library_file_identities identities
 		    ON identities.library_file_id = files.id AND identities.kind = 'external'
+		LEFT JOIN library_file_identities sources
+		    ON sources.library_file_id = files.id AND sources.kind = 'source'
 		WHERE files.id = $1 AND files.missing_at IS NULL
 		FOR UPDATE OF files
 	`, fileID)
@@ -381,12 +386,50 @@ func (remover *Remover) upgradeCandidateByID(
 	if err := rows.Scan(&candidate.id, &candidate.path, &candidate.rootPath,
 		&candidate.size, &candidate.bitRateKbps, &candidate.recordingID,
 		&candidate.damaged, &method, &manual, &candidate.durationMS,
-		&candidate.witnessFingerprint); err != nil {
+		&candidate.witnessFingerprint, &candidate.sourceKey); err != nil {
 		return upgradeCandidate{}, err
 	}
 	candidate.present = true
-	candidate.settled = candidate.recordingID.Valid && db.SettledProof(method, manual)
+	// A source identity is the track at an address, written when the audio
+	// reproduced the address's excerpt or when a person named the file from
+	// it. Either is a settled answer about what the file is.
+	candidate.settled = (candidate.recordingID.Valid && db.SettledProof(method, manual)) ||
+		candidate.sourceKey != ""
 	return candidate, rows.Err()
+}
+
+// sameMusic reports two files that say they are the same recording, or the same
+// track on a service. A keyed want's copies have no recording, and the address
+// both were proven against is what they agree on.
+func sameMusic(old, fresh upgradeCandidate) bool {
+	if old.recordingID.Valid || fresh.recordingID.Valid {
+		return old.recordingID.Valid && fresh.recordingID.Valid &&
+			old.recordingID.UUID == fresh.recordingID.UUID
+	}
+	return old.sourceKey != "" && old.sourceKey == fresh.sourceKey
+}
+
+// answersOther reports whether a file is also another recording's copy. A
+// recording's file is asked the question KeepOne asks. A source track's file
+// holds no recording, so any catalogue track mapped to it is other music.
+func (remover *Remover) answersOther(
+	ctx context.Context, transaction pgx.Tx, file upgradeCandidate,
+) (bool, error) {
+	if file.recordingID.Valid {
+		copied, err := remover.lockedCopy(ctx, transaction, file.recordingID.UUID, file.id)
+		if err != nil {
+			return false, err
+		}
+		return copied == nil || copied.answersOther, nil
+	}
+	var mapped bool
+	err := transaction.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM track_mappings WHERE library_file_id = $1)
+	`, file.id).Scan(&mapped)
+	if err != nil {
+		return false, fmt.Errorf("read whether file %s answers a catalogue track: %w", file.id, err)
+	}
+	return mapped, nil
 }
 
 // readable confirms a file's audio is actually on disk and can be opened, not
@@ -440,18 +483,17 @@ func (remover *Remover) replaceCandidate(
 	if err != nil {
 		return false, err
 	}
-	if !locked.present || !locked.recordingID.Valid ||
-		locked.recordingID.UUID != doomed.recordingID.UUID {
+	if !locked.present || !sameMusic(locked, doomed) {
 		return false, nil
 	}
 	// A file that also answers different music is that music's copy too, and
 	// a better copy of this recording is no licence to delete it. KeepOne
 	// refuses the same file for the same reason.
-	copied, err := remover.lockedCopy(ctx, transaction, doomed.recordingID.UUID, locked.id)
+	answersOther, err := remover.answersOther(ctx, transaction, locked)
 	if err != nil {
 		return false, err
 	}
-	if copied == nil || copied.answersOther {
+	if answersOther {
 		return false, nil
 	}
 	// The copy we keep must still prove the same recording under this
@@ -461,8 +503,7 @@ func (remover *Remover) replaceCandidate(
 	if err != nil {
 		return false, err
 	}
-	if !keptLocked.present || !keptLocked.recordingID.Valid ||
-		keptLocked.recordingID.UUID != doomed.recordingID.UUID {
+	if !keptLocked.present || !sameMusic(keptLocked, doomed) {
 		return false, nil
 	}
 	if err := containedIn(locked.rootPath, locked.path); err != nil {
@@ -473,11 +514,11 @@ func (remover *Remover) replaceCandidate(
 	if err := transaction.QueryRow(ctx, `
 		INSERT INTO library_file_removals (
 		    library_file_id, library_path, size_bytes,
-		    musicbrainz_recording_id, kept_library_file_id, kept_path,
+		    musicbrainz_recording_id, source_key, kept_library_file_id, kept_path,
 		    removed_by, reason
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		) VALUES ($1, $2, $3, $4, nullif($5, ''), $6, $7, $8, $9)
 		RETURNING id
-	`, locked.id, locked.path, locked.size, doomed.recordingID.UUID, kept.id, keptPath,
+	`, locked.id, locked.path, locked.size, doomed.recordingID, doomed.sourceKey, kept.id, keptPath,
 		removedBy, reason).Scan(&removalID); err != nil {
 		return false, fmt.Errorf("record the removal of %s: %w", locked.path, err)
 	}

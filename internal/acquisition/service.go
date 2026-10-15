@@ -258,6 +258,11 @@ type Store interface {
 	// Fetching a keyed want's track from its address, once (ADR 0038 §6).
 	SourceCopyFetched(ctx context.Context, targetID uuid.UUID) (bool, error)
 	RecordSourceFetch(ctx context.Context, params db.SourceFetchParams) (uuid.UUID, error)
+	// A keyed want that took a copy under its floor goes on looking for a
+	// better one, while replacing low-quality files is switched on.
+	UpgradeSettings(ctx context.Context) (db.UpgradeSettingsRow, error)
+	KeyedFileUnderFloor(ctx context.Context, targetID uuid.UUID) (uuid.NullUUID, error)
+	RaiseKeyedUpgrade(ctx context.Context, targetID, fileID uuid.UUID, searchAt time.Time, summary string) (uuid.UUID, error)
 }
 
 // Entry is what somebody asked for, in their own words. Everything except the
@@ -903,11 +908,13 @@ func (service *Service) completeAcquired(
 	// it may replace. Disagreed is excluded on purpose: a copy the library
 	// says is a different recording from what this want named is never
 	// compared against the old file at all.
+	notBetter := false
 	if service.upgrader != nil && outcome.Settled && !outcome.Disagreed &&
 		target.Origin == "upgrade" && target.UpgradeOfLibraryFileID.Valid {
 		replaced, err := service.upgrader.ReplaceIfBetter(
 			ctx, target.UpgradeOfLibraryFileID.UUID, outcome.LibraryFileID.UUID)
 		if errors.Is(err, library.ErrCopyNotBetter) {
+			notBetter = true
 			// A failure here leaves the want acquired. The upgrade sweep offers
 			// the damaged file again on its next pass.
 			if err := service.keepLookingForLossless(ctx, target); err != nil {
@@ -928,6 +935,9 @@ func (service *Service) completeAcquired(
 				Msg("a better copy replaced a file below the quality floor")
 		}
 	}
+	if outcome.Settled && !outcome.Disagreed {
+		service.keepLookingAboveFloor(ctx, target, notBetter)
+	}
 	// The library did not call the file this want's recording, and completing has
 	// already written the blunt version of that: stopped, with the general
 	// sentence. Whether it is really a disagreement is a question about two
@@ -937,6 +947,66 @@ func (service *Service) completeAcquired(
 		return true, service.resolveFiling(ctx, target)
 	}
 	return true, nil
+}
+
+// keyedUpgradeStandBack is how long a keyed want waits before it looks again
+// after a copy it found was no better than the file it holds. It is the stand
+// back db.UpgradeCandidates gives a file, for the same reason: the same copies
+// are on offer tomorrow, and asking Soulseek the same thing every day gets the
+// account banned.
+const keyedUpgradeStandBack = 30 * 24 * time.Hour
+
+// keepLookingAboveFloor follows a keyed want that holds a lossy file under its
+// floor with a want that searches for a copy at the floor (owner's decision,
+// 2026-10-15: a copy fetched from the link is accepted, and Schall keeps looking
+// for a better one). A copy that arrives replaces the file through the
+// upgrader, under the licence every replacement records (ADR 0021). It runs
+// only while replacing low-quality files is switched on, because with it off a
+// better copy would be imported beside the file rather than replace it.
+//
+// notBetter is a copy this want found and the upgrader discarded as no better.
+// The file it was raised for is then looked for again after the stand-back.
+// A failure is logged: the want has its music either way.
+func (service *Service) keepLookingAboveFloor(
+	ctx context.Context, target db.AcquisitionTargetRow, notBetter bool,
+) {
+	if target.Source == "" || service.upgrader == nil {
+		return
+	}
+	log := service.logger.With().Str("acquisition_target_id", target.ID.String()).Logger()
+	settings, err := service.store.UpgradeSettings(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("read whether low-quality files are replaced")
+		return
+	}
+	if !settings.Enabled {
+		return
+	}
+	fileID, searchAt, summary := uuid.NullUUID{}, service.now(), keyedUpgradeSummary
+	if notBetter {
+		fileID, searchAt, summary = target.UpgradeOfLibraryFileID, searchAt.Add(keyedUpgradeStandBack),
+			keyedUpgradeStandingBackSummary
+	} else if fileID, err = service.store.KeyedFileUnderFloor(ctx, target.ID); err != nil {
+		log.Warn().Err(err).Msg("read whether a keyed want holds a file under its floor")
+		return
+	}
+	if !fileID.Valid {
+		return
+	}
+	upgradeID, err := service.store.RaiseKeyedUpgrade(ctx, target.ID, fileID.UUID, searchAt, summary)
+	if errors.Is(err, db.ErrNoKeyedUpgrade) {
+		return
+	}
+	if err != nil {
+		log.Warn().Err(err).Msg("look for a better copy of a keyed want's track")
+		return
+	}
+	log.Info().
+		Str("upgrade_acquisition_target_id", upgradeID.String()).
+		Str("library_file_id", fileID.UUID.String()).
+		Time("search_at", searchAt).
+		Msg("a keyed want holds a file under its floor, so a better copy is looked for")
+	service.announce()
 }
 
 // keepLookingForLossless raises a fresh want when the copy fetched for a

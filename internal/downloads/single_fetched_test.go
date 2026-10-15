@@ -37,24 +37,54 @@ func fetchedFromTheAddress(t *testing.T, fingerprint string, kbps int) (*fakeImp
 	return store, importer
 }
 
-// SoundCloud serves 128 kbit/s. The audio is the track, and the copy is held
-// with both numbers so a person can accept it.
-func TestATrackFetchedFromTheAddressBelowTheFloorIsHeld(t *testing.T) {
+// SoundCloud serves 128 kbit/s. The audio is the track and the link serves
+// nothing better, so the copy is taken with both numbers named, and the want
+// looks for a better copy once it is in the library (owner's decision,
+// 2026-10-15).
+func TestATrackFetchedFromTheAddressBelowTheFloorIsAdmitted(t *testing.T) {
 	store, importer := fetchedFromTheAddress(t, anchorFingerprint, 128)
 
 	if err := importer.ImportOne(context.Background(), store.targetRow.RequestID); err != nil {
 		t.Fatal(err)
 	}
 
-	if store.accepted != nil {
-		t.Fatalf("accepted = %+v, want the fetched track held below the floor", store.accepted)
+	if store.accepted == nil || store.accepted.Verdict != db.AcquiredFileAccepted {
+		t.Fatalf("accepted = %+v, settled = %+v, want the fetched track admitted",
+			store.accepted, store.settled)
 	}
-	if store.settled == nil || store.settled.Verdict != db.AcquiredFileHeld {
-		t.Fatalf("settled = %+v, want the fetched track held", store.settled)
+	if !strings.Contains(store.accepted.Summary, "128 kbit/s") ||
+		!strings.Contains(store.accepted.Summary, "320 kbit/s") {
+		t.Fatalf("summary = %q, want both bit rates named", store.accepted.Summary)
 	}
-	if !strings.Contains(store.settled.Summary, "128 kbit/s") ||
-		!strings.Contains(store.settled.Summary, "320 kbit/s") {
-		t.Fatalf("summary = %q, want both bit rates named", store.settled.Summary)
+}
+
+// A peer's copy under the floor is still held: Soulseek may have a better one.
+func TestAPeersCopyBelowTheFloorIsStillHeld(t *testing.T) {
+	store, importer, _ := keyedCandidate(t, anchorFingerprint, 128)
+
+	if err := importer.ImportOne(context.Background(), store.targetRow.RequestID); err != nil {
+		t.Fatal(err)
+	}
+
+	if store.accepted != nil || store.settled == nil || store.settled.Verdict != db.AcquiredFileHeld {
+		t.Fatalf("accepted = %+v, settled = %+v, want a peer's copy held below the floor",
+			store.accepted, store.settled)
+	}
+}
+
+// A want looking for a better copy than the file it holds admits a copy under
+// the floor. The upgrader compares it with that file and keeps the better one.
+func TestACopyForAKeyedUpgradeBelowTheFloorIsAdmitted(t *testing.T) {
+	store, importer, _ := keyedCandidate(t, anchorFingerprint, 256)
+	store.targetRow.Upgrade = true
+
+	if err := importer.ImportOne(context.Background(), store.targetRow.RequestID); err != nil {
+		t.Fatal(err)
+	}
+
+	if store.accepted == nil || store.accepted.Verdict != db.AcquiredFileAccepted {
+		t.Fatalf("accepted = %+v, settled = %+v, want the copy admitted for the upgrader to judge",
+			store.accepted, store.settled)
 	}
 }
 
