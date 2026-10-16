@@ -414,6 +414,62 @@ func TestUpgradeCandidatesOffersADamagedLosslessFileAgainDespiteTheStandBack(t *
 	}
 }
 
+// A damaged FLAC whose upgrade copy is still in the library was kept beside it
+// because their audio did not agree. It is not offered again: each new want
+// brought one more copy, and Hum "Scraper" ended up with seven.
+func TestUpgradeCandidatesLeavesOutAFileWhoseUpgradeCopyIsStillThere(t *testing.T) {
+	pool := dbtest.Setup(t)
+	queries := New(pool)
+	ctx := context.Background()
+	recordingID := uuid.New()
+
+	fileID := candidateFile(t, pool, recordingID)
+	damagedCandidate(t, pool, fileID, "flac")
+	wantID, _, err := queries.CreateUpgradeTarget(ctx, CreateUpgradeTargetParams{
+		LibraryFileID: fileID, RecordingID: recordingID,
+		EntryArtist: "Hum", EntryTitle: "Scraper", Summary: "Your copy's audio is damaged.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copyID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO library_files (library_root_id, path, size_bytes, modified_at)
+		SELECT library_root_id, path || '.mp3', 1, now() FROM library_files WHERE id = $1
+		RETURNING id
+	`, fileID).Scan(&copyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO acquisition_target_files (
+			acquisition_target_id, provider, source_username, remote_path, verdict, library_file_id
+		) VALUES ($1, 'slskd', 'peer', 'Music\Hum\05 Scraper.flac', 'accepted', $2)
+	`, wantID, copyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE acquisition_targets
+		SET status = 'acquired', acquired_at = now(), next_attempt_at = NULL,
+		    summary = 'In your library.'
+		WHERE id = $1
+	`, wantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE library_files SET upgrade_refused_at = now() WHERE id = $1`, fileID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := queries.UpgradeCandidates(ctx, uuid.Nil, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsID(candidateFileIDs(rows), fileID) {
+		t.Fatal("a damaged FLAC whose upgrade copy is still in the library was offered again")
+	}
+}
+
 // A damaged lossy file keeps the stand-back: a lower bit rate copy refused for
 // it would otherwise be fetched again on the next pass.
 func TestUpgradeCandidatesKeepsADamagedLossyFileStandingBack(t *testing.T) {

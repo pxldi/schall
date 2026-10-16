@@ -204,6 +204,19 @@ func (q *Queries) UpgradeCandidates(
 		      WHERE targets.musicbrainz_recording_id = identities.musicbrainz_recording_id
 		        AND targets.status IN ('unresolved', 'pending', 'searching', 'awaiting_review')
 		  )
+		  -- A file an earlier upgrade want already brought a copy in for, and
+		  -- that copy is still in the library, was not replaced: the two did not
+		  -- agree, and the pair is on the duplicates screen. Another want would
+		  -- only add a third copy. Hum "Scraper" gathered seven MP3s this way,
+		  -- because a damaged lossless file ignores the stand-back above.
+		  AND NOT EXISTS (
+		      SELECT 1 FROM acquisition_targets earlier
+		      JOIN acquisition_target_files copies
+		          ON copies.acquisition_target_id = earlier.id AND copies.verdict = 'accepted'
+		      JOIN library_files brought
+		          ON brought.id = copies.library_file_id AND brought.missing_at IS NULL
+		      WHERE earlier.upgrade_of_library_file_id = files.id
+		  )
 		ORDER BY files.id
 		LIMIT $3
 	`, upgradeStandBackDays, damagedLossless("files", 4)),
