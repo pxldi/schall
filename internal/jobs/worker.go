@@ -127,6 +127,8 @@ const (
 	SweepDuplicates = "sweep_duplicates"
 	// ClearLeftBehindCopies is fixed by migration 00136, which queues it once.
 	ClearLeftBehindCopies = "clear_left_behind_copies"
+	// RemoveChosenCopies is fixed by migration 00137, which queues it once.
+	RemoveChosenCopies = "remove_chosen_copies"
 	// SyncNavidromePlaylists is fixed by migration 00038, whose partial unique
 	// index is keyed on this exact string. An applied migration is never edited,
 	// so this name is not one to tidy later.
@@ -880,6 +882,9 @@ type DuplicateSweeper interface {
 	// ClearLeftBehindCopies removes the extra copies failed imports left in
 	// the library, once, on the person's decision.
 	ClearLeftBehindCopies(context.Context) (SweptDuplicates, error)
+	// RemoveChosenCopies removes the files a person chose by path, each beside
+	// a file of the same recording that stays. The payload is the job's own.
+	RemoveChosenCopies(context.Context, json.RawMessage) (SweptDuplicates, error)
 	// QueueDuplicateSweep asks for a pass at a moment. A scan that brought
 	// files in asks for one now; a pass that has just finished asks for the
 	// next one hours away.
@@ -1650,6 +1655,8 @@ func (worker *Worker) process(ctx context.Context, job Job) {
 		worker.processDuplicateSweep(ctx, job)
 	case ClearLeftBehindCopies:
 		worker.processLeftBehindCleanup(ctx, job)
+	case RemoveChosenCopies:
+		worker.processChosenCopies(ctx, job)
 	case SweepUpgradeCandidates:
 		worker.processUpgradeSweep(ctx, job)
 	case JudgeCopiesAgain:
@@ -3590,6 +3597,32 @@ func (worker *Worker) processLeftBehindCleanup(ctx context.Context, job Job) {
 		Int("removed", swept.Removed).
 		Int("left_alone", swept.LeftAlone).
 		Msg("the extra copies failed imports left behind were removed")
+}
+
+// processChosenCopies removes the files a person chose by path. It runs once:
+// migration 00137 queues it and nothing queues another.
+func (worker *Worker) processChosenCopies(ctx context.Context, job Job) {
+	worker.announce(events.TopicLibrary)
+	defer worker.announce(events.TopicLibrary)
+
+	if worker.duplicates == nil {
+		worker.finishFailed(ctx, job, errors.New("settling duplicates is not configured"), false)
+		return
+	}
+	swept, err := worker.duplicates.RemoveChosenCopies(ctx, job.Payload)
+	if err != nil {
+		worker.finishFailed(ctx, job, fmt.Errorf("remove the copies a person chose: %w", err), true)
+		return
+	}
+	if err := worker.queue.Complete(ctx, job); err != nil {
+		worker.logger.Error().Err(err).Str("job_id", job.ID.String()).Msg("complete job")
+		return
+	}
+	worker.logger.Info().
+		Str("job_id", job.ID.String()).
+		Int("removed", swept.Removed).
+		Int("left_alone", swept.LeftAlone).
+		Msg("the copies a person chose were removed")
 }
 
 // processFileTagging brings one file's tags into line with the catalogue tracks
