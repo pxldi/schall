@@ -59,6 +59,21 @@ func (sweep *DuplicateSweep) SweepDuplicates(ctx context.Context) (jobs.SweptDup
 	}, nil
 }
 
+// ClearLeftBehindCopies removes the extra copies failed imports left behind.
+// It does not read the duplicates setting: the person chose this cleanup by
+// itself.
+func (sweep *DuplicateSweep) ClearLeftBehindCopies(ctx context.Context) (jobs.SweptDuplicates, error) {
+	swept, err := sweep.remover.ClearLeftBehindCopies(ctx)
+	if err != nil {
+		return jobs.SweptDuplicates{}, fmt.Errorf("clear the copies failed imports left behind: %w", err)
+	}
+	return jobs.SweptDuplicates{
+		Resolved:  swept.Resolved,
+		Removed:   len(swept.RemovedPaths),
+		LeftAlone: swept.LeftAlone,
+	}, nil
+}
+
 // QueueDuplicateSweep asks for a pass at a moment.
 func (sweep *DuplicateSweep) QueueDuplicateSweep(ctx context.Context, runAfter time.Time) error {
 	return db.New(sweep.pool).QueueDuplicateSweep(ctx, runAfter)
