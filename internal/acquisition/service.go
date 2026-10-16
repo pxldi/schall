@@ -26,6 +26,7 @@ import (
 	"github.com/pxldi/schall/internal/events"
 	"github.com/pxldi/schall/internal/identity"
 	"github.com/pxldi/schall/internal/library"
+	"github.com/pxldi/schall/internal/sources"
 	"github.com/rs/zerolog"
 )
 
@@ -195,6 +196,8 @@ type Store interface {
 	// flight, what to fetch next, and completing a copy the scan has since made a
 	// library file of.
 	AcquisitionTargetFiles(context.Context, uuid.UUID) ([]db.AcquisitionTargetFileRow, error)
+	UndeliveredBeforeWant(context.Context, uuid.UUID) ([]db.AcquisitionTargetFileRow, error)
+	LossyStandInKbps(context.Context) (int, error)
 	OpenTargetRequest(context.Context, uuid.UUID) (uuid.NullUUID, error)
 	OpenTargetTransferQueuedPast(context.Context, uuid.UUID, time.Time) (bool, error)
 	OpenFilesByPeer(context.Context) (map[db.Peer]int, error)
@@ -1019,12 +1022,13 @@ func (service *Service) keepLookingAboveFloor(
 //
 // The acquired want is superseded, not reopened: it has an accepted copy, and
 // a want with one never searches again (answeredAlready). The fresh want takes
-// only lossless copies, so it cannot fetch the discarded copy a second time.
+// only lossless copies or ones at the re-encode rate, so it cannot fetch the
+// discarded copy a second time.
 func (service *Service) keepLookingForLossless(
 	ctx context.Context, target db.AcquisitionTargetRow,
 ) error {
 	lossless, err := service.losslessOnly(ctx, target)
-	if err != nil || !lossless {
+	if err != nil || !lossless.losslessOnly {
 		return err
 	}
 	_, _, err = service.store.CreateUpgradeTarget(ctx, db.CreateUpgradeTargetParams{
@@ -1051,15 +1055,41 @@ func (service *Service) keepLookingForLossless(
 	return nil
 }
 
-// losslessOnly reports whether this want takes only lossless copies: it is an
-// upgrade want raised for a damaged lossless file.
+// lossBar is what a want for a damaged lossless file takes. The zero value is
+// an ordinary want.
+type lossBar struct {
+	// losslessOnly refuses every lossy copy below lossyFromKbps.
+	losslessOnly bool
+	// lossyFromKbps is the lowest bit rate a lossy copy may have; 0 is none.
+	lossyFromKbps int
+}
+
+// refuses reports whether the bar turns this file away for being lossy.
+func (bar lossBar) refuses(file sources.File) bool {
+	if !bar.losslessOnly || sources.Lossless(file.Extension) {
+		return false
+	}
+	return bar.lossyFromKbps == 0 || file.BitRate < bar.lossyFromKbps
+}
+
+// losslessOnly reads the bar for this want: an upgrade want raised for a
+// damaged lossless file refuses lossy copies, except at the rate the import
+// re-encodes lossless files to, when it does.
 func (service *Service) losslessOnly(
 	ctx context.Context, target db.AcquisitionTargetRow,
-) (bool, error) {
+) (lossBar, error) {
 	if target.Origin != "upgrade" || !target.UpgradeOfLibraryFileID.Valid {
-		return false, nil
+		return lossBar{}, nil
 	}
-	return service.store.UpgradeOfDamagedLossless(ctx, target.UpgradeOfLibraryFileID.UUID)
+	damaged, err := service.store.UpgradeOfDamagedLossless(ctx, target.UpgradeOfLibraryFileID.UUID)
+	if err != nil || !damaged {
+		return lossBar{}, err
+	}
+	kbps, err := service.store.LossyStandInKbps(ctx)
+	if err != nil {
+		return lossBar{}, err
+	}
+	return lossBar{losslessOnly: true, lossyFromKbps: kbps}, nil
 }
 
 // abandonTheWait stops a want claiming its copy is on the way in when it plainly

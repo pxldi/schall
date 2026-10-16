@@ -890,6 +890,17 @@ func completeDownloadImport(
 		if imported.TrackID != uuid.Nil {
 			track = imported.TrackID
 		}
+		// The file under this path is the one this import just validated, so an
+		// earlier download that still names the path describes a file that has
+		// since gone: a damaged copy being replaced, or a song fetched again after
+		// its first copy was removed. Its claim is let go rather than left to
+		// refuse the import.
+		if _, err := tx.Exec(ctx, `
+			UPDATE downloads SET local_path = NULL, library_file_id = NULL, updated_at = now()
+			WHERE local_path = $3 AND NOT (download_request_id = $1 AND remote_path = $2)
+		`, requestID, remotePath, imported.LocalPath); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `
 			UPDATE downloads SET local_path = $3, track_id = $4, updated_at = now()
 			WHERE download_request_id = $1 AND remote_path = $2

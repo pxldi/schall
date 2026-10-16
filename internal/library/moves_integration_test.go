@@ -1205,3 +1205,43 @@ func TestAnOlderFileOnASingleAndAnAlbumStaysUnderTheIdentifiedSingle(t *testing.
 		t.Fatalf("destination = %q, want %q", to, want)
 	}
 }
+
+// A move lands only on an empty destination, so a download that still names
+// that path describes a file that has gone. It used to refuse the move on the
+// unique path; the stale claim is let go and the moved file's download takes it.
+func TestAMoveTakesOverAPathAGoneDownloadStillNamed(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	rootID, rootPath := libraryRoot(t, pool)
+	setLayout(t, pool, "{artist}/{album}")
+
+	from := filepath.Join(rootPath, "loose", "roads.mp3")
+	fileID := libraryFile(t, pool, rootID, from, "Portishead", "Dummy")
+	want := filepath.Join(rootPath, "Portishead", "Dummy", "roads.mp3")
+	requestID := downloadProvenance(t, pool, fileID, from, filepath.Dir(from), "Portishead", "Dummy")
+	goneID := downloadProvenance(t, pool, fileID, want, filepath.Dir(want), "Portishead", "Dummy (gone)")
+	if _, err := pool.Exec(ctx,
+		`UPDATE downloads SET library_file_id = NULL WHERE download_request_id = $1`, goneID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	mover := NewMover(pool, zerolog.Nop())
+	plan, err := mover.Plan(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mover.Apply(ctx, plan.RunID); err != nil {
+		t.Fatal(err)
+	}
+
+	var holder uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`SELECT download_request_id FROM downloads WHERE local_path = $1`, want,
+	).Scan(&holder); err != nil {
+		t.Fatal(err)
+	}
+	if holder != requestID {
+		t.Fatalf("destination held by %s, want the moved file's download %s", holder, requestID)
+	}
+}

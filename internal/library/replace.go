@@ -56,6 +56,9 @@ type upgradeCandidate struct {
 	present   bool
 	// damaged is a file whose audio did not decode (library_files.decode_error).
 	damaged bool
+	// fromLossless is a lossy file Schall wrote from a lossless original on
+	// import, because the import settings ask for smaller copies.
+	fromLossless bool
 	// settled says the file's identity rests on one of db.SettledProof's
 	// proofs. A file that is not settled is deleted only once its audio agrees
 	// with the copy replacing it.
@@ -138,7 +141,11 @@ func (remover *Remover) ReplaceIfBetter(
 		return false, nil
 	}
 
-	if better(old, fresh) {
+	standIn, err := db.New(remover.pool).LossyStandInKbps(ctx)
+	if err != nil {
+		return false, err
+	}
+	if better(old, fresh, standIn) {
 		reason := upgradeReplacedReason
 		// Only a damaged file reaches here without a settled identity
 		// (db.UpgradeCandidates). Its identity may be wrong, so it is deleted
@@ -265,7 +272,14 @@ func (remover *Remover) ReplaceOwnedWithUpload(
 		candidateCopy := candidate
 		old = &candidateCopy
 	}
-	if old == nil || !better(*old, uploaded) {
+	if old == nil {
+		return false, nil
+	}
+	standIn, err := db.New(remover.pool).LossyStandInKbps(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !better(*old, uploaded, standIn) {
 		return false, nil
 	}
 
@@ -298,13 +312,15 @@ func (remover *Remover) ReplaceOwnedWithUpload(
 	return true, nil
 }
 
-// better reports whether fresh is a genuine upgrade over old.
+// better reports whether fresh is a genuine upgrade over old. standInKbps is
+// db.LossyStandInKbps: the rate at which a lossy copy replaces a damaged
+// lossless file, or 0 when none may.
 //
 // A file below the floor is never lossless (sources.Preferences.BelowFloor
 // never says so), so old is always the lossy side of this comparison in
 // practice; the lossless branches below exist so the rule reads correctly on
 // its own rather than relying on that.
-func better(old, fresh upgradeCandidate) bool {
+func better(old, fresh upgradeCandidate, standInKbps int) bool {
 	oldLossless := sources.Lossless(extension(old.path))
 	freshLossless := sources.Lossless(extension(fresh.path))
 	if fresh.damaged {
@@ -314,10 +330,14 @@ func better(old, fresh upgradeCandidate) bool {
 	// A fetched copy's decode_error is still unchecked here; the import refused
 	// it before it reached the library if its audio did not decode
 	// (downloads.DecodeChecker). A lossy copy never replaces a damaged lossless
-	// file, and a lower bit rate never replaces a higher one.
+	// file, and a lower bit rate never replaces a higher one. The exceptions are
+	// a copy that arrived lossless and was written smaller on import, and a lossy
+	// copy at the rate the import re-encodes to: the import settings asked for
+	// that size, and refusing it discarded every copy the want fetched, so the
+	// want fetched them for ever.
 	if old.damaged {
 		if oldLossless && !freshLossless {
-			return false
+			return fresh.fromLossless || (standInKbps > 0 && fresh.bitRateKbps >= standInKbps)
 		}
 		return freshLossless || fresh.bitRateKbps >= old.bitRateKbps
 	}
@@ -363,7 +383,8 @@ func (remover *Remover) upgradeCandidateByID(
 		       coalesce(identities.method, ''), coalesce(identities.is_manual, false),
 		       coalesce(files.measured_duration_ms, files.duration_ms, 0),
 		       coalesce(files.witness_fingerprint, ''),
-		       coalesce(sources.external_id, '')
+		       coalesce(sources.external_id, ''),
+		       coalesce(files.transcoded_from_format, '')
 		FROM library_files files
 		JOIN library_roots roots ON roots.id = files.library_root_id
 		LEFT JOIN library_file_identities identities
@@ -381,15 +402,16 @@ func (remover *Remover) upgradeCandidateByID(
 		return upgradeCandidate{}, rows.Err()
 	}
 	var candidate upgradeCandidate
-	var method string
+	var method, transcodedFrom string
 	var manual bool
 	if err := rows.Scan(&candidate.id, &candidate.path, &candidate.rootPath,
 		&candidate.size, &candidate.bitRateKbps, &candidate.recordingID,
 		&candidate.damaged, &method, &manual, &candidate.durationMS,
-		&candidate.witnessFingerprint, &candidate.sourceKey); err != nil {
+		&candidate.witnessFingerprint, &candidate.sourceKey, &transcodedFrom); err != nil {
 		return upgradeCandidate{}, err
 	}
 	candidate.present = true
+	candidate.fromLossless = sources.Lossless(transcodedFrom)
 	// A source identity is the track at an address, written when the audio
 	// reproduced the address's excerpt or when a person named the file from
 	// it. Either is a settled answer about what the file is.

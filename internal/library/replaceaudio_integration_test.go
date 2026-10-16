@@ -373,3 +373,69 @@ func TestReplaceIfBetterStandsADamagedMP3BackAfterAWorseCopy(t *testing.T) {
 		t.Fatal("the damaged MP3 does not stand back from the sweep")
 	}
 }
+
+// With re-encoding on, the lossless copy fetched for a damaged FLAC is filed as
+// an MP3. It replaces the FLAC rather than being discarded as lossy, which sent
+// the want to fetch the next lossless copy for ever.
+func TestReplaceIfBetterReplacesADamagedFLACWithACopyWrittenSmallerFromLossless(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	switchOnUpgrades(t, pool)
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	oldID := provenCopy(t, pool, rootID, filepath.Join(rootPath, "old.flac"), recordingID)
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_files
+		SET decode_error = 'Header missing', decode_checked_at = now(), bit_rate_kbps = 900
+		WHERE id = $1
+	`, oldID); err != nil {
+		t.Fatal(err)
+	}
+	newID := provenCopy(t, pool, rootID, filepath.Join(rootPath, "new.mp3"), recordingID)
+	if _, err := pool.Exec(ctx,
+		`UPDATE library_files SET transcoded_from_format = 'flac' WHERE id = $1`, newID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	replaced, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replaced || filePresent(t, pool, oldID) || !filePresent(t, pool, newID) {
+		t.Fatal("the damaged FLAC was not replaced by the copy written from a lossless file")
+	}
+}
+
+// With re-encoding to 320 kbps on, a clean MP3 at 320 is what a lossless copy
+// would have been filed as, so it replaces a damaged FLAC too (owner's decision,
+// 2026-10-15).
+func TestReplaceIfBetterReplacesADamagedFLACWithAnMP3AtTheReencodeRate(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Setup(t)
+	switchOnUpgrades(t, pool)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO import_settings (transcode_enabled, transcode_bitrate) VALUES (true, '320')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	rootID, rootPath := libraryRoot(t, pool)
+	recordingID := uuid.New()
+	oldID := provenCopy(t, pool, rootID, filepath.Join(rootPath, "old.flac"), recordingID)
+	if _, err := pool.Exec(ctx, `
+		UPDATE library_files
+		SET decode_error = 'Header missing', decode_checked_at = now(), bit_rate_kbps = 900
+		WHERE id = $1
+	`, oldID); err != nil {
+		t.Fatal(err)
+	}
+	newID := provenCopy(t, pool, rootID, filepath.Join(rootPath, "new.mp3"), recordingID)
+
+	replaced, err := NewRemover(pool, zerolog.Nop()).ReplaceIfBetter(ctx, oldID, newID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replaced || filePresent(t, pool, oldID) || !filePresent(t, pool, newID) {
+		t.Fatal("the damaged FLAC was not replaced by an MP3 at the re-encode rate")
+	}
+}
