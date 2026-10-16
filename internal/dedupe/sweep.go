@@ -7,6 +7,7 @@ package dedupe
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -66,6 +67,28 @@ func (sweep *DuplicateSweep) ClearLeftBehindCopies(ctx context.Context) (jobs.Sw
 	swept, err := sweep.remover.ClearLeftBehindCopies(ctx)
 	if err != nil {
 		return jobs.SweptDuplicates{}, fmt.Errorf("clear the copies failed imports left behind: %w", err)
+	}
+	return jobs.SweptDuplicates{
+		Resolved:  swept.Resolved,
+		Removed:   len(swept.RemovedPaths),
+		LeftAlone: swept.LeftAlone,
+	}, nil
+}
+
+// RemoveChosenCopies removes the files a person chose by path. The payload is
+// {"copies": [{"remove": path, "keep": path}, ...]}.
+func (sweep *DuplicateSweep) RemoveChosenCopies(
+	ctx context.Context, payload json.RawMessage,
+) (jobs.SweptDuplicates, error) {
+	var chosen struct {
+		Copies []library.ChosenCopy `json:"copies"`
+	}
+	if err := json.Unmarshal(payload, &chosen); err != nil {
+		return jobs.SweptDuplicates{}, fmt.Errorf("read the copies a person chose: %w", err)
+	}
+	swept, err := sweep.remover.RemoveChosenCopies(ctx, chosen.Copies)
+	if err != nil {
+		return jobs.SweptDuplicates{}, fmt.Errorf("remove the copies a person chose: %w", err)
 	}
 	return jobs.SweptDuplicates{
 		Resolved:  swept.Resolved,
