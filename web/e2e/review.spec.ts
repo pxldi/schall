@@ -17,7 +17,7 @@ test('the rail lists the open wants and counts them by reason', async ({ page })
   await expect(page.getByRole('button', { name: 'Which version 1' })).toBeVisible();
 });
 
-test('a downloaded want compares each copy with the wish, with None, Skip, Wrong song and Remove above', async ({
+test('a downloaded want compares each copy with the wish, with Skip, Wrong song, Remove and None to answer', async ({
   page
 }) => {
   await page.goto('/review');
@@ -35,7 +35,7 @@ test('a downloaded want compares each copy with the wish, with None, Skip, Wrong
   await expect(page.getByRole('button', { name: 'Accept Copy 1' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept Copy 2' })).toBeVisible();
 
-  const header = page.locator('header').filter({ has: heading });
+  const header = page.getByRole('group', { name: 'Decide' });
   await expect(header.getByRole('button', { name: 'None of these' })).toBeVisible();
   await expect(header.getByRole('button', { name: 'Skip' })).toBeVisible();
   await expect(header.getByRole('button', { name: 'Wrong song' })).toBeVisible();
@@ -43,7 +43,7 @@ test('a downloaded want compares each copy with the wish, with None, Skip, Wrong
   await expect(page.getByRole('slider', { name: 'Volume' })).toBeVisible();
 });
 
-test('a version want draws one row per candidate, with Use version, Skip and Remove above', async ({
+test('a version want draws one row per candidate, with Skip, Remove and Use version to answer', async ({
   page
 }) => {
   await page.goto('/review');
@@ -55,13 +55,13 @@ test('a version want draws one row per candidate, with Use version, Skip and Rem
   await expect(heading).toBeVisible();
   await expect(page.getByText('Recording', { exact: true })).toBeVisible();
   await expect(page.getByText('Release', { exact: true })).toBeVisible();
-  await expect(page.getByText('Matches', { exact: true })).toBeVisible();
+  await expect(page.getByText('Agrees', { exact: true })).toBeVisible();
   // The two candidates the entry fits.
   await expect(page.getByRole('radio')).toHaveCount(2);
   await expect(page.getByText('Signal Fires', { exact: true })).toBeVisible();
   await expect(page.getByText('Signal Fires (live)', { exact: true })).toBeVisible();
 
-  const header = page.locator('header').filter({ has: heading });
+  const header = page.getByRole('group', { name: 'Decide' });
   await expect(header.getByRole('button', { name: 'Use version' })).toBeVisible();
   await expect(header.getByRole('button', { name: 'Skip' })).toBeVisible();
   await expect(header.getByRole('button', { name: 'Remove' })).toBeVisible();
@@ -106,7 +106,7 @@ test('the answers stay on screen under a long queue', async ({ page }) => {
   const queue = page.getByRole('navigation', { name: 'Review queue' });
   await expect.poll(() => queue.locator('[data-question]').count()).toBeGreaterThan(90);
 
-  const skip = page.locator('header').getByRole('button', { name: 'Skip' });
+  const skip = page.getByRole('group', { name: 'Decide' }).getByRole('button', { name: 'Skip' });
   await expect(skip).toBeInViewport();
   await page.mouse.wheel(0, 600);
   await expect(skip).toBeInViewport();
@@ -114,7 +114,7 @@ test('the answers stay on screen under a long queue', async ({ page }) => {
   expect(rail!.height).toBeLessThanOrEqual(800);
 });
 
-test('the answers stay above the comparison in a narrow window', async ({ page }) => {
+test('the answers never lie over the comparison in a narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 753, height: 700 });
   await page.goto('/review');
   // The rail's list is hidden below 1024 px; the reason narrows to the one copy question.
@@ -123,8 +123,8 @@ test('the answers stay above the comparison in a narrow window', async ({ page }
   const accept = page.getByRole('button', { name: 'Accept Copy 1' });
   await accept.scrollIntoViewIfNeeded();
   await expect(accept).toBeInViewport();
-  const header = (await page.locator('header').filter({ has: page.getByRole('heading', { level: 2 }) }).boundingBox())!;
+  const answers = (await page.getByRole('group', { name: 'Decide' }).boundingBox())!;
   const box = (await accept.boundingBox())!;
-  // The sticky header never lies over the button it is scrolled to.
-  expect(box.y).toBeGreaterThanOrEqual(header.y + header.height);
+  // The sticky answer bar never lies over the button it is scrolled to.
+  expect(box.y + box.height).toBeLessThanOrEqual(answers.y);
 });

@@ -25,9 +25,11 @@
     type ReasonKey
   } from '$lib/review';
   import Button from '$lib/components/Button.svelte';
-  import Hero from '$lib/components/Hero.svelte';
-  import Cover from '$lib/components/Cover.svelte';
-  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import Keycap from '$lib/components/Keycap.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { glide, slideInto } from '$lib/motion.svelte';
+  import { STATE_GLYPH } from '$lib/states';
   import AlbumBatch from '$lib/components/AlbumBatch.svelte';
   import CopyTable from '$lib/components/CopyTable.svelte';
   import ReviewPlayer from '$lib/components/ReviewPlayer.svelte';
@@ -214,21 +216,6 @@
   let at = $state(0);
   const current = $derived(filtered[Math.min(at, Math.max(filtered.length - 1, 0))]);
   const currentReason = $derived(current ? reasons.get(current.id) : undefined);
-
-  // The print is the cover of the song being decided, so each question
-  // carries its own inks (ADR Duoton).
-  const currentAlbum = $derived(current?.want?.target.originAlbumId ?? current?.download?.albumId);
-  const currentInks = $derived(
-    current?.want?.target.originAlbumId ? current.want.inks : current?.download?.inks
-  );
-  usePagePrint(() => {
-    if (loading) return undefined;
-    return {
-      covers: currentAlbum ? [{ src: coverSrc(currentAlbum), seed: currentAlbum, inks: currentInks }] : [],
-      mode: 'single',
-      height: 16
-    };
-  });
 
   let held = $state('');
   // Whether the reader has put themselves anywhere yet. Nothing is held until
@@ -431,6 +418,7 @@
    * pressed button loses focus, so Space cannot press it again on the next
    * question. */
   async function decided() {
+    struck = current?.id ?? '';
     placed = true;
     at = Math.min(at, Math.max(filtered.length - 2, 0));
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -558,71 +546,110 @@
     if (current?.kind === 'downloaded' && !filed && current.want) $refuse.mutate(current.want.target.id);
   }
 
-  // Anything that already answers a keydown for itself: a control the reader
-  // could be pressing on purpose, or a dialog/menu sitting over the page.
-  const INTERACTIVE =
-    'button, a, input, textarea, select, summary, [role="radio"], [role="button"], [role="slider"], [contenteditable], [role="dialog"], dialog[open], [role="menu"]';
-  // What still takes its own letters: Y and N reach the page with focus on a
-  // button, never while somebody types.
-  const TYPING =
-    'input, textarea, select, [contenteditable], [role="slider"], [role="dialog"], dialog[open], [role="menu"]';
+  // The question just answered, struck through on its row until the queue
+  // no longer holds it.
+  let struck = $state('');
+  $effect(() => {
+    if (struck && !questions.some((question) => question.id === struck)) struck = '';
+  });
 
-  function onKey(event: KeyboardEvent) {
-    if (event.defaultPrevented) return;
-    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (target?.closest(TYPING)) return;
-    if (!current || deciding) return;
-    const key = event.key.toLowerCase();
-    const steps = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'j', 'k'];
-    // An open album batch answers nothing by key; the steps still leave it.
-    if (batch && !steps.includes(key)) return;
+  // Every identifier disclosure on a version question, opened together by I.
+  let identifiers = $state(false);
+  // Whether the form that keys a want to a link is open. It closes with the
+  // question.
+  let linking = $state(false);
+  $effect(() => {
+    void held;
+    linking = false;
+  });
 
-    if (key === 'y' || key === 'n') {
-      // Claimed whatever happens, so the letter never opens search instead.
-      event.preventDefault();
-      if (key === 'y') confirm();
-      else refuseAll();
-      return;
-    }
-    if (target?.closest(INTERACTIVE)) return;
+  // Review's keys (ADR 0042). The buttons that carry their own key (S, N)
+  // register themselves; these are the keys with no single button. An open
+  // album batch answers nothing by key, and the steps still leave it.
+  const pickable = $derived(
+    !batch && current ? (current.kind === 'version' ? candidates.length : columns.length) : 0
+  );
+  const answering = () => Boolean(current) && !deciding && !batch;
 
-    if (key === ' ') {
-      event.preventDefault();
-      heard = true;
-      player?.toggle();
-      return;
-    }
-
-    if (/^[1-9]$/.test(event.key)) {
-      const index = Number(event.key) - 1;
-      const max = current.kind === 'version' ? candidates.length : columns.length;
-      event.preventDefault();
-      if (index < max) {
-        chosen = index;
-        saidWhich = true;
+  useKeys(() => [
+    {
+      keys: ['j', 'k', 'arrowdown', 'arrowup', 'arrowright', 'arrowleft'],
+      caps: ['j', 'k'],
+      verb: 'next item',
+      order: 0,
+      enabled: () => Boolean(current) && !deciding,
+      run: (event) => {
+        const key = event.key.toLowerCase();
+        step(key === 'k' || key === 'arrowup' || key === 'arrowleft' ? at - 1 : at + 1);
       }
-      return;
-    }
-
-    switch (key) {
-      case 'enter':
-        confirm();
-        break;
-      case 'arrowup':
-      case 'arrowleft':
-      case 'k':
-        event.preventDefault();
-        step(at - 1);
-        break;
-      case 'arrowdown':
-      case 'arrowright':
-      case 'j':
-        event.preventDefault();
-        step(at + 1);
-        break;
-    }
-  }
+    },
+    ...(pickable > 0
+      ? [
+          {
+            keys: Array.from({ length: 9 }, (_, index) => String(index + 1)),
+            caps: Array.from({ length: Math.min(pickable, 9) }, (_, index) => String(index + 1)),
+            verb: 'pick',
+            order: 1,
+            enabled: answering,
+            run: (event: KeyboardEvent) => {
+              const index = Number(event.key) - 1;
+              if (index < pickable) {
+                chosen = index;
+                saidWhich = true;
+              }
+            }
+          }
+        ]
+      : []),
+    ...(player && !batch
+      ? [
+          {
+            keys: [' '],
+            verb: 'play',
+            order: 2,
+            enabled: answering,
+            run: () => {
+              heard = true;
+              player?.toggle();
+            }
+          }
+        ]
+      : []),
+    ...(current?.kind === 'version' || current?.kind === 'downloaded'
+      ? [
+          {
+            keys: ['enter'],
+            verb: current.kind === 'version' ? 'use' : 'accept',
+            order: 3,
+            enabled: () => answering() && (current?.kind !== 'version' || choiceMade),
+            run: confirm
+          },
+          // Y is Enter that a focused button cannot take for itself.
+          {
+            keys: ['y'],
+            verb: current.kind === 'version' ? 'use' : 'accept',
+            hidden: true,
+            fromControls: true,
+            enabled: answering,
+            run: confirm
+          }
+        ]
+      : []),
+    ...(current?.kind === 'version'
+      ? [
+          {
+            keys: ['i'],
+            verb: identifiers ? 'hide identifiers' : 'identifiers',
+            order: 60,
+            enabled: answering,
+            run: () => (identifiers = !identifiers)
+          }
+        ]
+      : []),
+    // Y and N are Review's on every question, answerable or not, so the
+    // letters never open search instead.
+    { keys: ['y', 'n'], verb: 'answer', hidden: true, fromControls: true, enabled: () => false, run: () => {} }
+  ]);
 
   /** Keeps the open question's row inside the rail's own scroll as the reader
    * steps with the keys; the rail scrolls apart from the page. */
@@ -639,348 +666,376 @@
 </script>
 
 <svelte:head><title>Review · Schall</title></svelte:head>
-<svelte:window onkeydown={onKey} />
 
-<!-- "Review" is the page's title, in the place every page keeps it; the song
-     being decided heads the panel below. -->
-<Hero title="Review" section />
+<!-- "Review" is the page's own heading. The song being decided is the title
+     of the decision pane, at the spot every page keeps its title. -->
+<h1 class="sr-only">Review</h1>
 
-<div class="mx-4 mb-6 flex flex-1 flex-col sm:mx-6">
-  {#if pageError}
-    <div class="py-10">
-      <ErrorNote error={pageError} fallback="Couldn't load the review queue." retry={retryQueue} />
-    </div>
-  {:else}
-  <Settle
-    pending={loading}
-    class="flex-1 {loading || hasQueue
-      ? 'overflow-clip rounded-panel border border-line-thin bg-surface-thin'
-      : ''}"
-    layer="flex flex-col"
-  >
+{#if pageError}
+  <div class="px-5 py-10">
+    <ErrorNote error={pageError} fallback="Couldn't load the review queue." retry={retryQueue} />
+  </div>
+{:else}
+  <Settle pending={loading} class="flex-1" layer="flex flex-col">
     {#snippet placeholder()}
-      <div role="status" aria-busy="true" aria-label="Loading the review queue" class="flex flex-col">
-        <div class="flex items-center gap-4 border-b border-line-thin px-4 py-4 sm:px-6">
-          <Skeleton shape="block" class="size-12" />
-          <div class="flex flex-1 flex-col gap-2">
-            <Skeleton class="h-6 w-2/5" />
-            <Skeleton class="h-3.5 w-1/4" />
-          </div>
-        </div>
-        <Skeleton shape="block" class="h-20 w-full rounded-none" />
-        <div class="flex">
-          <SkeletonRows count={6} class="hidden w-52 shrink-0 border-r border-line-thin lg:flex" />
-          <div class="flex-1 p-5"><Skeleton shape="block" class="h-56 w-full max-w-[56rem]" /></div>
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading the review queue"
+        class="grid min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[16.25rem_minmax(0,1fr)]"
+      >
+        <SkeletonRows count={6} class="hidden border-r border-rule bg-panel lg:flex" />
+        <div class="flex flex-col gap-3 px-5 pt-3.5">
+          <Skeleton class="h-3 w-32" />
+          <Skeleton class="h-8 w-2/5" />
+          <Skeleton shape="block" class="mt-3 h-14 w-full" />
+          <Skeleton shape="block" class="h-48 w-full max-w-[56rem]" />
         </div>
       </div>
     {/snippet}
-  {#if !hasQueue && moreToRead}
-    <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
-      <p class="text-body text-ink-3">Loading…</p>
-    </div>
-  {:else if !hasQueue}
-    <div class="py-5">
-      <EmptyPanel role="ok" heading="Nothing to decide" />
-    </div>
-  {:else}
-    <!-- The song and what can be said about it as a whole, across the top. -->
-    <!-- Sticky, so the answers stay in reach down a long list of candidates. -->
-    <header
-      class="sticky top-[var(--topbar-height)] z-10 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line-thin bg-surface-thin px-4 py-3.5 sm:px-6"
-    >
-      {#if batch}
-        <div class="flex min-w-0 flex-1 items-center gap-3.5">
-          <Icon name="release" size={20} class="shrink-0 text-ink-3" />
-          <div class="min-w-0">
-            <h2 class="truncate text-quiet-lead font-bold text-ink">{batch.album}</h2>
-            <p class="truncate text-meta text-ink-3">{batch.artist}</p>
-          </div>
-        </div>
-      {:else if current}
-        <div class="flex min-w-0 flex-1 basis-80 items-center gap-3.5">
-          <Cover
-            src={currentAlbum ? coverSrc(currentAlbum) : undefined}
-            seed={currentAlbum ?? current.id}
-            inks={currentInks}
-            class="size-12 shrink-0 rounded-row object-cover"
-          />
-          <div class="min-w-0">
-            <h2 class="truncate text-quiet-display font-bold text-ink">{current.title}</h2>
-            <p class="hero-sub truncate text-meta text-ink-3">
-              {#if current.detail}<span class="text-ink-2">{current.detail}</span>{/if}
-              {#if current.want?.target.durationMs}
-                <span class="numeric">{clock(current.want.target.durationMs / 1000)}</span>
-              {/if}
-              <span class="numeric">{(at + 1).toLocaleString()} of {(filter === 'all' ? total : filtered.length).toLocaleString()}</span>
-            </p>
-          </div>
-          {#if currentReason}
-            {@const reason = REASONS[currentReason]}
-            <span
-              class="hidden shrink-0 items-center gap-1.5 rounded-full border border-decide/45 bg-decide/8 px-2.5 py-1 text-meta font-medium text-decide sm:flex"
-              title={currentReason === 'waiting' && waiting ? waiting : reason.tip}
-            >
-              <Icon name={reason.icon} size={13} />
-              {currentReason === 'waiting' && waiting ? waiting : reason.label}
-            </span>
-          {/if}
-        </div>
-
-        <div class="flex flex-wrap items-center gap-1.5">
-          {#if current.kind === 'folder' && current.download}
-            <Button
-              disabled={deciding || !current.download.revalidatable}
-              onclick={() => $revalidate.mutate(current.download!.id)}
-            >
-              <Icon name="refresh" size={14} />
-              Check again
-            </Button>
-          {:else if current.kind === 'version'}
-            <Button disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
-              <Icon name="check" size={14} />
-              Use version
-            </Button>
-          {:else if !filed && current.want}
-            <Button
-              variant="outline"
-              disabled={deciding}
-              aria-label="None of these"
-              title="None of these (N)"
-              onclick={refuseAll}
-            >
-              <Icon name="close" size={14} />
-              None
-            </Button>
-          {/if}
-          <Button variant="outline" icon disabled={deciding} aria-label="Skip" title="Skip (J)" onclick={skip}>
-            <Icon name="arrow-right" size={14} />
-          </Button>
-          {#if current.kind === 'downloaded' && current.want}
-            <Button
-              variant="outline"
-              icon
-              disabled={deciding}
-              aria-label="Wrong song"
-              title="Wrong song: the wish points at another recording"
-              onclick={() => $wrongSong.mutate(current.want!.target.id)}
-            >
-              <Icon name="ban" size={14} />
-            </Button>
-          {/if}
-          {#if current.want}
-            <Button
-              variant="outline"
-              icon
-              disabled={deciding}
-              aria-label="Remove"
-              title="Remove from wishlist"
-              onclick={() => $notWanted.mutate(current.want!.target.id)}
-            >
-              <Icon name="delete" size={14} />
-            </Button>
-          {/if}
-        </div>
-      {/if}
-      {#if failure}
-        <p class="basis-full text-meta text-fail" role="status">{failure.message}</p>
-      {/if}
-    </header>
-
-    {#if !batch && column && playerSrc}
-      {#key current?.id}
-        <ReviewPlayer
-          bind:this={player}
-          src={playerSrc}
-          waveformOf={column.filed ? undefined : column.copy.id}
-          label={`${column.heading} · ${column.filed ? 'in your library' : (column.copy.origin?.label ?? column.copy.username)}`}
-          name={current?.title ?? ''}
-          autoplay={heard}
-          onstart={() => (heard = true)}
-        />
-      {/key}
-    {/if}
-
-    <div class="flex flex-1 flex-col lg:flex-row">
-      <!-- Why each question is here, then the questions themselves. It stays
-           under the sticky header and scrolls inside the window's height. -->
-      <nav
-        id="queue-rail"
-        data-queue-rail
-        aria-label="Review queue"
-        class="flex shrink-0 flex-col border-b border-line-thin lg:sticky lg:top-[calc(var(--topbar-height)+5rem)] lg:max-h-[calc(100dvh-var(--topbar-height)-5rem)] lg:w-[clamp(13rem,17vw,16rem)] lg:self-start lg:border-r lg:border-b-0"
-      >
-        <div class="flex flex-wrap gap-0.5 p-2.5 lg:flex-col">
-          {#each ['all' as const, ...shownReasons] as key (key)}
-            {@const reason = key === 'all' ? undefined : REASONS[key]}
-            <button
-              type="button"
-              onclick={() => chooseFilter(key)}
-              aria-pressed={filter === key}
-              title={reason?.tip}
-              class="flex items-center gap-2.5 rounded-row px-2.5 py-1.5 text-left text-meta font-medium transition {filter ===
-              key
-                ? 'bg-surface-thick text-ink'
-                : 'text-ink-2 hover:bg-surface-regular'}"
-            >
-              <Icon name={reason?.icon ?? 'checklist'} size={14} class="shrink-0" />
-              <span class="min-w-0 flex-1 truncate">{reason?.label ?? 'All'}</span>
-              <span class="numeric text-ink-4">
-                {countOf(key)}{key !== 'all' && partial ? '+' : ''}
-              </span>
-            </button>
-          {/each}
-          <button
-            type="button"
-            onclick={toggleByAlbum}
-            aria-pressed={byAlbum}
-            aria-label="Group by album"
-            title="Group by album: open an album and accept its copies together"
-            class="flex items-center gap-2.5 rounded-row px-2.5 py-1.5 text-left text-meta font-medium transition lg:mt-1 lg:border-t lg:border-line-thin lg:rounded-none lg:pt-2.5 {byAlbum
-              ? 'text-ink'
-              : 'text-ink-3 hover:text-ink-2'}"
-          >
-            <Icon name="release" size={14} class="shrink-0" />
-            <span class="hidden lg:inline">By album</span>
-          </button>
-        </div>
-
-        {#if loadError}
-          <div class="border-t border-line-thin px-4 py-2.5">
-            <ErrorNote bare error={loadError} fallback="Couldn't load the rest of the queue." retry={retryQueue} />
-          </div>
-        {/if}
-
-        <div
-          use:keepInView={at}
-          class="hidden min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-thin lg:flex"
+    {#if !hasQueue && moreToRead}
+      <div class="flex flex-1 items-center justify-center py-10" aria-busy="true">
+        <p class="text-body text-ink-3">Loading…</p>
+      </div>
+    {:else if !hasQueue}
+      <div class="px-5 py-5">
+        <EmptyPanel role="ok" heading="Nothing to decide" />
+      </div>
+    {:else}
+      <div class="grid min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[16.25rem_minmax(0,1fr)]">
+        <!-- The queue: why each question is here, then the questions. It
+             scrolls inside the window's height, apart from the page. -->
+        <nav
+          id="queue-rail"
+          data-queue-rail
+          aria-label="Review queue"
+          class="flex min-w-0 flex-col border-b border-rule bg-panel lg:sticky lg:top-10 lg:h-[calc(100dvh-4.5rem)] lg:border-r lg:border-b-0"
         >
-          {#snippet row(question: (typeof filtered)[number], index: number)}
-            {@const here = index === at && !batch}
-            <button
-              type="button"
-              data-question={question.id}
-              aria-current={here ? 'true' : undefined}
-              onclick={() => step(index)}
-              class="flex flex-col gap-0.5 border-b border-line-thin px-4 py-2 text-left {here
-                ? 'queue-current'
-                : 'hover:bg-surface-thick'}"
-            >
-              <span class="truncate text-body {here ? 'font-medium text-ink' : 'text-ink-2'}">
-                {question.title}
-              </span>
-              <span class="truncate text-meta text-ink-4">{question.detail}</span>
-            </button>
-          {/snippet}
-          {#if albums}
-            {@const indexOf = new Map(filtered.map((question, index) => [question.id, index]))}
-            {#each albums.groups as group (group.key)}
-              {@const open = batch?.key === group.key}
+          <div class="flex flex-wrap border-b border-rule">
+            {#each ['all' as const, ...shownReasons] as key (key)}
+              {@const reason = key === 'all' ? undefined : REASONS[key]}
               <button
                 type="button"
-                data-album={group.key}
-                aria-current={open ? 'true' : undefined}
-                aria-label={`${group.album} by ${group.artist}, ${group.questions.length}`}
-                onclick={() => (batch = { key: group.key, album: group.album, artist: group.artist })}
-                class="flex items-center gap-2 border-b border-line-thin bg-surface-regular px-4 py-2 text-left {open
-                  ? 'queue-current'
-                  : 'hover:bg-surface-thick'}"
+                onclick={() => chooseFilter(key)}
+                aria-pressed={filter === key}
+                title={reason?.tip}
+                class="flex h-8 items-center gap-1.5 px-2.5 text-meta transition {filter === key
+                  ? 'inverted font-medium'
+                  : 'text-ink-3 hover:bg-raised hover:text-ink'}"
               >
-                <Icon name="release" size={13} class="shrink-0 text-ink-3" />
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="truncate text-body font-medium text-ink">{group.album}</span>
-                  <span class="truncate text-meta text-ink-3">{group.artist}</span>
+                <span>{reason?.label ?? 'All'}</span>
+                <span class="mono text-micro {filter === key ? '' : 'text-ink-4'}">
+                  {countOf(key)}{key !== 'all' && partial ? '+' : ''}
                 </span>
-                <span class="numeric shrink-0 text-meta text-ink-2">{group.questions.length}</span>
               </button>
-              {#each group.questions as question (question.id)}
-                {@render row(question, indexOf.get(question.id) ?? 0)}
-              {/each}
             {/each}
-            {#each albums.loose as question (question.id)}
-              {@render row(question, indexOf.get(question.id) ?? 0)}
-            {/each}
-          {:else}
-            {#each filtered as question, index (question.id)}
-              {@render row(question, index)}
-            {/each}
-          {/if}
-          {#if moreToRead && !loadError}
-            <p use:nearEnd class="px-4 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
-          {/if}
-        </div>
-      </nav>
+            <button
+              type="button"
+              onclick={toggleByAlbum}
+              aria-pressed={byAlbum}
+              aria-label="Group by album"
+              title="Group by album: open an album and accept its copies together"
+              class="flex h-8 items-center gap-1.5 px-2.5 text-meta transition {byAlbum
+                ? 'inverted font-medium'
+                : 'text-ink-3 hover:bg-raised hover:text-ink'}"
+            >
+              <Icon name="release" size="sm" class="shrink-0" />
+              <span class="hidden lg:inline">By album</span>
+            </button>
+          </div>
 
-      <section aria-label="Review" class="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4 sm:px-6">
-        {#if batch}
-          {#key batch.key}
-            <AlbumBatch album={batch.album} artist={batch.artist} questions={batchQuestions} ondone={invalidate} />
-          {/key}
-        {:else if !current}
-          <!-- The reason chosen holds nothing. The rail stays, so the reader
-               can choose another. -->
-          {#if moreToRead && !loadError}
-            <SkeletonRows count={4} label="Reading more of the queue" />
+          {#if loadError}
+            <div class="border-b border-rule px-3.5 py-2.5">
+              <ErrorNote bare error={loadError} fallback="Couldn't load the rest of the queue." retry={retryQueue} />
+            </div>
+          {/if}
+
+          <div use:keepInView={at} class="hidden min-h-0 flex-1 flex-col overflow-y-auto lg:flex">
+            <div class="relative flex flex-col" use:glide={{ key: `${at}:${batch?.key ?? ''}:${filtered.length}` }}>
+              {#snippet rowBody(question: (typeof filtered)[number], here: boolean)}
+                {@const kind = reasons.get(question.id)}
+                <span class="truncate text-body {here ? 'font-medium' : 'text-ink-2'}">{question.title}</span>
+                <span class="truncate text-meta {here ? 'text-ink-3' : 'text-ink-4'}">
+                  {question.detail}{#if kind}<span class="text-ink-4">{` · ${REASONS[kind].label}`}</span>{/if}
+                </span>
+              {/snippet}
+              {#if albums}
+                {@const indexOf = new Map(filtered.map((question, index) => [question.id, index]))}
+                {#each albums.groups as group (group.key)}
+                  {@const open = batch?.key === group.key}
+                  <button
+                    type="button"
+                    data-album={group.key}
+                    data-cursor={open}
+                    aria-current={open ? 'true' : undefined}
+                    aria-label={`${group.album} by ${group.artist}, ${group.questions.length}`}
+                    onclick={() => (batch = { key: group.key, album: group.album, artist: group.artist })}
+                    class="row flex items-center gap-2 px-3.5 py-2 text-left {open ? 'on-ink' : ''}"
+                  >
+                    <Icon name="release" size="sm" class="shrink-0 text-ink-3" />
+                    <span class="flex min-w-0 flex-1 flex-col">
+                      <span class="truncate text-body font-medium">{group.album}</span>
+                      <span class="truncate text-meta text-ink-3">{group.artist}</span>
+                    </span>
+                    <span class="mono shrink-0 text-micro text-ink-2">{group.questions.length}</span>
+                  </button>
+                  {#each group.questions as question (question.id)}
+                    {@const index = indexOf.get(question.id) ?? 0}
+                    {@const here = index === at && !batch}
+                    <button
+                      type="button"
+                      data-question={question.id}
+                      data-cursor={here}
+                      aria-current={here ? 'true' : undefined}
+                      onclick={() => step(index)}
+                      class="row flex flex-col gap-0.5 py-2 pr-3.5 pl-7 text-left {here ? 'on-ink' : ''}"
+                      class:struck={struck === question.id}
+                    >
+                      {@render rowBody(question, here)}
+                    </button>
+                  {/each}
+                {/each}
+                {#each albums.loose as question (question.id)}
+                  {@const index = indexOf.get(question.id) ?? 0}
+                  {@const here = index === at && !batch}
+                  <button
+                    type="button"
+                    data-question={question.id}
+                    data-cursor={here}
+                    aria-current={here ? 'true' : undefined}
+                    onclick={() => step(index)}
+                    class="row flex flex-col gap-0.5 px-3.5 py-2 text-left {here ? 'on-ink' : ''}"
+                    class:struck={struck === question.id}
+                  >
+                    {@render rowBody(question, here)}
+                  </button>
+                {/each}
+              {:else}
+                <!-- When a question is answered, the rows under it slide up
+                     onto the cursor on the arriving step. -->
+                {#each filtered as question, index (question.id)}
+                  {@const here = index === at}
+                  <button
+                    type="button"
+                    data-question={question.id}
+                    data-cursor={here}
+                    aria-current={here ? 'true' : undefined}
+                    onclick={() => step(index)}
+                    class="row flex flex-col gap-0.5 px-3.5 py-2 text-left {here ? 'on-ink' : ''}"
+                    class:struck={struck === question.id}
+                    animate:slideInto
+                  >
+                    {@render rowBody(question, here)}
+                  </button>
+                {/each}
+              {/if}
+            </div>
+            {#if moreToRead && !loadError}
+              <p use:nearEnd class="px-3.5 py-2.5 text-meta text-ink-4" aria-live="polite">Loading more…</p>
+            {/if}
+          </div>
+        </nav>
+
+        <section aria-label="Review" class="flex min-w-0 flex-col">
+          {#if batch}
+            <PageHeader title={batch.album} level={2}>
+              {#snippet sub()}
+                <span>{batch?.artist}</span>
+              {/snippet}
+            </PageHeader>
+            <div class="px-5 pt-4 pb-6">
+              {#key batch.key}
+                <AlbumBatch album={batch.album} artist={batch.artist} questions={batchQuestions} ondone={invalidate} />
+              {/key}
+            </div>
+          {:else if !current}
+            <!-- The reason chosen holds nothing. The queue stays, so the reader
+                 can choose another. -->
+            <div class="px-5 pt-6">
+              {#if moreToRead && !loadError}
+                <SkeletonRows count={4} label="Reading more of the queue" />
+              {:else}
+                <EmptyPanel role="idle" heading="Nothing of this kind">
+                  <p class="text-body text-ink-2">Choose All to see the rest.</p>
+                </EmptyPanel>
+              {/if}
+            </div>
           {:else}
-            <EmptyPanel role="idle" heading="Nothing of this kind">
-              <p class="text-body text-ink-2">Choose All to see the rest.</p>
-            </EmptyPanel>
+            {#key current.id}
+              <PageHeader title={current.title} level={2} class="rise">
+                {#snippet sub()}
+                  {#if current?.detail}<span>{current.detail}</span>{/if}
+                  {#if current?.want?.target.durationMs}
+                    <span class="mono text-meta text-ink-3">{clock(current.want.target.durationMs / 1000)}</span>
+                  {/if}
+                  <span class="mono text-meta text-ink-3">
+                    {(at + 1).toLocaleString()} of {(filter === 'all' ? total : filtered.length).toLocaleString()}
+                  </span>
+                  {#if currentReason}
+                    {@const reason = REASONS[currentReason]}
+                    <span
+                      class="flex items-center gap-1.5 text-meta text-decide"
+                      title={currentReason === 'waiting' && waiting ? waiting : reason.tip}
+                    >
+                      <Icon name={STATE_GLYPH.decide} size="sm" />
+                      {currentReason === 'waiting' && waiting ? waiting : reason.label}
+                    </span>
+                  {/if}
+                {/snippet}
+              </PageHeader>
+            {/key}
+
+            <div class="flex flex-1 flex-col gap-4 px-5 pt-4 pb-4">
+              {#if column && playerSrc}
+                {#key current?.id}
+                  <ReviewPlayer
+                    bind:this={player}
+                    src={playerSrc}
+                    waveformOf={column.filed ? undefined : column.copy.id}
+                    label={`${column.heading} · ${column.filed ? 'in your library' : (column.copy.origin?.label ?? column.copy.username)}`}
+                    name={current?.title ?? ''}
+                    autoplay={heard}
+                    onstart={() => (heard = true)}
+                  />
+                {/key}
+              {/if}
+
+              {#key current.id}
+                {#if current.kind === 'downloaded' && current.want}
+                  <CopyTable
+                    want={current.want}
+                    {columns}
+                    {chosen}
+                    {deciding}
+                    onchoose={(index) => {
+                      chosen = index;
+                      saidWhich = true;
+                    }}
+                    onplay={(index) => void playColumn(index)}
+                    onaccept={acceptColumn}
+                  />
+                {:else if current.kind === 'version' && current.want}
+                  <VersionCandidates
+                    candidates={current.want.candidates}
+                    chosen={shownChoice}
+                    entryDurationMs={current.want.target.durationMs}
+                    {identifiers}
+                    onchoose={(index) => {
+                      chosen = index;
+                      saidWhich = true;
+                    }}
+                  />
+                  <UseAddress
+                    bind:open={linking}
+                    trigger={false}
+                    targetId={current.want.target.id}
+                    entryTitle={current.want.target.title}
+                    entryArtist={current.want.target.artist}
+                    entryDurationMs={current.want.target.durationMs}
+                  />
+                {:else if current.kind === 'folder' && current.download}
+                  {@const request = current.download}
+                  {#if request.importError}
+                    <p class="flex items-center gap-1.5 text-body text-fail">
+                      <Icon name={STATE_GLYPH.fail} size="sm" />
+                      {request.importError}
+                    </p>
+                  {/if}
+                  {#if request.importEvidence}
+                    <ImportEvidence
+                      evidence={request.importEvidence}
+                      decisions={request.importDecisions}
+                      pending={$resolveImport.isPending || $withdrawImport.isPending}
+                      onresolve={(fileName, trackId) =>
+                        $resolveImport.mutate({ requestId: request.id, fileName, trackId })}
+                      onwithdraw={(decisionId) => $withdrawImport.mutate({ requestId: request.id, decisionId })}
+                    />
+                  {/if}
+                {/if}
+              {/key}
+            </div>
+
+            <!-- The answers, at the bottom right with their keys. They stay on
+                 screen however long the comparison above them runs. -->
+            <div
+              class="sticky bottom-8 z-10 flex flex-wrap items-center justify-end gap-1.5 border-t border-rule bg-ground px-5 py-2.5"
+              role="group"
+              aria-label="Decide"
+            >
+              {#if failure}
+                <p class="mr-auto flex items-center gap-1.5 text-meta text-fail" role="status">
+                  <Icon name={STATE_GLYPH.fail} size="sm" />
+                  {failure.message}
+                </p>
+              {/if}
+              <Button variant="outline" key="s" verb="skip" disabled={deciding} aria-label="Skip" title="Skip" onclick={skip}>
+                Skip
+              </Button>
+              {#if current.kind === 'downloaded' && current.want}
+                <Button
+                  variant="outline"
+                  disabled={deciding}
+                  aria-label="Wrong song"
+                  title="Wrong song: the wish points at another recording"
+                  onclick={() => $wrongSong.mutate(current.want!.target.id)}
+                >
+                  <Icon name="ban" size="sm" />
+                  Wrong song
+                </Button>
+              {/if}
+              {#if current.want}
+                <Button
+                  variant="outline"
+                  disabled={deciding}
+                  aria-label="Remove"
+                  title="Remove from wishlist"
+                  onclick={() => $notWanted.mutate(current.want!.target.id)}
+                >
+                  <Icon name="delete" size="sm" />
+                  Remove
+                </Button>
+              {/if}
+              {#if current.kind === 'folder' && current.download}
+                <Button
+                  variant="primary"
+                  disabled={deciding || !current.download.revalidatable}
+                  onclick={() => $revalidate.mutate(current.download!.id)}
+                >
+                  <Icon name="refresh" size="sm" />
+                  Check again
+                </Button>
+              {:else if current.kind === 'version'}
+                <Button
+                  variant="outline"
+                  aria-expanded={linking}
+                  disabled={deciding}
+                  onclick={() => (linking = !linking)}
+                >
+                  <Icon name="link" size="sm" />
+                  Use link
+                </Button>
+                <Button variant="primary" disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
+                  Use version
+                  <Keycap key="enter" class="-mr-1" />
+                </Button>
+              {:else if !filed && current.want}
+                <Button
+                  variant="outline"
+                  key="n"
+                  verb="none of these"
+                  disabled={deciding}
+                  aria-label="None of these"
+                  title="None of these"
+                  onclick={refuseAll}
+                >
+                  <Icon name="close" size="sm" />
+                  None
+                </Button>
+              {/if}
+            </div>
           {/if}
-        {:else if current.kind === 'downloaded' && current.want}
-          <CopyTable
-            want={current.want}
-            {columns}
-            {chosen}
-            {deciding}
-            onchoose={(index) => {
-              chosen = index;
-              saidWhich = true;
-            }}
-            onplay={(index) => void playColumn(index)}
-            onaccept={acceptColumn}
-          />
-        {:else if current.kind === 'version' && current.want}
-          <VersionCandidates
-            candidates={current.want.candidates}
-            chosen={shownChoice}
-            onchoose={(index) => {
-              chosen = index;
-              saidWhich = true;
-            }}
-          />
-          <UseAddress
-            targetId={current.want.target.id}
-            entryTitle={current.want.target.title}
-            entryArtist={current.want.target.artist}
-            entryDurationMs={current.want.target.durationMs}
-          />
-        {:else if current.kind === 'folder' && current.download}
-          {@const request = current.download}
-          {#if request.importError}
-            <p class="text-body text-fail">{request.importError}</p>
-          {/if}
-          {#if request.importEvidence}
-            <ImportEvidence
-              evidence={request.importEvidence}
-              decisions={request.importDecisions}
-              pending={$resolveImport.isPending || $withdrawImport.isPending}
-              onresolve={(fileName, trackId) =>
-                $resolveImport.mutate({ requestId: request.id, fileName, trackId })}
-              onwithdraw={(decisionId) => $withdrawImport.mutate({ requestId: request.id, decisionId })}
-            />
-          {/if}
-        {/if}
-      </section>
-    </div>
-  {/if}
+        </section>
+      </div>
+    {/if}
   </Settle>
-  {/if}
-</div>
-
-<style>
-  /* The question on screen, marked in the page's light ink: the inks are chrome,
-     and which row is open is a place, not a state. */
-  .queue-current {
-    background: color-mix(in srgb, var(--color-duo-light) 9%, transparent);
-    box-shadow: inset 3px 0 0 var(--color-duo-light);
-  }
-</style>
+{/if}

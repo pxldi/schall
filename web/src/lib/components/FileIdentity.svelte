@@ -67,7 +67,7 @@
     {/if}
 
     {#if identity}
-      <div class="rounded-panel bg-ok/14 px-4 py-3">
+      <div class=" bg-ok/14 px-4 py-3">
         {#if identity.kind === 'external'}
           <p class="text-body font-semibold text-ink">{identity.trackTitle}</p>
           <p class="mt-1 text-meta text-ink-3">
@@ -99,7 +99,7 @@
       >
         {#snippet detail(_row, index)}
           {#if candidates[index]?.summary}
-            <p class="text-dense-meta text-ink-3">{candidates[index].summary}</p>
+            <p class="text-meta text-ink-3">{candidates[index].summary}</p>
           {/if}
         {/snippet}
       </ReviewEvidence>

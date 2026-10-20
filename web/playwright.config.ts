@@ -54,7 +54,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
         deviceScaleFactor: 1,
-        colorScheme: 'light',
+        // The baselines are drawn in the dark theme, the one the console was
+        // designed in (ADR 0042); pages.spec.ts draws two pages in light too.
+        colorScheme: 'dark',
         reducedMotion: 'reduce',
         locale: 'en-GB',
         timezoneId: 'Europe/Berlin',

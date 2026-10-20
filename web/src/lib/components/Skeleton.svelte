@@ -2,8 +2,7 @@
   import { cn } from '$lib/utils';
 
   // A placeholder for one thing that has not arrived yet: a line of text, a
-  // cover, an artist's photograph. It is tinted with the page's dark ink and
-  // crossed by one sheen of the light ink that every box on the page shares
+  // cover, an artist's photograph. A flat raised block that breathes
   // (`.skeleton` in styles.css). Size it with classes, the way the thing it
   // stands for will be sized.
   //
@@ -19,16 +18,16 @@
     class: className
   }: {
     /** `line` a run of text, `block` a panel or a card, `cover` a square picture,
-     *  `round` a photograph or a round control. */
+     *  `round` a photograph (square like every picture). */
     shape?: 'line' | 'block' | 'cover' | 'round';
     class?: string;
   } = $props();
 
   const shapes = {
-    line: 'h-4 rounded-row',
-    block: 'rounded-panel',
-    cover: 'aspect-square rounded-tight',
-    round: 'aspect-square rounded-pill'
+    line: 'h-4',
+    block: '',
+    cover: 'aspect-square',
+    round: 'aspect-square'
   };
 </script>
 

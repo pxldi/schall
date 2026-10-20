@@ -194,13 +194,6 @@
         item.fileStates?.some((file) => file.state === 'importing')
     )
   );
-  const chips: Record<Role, string> = {
-    ok: 'bg-ok/14 text-ok',
-    idle: 'bg-idle/14 text-idle',
-    decide: 'bg-decide/14 text-decide',
-    busy: 'bg-busy/14 text-busy',
-    fail: 'bg-fail/14 text-fail'
-  };
   const header = $derived.by((): { role: Role; text: string } => {
     if (unconfigured) return { role: 'idle', text: 'Not configured' };
     if ($send.isPending) return { role: 'busy', text: 'Uploading' };
@@ -212,7 +205,7 @@
 <div class="flex flex-col gap-4 px-6 py-4">
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
     <span
-      class="numeric truncate rounded-row border border-line-thin bg-surface-regular px-2 py-[3px] text-meta font-medium text-ink-2"
+      class="numeric truncate border border-rule bg-panel px-2 py-[3px] text-meta font-medium text-ink-2"
       title={$uploads.data?.stagingPath || 'Staging path'}
     >
       {$uploads.data?.stagingPath || '—'}
@@ -281,21 +274,21 @@
   {/if}
 
   {#if chosen.length > 0}
-    <section class="flex flex-col gap-3 rounded-panel border border-line-regular p-4">
+    <section class="flex flex-col gap-3 border border-rule p-4">
       <div class="flex flex-wrap items-center gap-2">
         <span class="label">Ready to send</span>
         <span class="numeric whitespace-nowrap text-meta text-ink-4">
           {chosen.length}
           {chosen.length === 1 ? 'file' : 'files'} · {formatBytes(chosenBytes)}
         </span>
-        <span class="h-px flex-1 bg-line-thin"></span>
+        <span class="h-px flex-1 bg-rule"></span>
       </div>
 
       <!-- No border of its own: the panel around it is already a surface, and a
            box inside a box is one border too many. A hairline separates them. -->
       <div class="flex flex-col">
         {#each chosen as file (file.name)}
-          <div class="flex items-center gap-3 border-b border-line-thin py-2 last:border-b-0">
+          <div class="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
             <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={file.name}>
               {file.name}
             </span>
@@ -305,7 +298,7 @@
       </div>
 
       {#if chosen.length === 1}
-        <div class="flex flex-col gap-3 border-t border-line-thin pt-3">
+        <div class="flex flex-col gap-3 border-t border-rule pt-3">
           <div>
             <label for="upload-soundcloud-url" class="label">SoundCloud link</label>
             <input
@@ -359,10 +352,10 @@
             aria-valuenow={Math.round(progress * 100)}
             aria-valuemin="0"
             aria-valuemax="100"
-            class="h-1.5 overflow-hidden rounded-full bg-surface-thick"
+            class="h-1.5 overflow-hidden bg-raised"
           >
             <div
-              class="h-full rounded-full bg-busy transition-[width]"
+              class="h-full bg-busy transition-[width]"
               style="width: {Math.round(progress * 100)}%"
             ></div>
           </div>
@@ -383,14 +376,14 @@
   <section class="flex flex-col gap-2.5">
     <div class="flex items-center gap-2.5">
       <span class="label">Recent uploads</span>
-      <span class="h-px flex-1 bg-line-thin"></span>
+      <span class="h-px flex-1 bg-rule"></span>
     </div>
 
     <Settle pending={$uploads.isPending}>
       {#snippet placeholder()}
         <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 18rem)">
         {#each Array(6) as _, placeholderIndex (placeholderIndex)}
-          <div data-placeholder-row class="border-b border-line-thin px-3 py-2 last:border-b-0">
+          <div data-placeholder-row class="border-b border-rule px-3 py-2 last:border-b-0">
             <Skeleton class="h-5" />
             <Skeleton class="mt-1 h-4 w-2/3" />
             <Skeleton class="mt-1 h-4 w-1/3" />
@@ -409,27 +402,11 @@
         {#each items as upload (upload.id)}
         {@const state = label(upload)}
         {@const link = upload.status === 'imported' ? libraryLink(upload) : null}
-        <div class="border-b border-line-thin last:border-b-0">
+        <div class="border-b border-rule last:border-b-0">
           <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_minmax(0,1fr)_84px_auto_auto] md:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-[1rem_minmax(0,1fr)_84px_auto_auto] md:gap-y-0"
           >
-            <!-- Four states and four glyphs. A decide graded as a dash would be
-                 a violet mark saying nothing, which is worse than no mark. -->
-            <span class="grid size-4 shrink-0 place-items-center rounded-row {chips[state.role]}">
-              {#if state.role === 'ok'}
-                <Icon name="check" size={10} />
-              {:else}
-                <span class="numeric text-micro font-bold">
-                  {state.role === 'decide'
-                    ? '?'
-                    : state.role === 'fail'
-                      ? '!'
-                      : state.role === 'busy'
-                        ? '·'
-                        : '–'}
-                </span>
-              {/if}
-            </span>
+            <StateMark role={state.role} />
 
             <span class="min-w-0 flex-1">
               <span class="numeric block truncate text-body text-ink">
@@ -444,7 +421,7 @@
                 {#if link}
                   <a
                     href={link}
-                    class="inline-block text-meta font-medium text-ink-2 underline decoration-white/24 underline-offset-4 transition hover:text-ink"
+                    class="inline-block text-meta font-medium text-ink-2 underline decoration-ink-4 underline-offset-4 transition hover:text-ink"
                   >
                     Open in Library
                   </a>
@@ -496,8 +473,8 @@
 </div>
 
 {#snippet Problem(message: string)}
-  <div class="flex items-start gap-2 rounded-row border border-line-thin bg-fail/14 px-2.5 py-2">
-    <StateMark role="fail">!</StateMark>
+  <div class="flex items-start gap-2 border border-rule bg-panel px-2.5 py-2">
+    <StateMark role="fail" />
     <span class="min-w-0 text-meta leading-relaxed text-fail">{message}</span>
   </div>
 {/snippet}

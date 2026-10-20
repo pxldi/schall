@@ -1,66 +1,63 @@
 <script lang="ts">
-  import { afterNavigate, beforeNavigate } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { page, updated } from '$app/state';
+  import { createQuery } from '@tanstack/svelte-query';
+  import { api } from '$lib/api';
+  import { trackFocus, useKeys } from '$lib/keys.svelte';
+  import { changed, glide } from '$lib/motion.svelte';
   import { loadNewerBuild } from '$lib/reload';
-  import { duoton } from '$lib/duoton/page.svelte';
   import { openSearch } from '$lib/search';
-  import type { IconName } from '$lib/icons';
+  import { STATE_GLYPH } from '$lib/states';
+  import { followSystemTheme } from '$lib/theme.svelte';
   import Icon from './Icon.svelte';
-  import Print from './Print.svelte';
+  import JobStatus from './JobStatus.svelte';
+  import Keycap from './Keycap.svelte';
+  import KeySheet from './KeySheet.svelte';
+  import KeyStrip from './KeyStrip.svelte';
 
   let { children } = $props();
 
-  // The chrome is a top bar sitting on the page's print (ADR Duoton): the
-  // wordmark, the seven destinations as pills, and search pushed right. There
-  // are no counts or state marks on it: what is waiting is read on the Overview and
-  // on the pages themselves. There is no phone form; the phone is served by the
-  // native app, decided 2026-09-20.
+  // The chrome every screen is drawn inside (ADR 0042): a 40px strip across
+  // the top with the wordmark, the seven destinations each with its number
+  // key, and what is running; a 32px strip along the foot naming the keys of
+  // the screen. The current destination is drawn inverted. There is no phone
+  // form; the phone is served by the native app, decided 2026-09-20.
   //
-  // The bar's highlight is not a document heading, so every page still carries
-  // its own <h1>, visible or not. `<main>` is the landing spot for the skip
-  // link, the first focusable element in the document.
-
-  // Each destination has a Misprint icon. Below 1280px the bar shows the
-  // icons alone, named by a tooltip and by the link itself, so the seven still
-  // fit on one line.
-  const destinations: { href: string; label: string; icon: IconName }[] = [
-    { href: '/', label: 'Overview', icon: 'listen' },
-    { href: '/artists', label: 'Artists', icon: 'artists' },
-    { href: '/playlists', label: 'Playlists', icon: 'playlist' },
-    { href: '/downloads?view=open', label: 'Downloads', icon: 'download' },
-    { href: '/review', label: 'Review', icon: 'checklist' },
-    { href: '/library', label: 'Library', icon: 'library' },
-    { href: '/settings/jobs', label: 'Settings', icon: 'settings' }
+  // The strip is not a document heading, so every page still carries its own
+  // <h1>. `<main>` is the landing spot for the skip link, the first focusable
+  // element in the document.
+  const destinations: { href: string; label: string }[] = [
+    { href: '/', label: 'Overview' },
+    { href: '/artists', label: 'Artists' },
+    { href: '/playlists', label: 'Playlists' },
+    { href: '/downloads?view=open', label: 'Downloads' },
+    { href: '/review', label: 'Review' },
+    { href: '/library', label: 'Library' },
+    { href: '/settings/jobs', label: 'Settings' }
   ];
 
   // A destination is its first segment and nothing more. Two of the seven
-  // point deeper than that (Downloads names a filter, Settings names a
-  // category) because neither stops being that destination once the reader
-  // moves within it.
+  // point deeper than that because neither stops being that destination once
+  // the reader moves within it.
   const rootOf = (href: string) => `/${href.split('?')[0].split('/')[1]}`;
   const roots = destinations.map((destination) => rootOf(destination.href));
 
-  // A release and a source run have their own addresses and are reached from
-  // Artists, Playlists, Review and Library alike. The bar keeps the section the
-  // reader opened it from rather than jumping to Library; a release opened
-  // straight from a link belongs to Library.
+  // A release and a source run are reached from Artists, Playlists, Review
+  // and Library alike. The strip keeps the section the reader opened it from;
+  // a release opened straight from a link belongs to Library.
   let section = $state<string | null>(null);
   afterNavigate(({ to }) => {
     if (!to) return;
     const root = rootOf(to.url.pathname);
     if (root !== '/releases') section = roots.includes(root) ? root : null;
   });
-
-  // The section a release belongs to, read before the address so the bar
-  // follows the remembered section whichever of the two changes.
   const releaseRoot = $derived(section ?? '/library');
 
   function isActive(href: string) {
+    // Read first, so the strip follows the remembered section whichever of
+    // the two changes.
     const fromSection = releaseRoot;
     const path = page.url.pathname;
-    // The overview is the one destination whose address is a single slash, and
-    // every other address starts with one. It is the open page only when it is
-    // the whole address.
     if (href === '/') return path === '/';
     const root = rootOf(href);
     if (path.startsWith('/releases')) return root === fromSection;
@@ -73,82 +70,109 @@
     loadNewerBuild(navigation, updated.current, (href) => location.assign(href));
   });
 
-  // The page's two inks live on <html>, so the tokens that name them (the
-  // accent, the focus ring, the primary button) resolve to the page's colours
-  // everywhere, overlays included.
-  //
-  // They change in the same frame as the page, with every transition held for
-  // that frame. A button easing its background from the old accent started
-  // only after the new page's first frame was drawn, and arrived late with it.
-  $effect(() => {
-    const html = document.documentElement;
-    html.dataset.inksChanging = '';
-    html.style.setProperty('--color-duo-dark', duoton.inks.dark);
-    html.style.setProperty('--color-duo-light', duoton.inks.light);
-    // Reading a layout back applies the new inks to the whole page while
-    // transitions are off.
-    void document.body.offsetHeight;
-    delete html.dataset.inksChanging;
+  // How many questions Review holds: the wants and the paused imports, the
+  // same two totals the Review page counts All by.
+  const wantQuestions = createQuery({
+    queryKey: ['review-queue', 'count'],
+    queryFn: () => api.reviewQueue(1, 0)
   });
+  const folderQuestions = createQuery({
+    queryKey: ['downloads', 'questions', 'count'],
+    queryFn: () => api.downloads({ view: 'questions', limit: 1 })
+  });
+  const reviewCount = $derived(($wantQuestions.data?.total ?? 0) + ($folderQuestions.data?.total ?? 0));
+  const reviewTicked = changed(() => reviewCount);
 
-  // The bar is a wash over the print and turns solid once the print has
-  // scrolled out from under it.
-  let scrollY = $state(0);
-  let remPx = $state(16);
-  $effect(() => {
-    remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  });
-  const solid = $derived(scrollY > (duoton.height - 2.75) * remPx);
+  let sheetOpen = $state(false);
+
+  useKeys(
+    () => [
+      ...destinations.map((destination, index) => ({
+        keys: [String(index + 1)],
+        verb: `open ${destination.label}`,
+        run: () => void goto(destination.href)
+      })),
+      { keys: ['/'], verb: 'search', run: openSearch },
+      { keys: ['?'], verb: 'all keys', run: () => (sheetOpen = true) },
+      // J and K move a list's cursor. A screen without a list still claims
+      // them, so the letters never open search.
+      { keys: ['j', 'k'], verb: 'move', hidden: true, enabled: () => false, run: () => {} }
+    ],
+    { global: true }
+  );
+
+  $effect(() => followSystemTheme());
+  $effect(() => trackFocus());
 </script>
 
-<svelte:window bind:scrollY />
-
-<div
-  class="duoton-app relative min-h-screen text-ink"
-  style="--print-height: {duoton.height}rem; --topbar-height: 2.75rem;"
->
+<div class="relative min-h-screen bg-ground pb-8 text-ink">
   <a
     href="#main"
-    class="sr-only rounded-control border border-line-thin bg-surface-regular px-3 py-2 text-ink focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-40"
+    class="sr-only border border-rule bg-panel px-3 py-2 text-ink focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-40"
   >
     Skip to content
   </a>
 
-  <div class="absolute inset-x-0 top-0 overflow-hidden" style="height: var(--print-height);">
-    <Print covers={duoton.covers} mode={duoton.mode} class="absolute inset-0" />
-    <div class="print-fade absolute inset-0" aria-hidden="true"></div>
-  </div>
-
   <header
-    class="topbar sticky top-0 z-30 flex h-[var(--topbar-height)] items-center gap-0.5 px-4 lg:px-6"
-    class:solid
+    class="sticky top-0 z-30 flex h-10 items-stretch border-b border-rule bg-ground"
+    style="view-transition-name: top-strip"
   >
-    <a href="/" class="wordmark mr-2 shrink-0 lg:mr-4 whitespace-nowrap text-[1.0625rem] text-ink" title="Build {__SCHALL_VERSION__}">schall</a>
-    <nav class="flex min-w-0 items-center gap-0.5" aria-label="Sections">
-      {#each destinations as destination (destination.href)}
+    <a
+      href="/"
+      class="wordmark flex shrink-0 items-center border-r border-rule px-4 text-lead text-ink"
+      title="Build {__SCHALL_VERSION__}"
+    >
+      schall
+    </a>
+    <nav class="no-scrollbar relative flex min-w-0 items-stretch overflow-x-auto" aria-label="Sections" use:glide={{ axis: 'x', key: page.url.pathname }}>
+      {#each destinations as destination, index (destination.href)}
         {@const active = isActive(destination.href)}
         <a
           href={destination.href}
-          class:active
           aria-current={active ? 'page' : undefined}
-          class="topbar-item whitespace-nowrap"
+          data-cursor={active}
           title={destination.label}
+          aria-describedby={destination.label === 'Review' && reviewCount > 0 ? 'review-count' : undefined}
+          class="relative flex items-center gap-1.5 whitespace-nowrap border-r border-rule px-3 text-meta transition {active
+            ? 'on-ink font-medium'
+            : 'text-ink-3 hover:bg-raised hover:text-ink'}"
         >
-          <Icon name={destination.icon} size="sm" />
-          <span class="max-xl:sr-only">{destination.label}</span>
+          <Keycap key={String(index + 1)} class="border-0 px-0 text-ink-4" />
+          <span>{destination.label}</span>
+          {#if destination.label === 'Review' && reviewCount > 0}
+            <span class="flex items-center gap-1 text-ink" aria-hidden="true">
+              <span class="mono text-meta" class:tick={reviewTicked.now} onanimationend={reviewTicked.settle}>
+                {reviewCount}
+              </span>
+              <Icon name={STATE_GLYPH.decide} size="sm" class={active ? '' : 'text-decide'} />
+            </span>
+          {/if}
         </a>
       {/each}
     </nav>
+    {#if reviewCount > 0}
+      <span id="review-count" class="sr-only">{reviewCount} to decide</span>
+    {/if}
 
-    <!-- Below 1024px the field folds to its icon, so the seven destinations
-         still fit on one line in half a screen. -->
-    <button class="topbar-search ml-auto shrink-0" onclick={openSearch} aria-label="Search">
-      <Icon name="search" size="sm" />
-      <span class="max-lg:hidden">Search</span>
-    </button>
+    <div class="ml-auto flex shrink-0 items-stretch">
+      <JobStatus />
+      <button
+        type="button"
+        class="flex items-center gap-2 border-l border-rule px-3 text-meta text-ink-3 transition hover:bg-raised hover:text-ink"
+        onclick={openSearch}
+        aria-label="Search"
+      >
+        <Icon name="search" size="sm" />
+        <span class="max-xl:hidden">Search</span>
+        <Keycap key="/" />
+      </button>
+    </div>
   </header>
 
-  <main id="main" tabindex="-1" class="page-view relative z-[2]">
+  <main id="main" tabindex="-1" class="relative">
     {@render children()}
   </main>
+
+  <KeyStrip onsheet={() => (sheetOpen = true)} />
+  <KeySheet bind:open={sheetOpen} />
 </div>

@@ -39,6 +39,9 @@
   let paused = $state(true);
   let elapsed = $state(0);
   let duration = $state(0);
+  // The file would not load: the copy is not on disk yet, or the server
+  // refused it. The play button says so instead of pressing into silence.
+  let missing = $state(false);
   let peaks = $state<number[] | null>(null);
   // Where to start the source that is loading, and whether to play it.
   let resume = { at: -1, play: false };
@@ -234,11 +237,12 @@
   onplay={() => (paused = false)}
   onpause={() => (paused = true)}
   onended={() => (paused = true)}
+  onerror={() => (missing = true)}
   preload="metadata"
 ></audio>
 
 <div
-  class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 border-b border-line-thin bg-inset px-4 py-3.5 sm:px-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
+  class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 border border-rule bg-inset px-3 py-2.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
 >
   <button
     type="button"
@@ -247,16 +251,19 @@
       (event.currentTarget as HTMLElement).blur();
     }}
     aria-label={paused ? `Play ${name}` : `Pause ${name}`}
-    title={paused ? 'Play (Space)' : 'Pause (Space)'}
-    class="flex size-14 shrink-0 items-center justify-center rounded-full bg-ink text-ground transition hover:bg-ink-2"
+    title={missing ? 'No audio yet' : paused ? 'Play (Space)' : 'Pause (Space)'}
+    disabled={missing}
+    class="inverted press flex size-[2.125rem] shrink-0 items-center justify-center transition disabled:opacity-50"
   >
-    <Icon name={paused ? 'play' : 'pause'} size={20} />
+    <Icon name={paused ? 'play' : 'pause'} size="md" />
   </button>
 
   <div class="flex min-w-0 flex-col gap-1.5">
     <p class="flex min-w-0 items-center gap-2 text-meta text-ink-3">
-      <span class="truncate font-medium text-ink-2">{label}</span>
-      <span class="numeric shrink-0">{clock(elapsed)} / {clock(duration)}</span>
+      <span class="truncate text-ink-2">{label}</span>
+      {#if duration > 0}
+        <span class="mono ml-auto shrink-0">{clock(elapsed)} / {clock(duration)}</span>
+      {/if}
     </p>
     <div
       role="slider"
@@ -270,10 +277,10 @@
       onclick={onSeekClick}
       onkeydown={onSeekKey}
     >
-      <svg width="100%" height="44" viewBox="0 0 400 44" preserveAspectRatio="none" aria-hidden="true">
+      <svg width="100%" height="28" viewBox="0 0 400 44" preserveAspectRatio="none" aria-hidden="true">
         {#if bars.length === 0}
-          <rect x="0" y="21" width={400 * played} height="2" class="fill-accent" />
-          <rect x={400 * played} y="21" width={400 - 400 * played} height="2" class="fill-line-thick" />
+          <rect x="0" y="21" width={400 * played} height="2" class="fill-ink" />
+          <rect x={400 * played} y="21" width={400 - 400 * played} height="2" class="fill-rule-strong" />
         {:else}
           {#each bars as value, index (index)}
             {@const height = 3 + value * 40}
@@ -282,7 +289,7 @@
               y={(44 - height) / 2}
               width={400 / BARS - 1.4}
               {height}
-              class={index / BARS < played ? 'fill-accent' : 'fill-line-thick'}
+              class={index / BARS < played ? 'fill-ink' : 'fill-rule-strong'}
             />
           {/each}
         {/if}
@@ -291,7 +298,7 @@
   </div>
 
   <div
-    class="col-span-2 flex items-center gap-4 lg:col-span-1 lg:border-l lg:border-line-regular lg:pl-4"
+    class="col-span-2 flex items-center gap-4 lg:col-span-1 lg:border-l lg:border-rule lg:pl-4"
   >
     <div
       class="flex h-8 items-end gap-0.5"
@@ -304,13 +311,13 @@
     >
       {#each Array.from({ length: STEPS }, (_, step) => step) as index (index)}
         <span
-          class="w-1 rounded-[1px] {index < lit || index === held - 1
+          class="w-1 {index < lit || index === held - 1
             ? index >= STEPS - 2
               ? 'bg-fail'
               : index >= STEPS - 5
                 ? 'bg-decide'
                 : 'bg-ok'
-            : 'bg-line-thick'}"
+            : 'bg-rule-strong'}"
           style="height: {30 + (70 * index) / (STEPS - 1)}%"
         ></span>
       {/each}
@@ -324,7 +331,7 @@
         value={Math.round(listening.volume * 100)}
         oninput={(event) => setVolume(Number(event.currentTarget.value) / 100)}
         aria-label="Volume"
-        class="w-full cursor-pointer accent-accent lg:w-28"
+        class="w-full cursor-pointer lg:w-28"
       />
     </label>
   </div>

@@ -244,7 +244,7 @@ describe('a track the library does not hold', () => {
     // the release speaking, not the row.
     expect(held.getAttribute('data-tone')).toBe('present');
     expect(absent.getAttribute('data-tone')).toBe('absent');
-    const row = absent.closest('div.flex')!;
+    const row = absent.closest('tr')!;
     expect(row.textContent).not.toMatch(/missing|not owned|absent|wanted/i);
   });
 
@@ -264,7 +264,7 @@ describe('a track the library does not hold', () => {
     opened();
 
     const title = await screen.findByText('Eden');
-    expect(title.closest('div.flex')!.querySelector('[aria-label="dismissed"]')).not.toBeNull();
+    expect(title.closest('tr')!.querySelector('[aria-label="dismissed"]')).not.toBeNull();
   });
 
   it('counts what the library holds on the owned bar beside the title', async () => {

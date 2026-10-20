@@ -1,19 +1,17 @@
 <script lang="ts">
-  // The pill-shaped picker beside a board's view chips — scope, sort, genre,
-  // monitor level. Same h-7 pill as `Segmented.svelte`'s chips, so a row that
-  // mixes chips and a select reads as one row rather than two controls of
-  // different heights.
+  // The square picker beside a board's view strip: scope, sort, genre, monitor
+  // level. The same 28px height as `Segmented.svelte`, so a row that mixes the
+  // two reads as one row.
   //
   // A native `<select>` under a styled shell, not the `ui/select` picker: that
-  // one is a 34px field-height control built for a form. A pill this short has
+  // one is a 34px field-height control built for a form. A control this short has
   // no room for `ui/select`'s own trigger chrome, and a native element already
   // gives keyboard support and a platform list for free.
   //
   // `quiet` drops the border for an ordering or a preference rather than a
   // narrowing: sort and genre are not filters, they do not change what is in
   // the list, only how it reads, so they carry no chrome of their own. A
-  // `prefix` word in front names the control the way the pill's own border
-  // used to.
+  // `prefix` word in front names the control.
 
   type Option = { value: string; name: string };
 
@@ -28,7 +26,7 @@
     options: Option[];
     value: string;
     onchange: (value: string) => void;
-    // There is no visible label beside the pill — the chosen option's own name
+    // There is no visible label beside the control: the chosen option's own name
     // is the only text shown — so screen readers need one passed in.
     label: string;
     quiet?: boolean;
@@ -46,8 +44,8 @@
     aria-label={label}
     onchange={(event) => onchange(event.currentTarget.value)}
     class={quiet
-      ? 'h-7 appearance-none rounded-full bg-transparent py-0 pl-0 pr-4 text-body text-ink-2 outline-none transition hover:text-ink'
-      : 'h-full appearance-none rounded-full border border-line-thin bg-transparent py-0 pl-2.5 pr-6 text-body text-ink-2 outline-none transition hover:border-line-regular'}
+      ? 'h-7 appearance-none bg-transparent py-0 pl-0 pr-4 text-body text-ink-2 outline-none transition hover:text-ink'
+      : 'h-full appearance-none border border-rule bg-raised py-0 pl-2.5 pr-6 text-body text-ink-2 outline-none transition hover:border-rule-strong hover:text-ink'}
   >
     {#each options as option (option.value)}
       <option value={option.value} selected={option.value === value}>{option.name}</option>

@@ -8,14 +8,12 @@
   import { api, ApiError, type LabelRelease } from '$lib/api';
   import { calendarDate } from '$lib/utils';
   import { queryRetry } from '$lib/errors';
-  import { coverSrc, usePagePrint } from '$lib/duoton';
-  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import Hero from '$lib/components/Hero.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
   const labelID = $derived(page.params.id ?? '');
@@ -38,21 +36,6 @@
   const label = $derived($detail.data?.label);
   const releases = $derived($detail.data?.releases ?? []);
 
-  // A strip of the label's pictured releases, the ones the library holds most
-  // of first, inked from the first (ADR Duoton).
-  usePagePrint(() => {
-    if (!$detail.data) return undefined;
-    return {
-      covers: releases
-        .filter((release) => release.hasCover)
-        .toSorted((a, b) => b.ownedTrackCount - a.ownedTrackCount)
-        .slice(0, 6)
-        .map((release) => ({ src: coverSrc(release.id), seed: release.id, inks: release.inks }))
-    };
-  });
-
-  const heroSize = $derived((label?.name.length ?? 0) > 18 ? 'm' : 'l');
-
   function line(release: LabelRelease): string {
     const year = release.releaseDate ? release.releaseDate.slice(0, 4) : '—';
     if (!release.monitored) return `${year} · unmonitored`;
@@ -63,24 +46,24 @@
 
 <svelte:head><title>{label ? `${label.name} · Schall` : 'Label · Schall'}</title></svelte:head>
 
-<!-- The hero settles out of its skeleton like the releases under it, so the
+<!-- The header settles out of its skeleton like the releases under it, so the
      title does not cut in over the boxes. -->
 <Settle pending={$detail.isPending}>
   {#snippet placeholder()}
-    <section
-      class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
-      style="min-height: calc(var(--print-height) - var(--topbar-height));"
-      aria-hidden="true"
-    >
-      <Skeleton class="h-16 w-96 max-w-full" />
+    <section class="flex flex-col gap-2 px-5 pb-4 pt-3.5" aria-hidden="true">
+      <Skeleton class="h-4 w-32" />
+      <Skeleton class="h-8 w-96 max-w-full" />
       <Skeleton class="h-4 w-56" />
     </section>
   {/snippet}
   {#if label}
-    <Hero title={label.name} size={heroSize}>
-      {#snippet back()}
-        <BackLink fallback="/artists/labels" label="Labels" />
-      {/snippet}
+    <PageHeader
+      title={label.name}
+      path={[
+        { label: 'Artists', href: '/artists' },
+        { label: 'Labels', href: '/artists/labels' }
+      ]}
+    >
       {#snippet sub()}
         <span>
           <b class="numeric font-semibold text-ink">{releases.length}</b>
@@ -92,22 +75,25 @@
           {label.lastRefreshedAt ? `updated ${calendarDate(label.lastRefreshedAt)}` : 'not refreshed yet'}
         </span>
       {/snippet}
-    </Hero>
+    </PageHeader>
   {:else if missing}
-    <Hero title="Label not found" size="m">
-      {#snippet back()}
-        <BackLink fallback="/artists/labels" label="Labels" />
-      {/snippet}
+    <PageHeader
+      title="Label not found"
+      path={[
+        { label: 'Artists', href: '/artists' },
+        { label: 'Labels', href: '/artists/labels' }
+      ]}
+    >
       {#snippet sub()}
         <span>No label here. The link may be old.</span>
       {/snippet}
-    </Hero>
+    </PageHeader>
   {:else}
     <h1 class="sr-only">Label</h1>
   {/if}
 </Settle>
 
-<div class="flex flex-col gap-4 px-4 py-5 sm:px-6">
+<div class="flex flex-col gap-4 px-5 py-5">
   {#if missing}
     <div><Button href="/artists/labels">Open labels</Button></div>
   {:else if $detail.isError}
@@ -144,7 +130,7 @@
               <!-- A release with nothing held is faded, the same as on an
                    artist's page, so what the library has stands out. -->
               <div
-                class="aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px] {release.ownedTrackCount ===
+                class="aspect-square overflow-hidden rounded-cover {release.ownedTrackCount ===
                 0
                   ? 'opacity-[0.38]'
                   : ''}"
@@ -157,7 +143,7 @@
                 />
               </div>
               <span
-                class="block truncate text-body font-bold tracking-[-0.01em] text-ink"
+                class="block truncate text-body font-semibold text-ink"
                 title={release.title}>{release.title}</span
               >
               <span class="-mt-1 block truncate text-meta text-ink-2">{release.artistName}</span>

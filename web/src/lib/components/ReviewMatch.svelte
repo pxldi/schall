@@ -139,7 +139,7 @@
   {/if}
 
   {#if contested && !loading}
-    <div class="flex flex-col gap-1.5 rounded-panel bg-surface-thick p-4">
+    <div class="flex flex-col gap-1.5 bg-raised p-4">
       <p class="text-body leading-relaxed text-ink">
         {candidates.length === 1
           ? 'Another file already has the one track this fits.'
@@ -157,8 +157,8 @@
 
   {#if confirming}
     {@const asked = confirming}
-    <div class="flex flex-col gap-3 rounded-panel bg-surface-thick p-4">
-      <h3 class="font-display text-lead font-bold text-ink">
+    <div class="flex flex-col gap-3 bg-raised p-4">
+      <h3 class=" text-lead font-bold text-ink">
         Move {asked.title} to this file?
       </h3>
       <p class="text-meta leading-relaxed text-ink-3">
@@ -198,7 +198,7 @@
     <div class="flex flex-col">
       {#each candidates as candidate (candidate.trackId)}
         <button
-          class="flex items-center gap-3 border-b border-line-thin px-3 py-2 text-left transition last:border-b-0 hover:bg-surface-thick disabled:opacity-40"
+          class="flex items-center gap-3 border-b border-rule px-3 py-2 text-left transition last:border-b-0 hover:bg-raised disabled:opacity-40"
           disabled={pending}
           onclick={() => choose(candidate)}
         >

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -6,27 +7,41 @@ import { describe, expect, it } from 'vitest';
 // interface is made of. `web/src/styles.css` is where those values actually
 // live, so the list is only worth having while the two agree.
 //
-// They once stopped agreeing. ADR 0022 retired the serif and ADR 0023 lifted
-// the ground, renamed all eight surface and line steps, recomputed the ink ramp
-// and split one type scale into two. None of it reached the token list, which
-// was then the frontmatter of DESIGN.md. Seventeen tokens named there did not
-// exist, and an agent generating a screen from it would have written
-// `bg-surface-raised`, which resolves to nothing at all.
+// They once stopped agreeing: two ADRs renamed every surface and line step and
+// none of it reached the token list, so seventeen names in it did not exist.
 const read = (path: string) =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url).href), 'utf8');
 
 const css = read('../styles.css');
 const frontmatter = read('../design-tokens.yaml');
 
-/** Every `--<prefix>-<name>: <value>` in the stylesheet, less the Tailwind
- *  companions that hang off a size token and the aliases pointing at another. */
-function declared(prefix: string) {
+/** The body of the first rule whose selector starts with `selector`. */
+function blockAfter(selector: string) {
+  const start = css.indexOf(`\n${selector}`);
+  if (start < 0) return '';
+  const open = css.indexOf('{', start);
+  let depth = 0;
+  for (let at = open; at < css.length; at++) {
+    if (css[at] === '{') depth++;
+    if (css[at] === '}' && --depth === 0) return css.slice(open + 1, at);
+  }
+  return '';
+}
+
+const theme = blockAfter('@theme {');
+const light = blockAfter(":root[data-theme='light'],");
+const darkInsideLight = blockAfter(":root[data-theme='light'] :is(.on-ink, .inverted) {");
+
+/** Every `--<prefix>-<name>: <value>` in one block, less the Tailwind
+ *  companions that hang off a size token, the namespace resets and the aliases
+ *  pointing at another. */
+function declared(prefix: string, block = theme) {
   const found = new Map<string, string>();
-  for (const [, name, value] of css.matchAll(
+  for (const [, name, value] of block.matchAll(
     new RegExp(String.raw`--${prefix}-([a-z0-9-]+):\s*([^;]+);`, 'g')
   )) {
     if (name.endsWith('--line-height') || name.endsWith('--letter-spacing')) continue;
-    if (value.includes('var(')) continue;
+    if (value.includes('var(') || value.trim() === 'initial') continue;
     found.set(name, value.trim());
   }
   return found;
@@ -40,9 +55,12 @@ function frontmatterBlock(name: string) {
   );
 }
 
-describe('the colours design-tokens.yaml records', () => {
-  const documented = frontmatterBlock('colors');
-  const shipped = declared('color');
+describe.each([
+  ['dark', 'colors', theme],
+  ['light', 'colors-light', light]
+])('the %s colours design-tokens.yaml records', (_, group, block) => {
+  const documented = frontmatterBlock(group);
+  const shipped = declared('color', block);
 
   it('are all of the colours the stylesheet defines', () => {
     expect([...shipped.keys()].sort()).toEqual([...documented.keys()].sort());
@@ -50,8 +68,21 @@ describe('the colours design-tokens.yaml records', () => {
 
   it('carry the values the stylesheet gives them', () => {
     for (const [name, value] of shipped) {
-      expect(documented.get(name), `colors.${name}`).toBe(value);
+      expect(documented.get(name), `${group}.${name}`).toBe(value);
     }
+  });
+});
+
+describe('an inverted surface', () => {
+  // An inverted surface in one theme draws in the other theme's colours, so a
+  // state glyph on the cursor row keeps the contrast it was checked at. The
+  // light theme's copy of the dark values is written out by hand.
+  it('in the light theme carries the dark values', () => {
+    expect(declared('color', darkInsideLight)).toEqual(declared('color', theme));
+  });
+
+  it('in the dark theme takes the light block', () => {
+    expect(css).toMatch(/:root\[data-theme='light'\],\n:root:not\(\[data-theme='light'\]\) :is\(\.on-ink, \.inverted\) \{/);
   });
 });
 
@@ -75,45 +106,77 @@ describe('the type steps design-tokens.yaml records', () => {
   });
 });
 
-describe('the accent stays chrome, never state', () => {
-  // Two radio groups in SettingsSections.svelte — the weekly playlist mode
-  // and the retention choice — used `bg-ember`/`text-ember-ink` to mean
-  // "chosen", which the Chrome Rule forbids: the accent marks chrome and
-  // never a selection. Both now use the treatment `.check` uses for its own
-  // border, a `border-line-live` ring with an ink fill. After the fix nothing
-  // in the file names the accent, which is what this would have failed on
-  // before. Ember was the accent's hex under Schall; it is lilac under
-  // Schall, and the rule the word guards did not move with it.
-  //
-  // TranscodeSettings.svelte has the same two-way choice drawn the same wrong
-  // way, twice more (:131-142, :158-169), and it is not covered here — fixing
-  // it is outstanding work, not a regression this test can catch yet.
-  it('SettingsSections.svelte draws no accent-filled control', () => {
-    const source = read('./components/SettingsSections.svelte');
-    expect(source).not.toMatch(/\bbg-accent\b/);
-    expect(source).not.toMatch(/\btext-accent-ink\b/);
+describe('the corners design-tokens.yaml records', () => {
+  it('include every radius the stylesheet defines', () => {
+    const documented = frontmatterBlock('rounded');
+    for (const [name, value] of declared('radius')) {
+      expect(documented.get(name), `rounded.${name}`).toBe(value);
+    }
   });
 
-  // The armed confirm on the duplicates screen filled with the accent, the variant
-  // reserved for the screen's one safe primary action, to mean "you are about
-  // to delete files for good". `danger` exists for that now.
-  it('the duplicates confirm asks in danger, not in primary', () => {
-    const source = read('./components/DuplicateRecordings.svelte');
-    expect(source).toMatch(/confirming === 'all' \? 'danger'/);
-    expect(source).not.toMatch(/confirming === [^?]*\? 'primary'/);
+  it('are never more than 2px', () => {
+    for (const value of frontmatterBlock('rounded').values()) {
+      expect(Number.parseFloat(value)).toBeLessThanOrEqual(2);
+    }
   });
 });
 
-describe('the six state colours, tinted at 14% on Surface Regular', () => {
-  // The Glyph Rule says no state is read by hue alone; this is the Readable
-  // Floor Rule's own check on the same six, in the one form they are drawn in
-  // most: a chip's tinted fill rather than the ground. `Chip.svelte` and
-  // `Badge.svelte` write the fill as `bg-<role>/14` and the text as
-  // `text-<role>` — the same hex on both sides of the compositing.
-  //
-  // axe measured `idle` on `bg-idle/14` at 3.82:1 on 2026-09-07; the
-  // arithmetic here reads 3.84:1 for the same pair, close enough that this is
-  // the same check axe runs, not a different one that happened to agree.
+/** Every Svelte and TypeScript file under web/src, less the tests. */
+function sources(dir = fileURLToPath(new URL('..', import.meta.url))): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sources(path);
+    if (!/\.(svelte|ts)$/.test(name) || /\.test\.ts$/.test(name)) return [];
+    return [path];
+  });
+}
+
+describe('there is no accent (ADR 0042)', () => {
+  // The look before this one printed every page in two inks taken from its
+  // cover and filled the current tab and the primary button with the light
+  // one. Selection is drawn by inversion now, and a colour that marks chrome
+  // does not exist to be reached for.
+  it('defines no accent, ink pair or ember token', () => {
+    expect(css).not.toMatch(/--color-(accent|duo|ember)/);
+  });
+
+  it('draws the focus ring in the ink', () => {
+    expect(css).toMatch(/:focus-visible \{\n {2}outline: 2px solid var\(--color-ink\);\n {2}outline-offset: 2px;/);
+  });
+
+  it('draws a selection inverted', () => {
+    expect(css).toMatch(/::selection \{\n {2}background: var\(--color-ink\);\n {2}color: var\(--color-ground\);/);
+  });
+
+  // Tailwind emits nothing for a class whose token is gone, and the build
+  // stays green, so a call site still asking for the old look is only caught
+  // by reading the source.
+  it('leaves no call site asking for a token that no longer exists', () => {
+    const retired =
+      /\b(?:[a-z-]+-)?(?:accent(?:-ink|-soft)?|duo-(?:dark|light)|surface-(?:thin|regular|thick|ultra)|line-(?:thin|inset|regular|thick|live)|shell-line)\b|\brounded-(?:tight|row|control|panel|card|pill|full|sm|md|lg|xl|2xl)\b|\btext-(?:dense|quiet|poster)-[a-z]+\b|\bfont-(?:display|wordmark)\b|\$lib\/duoton/;
+    const offenders = sources().filter((path) => {
+      const source = readFileSync(path, 'utf8')
+        // Comments may name the old look; markup and code may not.
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      return retired.test(source);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('draws no shadow, gradient or blur', () => {
+    const offenders = sources().filter((path) =>
+      /\b(?:shadow-\[|backdrop-blur|linear-gradient|radial-gradient)/.test(readFileSync(path, 'utf8'))
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('the six state colours on a 14% tint of the panel', () => {
+  // No state is read by hue alone; this is the readable floor for the six in
+  // the form they are drawn in most often, a tint of the role behind the
+  // role's own colour, in both themes.
   function hexToRgb(hex: string): [number, number, number] {
     const n = parseInt(hex.slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -133,35 +196,35 @@ describe('the six state colours, tinted at 14% on Surface Regular', () => {
     return (l1 + 0.05) / (l2 + 0.05);
   }
 
-  // Plain alpha compositing of the text colour at 14% over the surface below
-  // it, the same blend `color-mix` performs for a `/14` opacity modifier.
   function tintedFillOf(textHex: string, surfaceHex: string) {
     const text = hexToRgb(textHex);
     const surface = hexToRgb(surfaceHex);
     return text.map((c, i) => c * 0.14 + surface[i] * 0.86) as [number, number, number];
   }
 
-  const colours = declared('color');
-  const surfaceRegular = colours.get('surface-regular')!;
   const roles = ['ok', 'idle', 'decide', 'busy', 'fail', 'done'];
 
-  it.each(roles)('%s on its own tint over Surface Regular clears 4.5:1', (role) => {
-    const hex = colours.get(role)!;
-    const ratio = contrastRatio(hexToRgb(hex), tintedFillOf(hex, surfaceRegular));
-    expect(ratio, `${role} (${hex}) on bg-${role}/14 over Surface Regular`).toBeGreaterThanOrEqual(
-      4.5
-    );
+  describe.each([
+    ['dark', theme],
+    ['light', light]
+  ])('in the %s theme', (_, block) => {
+    const colours = declared('color', block);
+    const panel = colours.get('panel')!;
+
+    it.each(roles)('%s clears 4.5:1', (role) => {
+      const hex = colours.get(role)!;
+      const ratio = contrastRatio(hexToRgb(hex), tintedFillOf(hex, panel));
+      expect(ratio, `${role} (${hex}) on bg-${role}/14 over the panel`).toBeGreaterThanOrEqual(4.5);
+    });
   });
 });
 
 describe('the token file itself', () => {
   it('holds only the token groups the DESIGN.md schema accepts', () => {
-    const groups = [...frontmatter.matchAll(/^([a-z]+):$/gm)].map(([, g]) => g);
-    // Motion, breakpoints and shadows are not groups this schema has. They are
-    // declared in `styles.css` and described in the design spec's Motion
-    // section, where the prose can say what each one is for; a second copy of
-    // the values here would be a second thing to keep true.
-    expect(groups).toEqual(['colors', 'typography', 'rounded', 'spacing', 'components']);
+    const groups = [...frontmatter.matchAll(/^([a-z-]+):$/gm)].map(([, g]) => g);
+    // Motion, breakpoints and shadows are not groups this schema has. Motion is
+    // declared in `styles.css` and described in the design spec.
+    expect(groups).toEqual(['colors', 'colors-light', 'typography', 'rounded', 'spacing', 'components']);
   });
 
   it('points every component at a token that exists', () => {
@@ -181,19 +244,10 @@ describe('the token file itself', () => {
   });
 });
 
-describe('the inks are chrome, never state', () => {
-  // ADR Duoton: the accent is the page's light ink and changes with every
-  // cover. If it were a literal again, the primary button and the focus ring
-  // would stop following the page; if a state role pointed at it, a state
-  // would change colour with the cover.
-  it('the accent names the light ink and its ink the dark one', () => {
-    expect(css).toMatch(/--color-accent:\s*var\(--color-duo-light\);/);
-    expect(css).toMatch(/--color-accent-ink:\s*var\(--color-duo-dark\);/);
-  });
-
-  it('no state role is drawn in an ink', () => {
+describe('no state role is drawn in another token', () => {
+  it('gives every role its own literal', () => {
     for (const role of ['ok', 'idle', 'decide', 'busy', 'fail', 'done']) {
-      expect(css, role).not.toMatch(new RegExp(String.raw`--color-${role}:\s*var\(--color-(duo|accent)`));
+      expect(declared('color').get(role), role).toMatch(/^#[0-9a-f]{6}$/);
     }
   });
 });

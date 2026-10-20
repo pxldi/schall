@@ -125,15 +125,15 @@
 <div class="flex flex-col gap-3">
   <header class="flex flex-col gap-1">
     <p class="numeric text-meta text-ink-3">{questions.length.toLocaleString()} in album</p>
-    <h2 class="text-quiet-display font-bold text-ink">{album}</h2>
-    <p class="text-quiet-meta font-medium text-ink">{artist}</p>
+    <h2 class="text-title font-bold text-ink">{album}</h2>
+    <p class="text-meta font-medium text-ink">{artist}</p>
   </header>
 
   {#if rows.length > 0}
-    <ul aria-label="Album copies" class="flex max-w-[64rem] flex-col rounded-card border border-line-thin">
+    <ul aria-label="Album copies" class="flex max-w-[64rem] flex-col border border-rule">
       {#each rows as row (row.question.id)}
         {@const ms = row.copy.evidence?.observed?.durationMs}
-        <li class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+        <li class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
           <input
             type="checkbox"
             checked={isChecked(row)}
@@ -147,7 +147,7 @@
             onclick={() => play(row.copy.id)}
             aria-label={sounding(row.copy.id) ? `Pause ${row.question.title}` : `Play ${row.question.title}`}
             title={sounding(row.copy.id) ? 'Pause' : 'Play'}
-            class="flex size-8 shrink-0 items-center justify-center rounded-full border border-line-regular bg-surface-thick text-ink"
+            class="flex size-8 shrink-0 items-center justify-center border border-rule bg-raised text-ink"
           >
             <Icon name={sounding(row.copy.id) ? 'pause' : 'play'} size={13} />
           </button>

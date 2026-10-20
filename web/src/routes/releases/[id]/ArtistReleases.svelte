@@ -2,6 +2,7 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
   import { api, type Release } from '$lib/api';
+  import Button from '$lib/components/Button.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -50,19 +51,16 @@
 </script>
 
 <section class="flex min-w-0 flex-col" aria-labelledby="discography-heading">
-  <div class="flex items-baseline gap-2.5 border-b border-line-thin pb-1.5">
-    <h2 id="discography-heading" class="min-w-0 truncate text-[0.9375rem] font-semibold text-ink">
+  <div class="flex items-baseline gap-2.5 border-b border-rule pb-1.5">
+    <h2 id="discography-heading" class="min-w-0 truncate text-body font-semibold text-ink">
       {artistName}
       {#if $releases.data}
         <span class="numeric text-meta font-normal text-ink-4">{items.length}</span>
       {/if}
     </h2>
-    <a
-      href={`/artists/${artistID}`}
-      class="tap ml-auto inline-flex shrink-0 items-center gap-1 text-meta font-medium text-ink-3 transition hover:text-ink"
-    >
+    <Button variant="ghost" size="xs" key="a" verb="artist" href={`/artists/${artistID}`} class="ml-auto">
       Artist <Icon name="chevron-right" size="sm" />
-    </a>
+    </Button>
   </div>
   {#if $releases.isError}
     <ErrorNote error={$releases.error} retry={() => $releases.refetch()} class="mt-2" />
@@ -80,15 +78,14 @@
             <a
               href={`/releases/${release.id}`}
               aria-current={here ? 'page' : undefined}
-              class="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-row px-1.5 py-1 transition {here
-                ? 'bg-surface-regular'
-                : 'hover:bg-surface-thin'}"
+              class="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2.5 px-1.5 py-1 transition {here
+                ? 'bg-panel'
+                : 'hover:bg-panel'}"
             >
-              <span class="size-10 overflow-hidden rounded-tight bg-surface-thick {none ? 'opacity-[0.38]' : ''}">
+              <span class="size-10 overflow-hidden bg-raised {none ? 'opacity-[0.38]' : ''}">
                 <Cover
                   src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
                   seed={release.id}
-                  inks={release.inks}
                   class="size-full object-cover"
                 />
               </span>

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import Hero from '$lib/components/Hero.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import Button from '$lib/components/Button.svelte';
-  import { useNewestPrint } from '$lib/duoton';
   import { openSearch } from '$lib/search';
 
   // What SvelteKit draws when a page cannot be reached: an address that names
@@ -20,17 +19,13 @@
   // one with an ordinary cause a reader can act on. Everything else is the
   // application failing, and the reader can do the same one thing about it.
   const missing = $derived(page.status === 404);
-
-  // Printed from the three newest arrivals, tall, so a wrong address still
-  // lands on the collection rather than on a blank page.
-  useNewestPrint({ height: 26, count: 3 });
 </script>
 
 <svelte:head>
   <title>{missing ? 'Not found' : 'Error'} · Schall</title>
 </svelte:head>
 
-<Hero title={missing ? '404' : 'Error'} size="xl">
+<PageHeader title={missing ? '404' : 'Error'}>
   {#snippet sub()}
     {#if missing}
       <!-- The address is named, because the ordinary cause is a typed or
@@ -42,9 +37,9 @@
       <span>Reload it, or go back to Overview.</span>
     {/if}
   {/snippet}
-</Hero>
+</PageHeader>
 
-<div class="flex flex-col gap-4 px-4 pb-10 pt-5 sm:px-6">
+<div class="flex flex-col gap-4 px-5 pb-10 pt-5">
   <!-- `data-sveltekit-reload` is what makes the link work from an error the
        router itself raised: it leaves the client-side router out of it and
        asks the server for the page, so a broken route cannot swallow the way

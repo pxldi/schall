@@ -33,17 +33,17 @@
 
 <SelectPrimitive.Item
   class={cn(
-    'flex w-full cursor-default select-none items-center gap-2 rounded-control py-[7px] pl-2 pr-2.5',
+    'flex w-full cursor-default select-none items-center gap-2 h-9 pl-2 pr-2.5',
     'pointer-coarse:min-h-11',
-    'text-left text-dense-body text-ink transition-[background]',
-    'data-highlighted:bg-surface-thick',
+    'text-left text-body text-ink transition-[background]',
+    'data-highlighted:bg-raised',
     'data-disabled:pointer-events-none data-disabled:opacity-50',
     className
   )}
   {...rest}
 >
   {#snippet children({ selected })}
-    <span class="grid size-4 shrink-0 place-items-center text-accent">
+    <span class="grid size-4 shrink-0 place-items-center text-ink">
       {#if selected}
         <Icon name="check" size={13} />
       {/if}
