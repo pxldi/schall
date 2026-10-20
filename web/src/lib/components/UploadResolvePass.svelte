@@ -58,17 +58,17 @@
 </script>
 
 {#if files.length > 1}
-  <section class="flex flex-col gap-3 rounded-panel border border-line-regular p-4">
+  <section class="flex flex-col gap-3 border border-rule p-4">
     <div class="flex flex-wrap items-center gap-2">
       <Icon name="checklist" size={15} class="text-ink-3" />
       <span class="label">Files in this upload</span>
       <span class="numeric text-meta text-ink-4">{files.length}</span>
-      <span class="h-px flex-1 bg-line-thin"></span>
+      <span class="h-px flex-1 bg-rule"></span>
     </div>
 
     <div class="flex flex-col">
       {#each files as item (item.name)}
-        <div class="flex items-center gap-3 border-b border-line-thin py-2 last:border-b-0">
+        <div class="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
           <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={item.name}>
             {item.name}
           </span>
@@ -88,7 +88,7 @@
     </div>
 
     {#if active}
-      <div class="flex flex-col gap-3 border-t border-line-thin pt-3">
+      <div class="flex flex-col gap-3 border-t border-rule pt-3">
         <div class="flex items-start gap-2.5">
           <Icon name="track" size={15} class="mt-0.5 shrink-0 text-ink-3" />
           <div class="min-w-0">
@@ -124,7 +124,7 @@
         </p>
 
         {#if mode === 'manual'}
-          <div class="border-t border-line-thin pt-3">
+          <div class="border-t border-rule pt-3">
             <ReviewMatch file={active.file!} ondecided={answer} />
           </div>
         {/if}
@@ -134,7 +134,7 @@
         </p>
       </div>
     {:else if waiting.length > 0}
-      <p class="border-t border-line-thin pt-3 text-meta text-ink-3">
+      <p class="border-t border-rule pt-3 text-meta text-ink-3">
         No more files need an answer in this pass.
       </p>
     {/if}

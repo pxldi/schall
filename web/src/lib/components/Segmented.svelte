@@ -1,19 +1,12 @@
 <script lang="ts">
-  // The filter strip above a list. It existed five times as inline markup —
-  // artists, releases, an artist's releases, downloads and library — and the
-  // five had already drifted apart in height, text size and whether the count
-  // was aligned to anything. One definition, so they cannot drift again.
+  import { glide } from '$lib/motion.svelte';
+
+  // The strip of choices above a list: which view, which filter. One
+  // definition for every screen, so the strips cannot drift apart.
   //
-  // Three variants, chosen by what the strip is switching. `chips` (the
-  // default) is the original look: separate pills with their own hairline,
-  // for a view where every choice is a chip. `tabs` is for switching what the
-  // page shows — pills, the active one filled with the page's light ink and
-  // lettered in its dark one (ADR Duoton), the way the top bar marks the open
-  // destination. `filter` is for narrowing an already-
-  // chosen view — one pill-shaped container, the active choice a filled
-  // background, no accent. The accent is chrome: a selected tab may carry it
-  // because it marks where you are, a selected filter value may not because
-  // it marks nothing but a value.
+  // Flat tabs in a 1px rule. The current choice is drawn inverted, by one
+  // block that slides from the old choice to the new one (ADR 0042). The
+  // `variant` names what the strip switches and no longer changes its look.
 
   // `count: null` says the option has no figure to wait for, so no placeholder
   // is drawn for it while the others load; `undefined` means not yet known.
@@ -26,139 +19,54 @@
     onchange,
     label,
     pending = false,
-    variant = 'chips'
+    variant: _variant = 'chips'
   }: {
     options: Option[];
     value: string;
     onchange: (value: string) => void;
     // Names what the strip is filtering by, for anyone not reading the screen.
     label: string;
-    // Whether the figures are still on their way. A strip that carries counts
-    // has to say so while it does not have them yet: writing a zero there is
-    // not a placeholder, it is a wrong answer, and the reader believes it for
-    // as long as the request takes. A strip with no counts at all — Library's
-    // three shapes — passes nothing and stays as it is.
+    // Whether the figures are still on their way. A zero written before the
+    // count arrives is a wrong answer, so the strip holds a blank instead.
     pending?: boolean;
     variant?: Variant;
   } = $props();
-
-  // From sm up the plain strip wraps. It scrolls sideways on a phone, but a
-  // desktop shows no scrollbar or fade, so the last chips were cut off.
-  const containerClass = $derived(
-    variant === 'tabs'
-      ? 'no-scrollbar flex w-fit max-w-full items-center gap-1 overflow-x-auto'
-      : variant === 'filter'
-        ? 'no-scrollbar inline-flex h-7 max-w-full items-center gap-0.5 overflow-x-auto rounded-pill border border-line-thin p-0.5'
-        : 'no-scrollbar flex w-fit max-w-full items-center gap-1.5 overflow-x-auto sm:flex-wrap'
-  );
-
-  // The fade at the right edge says the strip goes on. It is drawn only while
-  // something is actually hidden past that edge: drawn by width alone, it
-  // dimmed the last tab of a strip that fitted in a half-screen window.
-  let strip = $state<HTMLDivElement>();
-  let more = $state(false);
-
-  $effect(() => {
-    const el = strip;
-    if (!el) return;
-    const measure = () => {
-      more = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    el.addEventListener('scroll', measure, { passive: true });
-    return () => {
-      observer.disconnect();
-      el.removeEventListener('scroll', measure);
-    };
-  });
-
-  function buttonClass(selected: boolean): string {
-    if (variant === 'tabs') {
-      return `flex h-7 shrink-0 items-center gap-1.5 rounded-pill border px-3 text-body font-semibold transition ${
-        selected
-          ? 'border-transparent bg-accent text-accent-ink'
-          : 'border-line-thin text-ink-2 hover:text-ink'
-      }`;
-    }
-    if (variant === 'filter') {
-      return `flex h-6 shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-body transition ${
-        selected ? 'bg-surface-thick text-ink' : 'text-ink-2 hover:text-ink'
-      }`;
-    }
-    return `flex h-7 shrink-0 items-center gap-1.5 rounded-pill border px-2.5 text-body transition ${
-      selected ? 'border-accent text-ink' : 'border-line-thin text-ink-2 hover:border-line-regular'
-    }`;
-  }
-
-  // `filter` never wears the accent, so its count dims the same way its label
-  // does instead of switching hue. `chips` marks the selected count in the
-  // accent; `tabs` letters it in the dark ink on the accent fill.
-  function countClass(selected: boolean): string {
-    if (!selected) return 'text-ink-3';
-    if (variant === 'tabs') return 'text-accent-ink';
-    return variant === 'filter' ? 'text-ink' : 'text-accent';
-  }
 </script>
 
-<!-- A group of buttons, not a tablist.
-     `role="tablist"` and `role="tab"` are a contract: a tab owns a panel named
-     by `aria-controls`, the arrow keys move between tabs, and only one of them
-     is in the tab order. None of that was true here and none of it should be —
-     this strip narrows a list that is already on screen, it opens no panel, and
-     the arrow keys belong to the page. A screen reader was being told to expect
-     a shape the strip does not have.
-     What it actually is: a set of buttons where one is on, which is what
-     `aria-pressed` says. `variant="tabs"` looks like a tab strip, but the DOM
-     underneath is the same buttons-in-a-group for the same reason.
-
-     The strip is as wide as its words. It is a block inside a stacked column on
-     most screens, so without `w-fit` it took the whole width of the page and six
-     short words sat at the left end of a long empty bar — beside a strip in a
-     row, which is content-width, the same control looked like two controls. -->
-<div class="scroll-fade scroll-fade-surface min-w-0 max-w-full" data-more={more || undefined}>
-  <div bind:this={strip} class={containerClass} role="group" aria-label={label}>
-  {#each options as option (option.value)}
-    <button
-      aria-pressed={value === option.value}
-      onclick={() => onchange(option.value)}
-      class={buttonClass(value === option.value)}
-    >
-      <!-- The word and the figure share a baseline. Centring them by box
-           instead left the figure riding high, because mono and sans do not
-           put their baselines in the same place inside a line box. -->
-      <span class="flex items-baseline gap-1.5">
-        <span>{option.name}</span>
-        <!-- The room the figure will take, in the figure's own units. `ch` is
-             the width of a `0`, and inside .numeric that is the width of every
-             character, so `2ch` is exactly two digits whatever the type scale
-             does later.
-
-             Both branches are given the same box on purpose. The blank pill
-             used to be `w-4` — 16px against the 6.75px a single digit actually
-             occupies — so every count arriving pulled the whole strip 9px to
-             the left, which is the shift that survived the first fix. Holding
-             the width in the figure's units instead means the placeholder and
-             the figure are the same size by construction rather than by a
-             number somebody measured once.
-
-             Two digits is the common case; a figure wider than that grows the
-             pill once, which is a smaller lie than a nought that turns into
-             forty. -->
-        {#if option.count !== undefined && option.count !== null}
-          <span class="numeric min-w-[2ch] text-meta {countClass(value === option.value)}">
-            {option.count.toLocaleString()}
-          </span>
-        {:else if pending && option.count !== null}
-          <span
-            class="numeric inline-block h-2.5 w-[2ch] animate-pulse rounded-row bg-white/10 text-meta"
-            aria-hidden="true"
-          ></span>
-        {/if}
-      </span>
-    </button>
+<!-- A group of buttons where one is on, which is what `aria-pressed` says. It
+     opens no panel and the arrow keys belong to the page, so it is not a
+     tablist. -->
+<div class="no-scrollbar max-w-full overflow-x-auto">
+  <div
+    class="relative inline-flex h-7 items-stretch border border-rule"
+    role="group"
+    aria-label={label}
+    use:glide={{ axis: 'x', key: value }}
+  >
+    {#each options as option (option.value)}
+      {@const selected = value === option.value}
+      <button
+        aria-pressed={selected}
+        data-cursor={selected}
+        onclick={() => onchange(option.value)}
+        class="relative flex shrink-0 items-center gap-1.5 border-r border-rule px-3 text-body transition last:border-r-0 {selected
+          ? 'on-ink font-medium'
+          : 'text-ink-3 hover:bg-raised hover:text-ink'}"
+      >
+        <span class="flex items-baseline gap-1.5">
+          <span>{option.name}</span>
+          <!-- The placeholder holds the room two digits take, in the figure's
+               own units, so the strip does not jump when the count lands. -->
+          {#if option.count !== undefined && option.count !== null}
+            <span class="mono min-w-[2ch] text-micro {selected ? 'text-ink' : 'text-ink-4'}">
+              {option.count.toLocaleString()}
+            </span>
+          {:else if pending && option.count !== null}
+            <span class="mono inline-block h-2.5 w-[2ch] animate-pulse bg-raised text-micro" aria-hidden="true"
+            ></span>
+          {/if}
+        </span>
+      </button>
     {/each}
   </div>
 </div>

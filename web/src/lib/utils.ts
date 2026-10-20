@@ -18,17 +18,17 @@ import type { DownloadRequest, LibraryFile, RemovedTracks, WantedTracks } from '
 // sizes because `sm` and `lg` are sizes it knows, and anything else is read as a
 // colour.
 //
-// Schall names its type steps `text-dense-body`, `text-quiet-lead` and so on.
+// Schall names its type steps `text-body`, `text-lead` and so on.
 // None of those is a size tailwind-merge has heard of, so all of them were read
 // as colours — and a colour written before another colour is a colour that
-// loses. `cn('text-dense-body', 'text-ink-3')` returned `text-ink-3` alone. The
+// loses. `cn('text-body', 'text-ink-3')` returned `text-ink-3` alone. The
 // class was not overridden or warned about; it was deleted, and the element drew
 // at whatever size it inherited. Every component in `lib/components/ui/` that
 // set a size and a colour together lost the size, silently, at every call site.
 //
 // The two lists below put the type steps back on the table as font sizes, which
 // is what they are. `text-ink-3` is still a colour and still settles against
-// other colours; `text-dense-body` now settles against other sizes, and the two
+// other colours; `text-body` now settles against other sizes, and the two
 // stop arguing with each other because they are no longer the same property.
 //
 // A new step has to be added here as well as to `styles.css`. That is the cost

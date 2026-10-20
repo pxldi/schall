@@ -14,6 +14,7 @@
 // own `fade`, which takes a number of milliseconds rather than reading CSS.
 
 import { untrack } from 'svelte';
+import { flip } from 'svelte/animate';
 import { reducedMotion } from '$lib/utils';
 
 // changed watches one value and says whether it has just become something else.
@@ -120,3 +121,102 @@ export function leave(
   };
 }
 
+
+// ── Shared console motion (ADR 0042) ──────────────────────────────────────────
+// The pieces every list and every page change use, kept here so the route
+// redraws that follow reuse them instead of writing their own.
+
+// glide draws a list's cursor as one inverted block that slides between rows,
+// instead of each row switching its fill on and off. The block is a child of
+// the node (which must be positioned) and sits under the rows, which keep a
+// transparent fill. It follows the element marked `[data-cursor]`, and hides
+// when there is none.
+//
+//   <div class="relative" use:glide={{ key: at }}> ... <div data-cursor={i === at}> ...
+export function glide(node: HTMLElement, options?: { axis?: 'x' | 'y'; key?: unknown }) {
+  const axis = options?.axis ?? 'y';
+  const block = document.createElement('div');
+  block.className = 'glider inverted';
+  block.setAttribute('aria-hidden', 'true');
+  block.dataset.still = '';
+  node.prepend(block);
+  let first = true;
+
+  const place = () => {
+    const row = node.querySelector<HTMLElement>('[data-cursor="true"]');
+    if (!row) {
+      block.style.display = 'none';
+      first = true;
+      return;
+    }
+    const box = row.getBoundingClientRect();
+    const frame = node.getBoundingClientRect();
+    block.style.display = '';
+    // Drawn 1px on the axis it travels and scaled to the row, so the slide
+    // and the change of size are one transform and nothing reflows.
+    if (axis === 'x') {
+      block.style.height = '100%';
+      block.style.width = '1px';
+      block.style.transform = `translateX(${box.left - frame.left + node.scrollLeft}px) scaleX(${box.width})`;
+    } else {
+      block.style.width = '100%';
+      block.style.height = '1px';
+      block.style.transform = `translateY(${box.top - frame.top + node.scrollTop}px) scaleY(${box.height})`;
+    }
+    // The first placement is where the cursor starts, not a move.
+    if (first) {
+      first = false;
+      requestAnimationFrame(() => delete block.dataset.still);
+    }
+  };
+
+  const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(place);
+  observer?.observe(node);
+  queueMicrotask(place);
+
+  return {
+    update() {
+      queueMicrotask(place);
+    },
+    destroy() {
+      observer?.disconnect();
+      block.remove();
+    }
+  };
+}
+
+// pageTransitions runs each navigation inside a view transition, where the
+// browser has them and the reader has not asked for less motion. styles.css
+// names what moves: the page fades and rises, the two strips hold still.
+export function pageTransitions(
+  onNavigate: (callback: (navigation: { complete: Promise<void> }) => Promise<void> | undefined) => void
+) {
+  onNavigate((navigation) => {
+    if (typeof document === 'undefined' || !('startViewTransition' in document) || reducedMotion()) return;
+    // The page is named only while the transition runs: a named element is a
+    // stacking context, and a page modal drawn inside it would sit under the
+    // strips.
+    const root = document.documentElement;
+    root.dataset.transition = '';
+    return new Promise<void>((resolve) => {
+      const transition = (
+        document as Document & {
+          startViewTransition: (update: () => Promise<void>) => { finished: Promise<void> };
+        }
+      ).startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+      void transition.finished.finally(() => delete root.dataset.transition);
+    });
+  });
+}
+
+// slideInto moves a row to its new place in a list on the arriving step, as
+// FLIP: a transform from where it was. It is the cut where motion is off or
+// the document cannot animate.
+export function slideInto(node: Element, fromTo: { from: DOMRect; to: DOMRect }) {
+  const duration = motionMs('enter');
+  if (duration === 0 || typeof (node as HTMLElement).getAnimations !== 'function') return { duration: 0 };
+  return flip(node, fromTo, { duration });
+}

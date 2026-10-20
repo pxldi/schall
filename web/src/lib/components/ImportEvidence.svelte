@@ -95,7 +95,7 @@
   );
 </script>
 
-<div class="mt-3 border-t border-line-regular pt-3">
+<div class="mt-3 border-t border-rule pt-3">
   <p class="text-meta font-semibold uppercase tracking-[0.18em] text-decide/70">
     What Schall compared
   </p>
@@ -283,7 +283,7 @@
   </div>
 
   {#if unmatched.length}
-    <div class="mt-3 border-t border-line-regular pt-2">
+    <div class="mt-3 border-t border-rule pt-2">
       <p class="text-micro uppercase tracking-[0.14em] text-ink-3">
         Tracks with no file
       </p>

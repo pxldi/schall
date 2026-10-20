@@ -31,18 +31,18 @@
   bind:indeterminate
   {closeOnSelect}
   class={cn(
-    'flex w-full cursor-default select-none items-center gap-2 rounded-control py-[7px] pl-2 pr-2.5',
-    'text-left text-dense-body font-medium text-ink transition-[background]',
-    'data-highlighted:bg-surface-thick',
+    'flex w-full cursor-default select-none items-center gap-2 h-9 pl-2 pr-2.5',
+    'text-left text-body font-medium text-ink transition-[background]',
+    'data-highlighted:bg-raised',
     'data-disabled:pointer-events-none data-disabled:opacity-50',
     className
   )}
   {...rest}
 >
   {#snippet children({ checked: on, indeterminate: partly })}
-    <span class="grid size-4 shrink-0 place-items-center text-accent">
+    <span class="grid size-4 shrink-0 place-items-center text-ink">
       {#if partly}
-        <span aria-hidden="true" class="h-[2px] w-[9px] rounded-full bg-accent"></span>
+        <span aria-hidden="true" class="h-[2px] w-[9px] bg-ink"></span>
       {:else if on}
         <Icon name="check" size={13} />
       {/if}

@@ -3,34 +3,123 @@
 /* Served from the image rather than a font CDN: a self-hosted tool should not
    make a third-party request on every page load.
 
-   One face (ADR Duoton). Bricolage Grotesque carries every word, every figure
-   and the wordmark; it replaced Schibsted Grotesk, Azeret Mono and Syne. The
-   file is variable on weight and optical size, so the 160px page titles draw
-   the display cut and the 12px labels the text cut from the same download.
-   Latin is preloaded in app.html; Latin Extended is only fetched when a name
-   needs it, through its unicode-range.
+   Two faces (ADR 0042). Barlow sets names, navigation, prose and titles, in
+   four static weights. Martian Mono sets figures, durations, dates, counts,
+   identifiers, paths and keycaps; its file is variable on weight and width, and
+   `.mono` below draws it at 87.5% width. Both are under the SIL Open Font
+   Licence 1.1 and come from the fontsource packages. Latin is preloaded in
+   app.html; Latin Extended is fetched only when a name needs it.
 
    `font-display: fallback` gives the download about a tenth of a second, then
    draws the fallback, and swaps the real face in only if it lands within the
-   next three seconds. `font-synthesis: none` below means a slant nothing here
-   asked for is drawn upright instead of being faked. */
+   next three seconds. */
 @font-face {
-  font-family: 'Bricolage Grotesque';
+  font-family: 'Barlow';
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 400;
   font-display: fallback;
-  src: url('/fonts/bricolage-grotesque-latin-var.woff2') format('woff2');
+  src: url('/fonts/barlow-latin-400.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
     U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
     U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Bricolage Grotesque';
+  font-family: 'Barlow';
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 500;
   font-display: fallback;
-  src: url('/fonts/bricolage-grotesque-latin-ext-var.woff2') format('woff2');
+  src: url('/fonts/barlow-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 600;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-ext-400.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-ext-500.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 600;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-ext-600.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: fallback;
+  src: url('/fonts/barlow-latin-ext-700.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Martian Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-display: fallback;
+  src: url('/fonts/martian-mono-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Martian Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-display: fallback;
+  src: url('/fonts/martian-mono-latin-ext-var.woff2') format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
     U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
     U+2113, U+2C60-2C7F, U+A720-A7FF;
@@ -51,63 +140,38 @@
    The durations, shortest first.
 
    --motion-state    A thing already on screen changing how it looks, in place.
-                     Hover, focus, a row being selected, a border strengthening,
-                     a chevron turning over. Nothing travels and nothing
-                     arrives, so this is the shortest step. It is also what
+                     Hover, focus, a row being selected, the cursor gliding to
+                     the next row, a keycap echoing a press. It is also what
                      Tailwind's bare `transition` utility uses, because the two
-                     Tailwind defaults are set from it below, and that utility
-                     is written at about forty call sites.
+                     Tailwind defaults are set from it below.
 
-   --motion-surface  A surface opening or closing over the page: a menu, the
-                     command palette, the one modal, a
-                     disclosure. Longer than a state change,
-                     because a surface has to be seen to arrive. Still short,
-                     because it stands between the reader and the thing they
-                     just asked for.
+   --motion-surface  A surface opening over the page: a menu, the command
+                     palette, a dialog, the key sheet, a page arriving. Longer
+                     than a state change, because a surface has to be seen to
+                     arrive.
 
-   --motion-enter    A thing arriving into the page, or leaving it. A card, a
-                     message where a list would have been, a mark that has
-                     changed what it says, a figure that has changed. It is the
-                     longest of the three and that is deliberate: nobody is
-                     waiting on it. The content is readable from its first frame
-                     and only settles into place. A surface is not.
+   --motion-enter    A thing arriving into the page, or leaving it: a row
+                     sliding onto the cursor after a decision, evidence rising
+                     in, a figure that has changed, a bar segment filling.
 
    --motion-stagger  The gap between one arrival and the next, where a small
-                     fixed set arrives in order. Today that is the five clips of
-                     the wordmark and the strike that answers a hover on them,
-                     and nothing else. A list is never staggered: a thousand
-                     rows arriving one behind another on every refresh is
-                     nausea, not craft.
+                     fixed set arrives in order. Never more than three rows.
 
    --motion-ambient  One turn of a loop that says work is still in flight. A
                      spinner turns once per step; a skeleton breathes over two.
 
-   --motion-read     One beat of a loop a person reads rather than watches —
-                     one name in the cycling placeholder, which has to arrive,
-                     be read, and go. Reading speed sets it, not the scale,
-                     which is why it is a step of its own and not a multiple of
-                     the ambient one.
+   --motion-read     One beat of a loop a person reads rather than watches: one
+                     name in the cycling placeholder.
 
    The curves.
 
-   --motion-ease         The default. Both ends shaped, for anything that
-                         changes in place and that the reader can reverse at any
-                         moment: a hover leaving is the same event as a hover
-                         arriving, so it is drawn the same way at both ends.
-                         This is Tailwind's own default curve, which is what
-                         every bare `transition` utility in the application was
-                         already using while this file said `ease` three lines
-                         further down. Naming it settles that disagreement in
-                         favour of what ships.
+   --motion-ease         The default, for anything that changes in place and
+                         that the reader can reverse at any moment.
 
    --motion-ease-arrive  Quick off the mark and slow into place, for anything
-                         arriving or opening. A thing that arrives this way has
-                         shown the reader where it is going before it gets
-                         there. It is the curve the wordmark already used.
+                         arriving, opening or gliding.
 
-   --motion-ease-loop    No shaping at all, for a loop. A loop has no beginning
-                         and no end to shape, and a spinner that eases reads as
-                         a spinner that is catching on something. */
+   --motion-ease-loop    No shaping at all, for a loop. */
 :root {
   --motion-state: 150ms;
   --motion-surface: 200ms;
@@ -122,253 +186,157 @@
 }
 
 @theme {
-  --font-sans: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
-  /* The display role keeps its own token although it names the same face: what
-     a heading is is a role, and display sizes take their own tracking. */
-  --font-display: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
-  /* Figures and identifiers. The Duoton ADR retired the monospace, so this is
-     the same face; `.numeric` adds tabular figures so columns still line up. */
-  --font-mono: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
-  /* The wordmark, set in the same face at 800. */
-  --font-wordmark: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-*: initial;
+  --font-sans: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-  /* ── Two type scales ──────────────────────────────────────────────────────
-     A type scale is the fixed set of text sizes a product is allowed to draw.
-     Every step in it carries a line height, which is the distance from one line
-     of text to the next, and a tracking, which is the space added between
-     letters. A call site picks a step by name: `text-dense-body`,
-     `text-quiet-lead`.
+  /* ── The type scale ───────────────────────────────────────────────────────
+     Five steps and no others. Tailwind keeps the line height and the tracking
+     on the size token, so a call site that asks for `text-body` gets all
+     three. `micro` is for the mono labels and keycaps, which repeat a value
+     that is named in full somewhere else. */
+  --text-*: initial;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.3;
+  --text-micro--letter-spacing: 0.06em;
+  --text-meta: 0.78125rem;
+  --text-meta--line-height: 1.4;
+  --text-meta--letter-spacing: 0;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.45;
+  --text-body--letter-spacing: 0;
+  --text-lead: 1rem;
+  --text-lead--line-height: 1.35;
+  --text-lead--letter-spacing: 0;
+  --text-title: 1.875rem;
+  --text-title--line-height: 1.1;
+  --text-title--letter-spacing: -0.01em;
 
-     There are two scales, because one cannot serve both readers. A
-     thousand-row table is scanned: the eye jumps down a column and wants the
-     rows close together. A screen where somebody decides something permanent is
-     read: the eye runs along a line and wants air around it. A single scale set
-     for either reader is wrong for the other.
+  /* ── Colour (ADR 0042) ────────────────────────────────────────────────────
+     The dark theme. The light theme overrides the same names below. There is
+     no accent: the current tab, the cursor row and the primary button are
+     drawn inverted, in `.inverted`. Colour is only in covers and in the six
+     state roles, and every state colour sits beside a glyph.
 
-     `dense` draws the library, the queue, every table, and all chrome.
-     `quiet` draws the review screen, evidence, and anything read rather than
-     scanned.
+       ground       the page
+       panel        a panel set into the page: the inspector, the queue
+       raised       a button's fill, a hovered row
+       inset        a well below the page: a field, a checkbox
+       rule         a 1px divider
+       rule-strong  the edge of a control, a header rule */
+  --color-ground: #141414;
+  --color-panel: #1b1b1b;
+  --color-raised: #232323;
+  --color-inset: #0e0e0e;
+  --color-rule: #2c2c2c;
+  --color-rule-strong: #3d3d3d;
 
-     Tailwind v4 keeps the line height and the tracking on the size token
-     itself, as `--text-x--line-height` and `--text-x--letter-spacing`. That is
-     why both are written here and not at the call site: a call site that asks
-     for `text-dense-body` gets all three and cannot take the size without the
-     other two.
+  /* Four greys for words, brightest first: a title, a line beside it, the
+     artist under it, a count beside a heading. */
+  --color-ink: #ece9e2;
+  --color-ink-2: #c2beb6;
+  --color-ink-3: #9b978f;
+  --color-ink-4: #8e8b84;
 
-     Nothing that means anything is smaller than 12px. The 11px step is kept for
-     the uppercase labels, which repeat a value shown in full somewhere else.
+  /* The roles that carry every state the API reports. `ok` is held, `idle`
+     is nothing happening, `decide` waits on a person, `busy` is running,
+     `fail` has stopped, `done` is finished without being a success. */
+  --color-ok: #7fd49a;
+  --color-idle: #9b978f;
+  --color-decide: #f0c45a;
+  --color-busy: #7fb8ff;
+  --color-fail: #ff7b6b;
+  --color-done: #5fd6c4;
 
-     The tracking tightens as the size grows, in both scales. Letters set large
-     are already far enough apart to tell one from the next, and the same
-     spacing that helps at 12px reads as loose at 24px. That is one rule, not
-     nine separate decisions. */
-  --text-dense-micro: 0.6875rem;
-  --text-dense-micro--line-height: 1.3;
-  --text-dense-micro--letter-spacing: 0.1em;
-  --text-dense-meta: 0.75rem;
-  --text-dense-meta--line-height: 1.35;
-  --text-dense-meta--letter-spacing: 0;
-  --text-dense-body: 0.8125rem;
-  --text-dense-body--line-height: 1.45;
-  --text-dense-body--letter-spacing: 0;
-  /* The heading of a card or a section, and the one step that has moved since
-     the sizes were first named. It was 15px: one over body, with the chip that
-     sits beside it one under at 12px. Three sizes inside two steps is not a
-     hierarchy. On the connections page the green "Connected" pill read louder
-     than the word "slskd" it was reporting on, because a tinted box beats a
-     heading it is nearly the size of, and "System health" lost the same way to
-     the Jobs button beside it. The heading is what the card is about, so the
-     heading is what got bigger. */
-  --text-dense-lead: 1.0625rem;
-  --text-dense-lead--line-height: 1.3;
-  --text-dense-lead--letter-spacing: -0.01em;
-  --text-dense-display: 1.5rem;
-  --text-dense-display--line-height: 1.1;
-  --text-dense-display--letter-spacing: -0.02em;
+  /* The one corner the interface draws, on a cover. Panels, rows and buttons
+     are square. */
+  --radius-*: initial;
+  --radius-cover: 2px;
 
-  --text-quiet-meta: 0.8125rem;
-  --text-quiet-meta--line-height: 1.6;
-  --text-quiet-meta--letter-spacing: 0;
-  --text-quiet-body: 0.9375rem;
-  --text-quiet-body--line-height: 1.65;
-  --text-quiet-body--letter-spacing: 0;
-  --text-quiet-lead: 1.1875rem;
-  --text-quiet-lead--line-height: 1.4;
-  --text-quiet-lead--letter-spacing: -0.01em;
-  --text-quiet-display: 1.625rem;
-  --text-quiet-display--line-height: 1.15;
-  --text-quiet-display--letter-spacing: -0.025em;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --blur-*: initial;
 
-  /* ── The poster steps ─────────────────────────────────────────────────────
-     A page title set over the print (ADR Duoton): 72 to 160px at 800, tracked
-     tight and set solid so two lines of it still sit inside the print. They
-     are rem like everything else, so at the owner's 133% root `poster-l` is
-     the prototype's 112px. All three shrink with a narrow window, so a two-word
-     name still fits half a screen. */
-  --text-poster-m: clamp(2.75rem, 7vw, 4rem);
-  --text-poster-m--line-height: 0.86;
-  --text-poster-m--letter-spacing: -0.05em;
-  --text-poster-l: clamp(3.25rem, 9vw, 5.25rem);
-  --text-poster-l--line-height: 0.84;
-  --text-poster-l--letter-spacing: -0.055em;
-  --text-poster-xl: clamp(4.5rem, 8.25vw, 7.5rem);
-  --text-poster-xl--line-height: 0.82;
-  --text-poster-xl--letter-spacing: -0.055em;
-
-  /* Data uses the mono face and the same relative size wherever it appears.
-     Fields and numeric figures share this role. */
-  --text-data: 0.9375em;
-
-  /* The four names the application already writes, kept pointing at the dense
-     scale so that no call site breaks. They carry the size and nothing else. A
-     site written before the two scales existed sets its own leading beside the
-     size, and giving these aliases a line height would change the look of every
-     one of those screens at once, which is not what this change is for. */
-  --text-micro: var(--text-dense-micro);
-  --text-meta: var(--text-dense-meta);
-  --text-body: var(--text-dense-body);
-  --text-lead: var(--text-dense-lead);
-
-  /* ── The two inks (ADR Duoton) ───────────────────────────────────────────
-     Every page is printed in two inks taken from the cover of the music on it.
-     These are the house inks, used when nothing on the page has a cover. A page
-     replaces them at runtime through `usePagePrint` in $lib/duoton, which
-     writes both variables on <html>, so everything below that reads them
-     re-inks with the page.
-
-     The inks are chrome and never state: the print, the top bar's open
-     destination, the primary button, the active tab, the focus ring. A state
-     keeps its own colour below on every page, whatever the cover. */
-  --color-duo-dark: #13204a;
-  --color-duo-light: #ffb59e;
-
-  /* The accent names the light ink, so every call site that already marks
-     chrome with it (primary button, active tab, focus ring) follows the page.
-     `accent-ink` is what is written on an accent fill: the dark ink, which the
-     luminance clamp keeps at least 7:1 from the light one. */
-  --color-accent: var(--color-duo-light);
-  --color-accent-soft: color-mix(in srgb, var(--color-duo-light) 85%, white);
-  --color-accent-ink: var(--color-duo-dark);
-
-  /* The roles that carry every state the API reports. Each one pairs with a
-     glyph wherever it appears, because no state may be identifiable by hue
-     alone. Four are the ADR's: own (`ok`), wanted or waiting on a decision
-     (`decide`), failed (`fail`) and busy (`busy`). */
-  --color-ok: #9be0b0;
-  --color-ok-border: #36513f;
-  --color-idle: #a5aab2;
-  --color-decide: #f2c66d;
-  --color-busy: #8ec5ff;
-  --color-fail: #f08a7a;
-  --color-fail-border: #5c3530;
-
-  /* A sixth role, for a thing that is finished rather than good. A manual
-     decision, a resolved conflict, a merged recording: none of them is a
-     success and none of them is still running, and green says the wrong word
-     about all three. */
-  --color-done: #5eead4;
-
-  /* ── The ink ramp ─────────────────────────────────────────────────────────
-     Four neutral greys for words, brightest first. `ink` draws a title, `ink-2`
-     a line beside it, `ink-3` the artist and release under it, `ink-4` a count
-     beside a heading. The ADR names `#eef0f2`, `#a5aab2` and `#7c828b`; the
-     last is lifted to `#8a9099` here so a count on the hover surface still
-     clears 4.5:1 (it measured 3.92:1). */
-  --color-ink: #eef0f2;
-  --color-ink-2: #c6cad0;
-  --color-ink-3: #a5aab2;
-  --color-ink-4: #8a9099;
-
-  /* ── The ground and the surfaces ──────────────────────────────────────────
-     A fixed neutral dark that no cover changes (ADR Duoton). The shell lays a
-     14% wash of the dark ink over it, which is the only way the page colour
-     reaches the work area.
-
-       inset     a well below the page: a field, a checkbox
-       ground    the page
-       thin      chips, anything that is barely a surface
-       regular   cards and raised panels
-       thick     hover
-       ultra     selected, active */
-  --color-inset: #090a0d;
-  --color-ground: #0d0f12;
-  --color-surface-thin: #14171c;
-  --color-surface-regular: #1b1f25;
-  --color-surface-thick: #22262c;
-  --color-surface-ultra: #2a2f36;
-
-  /* ── The lines ────────────────────────────────────────────────────────────
-       thin      a divider between rows
-       regular   the edge of a control
-       thick     an edge that is emphasis
-       live      an edge that is state
-       shell     the top bar's edge once it is solid */
-  --color-line-thin: #22262c;
-  --color-line-inset: #121418;
-  --color-line-regular: #2d3239;
-  --color-line-thick: #3a4048;
-  --color-line-live: #4f5660;
-  --color-shell-line: #22262c;
-
-  /* ── Radius ───────────────────────────────────────────────────────────────
-     A corner is geometry, not text, so these are px and stay px regardless of
-     the root font-size below. Tailwind's own scale (`rounded-md`, `-lg`, `-xl`,
-     ...) is rem-based and grows with `html`'s 133%, which drifted every
-     rounded corner in the app out of proportion with the thing it draws. Five
-     roles replace it, one per size of thing: a compact 24px target, something
-     that lives inside a row, a control that stands alone, a panel, a card. A
-     call site names the role (`rounded-control`) and never the pixel value.
-     Tailwind v4 turns a `--radius-*` theme key into a `rounded-*` utility. */
-  --radius-tight: 4px;
-  --radius-row: 6px;
-  --radius-control: 8px;
-  --radius-panel: 12px;
-  --radius-card: 16px;
-  /* A button, a tab, a chip and the search field: the prototype draws every
-     control you press as a pill. */
-  --radius-pill: 999px;
-
-  /* Tailwind draws motion from four of its own variables, and every one of them
-     shipped with a value of its own. Pointing them at the scale is what makes a
-     utility written at a call site obey the scale without the call site saying
-     so: `transition` is the state step, `animate-spin` is one turn of the
-     ambient loop, and `animate-pulse` is two.
-
-     This is the whole of the enforcement. There is no linter — a duration
-     written at a call site is caught by reading, and there is nowhere left it
-     needs to be written. */
+  /* Tailwind's bare `transition` utility and its two loops, pointed at the
+     scale so a utility written at a call site obeys it. */
   --default-transition-duration: var(--motion-state);
   --default-transition-timing-function: var(--motion-ease);
   --animate-spin: spin var(--motion-ambient) var(--motion-ease-loop) infinite;
   --animate-pulse: pulse calc(var(--motion-ambient) * 2) var(--motion-ease) infinite;
 }
 
-/* The inks change in the same frame as the page they belong to. An eased
-   change started only once the new page's first frame had been drawn, which
-   took about a second on a page of covers, so the colours visibly arrived
-   after the page. */
-@property --color-duo-dark {
-  syntax: '<color>';
-  inherits: true;
-  initial-value: #13204a;
+/* The light theme, and the colours inside an inverted surface in the dark
+   one. An inverted surface draws its words in the other theme's ramp and its
+   states in the other theme's roles, so a state glyph on the cursor row keeps
+   the contrast it was checked at. `data-theme` is set on <html> by the script
+   in app.html before the first paint. */
+:root[data-theme='light'],
+:root:not([data-theme='light']) :is(.on-ink, .inverted) {
+  color-scheme: light;
+  --color-ground: #e4e2dc;
+  --color-panel: #eeece7;
+  --color-raised: #f7f6f3;
+  --color-inset: #ffffff;
+  --color-rule: #cdc9c0;
+  --color-rule-strong: #b2ada3;
+  --color-ink: #161513;
+  --color-ink-2: #3d3a35;
+  --color-ink-3: #57534c;
+  --color-ink-4: #68645c;
+  --color-ok: #176636;
+  --color-idle: #57534c;
+  --color-decide: #775300;
+  --color-busy: #1a55b0;
+  --color-fail: #a83224;
+  --color-done: #0b6459;
 }
 
-@property --color-duo-light {
-  syntax: '<color>';
-  inherits: true;
-  initial-value: #ffb59e;
+/* The dark theme's values again, for an inverted surface in the light theme.
+   design-system.test.ts holds this block to the @theme one. */
+:root[data-theme='light'] :is(.on-ink, .inverted) {
+  color-scheme: dark;
+  --color-ground: #141414;
+  --color-panel: #1b1b1b;
+  --color-raised: #232323;
+  --color-inset: #0e0e0e;
+  --color-rule: #2c2c2c;
+  --color-rule-strong: #3d3d3d;
+  --color-ink: #ece9e2;
+  --color-ink-2: #c2beb6;
+  --color-ink-3: #9b978f;
+  --color-ink-4: #8e8b84;
+  --color-ok: #7fd49a;
+  --color-idle: #9b978f;
+  --color-decide: #f0c45a;
+  --color-busy: #7fb8ff;
+  --color-fail: #ff7b6b;
+  --color-done: #5fd6c4;
 }
 
-html[data-inks-changing],
-html[data-inks-changing] * {
-  transition: none !important;
+/* Inverted means the page's ink is the fill and the page's ground is the
+   text, so the first word on an inverted surface is the ground of the theme
+   around it. */
+:root:not([data-theme='light']) :is(.on-ink, .inverted) {
+  --color-ink: #141414;
+}
+:root[data-theme='light'] :is(.on-ink, .inverted) {
+  --color-ink: #e4e2dc;
+}
+:root:not([data-theme='light']) .inverted {
+  background-color: #ece9e2;
+}
+:root[data-theme='light'] .inverted {
+  background-color: #161513;
 }
 
 :root {
   font-family: var(--font-sans);
   color-scheme: dark;
-  font-synthesis: none;
   background: var(--color-ground);
+  color: var(--color-ink);
+  caret-color: var(--color-ink);
+  accent-color: var(--color-ink);
 }
 
 * {
@@ -378,12 +346,11 @@ html[data-inks-changing] * {
 html {
   background: var(--color-ground);
   /* The owner reads the product at 133% browser zoom and asked for that as
-     the default (2026-09-01). A percentage rather than a px value keeps a
-     browser accessibility font-size in play. Every size and space in the
-     application is rem-based, so this scales all of it together; the px
-     names in the design spec and the type-scale comments are the design-time
-     values at a 16px root, drawn a third larger here. */
+     the default (2026-09-01). Every size in the application is rem-based, so
+     the px values in the design spec are drawn a third larger here. */
   font-size: 133%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-strong) var(--color-ground);
 }
 
 body {
@@ -391,6 +358,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  /* A name in a music collection is often one word to the browser
+     (`01-artist-album-track-remastered.flac`). `anywhere` lets a flex row stay
+     inside the screen and the word wrap. */
+  overflow-wrap: anywhere;
 }
 
 button,
@@ -404,165 +375,176 @@ a {
   cursor: pointer;
 }
 
-/* One focus ring for the whole application, in the accent, so that keyboard
-   navigation reads the same on every control without each one restating it.
-   Deliberately left outside the component layer below: this is not a component
-   and is not a thing a call site may overrule, because the page that writes
-   `focus:outline-none` beside it is removing the only mark a keyboard has.
+a {
+  text-underline-offset: 3px;
+}
 
-   The accent is drawn at full strength. Softened, lilac over the near-black
-   ground falls under the 3:1 a focus indicator has to reach to be seen against
-   what is beside it; solid, it clears it with room to spare. A ring that is
-   the only mark a keyboard leaves cannot be the one thing drawn faintly. */
+::selection {
+  background: var(--color-ink);
+  color: var(--color-ground);
+}
+
+/* Focus and selection never look alike: selection is an inverted fill, focus
+   is this outline. Left outside the component layer so no call site can
+   remove the only mark a keyboard leaves. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 
-/* A field that wraps its own input — an icon beside the text — takes the ring on
-   its frame. On the input it drew a second box inside the first. */
+/* A field that wraps its own input takes the ring on its frame. */
 .field:has(input:focus-visible) {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 .field input:focus-visible {
   outline: none;
 }
 
-/* ── Component classes ──────────────────────────────────────────────────────
-   Every class the application writes for itself belongs in this layer, and the
-   layer is the whole point. Tailwind v4 puts its utilities in @layer utilities,
-   and an unlayered rule beats a layered one whatever the specificity, so a class
-   declared out here silently won every argument with a utility written beside it
-   at the call site: `pl-8` on a .field did nothing — FollowArtistModal drew its
-   icon on top of its own text — and `text-ok` on a .label did nothing. Layered,
-   the call site wins, which is the order a utility framework is built on.
-   Anything new goes inside this block. */
-@layer components {
-  /* The one boolean in Schall. A 24px target that carries a small tick when it is on:
-     colour alone is not a state, here or anywhere. The tick is a mask rather
-     than a child element because an `appearance-none` input cannot hold one.
+th {
+  overflow-wrap: normal;
+}
 
-     It takes the inset for the same reason a field does: it is a box something
-     goes into. */
+h1 {
+  overflow-wrap: break-word;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-rule-strong);
+}
+
+/* ── Component classes ──────────────────────────────────────────────────────
+   Every class the application writes for itself belongs in this layer. An
+   unlayered rule beats a layered one whatever the specificity, so a class
+   declared outside it would win every argument with a utility written beside
+   it at the call site. */
+@layer components {
+  /* Figures, durations, dates, counts, identifiers, paths and keycaps. The
+     tabular figures keep a column of numbers lined up and stop a changing
+     count from reflowing. */
+  .mono,
+  .numeric,
+  .font-mono,
+  .label,
+  .keycap,
+  kbd,
+  code {
+    font-family: var(--font-mono);
+    font-stretch: 87.5%;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A label over a column or beside a value: 11px mono capitals in the
+     quietest grey. It repeats a name, so it is never the only words. */
+  .label {
+    font-size: var(--text-micro);
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-4);
+  }
+
+  /* The inverted surface: the ink is the fill and the ground is the text. It
+     is the only way Schall marks the current tab, the cursor row and the
+     primary button. `.on-ink` alone swaps the colours without the fill, for a
+     row whose fill is the gliding cursor behind it. */
+  .inverted {
+    color: var(--color-ink);
+  }
+  .on-ink {
+    color: var(--color-ink);
+  }
+
+  /* A key named on a button or in the key strip. */
+  .keycap {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    padding: 0 0.25rem;
+    border: 1px solid var(--color-rule-strong);
+    color: var(--color-ink-3);
+    font-size: var(--text-micro);
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  /* A key that just fired flashes inverted for one state beat, on the strip
+     and on the button it pressed. */
+  .keycap[data-echo] {
+    animation: schall-echo var(--motion-state) var(--motion-ease);
+  }
+
+  [data-echo-press] {
+    animation: schall-press-echo var(--motion-state) var(--motion-ease);
+  }
+
+  /* The one boolean in Schall: a square box with a tick when it is on. The
+     tick is a mask so it takes the ground colour of either theme. */
   .check {
     appearance: none;
+    position: relative;
     flex: 0 0 1.5rem;
     width: 1.5rem;
     height: 1.5rem;
-    border-radius: var(--radius-tight);
-    border: 1px solid var(--color-line-thick);
+    border: 1px solid var(--color-rule-strong);
     background: var(--color-inset);
     transition: var(--motion-state) var(--motion-ease);
   }
 
   .check:hover:not(:disabled) {
-    border-color: var(--color-line-live);
+    border-color: var(--color-ink-3);
   }
 
   .check:checked {
-    border-color: var(--color-accent);
-    background-color: var(--color-accent);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d0f12' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
-    background-size: 11px 11px;
-    background-position: center;
-    background-repeat: no-repeat;
+    border-color: var(--color-ink);
+    background-color: var(--color-ink);
+  }
+
+  .check:checked::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-ground);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='4' stroke-linecap='square'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+      center / 11px 11px no-repeat;
   }
 
   .check:disabled {
     opacity: 0.5;
   }
 
-  /* Counts, durations, sizes and identifiers are set in mono and tabular so that
-     figures line up column-to-column and a number changing does not reflow.
-
-     It is declared before .font-display and the order still settles the family
-     between the two: both sit in this layer and are equally specific, so the
-     later one wins. A headline figure asks for both — the display face for its
-     size, the tabular figures so it does not reflow as it counts — and with
-     .numeric last it was getting mono at 32px on every stat card. Now that the
-     layer is here, Tailwind's own font-display utility would win it in any case;
-     the order below is what holds if that utility is not the one written. */
-  .numeric {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* A monospace set at the same size as the sans beside it reads bigger, and
-     measuring the two says why it is not a size problem to solve with a size.
-     Their x-heights are 52 and 53 at 100px and their digits both advance 60:
-     the faces are the same size. What differs is that every glyph in the mono
-     takes a digit's width, so `1 of 1 · 100%` sets far wider than the artist
-     name above it while claiming the same line — the narrow characters are the
-     ones paying, and a `1` in a `0`'s box is what makes a figure look shouted.
-
-     One step down is the ordinary answer where a mono is mixed into a sans, and
-     it costs nothing here: the figures still line up column to column, because
-     tabular-nums is about the widths matching each other and not about matching
-     the text around them.
-
-     Held off the display face on purpose. A headline figure asks for .numeric
-     to stop itself reflowing as it counts, takes its size from the display step
-     it was given, and is the one place mono never applies. */
-  .numeric:not(.font-display) {
-    font-size: var(--text-data);
-  }
-
-  /* The tracking is its own decision. A grotesque at display size wants a
-     little of its letter-fit back — set loose it reads as body text blown up —
-     but the -0.04em headings once carried here closed the counters up. One
-     step further than body's default is enough for 24px at 700. */
-  .font-display {
-    font-family: var(--font-display);
-    letter-spacing: -0.02em;
-  }
-
-  /* ── The overlay layer ────────────────────────────────────────────────────
-     An overlay is anything drawn on top of the page rather than in it: the one
-     modal, a menu, a select's list, a popover. Schall draws two things for
-     every one of them, and until now both were written out again at each call
-     site — `FollowArtistModal.svelte`, `Menu.svelte` and `CommandPalette.svelte`
-     each carried their own copy of the same two strings. The values below are
-     those call sites' values, moved to one place. Nothing
-     here is new and no existing component is changed; the components in
-     `lib/components/ui/` ask for these classes instead of copying the strings a
-     fifth time.
-
-     `.scrim` is the cover between the page and a modal surface. Black at 55%
-     with an 8px blur: the page stays visible enough to say where the reader
-     came from, and unreadable enough that nobody tries to read it.
-
-     `.overlay-panel` is the surface itself, and it is the whole of Schall's
-     glass budget: `rgba(32,34,39,0.55)`, a `rgba(232,233,231,0.09)` hairline
-     and a 14px blur. Glass is spent here and nowhere else — never on a card,
-     never on a table row, because a surface that sits in the page is drawn in
-     the flat plum and a surface floating above it is the one place blur earns
-     its keep.
-
-     Both open over the surface step, which is what the modal, the menu and
-     the palette already take, so every surface in the application arrives at
-     one speed. There is no way out to animate: an overlay that lingers after
-     a choice is an overlay the reader is still being shown. */
+  /* `.scrim` is the flat cover between the page and a modal surface.
+     `.overlay-panel` is the surface itself: a panel with a rule, no blur and
+     no shadow. Both drop 4px into place on the surface step and close on the
+     state step. */
   .scrim {
     position: fixed;
     inset: 0;
     background: rgb(0 0 0 / 0.55);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     animation: schall-fade var(--motion-surface) var(--motion-ease-arrive);
   }
 
   .overlay-panel {
-    border: 1px solid rgba(232, 233, 231, 0.09);
-    background-color: rgba(32, 34, 39, 0.55);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    animation: schall-fade var(--motion-surface) var(--motion-ease-arrive);
+    border: 1px solid var(--color-rule-strong);
+    background-color: var(--color-panel);
+    animation: schall-drop var(--motion-surface) var(--motion-ease-arrive);
   }
 
-  /* A control that scrolls sideways on a narrow screen should not grow a
-     scrollbar across the interface it sits in; the overflow is a fallback, not a
-     feature. */
+  .scrim[data-state='closed'] {
+    animation: schall-fade-out var(--motion-state) var(--motion-ease) forwards;
+  }
+
+  .overlay-panel[data-state='closed'] {
+    animation: schall-fade-out var(--motion-state) var(--motion-ease) forwards;
+  }
+
   .no-scrollbar {
     scrollbar-width: none;
   }
@@ -571,114 +553,38 @@ a {
     display: none;
   }
 
-  /* The last control is allowed to continue under the edge. The fade leaves
-     enough of its label visible to show that the row can be moved sideways. */
-  .scroll-fade {
-    position: relative;
-  }
-
-  .scroll-fade::after {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 1.5rem;
-    pointer-events: none;
-    background: linear-gradient(to right, transparent, var(--color-ground));
-    content: '';
-    opacity: 0;
-  }
-
-  .scroll-fade-surface::after {
-    background: linear-gradient(to right, transparent, var(--color-surface-regular));
-  }
-
-  .scroll-fade[data-more]::after {
-    opacity: 1;
-  }
-
-  /* The smallest thing in the interface, and the only role allowed under 12px:
-     a label repeats in full, in the ordinary size, whatever it introduces. The
-     tracking is wider than a grotesque would need, because uppercase in a face
-     with this much contrast closes up at small sizes. */
-  .label {
-    font-size: var(--text-micro);
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--color-ink-3);
-  }
-
-  /* One control height across every form on every screen: a settings page that
-     agrees with itself is the cheapest kind of polish.
-
-     The fill is the inset, which is darker than the page. A field is a place
-     where something goes in — a well, not a raise — and drawing it as a raise
-     was doing real damage as well as saying the wrong thing. It used to be a
-     wash of white, so a field inside a card was that wash twice and its
-     placeholder was read against the lightest surface in the product. The
-     inset is now darker, and the placeholder clears 4.5:1 on every surface. */
+  /* One control height across every form. The fill is the inset, because a
+     field is a place something goes into. */
   .field {
-    height: 2.125rem;
-    border-radius: var(--radius-control);
-    border: 1px solid var(--color-line-regular);
+    height: 2rem;
+    border: 1px solid var(--color-rule);
     background: var(--color-inset);
     padding: 0 0.625rem;
     color: var(--color-ink);
-    font-family: var(--font-mono);
-    /* --text-data is relative to the text around it, and a field usually sits
-       in a wrapper with no size of its own, where it came out at 20px beside
-       16px labels. Anchored to body text, every field is the same size. */
-    font-size: calc(var(--text-body) * 0.9375);
+    font-size: var(--text-body);
     font-weight: 400;
   }
 
-  /* The quietest grey in the ramp, which the field can now afford. A
-     placeholder is words: it names what goes in the box, so it is held to the
-     4.5:1 floor like any other words. It is drawn on the field's own fill and
-     never on the ground, and that fill used to be a wash of white. The
-     placeholder now uses the lower step because the inset is darker, and the
-     ramp clears 4.5:1 on every surface. */
   .field::placeholder {
     color: var(--color-ink-4);
-    /* A placeholder is words: it names what goes in the box, and words are set
-       in the reading face. The value that replaces it is data and keeps the
-       field's mono — the swap on first keystroke is the boundary being drawn,
-       not a glitch. */
-    font-family: var(--font-sans);
+  }
+
+  .field:hover:not(:disabled):not(:focus-within) {
+    border-color: var(--color-rule-strong);
   }
 
   .field:disabled {
     opacity: 0.5;
   }
 
-  /* The trailing glyph is the only glyph a field carries and it is always state:
-     the spinner while a lookup answers, the tick once a candidate is chosen. The
-     room for it belongs to the component and never to a `pr-8` at the call site
-     — 10px of inset matching the field's own padding, a 14px glyph, 8px of air.
-     There is no leading form of this, on purpose. */
+  /* Room for the one trailing glyph a field carries: a spinner while a lookup
+     answers, a tick once a candidate is chosen. */
   .field.trailing {
     padding-right: 2rem;
   }
 
-  /* Gives a small control a fingertip to be pressed by without making it look
-     bigger. A back arrow drawn at 17px, a sort header set in 11px capitals and
-     the button that opens the navigation are all correct at the size they are
-     drawn: they sit in a row of text and growing them would push that row
-     apart. What is wrong is that the area which answers a press is the same
-     size as the drawing.
-
-     So the area is separated from the drawing. An invisible box is centred over
-     the control and held to 44px, which is the figure every touch platform
-     publishes for a fingertip, and it takes the press. Nothing moves, because an
-     absolutely positioned box is outside the layout.
-
-     It is applied only where a pointer is coarse — a finger or a stylus. A mouse
-     is accurate to the pixel and does not need it, and a 44px box under a 17px
-     arrow would swallow presses meant for whatever sits beside it. That test is
-     the pointer rather than the width of the window on purpose: a laptop with a
-     touchscreen needs this at 1440px, and a mouse pointed at a 390px window does
-     not need it at all. */
+  /* Gives a small control a 44px fingertip under a coarse pointer without
+     drawing it bigger. */
   .tap {
     position: relative;
   }
@@ -697,45 +603,14 @@ a {
     }
   }
 
-  /* The same 44px, for a control that cuts its own text off. A row title that
-     ends in an ellipsis is `overflow: hidden`, and an element that hides its
-     overflow hides the invisible box of `.tap` as well, clipping it back to the
-     height it was trying to escape. Padding is inside the box and is not
-     clipped, so the room is taken there instead.
-
-     The row gets taller by that padding, and it is meant to. The first attempt
-     here pulled the height back with a negative margin, which looked tidy and
-     was wrong: the title then overlapped the line beneath it, that line is drawn
-     second, and it took every press aimed at the bottom half of the title. Half
-     a target is worse than none, because it fails only sometimes. A list read
-     with a thumb wants taller rows anyway.
-
-     Only the vertical is treated. A title that runs the width of a row is easy
-     to hit from side to side already. */
+  /* The same 44px for a control that clips its own overflow, taken as
+     padding because `.tap`'s box would be clipped. */
   @media (pointer: coarse) {
     .tap-tall {
       padding-block: 0.75rem;
     }
   }
 
-  /* A row of column names that are also the controls that sort by them. On a
-     touch screen the row itself is given the height a fingertip needs and each
-     name fills it, so every name is genuinely 44px and none of them reaches
-     outside the row.
-
-     `.tap` was used here first and was wrong. Its invisible box is centred on
-     the control and takes no room in the layout, which is right for something
-     with air around it and wrong for something in a dense row: the boxes
-     reached 13px up out of this row and took the bottom half of the button
-     sitting above it. That button then worked when pressed near its top and did
-     nothing when pressed near its bottom, which is the worst of both.
-
-     This works on a flex box, which is what a row of column names was. It does
-     nothing to a real `<tr>`: `min-height` and `align-items` do not apply to a
-     table row, whose height the browser takes from the cells inside it. A table
-     header asks for the same 44px on the buttons instead —
-     `pointer-coarse:min-h-11` — and the row grows to hold them. Nothing uses
-     this class today; it is kept for a row of names that is not a table. */
   @media (pointer: coarse) {
     .sort-row {
       min-height: 2.75rem;
@@ -743,149 +618,42 @@ a {
     }
   }
 
-  /* ── The shell (ADR Duoton) ──────────────────────────────────────────────
-     The work area is the neutral ground with a 14% wash of the page's dark
-     ink, as in the prototype, so a page reads as belonging to its cover
-     without any surface changing colour. The print fades into that same wash
-     at its foot. */
-  .duoton-app {
-    background-color: color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground));
-  }
-
-  /* The same wash, for something that sticks under the top bar and has to
-     hide the rows scrolling beneath it. */
-  .shell-ground {
-    background-color: color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground));
-  }
-
-  .print-fade {
-    background: linear-gradient(
-      180deg,
-      transparent 30%,
-      color-mix(in srgb, var(--color-duo-dark) 14%, var(--color-ground)) 100%
-    );
-  }
-
-  /* The line under a hero title: each part separated by a quiet dot. */
-  .hero-sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    row-gap: 0.25rem;
-  }
-
-  .hero-sub > * + *::before {
-    content: '·';
-    margin: 0 0.5rem;
-    color: var(--color-ink-4);
-  }
-
-  /* A part that wraps to the start of a line keeps its dot's space but not the
-     dot (lib/separators.ts marks it). */
-  .hero-sub > [data-line-start]::before {
-    visibility: hidden;
-  }
-
-  /* ── The top bar (ADR Duoton) ────────────────────────────────────────────
-     The navigation sits on the print. Over the print it is a wash of the dark
-     ink fading to nothing, so the print shows through; once the print has
-     scrolled away it turns solid. The open destination is the one pill filled
-     with the light ink and lettered in the dark one: a dark-ink pill vanished
-     wherever the print under it was dark. */
-  .topbar {
-    /* The wash keeps a third of the dark ink at its foot, and the pill
-       letters carry a shadow in it: on a light cover (the white outline
-       digits of "22") the letters had nothing under them to read against. */
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-duo-dark) 85%, transparent),
-      color-mix(in srgb, var(--color-duo-dark) 35%, transparent)
-    );
-    text-shadow: 0 1px 3px color-mix(in srgb, var(--color-duo-dark) 90%, transparent);
-    transition:
-      background-color var(--motion-surface) var(--motion-ease),
-      box-shadow var(--motion-surface) var(--motion-ease);
-  }
-
-  .topbar.solid {
-    background: color-mix(in srgb, var(--color-duo-dark) 55%, var(--color-ground));
-    backdrop-filter: blur(14px);
-    box-shadow: 0 1px 0 var(--color-shell-line);
-  }
-
-  .topbar-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.3rem 0.66rem;
-    border-radius: var(--radius-pill);
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: color-mix(in srgb, var(--color-duo-light) 45%, white);
+  /* A list row: 36px, a 1px rule under it, the raised fill under a pointer. */
+  .row {
+    position: relative;
+    min-height: 2.25rem;
+    border-bottom: 1px solid var(--color-rule);
     transition:
       background-color var(--motion-state) var(--motion-ease),
       color var(--motion-state) var(--motion-ease);
   }
 
-  .topbar-item:hover {
-    background: color-mix(in srgb, var(--color-duo-dark) 60%, transparent);
-    color: #fff;
+  .row:hover:not(.on-ink):not(.inverted) {
+    background-color: var(--color-raised);
   }
 
-  .topbar-item.active {
-    text-shadow: none;
-    background: var(--color-duo-light);
-    color: var(--color-duo-dark);
+  /* The cursor block a list draws behind its current row (`glide` in
+     $lib/motion.svelte). It is one element and slides between rows. */
+  .glider {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    transform-origin: 0 0;
+    transition: transform var(--motion-state) var(--motion-ease-arrive);
   }
 
-  .topbar-search {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0.4rem 0.3rem 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--color-duo-light) 30%, transparent);
-    background: color-mix(in srgb, var(--color-duo-dark) 40%, transparent);
-    border-radius: var(--radius-pill);
-    font-size: 0.6875rem;
-    color: color-mix(in srgb, var(--color-duo-light) 45%, white);
-    transition: border-color var(--motion-state) var(--motion-ease);
+  .glider[data-still] {
+    transition: none;
   }
 
-  .topbar-search:hover {
-    border-color: color-mix(in srgb, var(--color-duo-light) 55%, transparent);
-  }
-
-  /* In half a screen the bar has to hold the wordmark, seven pills and search
-     on one line: at 753px it did not, and the wordmark broke into three lines
-     under a search field lying over Review. Below 1024px the pills are drawn
-     tighter and search is its icon alone. */
-  @media (width >= 64rem) {
-    .topbar-search {
-      min-width: 13rem;
-    }
-  }
-
-  @media (width < 64rem) {
-    .topbar-item {
-      padding-inline: 0.45rem;
-    }
-
-    .topbar-search {
-      padding: 0.3rem 0.5rem;
-    }
-  }
-
-  /* The wordmark: the one face at 800, tracked tight, lowercase. */
+  /* The wordmark: Barlow at 700, lowercase. */
   .wordmark {
     display: inline-block;
-    font-family: var(--font-wordmark);
-    font-weight: 800;
-    letter-spacing: -0.04em;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.01em;
     text-transform: lowercase;
-  }
-
-  .wordmark-hero {
-    letter-spacing: -0.045em;
   }
 
   .step-number {
@@ -894,25 +662,22 @@ a {
     height: 1.5rem;
     flex: 0 0 1.5rem;
     place-items: center;
-    border-radius: var(--radius-row);
-    background: var(--color-surface-thick);
+    border: 1px solid var(--color-rule-strong);
     color: var(--color-ink-2);
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-stretch: 87.5%;
+    font-size: var(--text-micro);
   }
 
   .step-number.complete {
-    background: color-mix(in srgb, var(--color-ok) 14%, transparent);
+    border-color: var(--color-ok);
     color: var(--color-ok);
   }
 
   /* ── The cycling placeholder ──────────────────────────────────────────────
      An element behind a transparent input, because a native placeholder
-     attribute cannot be animated. Every metric here is the field's own, taken
-     from the variant and never from a utility at the call site: any disagreement
-     between the two layers shows as text that shifts on the first keystroke.
-     Written by CyclingPlaceholder.svelte. */
+     cannot be animated. Every metric is the field's own, so nothing shifts on
+     the first keystroke. Written by CyclingPlaceholder.svelte. */
   .ph-wrap {
     position: relative;
     display: inline-flex;
@@ -924,13 +689,10 @@ a {
     width: 100%;
   }
 
-  /* Only while the ghost is showing does the input hand its fill to the overlay
-     beneath. A field that has been typed into keeps its own inset fill. */
   .ph-wrap:not(.typed) .field {
     background-color: transparent;
   }
 
-  /* The box, inset to the field's own border so it cannot cover it. */
   .ph {
     position: absolute;
     z-index: 0;
@@ -941,90 +703,42 @@ a {
     display: grid;
     align-items: center;
     padding: 0 0.625rem;
-    border-radius: var(--radius-control);
     background: var(--color-inset);
-    font-family: var(--font-mono);
-    /* The field's own size, which is the whole point: this box is drawn behind
-       the field and is replaced by what the reader types. Half a pixel smaller
-       and the text steps as it is replaced, which is the shift the component
-       exists to prevent. */
-    font-size: var(--text-data);
+    font-size: var(--text-body);
     font-weight: 400;
-    /* The same grey the native placeholder takes. It has to be the same one: a
-       reader who types replaces this box with the real placeholder, and two
-       different greys either side of that moment read as the text changing
-       colour under the first keystroke. */
     color: var(--color-ink-4);
     pointer-events: none;
     overflow: hidden;
   }
 
-  /* The trailing variant's room comes from the variant, on both layers. */
   .ph.trailing {
     padding-right: 2rem;
   }
 
-  /* A name arrives as a slow sweep: a soft mask edge crossing the word left to
-     right, so the letters resolve in reading order. It leaves the other way,
-     straight out on opacity, and the box is empty for a beat before the next one
-     begins. The glyphs never move, only the edge does, and the colour never
-     changes — ink-4 from the first frame to the last, because a placeholder that
-     brightens is a placeholder pretending to be a value. */
   .ph span {
     grid-area: 1 / 1;
     opacity: 0;
     white-space: nowrap;
-    mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
-    mask-size: 300% 100%;
-    -webkit-mask-size: 300% 100%;
     animation: schall-ph var(--ph-cycle) var(--motion-ease) infinite;
     animation-delay: calc(var(--ph-index) * var(--motion-read));
   }
 
-  /* Typed into once: the cycle is over and the box is not rendered. The rule
-     stands for anyone holding these classes directly; the component stops
-     rendering the box at the same moment. */
   .ph-wrap.typed .ph {
     display: none;
   }
 
-  /* ── The five named motions ───────────────────────────────────────────────
-     A component that has to move says which of these it is doing, rather than
-     writing keyframes of its own. That is what keeps a card arriving on the
-     settings page and a message arriving on the artists page the same event.
+  /* ── The named motions ────────────────────────────────────────────────────
+     A component that has to move says which of these it is doing. Every one
+     moves `transform`, `opacity` or `clip-path` and nothing else, so nothing
+     around it reflows. */
 
-     Every one of them moves `transform` and `opacity` and nothing else. Width,
-     height, top, left, margin and padding move the layout around them, and the
-     text on the page would jump; the font loading strategy at the top of this
-     file was changed to stop exactly that. */
-
-  /* Something arriving in the page: a card, a message where a list would have
-     been, a panel a disclosure has just opened. Four pixels of travel, which is
-     enough to read as arriving and too little to read as sliding. `backwards`
-     holds the first frame through any delay, so nothing flashes at full opacity
-     before it starts. */
+  /* Something arriving in the page. `backwards` holds the first frame through
+     any delay. */
   .rise {
     animation: schall-rise var(--motion-enter) var(--motion-ease-arrive) backwards;
   }
 
-  /* A picture, once its own bytes have arrived, over the state step: the
-     arriving step made covers read as late. Every cover and every artist
-     photograph was drawn at full opacity the instant it decoded, in whatever
-     order the network answered, so a grid of forty of them read as flashing —
-     forty hard cuts at forty unpredictable moments is what flashing is.
-
-     It fades and nothing else. `.rise` travels four pixels, which is right for
-     a card arriving into a layout and wrong here: the box is already drawn at
-     the right size, in the right place, holding either the hatched square or
-     the artist's initials, and the picture is filling it rather than joining
-     the page. Moving it would mean the frame and its contents disagreed about
-     where they were.
-
-     Nothing is staggered. The offsets between one cover and the next are the
-     network's own, which is the honest source of them and is why the scale's
-     stagger step stays reserved for a small fixed set — a list given a stagger
-     of its own is the nausea `--motion-stagger` is documented against. */
+  /* A picture fading up once its bytes have arrived. */
   .cover-arrive {
     opacity: 0;
     transition: opacity var(--motion-state) var(--motion-ease-arrive);
@@ -1041,95 +755,91 @@ a {
   .cover-fallback {
     display: grid;
     place-items: center;
-    color: var(--color-ink-3);
-    font-family: var(--font-display);
-    font-weight: 700;
+    background: var(--color-raised);
+    color: var(--color-ink-4);
   }
 
-  /* A mark that has changed what it says — a state mark whose role is now
-     something else, a count badge that has just appeared. It is drawn only when
-     the thing changes and never when the page first draws it: a list arriving
-     is not an event, one row in it changing is. The component decides which of
-     the two happened; this is only the drawing. */
+  /* A mark that has changed what it says. Never on the first draw. */
   .turn {
     animation: schall-turn var(--motion-enter) var(--motion-ease-arrive);
   }
 
-  /* A figure that has changed. It nudges down into its new value, so a number
-     that moved is separable from the seven beside it that did not. The glyphs
-     are tabular and the box does not resize, so nothing around it moves. */
+  /* A figure that has changed. It nudges down into its new value once. */
   .tick {
+    display: inline-block;
     animation: schall-tick var(--motion-enter) var(--motion-ease-arrive);
   }
 
-  /* A control being pressed. Two pixels of nothing, and the only motion in the
-     application a person causes directly rather than watches. It answers a
-     press and does not wait for one: whatever the control does, it has already
-     started. */
+  /* A control being pressed. */
   .press:active:not(:disabled) {
     transform: scale(0.97);
   }
 
-  /* A disclosure opening — a `details` element with a `summary` a reader
-     pressed. The panel is not drawn at all while the element is shut, so the
-     animation runs on the open and never on the page load. */
+  /* A decision taken on a row: a 1px line drawn across it, left to right. */
+  .struck {
+    position: relative;
+  }
+
+  .struck::after {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 50%;
+    height: 1px;
+    background: currentColor;
+    transform-origin: left;
+    animation: schall-strike var(--motion-state) var(--motion-ease-arrive) both;
+  }
+
+  /* A bar segment that has just filled, drawn left to right. */
+  .fill-in {
+    transform-origin: left;
+    animation: schall-fill var(--motion-enter) var(--motion-ease-arrive) backwards;
+  }
+
   details[open] > .reveal {
     animation: schall-rise var(--motion-surface) var(--motion-ease-arrive);
   }
 
   /* ── The want toggle ─────────────────────────────────────────────────────
-     The round + on a track, drawn by WantToggle.svelte. Unwanted it is a ring
-     holding a plus. Pressed, the ring fills from the bottom with the page's
-     light ink, like ink drawn up a nib, and the tick prints in the dark ink
-     once it is full. The wanted mark is drawn in the cover's inks, so it
-     changes with every release (the one state the Duoton ADR lets the inks
-     carry). A pointer resting on a wanted toggle turns the plus back in as a
-     cross, and pressing it drains the ink back out.
-
-     Only transform, opacity, the fill's clip and the tick's stroke offset
-     move. All of them are paint and move nothing around the toggle. */
+     The square + on a track, drawn by WantToggle.svelte. Pressed, the square
+     fills from the bottom with ink and the tick prints in the ground colour.
+     A pointer resting on a wanted toggle turns the plus back in as a cross.
+     Only transform, opacity, clip-path and the tick's stroke offset move. */
   .want-toggle {
     display: inline-grid;
     place-items: center;
     flex-shrink: 0;
-    border-radius: var(--radius-pill);
     color: var(--color-ink-3);
-    box-shadow: inset 0 0 0 1.5px currentColor;
+    box-shadow: inset 0 0 0 1px currentColor;
     transition:
       background-color var(--motion-state) var(--motion-ease),
-      color var(--motion-state) var(--motion-ease),
-      box-shadow var(--motion-state) var(--motion-ease);
+      color var(--motion-state) var(--motion-ease);
   }
 
   .want-toggle:hover:not(:disabled) {
     color: var(--color-ink);
   }
 
-  /* In a list of tracks the + is drawn only on the row a pointer rests on or
-     focus is inside, so the list reads as titles and not as forty rings. A
-     wanted track keeps its disc on every row, because that is a state worth
-     reading at a glance. Focus counts only when it is keyboard focus: a click
-     leaves focus on the button, and the + would stay drawn after the pointer
-     left. A screen with no hover shows every +, since a finger
-     has nothing to rest on. */
   @media (hover: hover) {
     .want-toggle[data-reveal='true'][data-wanted='false'],
     .want-toggle[data-reveal='all'] {
       opacity: 0;
       transition:
         opacity var(--motion-state) var(--motion-ease),
-        background-color var(--motion-state) var(--motion-ease),
-        color var(--motion-state) var(--motion-ease),
-        box-shadow var(--motion-state) var(--motion-ease);
+        color var(--motion-state) var(--motion-ease);
     }
 
     .want-row:hover .want-toggle[data-reveal='true'],
     .want-row:has(:focus-visible) .want-toggle[data-reveal='true'],
+    .want-row.on-ink .want-toggle[data-reveal='true'],
     .want-tile:hover .want-toggle[data-reveal='true'],
     .want-tile:has(:focus-visible) .want-toggle[data-reveal='true'],
     .want-toggle[data-reveal='true']:focus-visible,
     .want-row:hover .want-toggle[data-reveal='all'],
     .want-row:has(:focus-visible) .want-toggle[data-reveal='all'],
+    .want-row.on-ink .want-toggle[data-reveal='all'],
     .want-tile:hover .want-toggle[data-reveal='all'],
     .want-tile:has(:focus-visible) .want-toggle[data-reveal='all'],
     .want-toggle[data-reveal='all']:focus-visible {
@@ -1137,59 +847,28 @@ a {
     }
   }
 
-  /* Progress printed as a row of dots (ADR Duoton, halftone tables): unlit
-     dots for the whole, lit ones in the busy colour for what has arrived.
-     Progress is a state, so it never takes the page's ink. */
-  .dot-track,
-  .dot-fill {
-    height: 7px;
-    background-size: 9px 7px;
-    background-repeat: repeat-x;
-  }
-  .dot-track {
-    overflow: hidden;
-    background-image: radial-gradient(circle at 3.5px 3.5px, var(--color-line-thick) 2.6px, transparent 3px);
-  }
-  .dot-fill {
-    background-image: radial-gradient(circle at 3.5px 3.5px, var(--color-busy) 2.6px, transparent 3px);
-  }
-
-  /* The row under the pointer or keyboard focus takes a wash of the page's
-     light ink and a rule at its left edge (ADR Duoton, halftone tables). The
-     ink is chrome; the row's state keeps its own colour. */
   .want-row {
     transition: background-color var(--motion-state) var(--motion-ease);
   }
-  .want-row:hover,
-  .want-row:has(:focus-visible) {
-    background-color: color-mix(in srgb, var(--color-duo-light) 8%, transparent);
-  }
-  tr.want-row:hover > td:first-child,
-  tr.want-row:has(:focus-visible) > td:first-child,
-  div.want-row:hover,
-  div.want-row:has(:focus-visible) {
-    box-shadow: inset 2px 0 0 var(--color-duo-light);
+
+  .want-row:hover:not(.on-ink) {
+    background-color: var(--color-raised);
   }
 
   .want-toggle[data-wanted='true'] {
-    color: var(--color-duo-dark);
-    box-shadow: inset 0 0 0 1.5px var(--color-duo-light);
+    color: var(--color-ground);
+    box-shadow: inset 0 0 0 1px var(--color-ink);
   }
 
   .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) {
     color: var(--color-fail);
-    box-shadow: inset 0 0 0 1.5px currentColor;
+    box-shadow: inset 0 0 0 1px currentColor;
   }
 
-  /* The ink. It drains on the arriving step and rises a little slower,
-     because filling is the moment the press is about. */
-  /* Inside the ring rather than over it, so the ring stays drawn when the
-     ink turns to the remove tint. */
   .want-ink {
     position: absolute;
     inset: 1px;
-    border-radius: inherit;
-    background-color: var(--color-duo-light);
+    background-color: var(--color-ink);
     clip-path: inset(100% 0 0 0);
     pointer-events: none;
     transition:
@@ -1205,7 +884,7 @@ a {
   }
 
   .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) .want-ink {
-    background-color: color-mix(in srgb, var(--color-fail) 22%, var(--color-surface-regular));
+    background-color: var(--color-raised);
   }
 
   .want-toggle svg {
@@ -1232,8 +911,6 @@ a {
     opacity: 1;
   }
 
-  /* The tick prints once the ink is most of the way up, a surface step after
-     the press, so it reads as printed onto the ink. */
   .want-toggle .want-tick {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
@@ -1253,41 +930,52 @@ a {
     opacity: 0;
   }
 
-  /* The server said no, and the toggle has gone back to what it was. A short
-     shake says the press was heard and refused. */
+  /* The server said no, and the toggle has gone back to what it was. */
   .refuse {
     animation: schall-refuse calc(var(--motion-enter) * 1.5) var(--motion-ease);
   }
 
-  /* ── Placeholders ────────────────────────────────────────────────────────
-     A box standing where content will be, drawn by Skeleton.svelte. It is
-     tinted with the page's dark ink, so a loading page is already the colour
-     of the cover it is loading, and one sheen of the light ink crosses it.
-
-     The sheen is fixed to the viewport, so every box on the page shows the
-     same sweep at the same moment: one band of light crossing the page, where
-     forty boxes each running their own sweep would read as forty clocks. It
-     moves the background and nothing else, which is paint. */
+  /* A box standing where content will be: a flat raised block that breathes.
+     It is opacity alone, so it is kept for a reader who asked for less
+     motion. */
   .skeleton {
     display: block;
-    border-radius: var(--radius-row);
-    background-color: color-mix(in srgb, var(--color-duo-dark) 30%, var(--color-surface-regular));
-    background-image: linear-gradient(
-      100deg,
-      transparent 30%,
-      color-mix(in srgb, var(--color-duo-light) 10%, transparent) 50%,
-      transparent 70%
-    );
-    background-attachment: fixed;
-    background-repeat: no-repeat;
-    background-size: 200vw 100%;
-    animation: schall-sheen calc(var(--motion-ambient) * 1.6) var(--motion-ease-loop) infinite;
+    background-color: var(--color-raised);
+    animation: schall-breathe calc(var(--motion-ambient) * 2) var(--motion-ease) infinite;
   }
 }
 
-/* An overlay arriving. Opacity alone: a scrim that slid would show the page at
-   its edge, and a menu that scaled would be read as a different size for the
-   first frames of its life. */
+/* ── Page changes (ADR 0042) ─────────────────────────────────────────────────
+   `pageTransitions` in $lib/motion.svelte runs a view transition on every
+   navigation. The two strips hold still; the page under them fades out and the
+   new one rises 6px into place. */
+html[data-transition] #main {
+  view-transition-name: page;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(top-strip),
+::view-transition-old(key-strip) {
+  display: none;
+}
+
+::view-transition-new(top-strip),
+::view-transition-new(key-strip) {
+  animation: none;
+}
+
+::view-transition-old(page) {
+  animation: schall-fade-out var(--motion-surface) var(--motion-ease) both;
+}
+
+::view-transition-new(page) {
+  animation: schall-rise-page var(--motion-surface) var(--motion-ease-arrive) both;
+}
+
 @keyframes schall-fade {
   from {
     opacity: 0;
@@ -1297,15 +985,64 @@ a {
   }
 }
 
-/* A sheen crossing the page from left to right. The background is twice the
-   viewport wide, so it starts with its bright band off the left edge and ends
-   with it off the right. */
-@keyframes schall-sheen {
+@keyframes schall-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes schall-drop {
   from {
-    background-position: 100vw 0;
+    opacity: 0;
+    transform: translateY(-4px);
   }
   to {
-    background-position: -100vw 0;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes schall-rise-page {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes schall-echo {
+  from,
+  to {
+    background-color: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-ground);
+  }
+}
+
+@keyframes schall-press-echo {
+  50% {
+    transform: scale(0.97);
+  }
+}
+
+@keyframes schall-strike {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes schall-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -1363,80 +1100,57 @@ a {
   }
 }
 
-/* One name at a time, with a beat of empty between them: 900ms sweep in, left to
-   right — 1600ms held — 300ms out, straight opacity and no sweep — 400ms of
-   empty box. 3200ms per name, 48s for the fifteen the card names, which is what
-   the percentages are against: 900ms = 1.875%, 2500ms = 5.208%, 2800ms =
-   5.833%. --ph-cycle carries the total and --ph-index the name's place in it. */
+/* One name at a time, with a beat of empty between them: 900ms in, 1600ms
+   held, 300ms out, 400ms of empty box. The percentages are against the 48s
+   that fifteen names take; --ph-cycle carries the total. */
 @keyframes schall-ph {
   0% {
     opacity: 0;
-    mask-position: 100% 0;
-    -webkit-mask-position: 100% 0;
   }
   1.875% {
     opacity: 1;
-    mask-position: 50% 0;
-    -webkit-mask-position: 50% 0;
   }
   5.208% {
     opacity: 1;
-    mask-position: 50% 0;
-    -webkit-mask-position: 50% 0;
   }
   5.833% {
     opacity: 0;
-    mask-position: 50% 0;
-    -webkit-mask-position: 50% 0;
-  }
-  5.834% {
-    opacity: 0;
-    mask-position: 100% 0;
-    -webkit-mask-position: 100% 0;
   }
   100% {
     opacity: 0;
-    mask-position: 100% 0;
-    -webkit-mask-position: 100% 0;
   }
 }
 
-/* A reader who has asked their system for less motion is asking for less of
-   everything below, and the list has to be kept complete by hand: every motion
-   this file names appears here, and a new one is not finished until it does.
-
-   Everything that travels, arrives or pops is off.
-
-   Three things are kept, and each of them is kept for a reason that is not
-   taste. The state step: a hover that eases into its colour over 150ms moves
-   nothing across the screen and is what makes a control feel answered rather
-   than switched, and taking it away would make the interface feel broken rather
-   than calm. The spinner, for the same reason a progress bar is kept: it is not
-   decoration, it is the only thing saying the work has not stopped. And the
-   skeleton's pulse, which is the spinner's argument again — sixteen screens say
-   "still loading" with a breathing grey box and nothing else, and a box that
-   stops breathing is a box that has finished. It repeats, which the rest of
-   this block switches off, and it is allowed to because nothing about it moves:
-   it is opacity alone, over two seconds, and a reader who has asked for less
-   motion has not asked for a page that lies about what it is doing.
-
-   The mast itself has nothing to switch off here: it is a fixed rail that
-   does not travel once drawn, which is what the drawer it replaced used to
-   have to answer for in this block. */
+/* A reader who has asked for less motion gets every change on the cut. The
+   spinner and the skeleton's breathing stay: they are the only things saying
+   work has not stopped. */
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .turn,
   .tick,
   .scrim,
   .overlay-panel,
+  .fill-in,
+  .keycap[data-echo],
+  [data-echo-press],
   details[open] > .reveal,
   .refuse {
     animation: none;
   }
 
-  /* The want toggle changes state on the cut: colours still ease on the state
-     step, the plus and the tick swap without turning or drawing, and the ink
-     is there or gone without rising. */
+  .struck::after {
+    animation: none;
+  }
+
+  .glider {
+    transition: none;
+  }
+
+  ::view-transition-old(page),
+  ::view-transition-new(page) {
+    animation: none;
+  }
+
   .want-toggle .want-plus,
   .want-toggle .want-tick,
   .want-ink,
@@ -1444,33 +1158,17 @@ a {
     transition: opacity var(--motion-state) var(--motion-ease);
   }
 
-  /* The sheen travels, so it stops. The box keeps breathing on the pulse, for
-     the reason the spinner keeps turning: it is the only thing saying the page
-     is still loading. */
-  .skeleton {
-    background-image: none;
-    animation: schall-breathe calc(var(--motion-ambient) * 2) var(--motion-ease) infinite;
-  }
-
-  /* The picture still has to appear, so this is switched off rather than turned
-     into `opacity: 0`. A reduced-motion reader gets the cut the fade replaced,
-     which is the state change without the time. */
   .cover-arrive {
     opacity: 1;
     transition: none;
   }
 
-  /* The press stays a press and stops being a movement. */
   .press:active:not(:disabled) {
     transform: none;
   }
 
-  /* One name, held. No cycling and no sweep — the same treatment the spinner
-     takes. */
   .ph span {
     animation: none;
-    mask-image: none;
-    -webkit-mask-image: none;
   }
 
   .ph span:first-child {
@@ -1478,70 +1176,8 @@ a {
   }
 }
 
-/* A word that is longer than the box it is in.
-
-   Nothing in a music collection is written to fit. A file arrives named
-   `01-artist-album-track-remastered-deluxe-edition-2023-24bit-96khz.flac`, which
-   is one word to a browser because it holds no spaces, and a browser will not
-   break a word unless it is told it may. So the word ran off the side of the
-   page, and the page grew sideways to hold it — measured at 582px past the edge
-   of a 390px screen, on every screen that prints a name.
-
-   The value is `anywhere` and not `break-word`, which was tried first and did
-   nothing. The two break a word identically. They differ in what they tell the
-   layout the smallest the box can be: `break-word` says the box must still be
-   wide enough for the longest word, and almost every name here sits in a flex
-   row, where a box that says that simply grows and the word never reaches an
-   edge to break at. `anywhere` says the box may be as narrow as one character,
-   so the row stays inside the screen and the word wraps.
-
-   Either way a word that fits is never touched, and prose is unaffected. It is
-   set on the whole document because there is no screen here where the opposite
-   is wanted. Text that must stay on one line says so itself with `truncate`,
-   which wins because it forbids wrapping at all. */
-body {
-  overflow-wrap: anywhere;
-}
-
-/* A column heading is one or two short words, and the table can always make
-   room for them. Broken anywhere, a narrow column printed "LENGT" over "H". */
-th {
-  overflow-wrap: normal;
-}
-
-/* A page title is set at poster size and is a name, so it wraps between words
-   and breaks a word only when that word alone is wider than the page. Broken
-   anywhere, "Schall Weekly" printed "Weekl" over "y" in half a screen. */
-h1 {
-  overflow-wrap: break-word;
-}
-
-::selection {
-  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
-}
-
-/* Scrollbars are thin and drawn in the hairline colour on no track, so a
-   scrolling region reads as part of the surface it sits on. Chrome and Firefox
-   take the standard properties; the WebKit rules are Safari's copy of them. */
-html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-line-regular) transparent;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-line-regular);
-  border-radius: 999px;
-}
-
-/* The preview's volume slider. Styled here rather than inline because the
-   pseudo-elements a range input is built from cannot be reached by a utility
-   class, and a slider that blasts at whatever the last one was set to is the
-   thing the preview exists to avoid. */
+/* The preview's volume slider. The pseudo-elements a range input is built
+   from cannot be reached by a utility class. */
 input[type='range'] {
   appearance: none;
   height: 14px;
@@ -1549,95 +1185,59 @@ input[type='range'] {
 }
 
 input[type='range']::-webkit-slider-runnable-track {
-  height: 3px;
-  border-radius: var(--radius-tight);
-  background: var(--color-line-regular);
+  height: 2px;
+  background: var(--color-rule-strong);
 }
 
 input[type='range']::-webkit-slider-thumb {
   appearance: none;
   width: 10px;
   height: 10px;
-  margin-top: -3.5px;
-  border-radius: var(--radius-control);
-  background: #d6d3d1;
+  margin-top: -4px;
+  background: var(--color-ink-2);
 }
 
 input[type='range']:hover::-webkit-slider-thumb {
-  background: #fafaf9;
+  background: var(--color-ink);
 }
 
 input[type='range']::-moz-range-track {
-  height: 3px;
-  border-radius: var(--radius-tight);
-  background: var(--color-line-regular);
+  height: 2px;
+  background: var(--color-rule-strong);
 }
 
 input[type='range']::-moz-range-thumb {
   width: 10px;
   height: 10px;
   border: 0;
-  border-radius: var(--radius-control);
-  background: #d6d3d1;
+  border-radius: 0;
+  background: var(--color-ink-2);
 }
 
-/* The floor a finger meets.
-
-   Every control above is drawn for a mouse, which is accurate to the pixel. A
-   fingertip is not: it covers about 44px, it hides the thing it is pressing, and
-   it arrives at an angle. The controls that need help are the ones whose height
-   comes from the text inside them — a search field is 34px because that is what
-   a 13px line and its padding come to, and a checkbox target is 24px because
-   that is the minimum useful area.
-
-   These are raised rather than given an invisible box, because unlike a sort
-   header they are not sitting in a line of text that would be pushed apart: each
-   is the only thing on its row, and a row on a phone has the room. The visual
-   mark inside a checkbox stays 15px; its target is 24px on every pointer.
-
-   Keyed to the pointer and not to the width of the window, for the same reason
-   `.tap` is: what needs a bigger target is a finger, and a finger is what
-   `pointer: coarse` names. */
+/* The floor a finger meets. Keyed to the pointer rather than the window
+   width, because a finger is what needs the bigger target. */
 @media (pointer: coarse) {
   .field {
     height: auto;
     min-height: 2.75rem;
   }
 
-  /* Sixteen pixels, and not because it is easier to read.
-
-     Safari on iOS zooms the whole page in when a person taps a text box whose
-     text is smaller than 16px, to bring it up to a size it thinks is readable.
-     It does not zoom back out. The page is then wider than the screen, the
-     layout that was just checked at 390px is off the side, and this happens on
-     the search box at the top of the library — the first thing anybody types
-     into. The only way to stop it is to give the box 16px text. */
+  /* Safari on iOS zooms the page into any text box under 16px and does not
+     zoom back out. */
   .field,
   input:not([type='range']):not([type='checkbox']),
   textarea {
     font-size: 1rem;
   }
 
-  /* A destination in the navigation. Six of them sit one under another in the
-     drawer, which is exactly the case where a press landing one row off takes
-     somebody to the wrong screen. */
-  .nav-item {
-    min-height: 2.75rem;
-  }
-
-  /* The label a checkbox is written inside. Its 24px target sits in the 44px
-     row, and the label still gives the whole setting a comfortable press area. */
   label:has(> .check) {
     min-height: 2.75rem;
   }
 
-  /* Dragged rather than pressed, which is harder still: a thumb that has to be
-     caught before it can be moved. It is drawn larger here rather than given a
-     hit area, because the area a drag begins in is the thumb itself. */
   input[type='range']::-webkit-slider-thumb {
     width: 18px;
     height: 18px;
-    margin-top: -7.5px;
+    margin-top: -8px;
   }
 
   input[type='range']::-moz-range-thumb {

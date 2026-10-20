@@ -1,8 +1,10 @@
 <script lang="ts">
   import { QueryClientProvider } from '@tanstack/svelte-query';
   import { onMount } from 'svelte';
+  import { onNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { connectEvents } from '$lib/events';
+  import { pageTransitions } from '$lib/motion.svelte';
   import { trackNavigation } from '$lib/navigation.svelte';
   import { queriesRestored, queryClient } from '$lib/query-client';
   import AppShell from '$lib/components/AppShell.svelte';
@@ -26,6 +28,9 @@
   // arrived would otherwise start listening after the navigation it needed to
   // hear about.
   trackNavigation();
+
+  // Each page change fades the page and holds the two strips still (ADR 0042).
+  pageTransitions(onNavigate);
 </script>
 
 <QueryClientProvider client={queryClient}>

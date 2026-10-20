@@ -12,12 +12,11 @@
   import { page } from '$app/state';
   import { api, type PlayerPairing, type PlaylistEntry, type UnpairedFile } from '$lib/api';
   import AddToMusicBrainz from '$lib/components/AddToMusicBrainz.svelte';
-  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
-  import Hero from '$lib/components/Hero.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -27,7 +26,6 @@
   import UseAddress from '$lib/components/UseAddress.svelte';
   import { entryState, ownedOf, playlistOrigin, reviewHref, type EntryRole } from '$lib/playlists';
   import { calendarDate } from '$lib/utils';
-  import { coverSrc, usePagePrint } from '$lib/duoton';
   import { lineSeparators } from '$lib/separators';
   import { nearEnd } from '$lib/grow';
   import { tick } from 'svelte';
@@ -191,34 +189,11 @@
   // weekly list drops entries and keeps the others' positions, which numbered
   // it 2, 3, 4, 8. The unpaired list uses the same numbers so the two agree.
   const rowNumber = $derived(new Map(entries.map((entry, index) => [entry.id, index + 1])));
-
-  // The releases the list leads to, in list order, once each. The print lays
-  // up to five side by side; a list that leads to one prints it large.
-  const releaseIds = $derived([
-    ...new Set(entries.map((entry) => entry.releaseId).filter((id): id is string => !!id))
-  ]);
-  usePagePrint(() => {
-    if (!playlist) return undefined;
-    const covers = releaseIds.length
-      ? releaseIds.slice(0, 5)
-      : [
-          {
-            src: playlist.coverReleaseId ? coverSrc(playlist.coverReleaseId) : null,
-            seed: playlist.id
-          }
-        ];
-    return {
-      covers,
-      mode: covers.length > 1 ? 'strip' : 'single',
-      height: 20,
-      inks: playlist.inks
-    };
-  });
 </script>
 
 <svelte:head><title>{playlist?.name ?? 'Playlist'} · Schall</title></svelte:head>
 
-<!-- One set of actions for the hero and for the frame drawn while the list
+<!-- One set of actions for the header and for the frame drawn while the list
      loads, where they wait disabled. Send to player is the one primary. -->
 {#snippet playlistActions()}
   <Button
@@ -266,18 +241,13 @@
 {/snippet}
 
 {#if playlist}
-  <!-- The list over the covers of the releases it leads to, printed in the
-       inks of its first one (ADR Duoton). -->
-  <Hero
+  <PageHeader
     title={playlist.name}
-    size={playlist.name.length > 24 ? 'm' : 'l'}
+    path={[{ label: 'Playlists', href: '/playlists' }]}
     actions={playlistActions}
   >
-    {#snippet back()}
-      <BackLink fallback="/playlists" label="Playlists" />
-    {/snippet}
     {#snippet sub()}
-      <!-- One child, so the hero puts no dot of its own between the parts.
+      <!-- One child, so the header puts no gap of its own between the parts.
            Each part carries its dot in front, in a box as wide as the gap.
            A part that starts a line hides its dot (lib/separators.ts), and
            the row is pulled left by the dot's width and clipped, so the
@@ -302,7 +272,7 @@
           {:else if pairingData}
             <button
               type="button"
-              class="text-meta text-accent underline-offset-2 hover:underline"
+              class="text-meta text-ink underline-offset-2 hover:underline"
               onclick={() => (pairingPanelOpen = !pairingPanelOpen)}
             >
               player: {pairingData.pairedCount} paired, {unpaired.length} not
@@ -313,22 +283,21 @@
       </span>
       </span>
     {/snippet}
-  </Hero>
+  </PageHeader>
 {:else}
-  <!-- The frame the hero will fill, so the list under it does not move. -->
-  <section
-    class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
-    style="min-height: calc(var(--print-height) - var(--topbar-height));"
-  >
-    <div class="mb-auto pt-4 pb-1"><BackLink fallback="/playlists" label="Playlists" /></div>
-    {#if $detail.isError}
-      <!-- A read that failed is not still loading: the title stops pulsing and
-           the note under it says what happened. -->
-      <h1 class="text-poster-m font-extrabold text-ink">Playlist</h1>
-    {:else}
+  <!-- The frame the header will fill, so the list under it does not move. -->
+  {#if $detail.isError}
+    <!-- A read that failed is not still loading: the title stops pulsing and
+         the note under it says what happened. -->
+    <PageHeader title="Playlist" path={[{ label: 'Playlists', href: '/playlists' }]} />
+  {:else}
+    <section class="flex flex-col gap-1 px-5 pt-3.5">
+      <nav aria-label="Path" class="mono flex h-4 items-center gap-1.5 text-micro text-ink-4">
+        <a href="/playlists" class="transition hover:text-ink hover:underline">Playlists</a>
+      </nav>
       <h1
         aria-label="Loading playlist"
-        class="skeleton inline-block w-fit min-w-48 text-poster-m font-extrabold text-transparent"
+        class="skeleton inline-block w-fit min-w-48 text-title font-semibold text-transparent"
       >
         Loading playlist
       </h1>
@@ -336,11 +305,11 @@
         <Skeleton class="w-48" />
         <div class="flex shrink-0 items-center gap-2">{@render playlistActions()}</div>
       </div>
-    {/if}
-  </section>
+    </section>
+  {/if}
 {/if}
 
-<div class="flex flex-col gap-3.5 px-4 sm:px-6 pb-5">
+<div class="flex flex-col gap-3.5 px-5 pb-5">
   <!-- A failed refetch keeps the rows it has: the next one usually answers,
        and a table that vanished for 20 s after one slow answer read as data
        loss. Only a list never read shows the error. -->
@@ -353,18 +322,18 @@
     <Settle pending={$detail.isPending}>
       {#snippet placeholder()}
         <section
-      class="max-h-[calc(100dvh-10rem)] overflow-hidden rounded-panel border border-line-thin"
+      class="max-h-[calc(100dvh-10rem)] overflow-hidden border border-rule"
       aria-busy="true"
       aria-label="Loading playlist entries"
     >
-      <div aria-hidden="true" class="flex h-10 flex-col justify-center gap-1.5 border-b border-line-thin px-3"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
+      <div aria-hidden="true" class="flex h-10 flex-col justify-center gap-1.5 border-b border-rule px-3"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
       {#each Array.from({ length: playlistEntrySkeletonCount }) as _}
-        <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
+        <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-rule px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
       {/each}
         </section>
       {/snippet}
     {#if pairingAsked && pairingPanelOpen}
-      <section class="rounded-panel border border-line-thin">
+      <section class="bg-panel">
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-4 py-3">
           <span class="text-body font-medium text-ink">Player pairing</span>
           {#if $pairing.isFetching}
@@ -386,12 +355,12 @@
         </div>
         {#if $pairing.isFetching}
           <div
-            class="flex max-h-[calc(100dvh-14rem)] flex-col overflow-hidden border-t border-line-thin"
+            class="flex max-h-[calc(100dvh-14rem)] flex-col overflow-hidden border-t border-rule"
             aria-busy="true"
             aria-label="Loading player pairing"
           >
             {#each Array.from({ length: 40 }) as _}
-              <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-line-thin px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
+              <div aria-hidden="true" class="flex h-14 flex-col justify-center gap-1.5 border-b border-rule px-3 last:border-b-0"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
             {/each}
           </div>
         {:else if pairingData?.configured}
@@ -408,11 +377,11 @@
             </div>
           {/if}
           {#if unpaired.length}
-            <div class="flex flex-col border-t border-line-thin">
+            <div class="flex flex-col border-t border-rule">
               {#each unpaired as file (`${file.entryId}-${file.position}`)}
                 {@const state = reason(file.reason)}
                 <div
-                  class="flex flex-col gap-1 border-b border-line-thin px-4 py-2 last:border-b-0"
+                  class="flex flex-col gap-1 border-b border-rule px-4 py-2 last:border-b-0"
                 >
                   <div class="flex items-center gap-3">
                     <span class="numeric text-meta text-ink-4">{rowNumber.get(file.entryId) ?? file.position}</span>
@@ -470,7 +439,7 @@
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-left md:min-w-[640px]">
           <thead>
-            <tr class="border-b border-line-regular text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
+            <tr class="border-b border-rule text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
               <th class="numeric px-4 py-2 font-medium">#</th>
               <th class="px-3 py-2 font-medium">Title</th>
               <th class="hidden px-3 py-2 font-medium md:table-cell">Artist</th>
@@ -495,7 +464,7 @@
                    waits for whichever of the two is last. -->
               <tr
                 id="entry-{entry.id}"
-                class="want-row scroll-mt-24 {line ? '' : 'border-b border-line-thin last:border-b-0'}"
+                class="want-row scroll-mt-24 {line ? '' : 'border-b border-rule last:border-b-0'}"
               >
                 <td class="numeric px-4 py-1.5 text-meta text-ink-4">{index + 1}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
@@ -551,14 +520,14 @@
               {#if line}
                 <!-- One line under the row: what happened, then what can be
                      done about it. "Use address" opens its form under it. -->
-                <tr class="border-b border-line-thin last:border-b-0">
+                <tr class="border-b border-rule last:border-b-0">
                   <td></td>
                   <td class="px-3 pb-2" colspan="5">
                     <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       {#if decide}
                         <a
                           href={reviewHref(entry)}
-                          class="text-meta font-medium text-ink-2 underline decoration-line-thick underline-offset-[3px] hover:text-ink"
+                          class="text-meta font-medium text-ink-2 underline decoration-rule-strong underline-offset-[3px] hover:text-ink"
                         >
                           Decide in Review
                         </a>

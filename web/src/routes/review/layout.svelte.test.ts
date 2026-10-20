@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, setup, waitFor, within } from '@testing-library/svelte';
+import { shimTheMissingBrowser } from '$lib/components/ui/test-window';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { AcquiredCopy, AcquisitionCandidate, DownloadRequest, ReviewItem } from '$lib/api';
 
@@ -222,6 +223,7 @@ function answer(url: string) {
 }
 
 beforeAll(setup);
+beforeAll(shimTheMissingBrowser);
 
 beforeEach(() => {
   piles = { wants: [], downloads: [] };
@@ -257,20 +259,20 @@ async function open(text: string) {
   await screen.findAllByText(text);
 }
 
-/** The names of the buttons in the panel's header, in order. */
+/** The names of the answer buttons at the foot of the panel, in order. */
 function headerActions() {
-  const header = screen.getByRole('heading', { level: 2 }).closest('header')!;
-  return within(header)
+  const answers = screen.getByRole('group', { name: 'Decide' });
+  return within(answers)
     .getAllByRole('button')
     .map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim());
 }
 
 describe('the three kinds Review holds', () => {
-  it('heads a downloaded question with None, Skip, Wrong song and Remove, in order', async () => {
+  it('answers a downloaded question with Skip, Wrong song, Remove and None, in order', async () => {
     piles.wants = [want('copies')];
     await open('Evensong');
 
-    expect(headerActions()).toEqual(['None of these', 'Skip', 'Wrong song', 'Remove']);
+    expect(headerActions()).toEqual(['Skip', 'Wrong song', 'Remove', 'None of these']);
   });
 
   it('puts an Accept under every copy', async () => {
@@ -303,18 +305,18 @@ describe('the three kinds Review holds', () => {
     );
   });
 
-  it('heads a version question with Use version, Skip and Remove, in order', async () => {
+  it('answers a version question with Skip, Remove and Use version, in order', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
-    expect(headerActions()).toEqual(['Use version', 'Skip', 'Remove']);
+    expect(headerActions()).toEqual(['Skip', 'Remove', 'Use version']);
   });
 
-  it('heads a folder question with Check again before Skip', async () => {
+  it('answers a folder question with Skip before Check again', async () => {
     piles.downloads = [download()];
     await open('Signal Fires');
 
-    expect(headerActions()).toEqual(['Check again', 'Skip']);
+    expect(headerActions()).toEqual(['Skip', 'Check again']);
   });
 
   it('shows what was wished in its own column beside the copies', async () => {
@@ -677,15 +679,17 @@ describe('a file named in the address bar', () => {
   });
 });
 
-describe('the print', () => {
-  it('takes the stored inks of the release the question came from', async () => {
-    const { duoton } = await import('$lib/duoton');
-    const inked = want('copies');
-    inked.target.originAlbumId = 'ffffffff-0000-4000-8000-000000000006';
-    inked.inks = { dark: '#0d1420', light: '#f2b48c' };
-    piles.wants = [inked];
+describe('the letters Review answers', () => {
+  // Y and N answered every question before the keys moved into $lib/keys, so
+  // typing either never opened search. A version question has no None button
+  // and must still claim N.
+  it('claims N on a question that has no None of these', async () => {
+    piles.wants = [want('resolution')];
     await open('Evensong');
+    const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true });
 
-    await waitFor(() => expect(duoton.inks).toEqual({ dark: '#0d1420', light: '#f2b48c' }));
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
   });
 });

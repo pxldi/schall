@@ -225,7 +225,7 @@ describe('artist pictures', () => {
     expect(pictures).toEqual(['/api/v1/artists/a1/image']);
   });
 
-  it('draws generated art for an artist with no photo and no covers', async () => {
+  it('draws the flat placeholder for an artist with no photo and no covers', async () => {
     pageState.url = new URL('http://localhost/artists');
     const card = (id: string, name: string, coverAlbumIds: string[]) => ({
       id,
@@ -274,11 +274,11 @@ describe('artist pictures', () => {
     opened();
     await screen.findByText('Sewerslvt');
 
-    const generated = Array.from(document.querySelectorAll('[data-generated]')).map((node) =>
-      node.getAttribute('data-generated')
+    const placeholders = Array.from(document.querySelectorAll('[data-placeholder]')).map((node) =>
+      node.getAttribute('data-placeholder')
     );
-    expect(generated).toContain('a2');
-    expect(generated).not.toContain('a1');
+    expect(placeholders).toContain('a2');
+    expect(placeholders).not.toContain('a1');
   });
 });
 

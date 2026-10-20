@@ -24,8 +24,7 @@
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
-  import Hero from '$lib/components/Hero.svelte';
-  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import ArtistArt from './ArtistArt.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -308,22 +307,6 @@
     sort = 'name';
   }
 
-  // The print is a strip of the listed artists' covers, one each, and the page
-  // takes its inks from the first (ADR Duoton).
-  usePagePrint(() => {
-    if (!$artists.data) return undefined;
-    return {
-      covers: shown
-        .filter((artist) => artist.coverAlbumIds?.length)
-        .slice(0, 8)
-        .map((artist) => ({
-          src: coverSrc(artist.coverAlbumIds[0]),
-          seed: artist.coverAlbumIds[0],
-          inks: artist.coverInks
-        }))
-    };
-  });
-
   const hasFilters = $derived(
     Boolean(searchInput || search || scope || tab || genre || sort !== 'name')
   );
@@ -331,7 +314,7 @@
 
 <svelte:head><title>Artists · Schall</title></svelte:head>
 
-<Hero title="Artists" section>
+<PageHeader title="Artists">
   {#snippet sub()}
     <span>
       {#if $dashboard.data}
@@ -367,7 +350,7 @@
       <Icon name="plus" size="sm" /> Follow artist
     </Button>
   {/snippet}
-</Hero>
+</PageHeader>
 
 <ControlRail>
   <Segmented
@@ -437,7 +420,7 @@
   </div>
 </ControlRail>
 
-<div class="flex flex-col gap-5 px-4 sm:px-6 py-5">
+<div class="flex flex-col gap-5 px-5 py-5">
   {#if guiding}
     {@render Setup()}
   {/if}
@@ -457,8 +440,7 @@
           {#each Array(artistSkeletonCount) as _, placeholderIndex (placeholderIndex)}
             <div class="flex flex-col gap-2" aria-hidden="true">
               <div
-                class="skeleton aspect-square rounded-card border border-line-regular"
-              ></div>
+                class="skeleton aspect-square rounded-cover"></div>
               <span class="flex flex-col gap-1">
                 <Skeleton class="h-4 w-2/3" />
                 <Skeleton class="h-4 w-full" />
@@ -535,7 +517,7 @@
   <section class="flex max-w-2xl flex-col gap-3">
     <div class="flex items-center gap-2.5">
       <span class="label">Setup · step {step} of 3</span>
-      <span class="h-px flex-1 bg-line-thin"></span>
+      <span class="h-px flex-1 bg-rule"></span>
       <span class="text-meta font-medium text-ink-4">
         nothing is written to the folders you point at
       </span>
@@ -564,7 +546,7 @@
         read tags and identifiers from local files
         {#snippet action()}
           {#if rootCount === 0}
-            <span class="rounded-row bg-idle/14 px-2 py-1 text-meta font-medium text-idle">
+            <span class=" bg-idle/14 px-2 py-1 text-meta font-medium text-idle">
               waiting on step 2
             </span>
           {:else if !scanned}
@@ -597,13 +579,12 @@
       : `${artist.name} — ${artist.ownedReleaseCount} of ${artist.releaseCount} releases owned`}
   >
     <span
-      class="relative block aspect-square overflow-hidden rounded-card transition-transform duration-200 group-hover:-translate-y-[3px]"
+      class="relative block aspect-square overflow-hidden rounded-cover"
     >
       <ArtistArt
         id={artist.id}
         hasImage={artist.hasImage}
         coverAlbumIds={artist.coverAlbumIds}
-        coverInks={artist.coverInks}
       />
 
       {#if badge}
@@ -611,13 +592,12 @@
              ground, and a tint of its role at 14% is enough to separate it from
              that. Here it sits on a photograph of the artist, which is any
              colour at all, and over a bright one the words disappeared. The
-             chip brings its own ground: opaque, blurred, and dark enough that
-             the role's colour reads on it whatever the picture beneath is
-             doing. -->
+             chip brings its own opaque ground so the role's colour reads on it
+             whatever the picture beneath is doing. -->
         <Chip
           role={badge.role}
           dot={false}
-          class="absolute left-2 top-2 bg-ground/85 backdrop-blur-sm"
+          class="absolute left-2 top-2 bg-ground"
         >
           <!-- Paired with a glyph, because no state may be readable by hue alone. -->
           {#if badge.role === 'decide'}
@@ -637,7 +617,7 @@
 
       {#if ['queued', 'running'].includes(artist.refreshStatus)}
         <span
-          class="absolute right-2 top-2 grid size-[18px] place-items-center rounded-row bg-ground/85 text-busy backdrop-blur-sm"
+          class="absolute right-2 top-2 grid size-[18px] place-items-center bg-ground text-busy"
           title="Refreshing this artist's discography"
         >
           <Icon name="busy" size="sm" class="animate-spin" />
@@ -646,7 +626,7 @@
     </span>
 
     <span class="flex min-w-0 flex-col gap-1.5">
-      <span class="truncate text-body font-bold tracking-[-0.01em] text-ink">{artist.name}</span>
+      <span class="truncate text-body font-semibold text-ink">{artist.name}</span>
       <!-- Owned is always the bar and the fraction, never a percentage alone.
            An artist with no discography fetched yet, or one on a service
            MusicBrainz has never heard of, has no fraction to state — saying

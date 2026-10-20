@@ -70,7 +70,7 @@
     width: 7px;
     height: 7px;
     border-radius: 9999px;
-    background: var(--color-line-thick);
+    background: var(--color-rule-strong);
     transition: transform var(--motion-state) var(--motion-ease);
   }
   button.strip-dot:hover {

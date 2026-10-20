@@ -12,7 +12,7 @@
   //
   // Nine call sites had written the panel out by hand and no two of them agreed:
   // `max-w-lg` beside `max-w-[512px]` for the same 512 pixels, `p-4` beside
-  // `p-5`, `border-line-thin` beside `border-line-regular`. The card's values are the
+  // `p-5`, `border-rule` beside `border-rule`. The card's values are the
   // ones here. It carries no fill (the 2026-09-07 surface review): a panel that
   // only names why a list is empty is a grouping container, not a working
   // surface.
@@ -51,7 +51,7 @@
 
 <div
   class={cn(
-    'flex max-w-[512px] flex-col gap-3 rounded-panel border border-line-regular p-5',
+    'flex max-w-[512px] flex-col gap-3 border border-rule p-5',
     className
   )}
 >
@@ -66,7 +66,7 @@
           {glyphs[role]}
         {/if}
       </StateMark>
-      <svelte:element this={`h${level}`} class="font-display text-lead font-bold text-ink">
+      <svelte:element this={`h${level}`} class=" text-lead font-bold text-ink">
         {heading}
       </svelte:element>
     </div>

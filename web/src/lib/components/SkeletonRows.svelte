@@ -33,7 +33,7 @@
   role={label ? 'status' : undefined}
 >
   {#each Array.from({ length: count }, (_, index) => index) as index (index)}
-    <div data-placeholder-row class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+    <div data-placeholder-row class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
       {#if cover}<Skeleton shape="cover" class="size-10 shrink-0" />{/if}
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
         <Skeleton class={cn('h-3.5', titles[index % titles.length])} />

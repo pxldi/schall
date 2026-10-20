@@ -3,7 +3,6 @@
   import Icon from './Icon.svelte';
   import { previousScreen } from '$lib/navigation.svelte';
   import { screenLabel } from '$lib/screen-name';
-  import { cn } from '$lib/utils';
 
   let {
     // Where to go when there is nothing to go back to — a link somebody was
@@ -49,15 +48,14 @@
   }
 </script>
 
-<!-- A pill like the hero's other controls, on a frosted ground so it reads over
-     any print. -->
+<!-- A plain ghost link: a word and an arrow, with no ground of its own. -->
 <Button
   {href}
   onclick={back}
-  variant="outline"
+  variant="ghost"
   size="sm"
   aria-label={`Back to ${name}`}
-  class={cn('bg-ground/40 backdrop-blur-[8px]', className)}
+  class={className}
 >
   <Icon name="arrow-left" size="sm" />
   <span class="max-w-[16rem] truncate">{name}</span>

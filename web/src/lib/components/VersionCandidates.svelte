@@ -1,44 +1,58 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
+  import Keycap from './Keycap.svelte';
   import type { AcquisitionCandidate } from '$lib/api';
+  import { glide } from '$lib/motion.svelte';
   import { clock } from '$lib/review';
+  import { STATE_GLYPH } from '$lib/states';
 
-  // Which MusicBrainz recording a playlist entry means. One row-card per
-  // candidate, read down the same columns every row answers: the recording,
-  // its release, how long it runs, and which fields fit the entry — the
-  // grader's own agrees/differs, read back rather than scored. The
-  // identifiers nobody compares by eye (ISRC, the MusicBrainz IDs) sit behind
-  // a disclosure under the row instead of taking a column of their own.
+  // Which MusicBrainz recording a playlist entry means. One row per
+  // candidate, read down the same columns: the key that picks it, the
+  // recording, its release, how long it runs against the entry, and which
+  // fields fit the entry, which is the grader's own agrees and differs read
+  // back, never scored. The identifiers nobody compares by eye sit behind a
+  // disclosure under each row.
 
   let {
     candidates,
     chosen,
-    onchoose
+    onchoose,
+    entryDurationMs = null,
+    identifiers = false
   }: {
     candidates: AcquisitionCandidate[];
     /** -1 when nothing is selected, which is what two candidates saying the
-     * same thing leaves behind — nothing here may guess between them. */
+     * same thing leaves behind. Nothing here may guess between them. */
     chosen: number;
     onchoose: (index: number) => void;
+    /** How long the entry runs, so each length can print its difference. */
+    entryDurationMs?: number | null;
+    /** Opens every row's identifiers (the I key). */
+    identifiers?: boolean;
   } = $props();
 
-  const COLUMNS =
-    'grid-cols-[1.75rem_1.5rem_minmax(0,2fr)_minmax(0,1.6fr)_4.5rem_minmax(0,1.6fr)]';
+  const COLUMNS = 'grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_6.5rem_minmax(0,2fr)]';
 
-  /** A verdict entry ("duration (3 seconds out)") as a short chip label
-   * ("duration"). The measurement in brackets is the grader's, not a fact for
-   * this chip to restate. */
-  function chipLabel(entry: string) {
+  /** A verdict entry ("duration (3 seconds out)") as a short word
+   * ("duration"). The measurement is printed in the length column. */
+  function word(entry: string) {
     const opened = entry.indexOf(' (');
     return opened < 0 ? entry : entry.slice(0, opened);
   }
+
+  /** The difference from the entry's length, signed, in whole seconds. */
+  function difference(durationMs: number | null | undefined) {
+    if (!durationMs || !entryDurationMs) return '';
+    const seconds = Math.round((durationMs - entryDurationMs) / 1000);
+    if (seconds === 0) return '±0s';
+    return `${seconds > 0 ? '+' : '−'}${Math.abs(seconds)}s`;
+  }
+
+  const lengthDiffers = (candidate: AcquisitionCandidate) =>
+    candidate.differs.some((entry) => /^(duration|length)/.test(entry));
 </script>
 
-<!-- The 40rem floor keeps the columns readable on a phone, where the strip
-     scrolls. From 640px up the review pane is narrower than 40rem at the 133%
-     root, half a screen included, and the floor pushed each card's right edge
-     out of sight. -->
 {#if candidates.length === 0}
   <!-- A header row of columns with nothing under it read as a list that failed
        to draw. -->
@@ -46,84 +60,81 @@
     <p class="text-body text-ink-2">MusicBrainz has no match for this song.</p>
   </EmptyPanel>
 {:else}
-<div class="overflow-x-auto">
-  <div class="flex min-w-[40rem] flex-col gap-2 sm:min-w-0" role="radiogroup" aria-label="Versions this could be">
-    <div class={`grid ${COLUMNS} gap-x-4 px-[18px] text-dense-micro uppercase text-ink-3`}>
-      <span></span>
-      <span></span>
-      <span>Recording</span>
-      <span>Release</span>
-      <span>Length</span>
-      <span>Matches</span>
-    </div>
-
-    {#each candidates as candidate, index (candidate.recordingId)}
-      {@const selected = index === chosen}
-      <div
-        class={`rounded-card border ${selected ? 'border-accent bg-surface-regular' : 'border-line-thin'}`}
-      >
-        <div
-          role="radio"
-          aria-checked={selected}
-          tabindex="0"
-          data-candidate={index}
-          onclick={() => onchoose(index)}
-          onkeydown={(event) => {
-            if (event.key === ' ') {
-              event.preventDefault();
-              onchoose(index);
-            }
-          }}
-          class={`grid ${COLUMNS} cursor-pointer items-center gap-x-4 px-[18px] py-3.5`}
-        >
-          <span
-            aria-hidden="true"
-            class={`flex size-5 items-center justify-center rounded-full border-2 ${
-              selected ? 'border-accent' : 'border-line-thick'
-            }`}
-          >
-            {#if selected}<span class="size-2.5 rounded-full bg-accent"></span>{/if}
-          </span>
-          <span class="numeric text-meta">{index + 1}</span>
-          <span class="min-w-0">
-            <span class="block truncate text-quiet-meta font-medium text-ink">{candidate.trackTitle}</span>
-            <span class="block truncate text-meta text-ink-3">{candidate.artistName}</span>
-          </span>
-          <span class="min-w-0">
-            <span class="block truncate text-quiet-meta text-ink-2">{candidate.releaseTitle || '—'}</span>
-          </span>
-          <span class="numeric text-quiet-meta">{candidate.durationMs ? clock(candidate.durationMs / 1000) : '—'}</span>
-          <span class="flex min-w-0 flex-wrap gap-1.5">
-            {#each candidate.agrees as entry (entry)}
-              <span class="flex items-center gap-1 whitespace-nowrap rounded-full border border-line-thin px-2 py-0.5 text-meta text-ink-2">
-                <Icon name="check" size={10} class="text-ok" />
-                {chipLabel(entry)}
-              </span>
-            {/each}
-            {#each candidate.differs as entry (entry)}
-              <span class="flex items-center gap-1 whitespace-nowrap rounded-full border border-fail-border px-2 py-0.5 text-meta text-ink-2">
-                <Icon name="close" size={10} class="text-fail" />
-                {chipLabel(entry)}
-              </span>
-            {/each}
-          </span>
-        </div>
-
-        <details class="border-t border-line-thin px-4 py-2">
-          <summary class="cursor-pointer text-meta text-ink-3">Identifiers</summary>
-          <dl class="mt-1.5 grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-1 text-meta text-ink-2">
-            <dt>Recording ID</dt>
-            <dd class="numeric truncate">{candidate.recordingId}</dd>
-            {#if candidate.releaseGroupId}
-              <dt>Release group ID</dt>
-              <dd class="numeric truncate">{candidate.releaseGroupId}</dd>
-            {/if}
-            <dt>ISRC</dt>
-            <dd class="numeric truncate">{candidate.isrc || '—'}</dd>
-          </dl>
-        </details>
+  <div class="overflow-x-auto">
+    <div class="min-w-[40rem] sm:min-w-0" role="radiogroup" aria-label="Versions this could be">
+      <div class={`grid ${COLUMNS} h-7 items-center gap-x-4 border-b border-rule-strong px-2.5`}>
+        <span class="label">Key</span>
+        <span class="label">Recording</span>
+        <span class="label">Release</span>
+        <span class="label text-right">Length</span>
+        <span class="label">Agrees</span>
       </div>
-    {/each}
+
+      <div class="relative" use:glide={{ key: chosen }}>
+        {#each candidates as candidate, index (candidate.recordingId)}
+          {@const selected = index === chosen}
+          <div class="rise border-b border-rule" style="animation-delay: calc({Math.min(index, 2)} * var(--motion-stagger))">
+            <div
+              role="radio"
+              aria-checked={selected}
+              tabindex="0"
+              data-candidate={index}
+              data-cursor={selected}
+              onclick={() => onchoose(index)}
+              onkeydown={(event) => {
+                if (event.key === ' ') {
+                  event.preventDefault();
+                  onchoose(index);
+                }
+              }}
+              class={`row grid ${COLUMNS} min-h-9 cursor-pointer items-center gap-x-4 border-b-0 px-2.5 ${selected ? 'on-ink' : ''}`}
+            >
+              <Keycap key={String(index + 1)} class="w-fit" />
+              <span class="min-w-0 truncate text-body">
+                <span class="text-ink">{candidate.trackTitle}</span>
+                <span class="mono ml-1.5 text-meta text-ink-3">{candidate.artistName}</span>
+              </span>
+              <span class="min-w-0 truncate text-body text-ink-2">{candidate.releaseTitle || '—'}</span>
+              <span class="mono flex items-center justify-end gap-1.5 text-meta text-ink-2">
+                {candidate.durationMs ? clock(candidate.durationMs / 1000) : '—'}
+                {#if difference(candidate.durationMs)}
+                  <span class={lengthDiffers(candidate) ? 'text-fail' : 'text-ink-4'}>
+                    {difference(candidate.durationMs)}
+                  </span>
+                {/if}
+              </span>
+              <span class="mono flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-micro uppercase">
+                {#each candidate.agrees as entry (entry)}
+                  <span class="flex items-center gap-1 whitespace-nowrap text-ink-2">
+                    <Icon name={STATE_GLYPH.ok} size={12} class="text-ok" aria-label="agrees" />
+                    {word(entry)}
+                  </span>
+                {/each}
+                {#each candidate.differs as entry (entry)}
+                  <span class="flex items-center gap-1 whitespace-nowrap text-fail" title={entry}>
+                    <Icon name={STATE_GLYPH.fail} size={12} aria-label="differs" />
+                    {word(entry)}
+                  </span>
+                {/each}
+              </span>
+            </div>
+
+            <details class="relative px-2.5 pb-2 pl-[3.25rem]" open={identifiers || undefined}>
+              <summary class="w-fit cursor-pointer text-meta text-ink-4 transition hover:text-ink">Identifiers</summary>
+              <dl class="reveal mt-1.5 grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-1 text-meta text-ink-2">
+                <dt>Recording ID</dt>
+                <dd class="mono truncate">{candidate.recordingId}</dd>
+                {#if candidate.releaseGroupId}
+                  <dt>Release group ID</dt>
+                  <dd class="mono truncate">{candidate.releaseGroupId}</dd>
+                {/if}
+                <dt>ISRC</dt>
+                <dd class="mono truncate">{candidate.isrc || '—'}</dd>
+              </dl>
+            </details>
+          </div>
+        {/each}
+      </div>
+    </div>
   </div>
-</div>
 {/if}

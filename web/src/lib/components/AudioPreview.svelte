@@ -134,10 +134,10 @@
 ></audio>
 
 <div class="flex flex-col gap-1.5">
-  <div class="flex items-center gap-2.5 rounded-control bg-surface-thick px-2 py-1.5">
+  <div class="flex items-center gap-2.5 bg-raised px-2 py-1.5">
     <button
       type="button"
-      class="flex size-7 shrink-0 items-center justify-center rounded-control bg-surface-thick text-ink transition hover:bg-accent hover:text-accent-ink"
+      class="flex size-7 shrink-0 items-center justify-center bg-raised text-ink transition hover:bg-ink hover:text-ground"
       onclick={toggle}
       aria-label={started && !paused ? `Pause ${name}` : `Play ${name} from the middle`}
     >
@@ -160,9 +160,9 @@
         onclick={seek}
         onkeydown={seekByKey}
       >
-        <div class="h-1 w-full overflow-hidden rounded-full bg-surface-thick">
+        <div class="h-1 w-full overflow-hidden bg-raised">
           <div
-            class="h-full rounded-full bg-[#d6d3d1]"
+            class="h-full bg-[#d6d3d1]"
             style="width: {started && duration > 0 ? (elapsed / duration) * 100 : 0}%"
           ></div>
         </div>

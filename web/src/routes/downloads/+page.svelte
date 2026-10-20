@@ -34,9 +34,9 @@
   } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
   import Cover from '$lib/components/Cover.svelte';
-  import Hero from '$lib/components/Hero.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import { coverSrc, usePagePrint, type CoverRef } from '$lib/duoton';
+  import { coverSrc } from '$lib/cover-size';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -186,24 +186,6 @@
     return { destroy: () => observer.disconnect() };
   }
   const counts = $derived($downloads.data?.pages[0]?.counts);
-
-  // The print is the covers of the pile on screen, the transfers moving now
-  // first, so the page takes its inks from what is arriving (ADR Duoton). A
-  // request for a recording with no release has no cover to give.
-  usePagePrint(() => {
-    if (!$downloads.data) return undefined;
-    const moving = items.filter((item) => item.status === 'started');
-    const rest = items.filter((item) => item.status !== 'started');
-    const albums = new Set<string>();
-    const covers: CoverRef[] = [];
-    for (const item of [...moving, ...rest]) {
-      if (!item.albumId || albums.has(item.albumId)) continue;
-      albums.add(item.albumId);
-      covers.push({ src: coverSrc(item.albumId), seed: item.albumId, inks: item.inks });
-      if (covers.length === 6) break;
-    }
-    return { covers, height: 15 };
-  });
 
   // Release and artist, in the order the row draws them: the release named
   // plainly, the artist beside it in ink-3 only when there is a release to
@@ -590,7 +572,7 @@
   <title>{tab === 'uploads' ? 'Uploads' : tab === 'wanted' ? 'Wishlist' : 'Downloads'} · Schall</title>
 </svelte:head>
 
-<Hero title="Downloads" section />
+<PageHeader title="Downloads" />
 
 <ControlRail label="Incoming">
   <Segmented
@@ -636,7 +618,7 @@
     />
   </ControlRail>
 
-  <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
+  <div class="flex flex-col gap-4 px-5 py-5">
     {#if $downloads.isError && !$downloads.data}
       <!-- It is the list that failed, so the failure stands where the list
            would have been rather than above it. -->
@@ -654,13 +636,13 @@
            the list lands. The progress slot is part of every row too. -->
       <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
         {#each Array(10) as _, placeholderIndex (placeholderIndex)}
-          <div class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+          <div class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
             <Skeleton shape="round" class="size-4 shrink-0" />
             <Skeleton shape="cover" class="hidden size-10 shrink-0 md:block" />
             <div class="min-w-0 flex-1">
               <Skeleton class="h-5" />
               <Skeleton class="mt-1 h-4 w-2/3" />
-              <Skeleton class="mt-2 h-1.5 rounded-full" />
+              <Skeleton class="mt-2 h-1.5" />
               <Skeleton class="mt-1 h-4 w-1/3" />
             </div>
           </div>
@@ -681,7 +663,7 @@
           {@const failures = rowErrors[item.id] ?? []}
           {@const showProgress = item.status === 'started' && !waiting(item)}
           <article
-            class="border-b border-line-thin last:border-b-0 md:col-span-full md:grid md:grid-cols-subgrid md:[&>*]:col-span-full {item.status === 'cancelled'
+            class="border-b border-rule last:border-b-0 md:col-span-full md:grid md:grid-cols-subgrid md:[&>*]:col-span-full {item.status === 'cancelled'
               ? 'opacity-55'
               : ''}"
           >
@@ -690,7 +672,7 @@
                  up down the page. Fixed widths let `Start` and `Cancel` spill
                  left over the size beside them. -->
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-subgrid md:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-subgrid md:gap-y-0"
             >
               <!-- No badge for the score. It measures how good a copy is and knows
                    nothing about which release it holds, so a green number here read
@@ -706,7 +688,7 @@
                 />
               </StateMark>
 
-              <span class="hidden h-10 w-10 shrink-0 overflow-hidden rounded-row bg-surface-thin md:block" aria-hidden="true">
+              <span class="hidden h-10 w-10 shrink-0 overflow-hidden bg-panel md:block" aria-hidden="true">
                 <Cover
                   src={item.albumId ? coverSrc(item.albumId) : undefined}
                   seed={item.albumId ?? item.id}
@@ -723,7 +705,7 @@
                 {#if item.albumId}
                   <a
                     href={`/releases/${item.albumId}`}
-                    class="tap-tall block truncate text-body font-medium text-ink transition hover:text-accent-soft"
+                    class="tap-tall block truncate text-body font-medium text-ink transition hover:text-ink"
                   >
                     {rowHeading(item)}{#if rowSubject(item)}{' '}<span class="font-normal text-ink-3">· {rowSubject(item)}</span>{/if}
                   </a>
@@ -876,7 +858,7 @@
             {/if}
 
             {#if sourceQuestion && sourceQuestion.requestId === item.id}
-              <div class="mx-3 mb-2 rounded-row border border-line-thin bg-decide/14 px-3 py-2.5">
+              <div class="mx-3 mb-2 border border-rule bg-decide/14 px-3 py-2.5">
                 <p class="text-body font-semibold text-decide">The peer's folder changed</p>
                 {#if sourceQuestion.offer.missing.length}
                   <p class="mt-1.5 text-meta leading-relaxed text-ink-2">
@@ -918,7 +900,7 @@
                    answered by Schall where the message is one it knows. This is
                    what is left, and not all of it is a question — so the peer's
                    own words are what it says, and the answer is a person's. -->
-              <div class="mx-3 mb-2 rounded-row border border-line-thin bg-decide/14 px-3 py-2.5">
+              <div class="mx-3 mb-2 border border-rule bg-decide/14 px-3 py-2.5">
                 <p class="text-body text-ink-1" title={question.message}>
                   Peer {question.username} wrote: &ldquo;{clipped(question.message)}&rdquo;
                 </p>
@@ -968,13 +950,13 @@
             {#if expanded === item.id}
               <!-- The detail opens inside the row's own hairline and at its own
                    inset, so the row above it is the border. -->
-              <div class="mx-3 mb-2 flex flex-col gap-3 rounded-row bg-surface-regular px-3 py-2.5">
+              <div class="mx-3 mb-2 flex flex-col gap-3 bg-panel px-3 py-2.5">
                 <!-- Why it stopped, and what to do about it, live behind the
                      chevron. A row that has settled states its outcome in the
                      chip; six open paragraphs down a list state nothing at all,
                      because nobody reads the seventh. -->
                 {#if item.error}
-                  <div class="flex items-start gap-2 rounded-row bg-fail/14 px-2.5 py-2">
+                  <div class="flex items-start gap-2 bg-fail/14 px-2.5 py-2">
                     <StateMark role="fail">!</StateMark>
                     <ErrorNote bare error={item.error} />
                   </div>
@@ -988,7 +970,7 @@
                   {@const unsettled = (item.importEvidence?.files ?? []).filter(
                     (file) => file.problems.length
                   ).length}
-                  <div class="rounded-row bg-decide/14 px-3 py-2.5">
+                  <div class=" bg-decide/14 px-3 py-2.5">
                     {#if item.importError}
                       <ErrorNote bare error={item.importError} />
                     {/if}
@@ -1050,7 +1032,7 @@
                   <div class="flex flex-col gap-1.5">
                     <div class="flex items-center gap-2.5">
                       <span class="label">Import history</span>
-                      <span class="h-px flex-1 bg-line-thin"></span>
+                      <span class="h-px flex-1 bg-rule"></span>
                     </div>
                     <ol class="flex flex-col gap-1">
                       {#each item.importReviews as review, reviewIndex (reviewIndex)}
@@ -1099,7 +1081,7 @@
                           variant="ghost"
                           size="xs"
                           tall
-                          class="text-accent-soft hover:text-accent"
+                          class="text-ink hover:text-ink"
                           disabled={$retryDownload.isPending}
                           onclick={() => $retryDownload.mutate({ requestId: item.id, paths: [path] })}
                         >
@@ -1168,7 +1150,7 @@
   <!-- The band is the row's own, so the note is drawn bare inside it: the tint
        and the mark are already here, and a second band inside the first says
        nothing the first has not said. -->
-  <div class="mx-3 mb-2 flex items-start gap-2 rounded-row border border-line-thin bg-fail/14 px-2.5 py-2">
+  <div class="mx-3 mb-2 flex items-start gap-2 border border-rule bg-fail/14 px-2.5 py-2">
     <StateMark role="fail">!</StateMark>
     <ErrorNote bare error={failure} />
   </div>

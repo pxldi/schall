@@ -25,6 +25,14 @@ export function shimTheMissingBrowser() {
     } as unknown as typeof ResizeObserver;
   }
 
+  // Svelte asks a row leaving a list with `animate:` whether it is already
+  // animating. jsdom has no Web Animations.
+  if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
+    Element.prototype.getAnimations = function getAnimations() {
+      return [];
+    };
+  }
+
   if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = function scrollIntoView() {};
   }

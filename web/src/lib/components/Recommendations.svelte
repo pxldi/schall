@@ -465,7 +465,7 @@
         onchange={chooseSource}
         label="Recommendation source"
       />
-      <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
+      <span class="hidden h-px flex-1 bg-rule sm:block"></span>
       <span class="min-w-56 text-meta text-ink-3">
         {#if readAt}
           {own ? 'built from your listens' : 'read from ListenBrainz'} {readAt}
@@ -498,7 +498,7 @@
         </p>
       </details>
       {#if clearFeedbackOpen}
-        <div class="w-full rounded-row border border-fail/40 bg-fail/14 p-3" role="group" aria-label="Clear feedback confirmation">
+        <div class="w-full border border-rule-strong bg-panel p-3" role="group" aria-label="Clear feedback confirmation">
           <p class="text-body font-medium text-ink">Clear all {sourceName} feedback?</p>
           <p class="mt-1 text-meta leading-5 text-ink-2">
             Removes every More like this and Less like this pressed on the {sourceName} list.
@@ -585,21 +585,21 @@
     <Settle pending={$recommendations.isPending}>
       {#snippet placeholder()}
         <div
-          class="flex max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden rounded-panel border border-line-thin p-5"
+          class="flex max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden border border-rule p-5"
           aria-busy="true"
           aria-label="Loading recommendations"
         >
           <span class="text-meta text-ink-3">loading suggestions…</span>
-          <SkeletonRows count={12} class="-mx-5 -mb-5 border-t border-line-thin" />
+          <SkeletonRows count={12} class="-mx-5 -mb-5 border-t border-rule" />
         </div>
       {/snippet}
       {#if items.length > 0}
-        <section class="rounded-panel border border-line-thin">
+        <section class=" border border-rule">
           {#each items as recommendation (recommendation.recordingId)}
             <div
               use:onscreen={recommendation.recordingId}
               out:leave={{ active: leaving.has(recommendation.recordingId), after: motionMs('enter') }}
-              class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-thin px-3 py-2 last:border-b-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule px-3 py-2 last:border-b-0"
             >
               <span class="flex min-w-0 flex-1 basis-full flex-col gap-0.5 sm:basis-auto">
                 <span class="truncate text-body font-medium text-ink">{name(recommendation)}</span>

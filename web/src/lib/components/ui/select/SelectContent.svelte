@@ -42,8 +42,8 @@
     escapeKeydownBehavior="close"
     class={cn(
       'overlay-panel z-50 max-h-[18rem] min-w-[var(--bits-select-anchor-width)]',
-      'max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-panel p-1',
-      'text-dense-body text-ink outline-none',
+      'max-w-[calc(100vw-1.5rem)] overflow-hidden p-1',
+      'text-body text-ink outline-none',
       className
     )}
     {...rest}

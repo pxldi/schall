@@ -139,11 +139,11 @@ describe('FollowArtistModal, the field', () => {
 });
 
 describe('FollowArtistModal, the layer', () => {
-  // The scrim is the elevation and the border is the edge.
-  it('darkens the page rather than casting a shadow', () => {
+  // The scrim is flat and the border is the edge.
+  it('darkens the page and casts no shadow', () => {
     mount();
 
-    expect(scrim().getAttribute('data-scrim')).toBe('dark-blurred');
+    expect(scrim().getAttribute('data-scrim')).toBe('flat');
     expect(panel()!.getAttribute('data-shadow')).toBe('none');
   });
 

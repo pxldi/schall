@@ -224,17 +224,13 @@
 <svelte:window onkeydown={keydown} />
 
 {#if open}
-  <!-- The scrim is the elevation and the border is the edge: black at 55% with
-       an 8px blur leaves the page behind present as shape and unreadable as
-       text, and the panel is the frosted material the palette is made of, so
-       nothing on this layer needs a shadow. Both fade in together over the
-       surface step, the one every surface in the application opens at — no
-       slide, no scale, and nothing at all under prefers-reduced-motion, which
-       is what `motionMs` returns zero for. -->
+  <!-- The scrim is flat black at 55% and the panel carries a 1px rule, so
+       the layer needs no shadow. Both fade in over the surface step,
+       and under prefers-reduced-motion `motionMs` returns zero. -->
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
+    class="scrim z-50 flex items-center justify-center p-6"
     role="presentation"
-    data-scrim="dark-blurred"
+    data-scrim="flat"
     onmousedown={scrimPress}
     transition:fade={{ duration: motionMs('surface') }}
   >
@@ -243,7 +239,7 @@
          rather than growing past the viewport after the page scrollbar it would
          have needed has been locked away. -->
     <div
-      class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
+      class="flex max-h-full w-full max-w-md flex-col overflow-hidden overlay-panel"
       role="dialog"
       aria-modal="true"
       aria-labelledby="follow-title"
@@ -254,8 +250,8 @@
     >
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
         <!-- Pinned, so the way out stays reachable at any height. -->
-        <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
-          <h2 id="follow-title" class="font-display text-lead font-bold">
+        <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
+          <h2 id="follow-title" class=" text-lead font-bold">
             Follow artist
           </h2>
           {#if showingCandidates && candidates.length > 0}
@@ -265,7 +261,7 @@
             </span>
           {/if}
           <button
-            class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
+            class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
             type="button"
             onclick={close}
             disabled={inFlight}
@@ -335,11 +331,11 @@
                 {#each candidates as result (result.musicbrainzId)}
                   <button
                     type="button"
-                    class="flex w-full items-center gap-3 border-b border-line-thin px-3 py-2 text-left transition last:border-b-0 hover:bg-surface-thick focus:bg-surface-thick focus:outline-none"
+                    class="flex w-full items-center gap-3 border-b border-rule px-3 py-2 text-left transition last:border-b-0 hover:bg-raised focus:bg-raised focus:outline-none"
                     onclick={() => select(result)}
                   >
                     <span
-                      class="grid size-4 shrink-0 place-items-center rounded-row bg-ok/14 text-micro font-bold text-ok"
+                      class="grid size-4 shrink-0 place-items-center bg-raised text-micro font-semibold text-ink-2"
                     >
                       {result.name.slice(0, 1).toUpperCase()}
                     </span>
@@ -403,7 +399,7 @@
              a bug. Reading is never refused: the body still scrolls, text still
              selects, focus still moves. -->
         <div
-          class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3"
+          class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           <Button type="submit" disabled={!selectedArtist || inFlight}>

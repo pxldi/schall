@@ -528,7 +528,7 @@
     <span class="text-ink-4">·</span>
     <button
       type="button"
-      class="text-ink-2 underline decoration-white/24 underline-offset-2 transition hover:text-ink"
+      class="text-ink-2 underline decoration-ink-4 underline-offset-2 transition hover:text-ink"
       aria-expanded={showFolders}
       onclick={() => (showFolders = !showFolders)}
     >
@@ -574,7 +574,7 @@
     <section class="flex flex-col gap-2.5">
       <div class="flex items-center gap-2.5">
         <span class="label">Music folders</span>
-        <span class="h-px flex-1 bg-line-thin"></span>
+        <span class="h-px flex-1 bg-rule"></span>
       </div>
 
       <form class="flex flex-wrap gap-2" onsubmit={addFolder}>
@@ -598,7 +598,7 @@
       {:else if $roots.data?.items.length}
         <div class="flex flex-col">
           {#each $roots.data.items as root (root.id)}
-            <div class="flex items-center gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
+            <div class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
               <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={root.path}>
                 {root.path}
               </span>
@@ -690,15 +690,15 @@
            strip where the column names will stand, and bars the height of a
            row. The list keeps its shape when the files land. -->
       <div
-        class="max-h-[calc(100dvh-9rem)] overflow-hidden rounded-panel border border-line-thin"
+        class="max-h-[calc(100dvh-9rem)] overflow-hidden border border-rule"
         role="status"
         aria-label="Loading files"
       >
-        <div class="h-9 border-b border-line-thin"></div>
+        <div class="h-9 border-b border-rule"></div>
         <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
         {#each Array(60) as _, placeholderIndex (placeholderIndex)}
           <div
-            class="h-[3.46875rem] border-b border-line-thin px-3 py-2 last:border-b-0"
+            class="h-[3.46875rem] border-b border-rule px-3 py-2 last:border-b-0"
             aria-hidden="true"
           >
             <Skeleton class="h-full" />
@@ -718,7 +718,7 @@
            whole document the header slides away with the rows. Below the
            column names' own width the box scrolls sideways instead of
            reflowing the row — `Table.Root` scrolls by default. -->
-      <Table.Root wrapperClass="max-h-[68dvh] scroll-pt-9 rounded-panel border border-line-thin">
+      <Table.Root wrapperClass="max-h-[68dvh] scroll-pt-9 border border-rule">
         <Table.Header>
           <Table.Row class="hover:bg-transparent">
             <Table.Head class="w-10 text-center">#</Table.Head>
@@ -772,7 +772,7 @@
                   {#if !file.missingAt}
                     <button
                       type="button"
-                      class="tap col-start-1 row-start-1 grid size-7 place-items-center rounded-control text-ink-2 opacity-100 transition md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 hover:text-ink {sounding ===
+                      class="tap col-start-1 row-start-1 grid size-7 place-items-center text-ink-2 opacity-100 transition md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 hover:text-ink {sounding ===
                       file.id
                         ? 'opacity-100'
                         : ''}"
@@ -952,7 +952,7 @@
             {#if open}
               <Table.Row class="hover:bg-transparent">
                 <Table.Cell colspan={columnCount} class="pt-0">
-                  <div class="flex flex-col gap-3 rounded-panel bg-surface-regular px-3 py-2.5">
+                  <div class="flex flex-col gap-3 bg-panel px-3 py-2.5">
                     {#if file.matchStatus === 'ambiguous'}
                       <ReviewMatch file={file} ondecided={() => (expandedFileID = '')} />
                     {:else if file.resolutionStatus === 'needs_review' || file.resolutionStatus === 'conflict'}
@@ -990,7 +990,7 @@
         {#if !scanning && empty.elsewhere}
           <button
             type="button"
-            class="w-fit text-left text-meta font-medium text-ink-2 underline decoration-white/24 underline-offset-4 transition hover:text-ink"
+            class="w-fit text-left text-meta font-medium text-ink-2 underline decoration-ink-4 underline-offset-4 transition hover:text-ink"
             onclick={() => onheldtwice?.()}
           >
             {empty.elsewhere.label}

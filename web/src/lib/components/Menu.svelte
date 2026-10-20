@@ -57,8 +57,8 @@
 
   let open = $state(false);
   // Where the keyboard caret is. A pointer resting on another item does not
-  // move it: the ring says which item Enter will take, and hover never draws
-  // one.
+  // move it: the inverted item is the one Enter will take, and hover never
+  // inverts one.
   let at = $state(0);
   let above = $state(false);
 
@@ -197,19 +197,12 @@
     if (open) hide();
   }
 
-  // The floating surface: Schall's whole glass budget, spent here because a
-  // menu is one of the surfaces that floats above the page rather than sits
-  // in it. It is the material the command palette and the one modal are made
-  // of, at the smaller radius.
-  const frosted = 'bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]';
-
-  // Rest, hover, keyboard focus, refused. Hover is a surface; focus is that
-  // same surface and the one ring, inset — so a pointer resting on one item
-  // while the caret sits on another cannot be read as two carets.
+  // Rest, hover, keyboard caret, refused. The caret item is drawn inverted, so
+  // a pointer resting on another item (raised) cannot be read as a second
+  // caret. An item is at least 36px tall and grows for its detail line.
   const itemBase =
-    'flex w-full items-start gap-2 rounded-control text-left font-medium text-ink ' +
-    'transition-[background] hover:bg-surface-thick ' +
-    'focus-visible:bg-surface-thick focus-visible:outline-offset-[-2px] ' +
+    'flex min-h-9 w-full items-center gap-2 text-left font-medium text-ink ' +
+    'transition-[background] focus-visible:outline-offset-[-2px] ' +
     'aria-disabled:pointer-events-none aria-disabled:opacity-50';
 </script>
 
@@ -225,7 +218,7 @@
       aria-expanded={open}
       onclick={toggle}
       onkeydown={onTriggerKeydown}
-      class="aria-expanded:border-line-thick aria-expanded:bg-surface-thick aria-expanded:text-ink"
+      class="aria-expanded:border-rule-strong aria-expanded:bg-raised aria-expanded:text-ink"
     >
       {label}
       <Icon name="chevron-down" size={13} class={cn('transition-transform', open && 'rotate-180')} />
@@ -246,7 +239,7 @@
       aria-expanded={open}
       onclick={toggle}
       onkeydown={onTriggerKeydown}
-      class="text-ink-4 group-hover:text-ink-2 aria-expanded:bg-surface-thick aria-expanded:text-ink"
+      class="text-ink-4 group-hover:text-ink-2 aria-expanded:bg-raised aria-expanded:text-ink"
     >
       <Icon name="more" size={14} />
     </Button>
@@ -265,8 +258,7 @@
       data-side={trigger === 'labelled' ? 'left' : 'right'}
       onkeydown={onMenuKeydown}
       class={cn(
-        'menu-in absolute z-[2] w-[17rem] max-w-full overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] p-1',
-        frosted,
+        'overlay-panel absolute z-[2] w-[17rem] max-w-full overflow-hidden p-1',
         above ? 'bottom-[calc(100%+4px)]' : 'top-[calc(100%+4px)]',
         trigger === 'labelled' ? 'left-0' : 'right-0'
       )}
@@ -280,7 +272,7 @@
           tabindex="-1"
           aria-disabled={item.disabled || undefined}
           onclick={() => void choose(item)}
-          class={cn(itemBase, 'px-2.5 py-[7px] text-body leading-[1.35]')}
+          class={cn(itemBase, 'px-2.5 py-1.5 text-body leading-[1.35]', index === at ? 'inverted' : 'hover:bg-raised')}
         >
           <span class="min-w-0">
             {item.label}
@@ -295,32 +287,3 @@
     </div>
   {/if}
 </span>
-
-<style>
-  /* The panel opens over the surface step — no scale, no bounce, and nothing
-     at all for a reader who asked for less motion. There is no way out to
-     animate: a menu that lingers after a choice is a menu the reader is still
-     being shown.
-
-     It was drawn at 120ms, which was a fourth duration the scale did not
-     have. 200ms is what the drawer, the modal and the palette all take now, so
-     every surface in the application opens at one speed. */
-  .menu-in {
-    animation: menu-in var(--motion-surface) var(--motion-ease-arrive);
-  }
-
-  @keyframes menu-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .menu-in {
-      animation: none;
-    }
-  }
-</style>

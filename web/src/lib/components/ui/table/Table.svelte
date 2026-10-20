@@ -24,7 +24,7 @@
 
 <div class={cn('relative w-full overflow-x-auto @container', wrapperClass)}>
   <table
-    class={cn('w-full border-collapse text-left text-dense-body text-ink', className)}
+    class={cn('w-full border-collapse text-left text-body text-ink', className)}
     {...rest}
   >
     {@render children?.()}

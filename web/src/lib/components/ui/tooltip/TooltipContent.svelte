@@ -35,7 +35,7 @@
     {collisionPadding}
     avoidCollisions
     class={cn(
-      'overlay-panel z-50 rounded-panel px-2 py-1',
+      'overlay-panel z-50 px-2 py-1',
       'text-meta font-medium text-ink outline-none',
       className
     )}

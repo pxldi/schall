@@ -596,16 +596,6 @@ describe('a failed poll', () => {
   });
 });
 
-describe('the print', () => {
-  it("takes the stored inks of the first row's release", async () => {
-    const { duoton } = await import('$lib/duoton');
-    answering(() => listing({ items: [request({ inks: { dark: '#0d1420', light: '#f2b48c' } })] }));
-    opened();
-
-    await waitFor(() => expect(duoton.inks).toEqual({ dark: '#0d1420', light: '#f2b48c' }));
-  });
-});
-
 // "Needs review" said 1,449 beside a Review of 230. The pile is now the one
 // Review asks about, read by Review's own rule.
 describe('the needs-review pile', () => {
