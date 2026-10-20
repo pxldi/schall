@@ -7,4 +7,4 @@
   let { class: className, ...rest }: DialogPrimitive.DescriptionProps = $props();
 </script>
 
-<DialogPrimitive.Description class={cn('text-meta text-ink-3', className)} {...rest} />
+<DialogPrimitive.Description class={cn('text-dense-meta text-ink-3', className)} {...rest} />

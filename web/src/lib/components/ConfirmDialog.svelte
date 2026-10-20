@@ -33,7 +33,10 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content showClose={false}>
+  <Dialog.Content
+    class="bg-[color-mix(in_srgb,var(--color-duo-dark)_22%,var(--color-surface-regular))] backdrop-blur-none"
+    showClose={false}
+  >
     <Dialog.Header>
       <Dialog.Title>{title}</Dialog.Title>
     </Dialog.Header>

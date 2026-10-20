@@ -8,6 +8,6 @@
 </script>
 
 <DialogPrimitive.Title
-  class={cn(' text-lead font-semibold text-ink', className)}
+  class={cn('font-display text-dense-lead font-semibold text-ink', className)}
   {...rest}
 />

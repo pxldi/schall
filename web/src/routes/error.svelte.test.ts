@@ -38,8 +38,7 @@ describe('the error page', () => {
     opened();
 
     expect(screen.getByRole('heading', { level: 1, name: '404' })).toBeTruthy();
-    expect(screen.getByText('Nothing at')).toBeTruthy();
-    expect(screen.getByText('/nowhere')).toBeTruthy();
+    expect(screen.getByText('Nothing at /nowhere')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Go to Overview' }).getAttribute('href')).toBe('/');
 
     const summoned = vi.fn();

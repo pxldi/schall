@@ -4,26 +4,26 @@ import { createRawSnippet } from 'svelte';
 import { Badge } from '$lib/components/ui/badge';
 
 // No state in Schall may be identifiable by hue alone. A badge with a role
-// carries a glyph in front of its words, and the words say the state out loud, so
+// carries a dot in front of its words, and the words say the state out loud, so
 // a reader who cannot tell the six tints apart still reads the state.
 
 afterEach(cleanup);
 
 describe('ui/Badge', () => {
-  it('marks a role with a glyph as well as a colour', () => {
+  it('marks a role with a dot as well as a tint', () => {
     const { container } = render(Badge, { role: 'fail', children: label('Failed') });
 
     expect(container.querySelector('[aria-hidden="true"]')).toBeTruthy();
     expect(screen.getByText('Failed')).toBeTruthy();
   });
 
-  it('draws no glyph where there is no role', () => {
+  it('draws no dot where there is no role, because grey is already a role', () => {
     const { container } = render(Badge, { children: label('FLAC') });
 
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('drops the glyph for a badge that draws a glyph of its own', () => {
+  it('drops the dot for a badge that draws a glyph of its own', () => {
     const { container } = render(Badge, { role: 'busy', dot: false, children: label('Searching') });
 
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();

@@ -17,7 +17,7 @@
       alt=""
       width="64"
       height="64"
-      class="size-16 flex-none object-cover"
+      class="size-16 flex-none rounded-row object-cover"
     />
   {/if}
   <div class="min-w-0">

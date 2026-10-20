@@ -24,7 +24,7 @@
 <th
   scope="col"
   class={cn(
-    'label whitespace-nowrap px-3 py-1.5 align-middle',
+    'label whitespace-nowrap px-3 py-2 align-middle',
     numeric && 'text-right',
     className
   )}

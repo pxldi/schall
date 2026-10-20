@@ -114,23 +114,23 @@
 <svelte:window onkeydown={keydown} />
 
 <div
-  class="scrim z-50 flex items-center justify-center p-6"
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
   role="presentation"
   onmousedown={scrimPress}
   transition:fade={{ duration: motionMs('surface') }}
 >
   <div
-    class="flex max-h-full w-full max-w-lg flex-col overflow-hidden overlay-panel"
+    class="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
     role="dialog"
     aria-modal="true"
     aria-labelledby="keep-one-title"
     tabindex="-1"
     bind:this={panel}
   >
-    <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-      <h2 id="keep-one-title" class=" text-lead font-bold">Keep this copy</h2>
+    <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
+      <h2 id="keep-one-title" class="font-display text-lead font-bold">Keep this copy</h2>
       <button
-        class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+        class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
         type="button"
         onclick={oncancel}
         disabled={busy}
@@ -179,7 +179,7 @@
       {/if}
     </div>
 
-    <div class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3">
+    <div class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3">
       <Button type="button" variant="ghost" onclick={oncancel} disabled={busy}>Cancel</Button>
       <Button type="button" onclick={onconfirm} disabled={busy || going.length === 0}>
         {#if busy}

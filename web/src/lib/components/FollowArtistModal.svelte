@@ -1,11 +1,11 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
   import { api, type ArtistSearchResult } from '$lib/api';
-  import { glide, motionMs } from '$lib/motion.svelte';
+  import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
   import CyclingPlaceholder from './CyclingPlaceholder.svelte';
   import ErrorNote from './ErrorNote.svelte';
@@ -105,29 +105,6 @@
   const inFlight = $derived($followArtist.isPending);
   const candidates = $derived($artistSearch.data?.items ?? []);
   const showingCandidates = $derived(debouncedArtistName.length >= 2 && !selectedArtist);
-
-  // The cursor over the candidates (ADR 0042): Up and Down in the field move one
-  // inverted row, and Enter takes it. Without a cursor Enter submits, as before.
-  let candidateAt = $state(-1);
-  $effect(() => {
-    void debouncedArtistName;
-    candidateAt = -1;
-  });
-
-  function fieldKeys(event: KeyboardEvent) {
-    if (!showingCandidates || candidates.length === 0) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const by = event.key === 'ArrowDown' ? 1 : -1;
-      candidateAt = candidateAt < 0 ? (by > 0 ? 0 : candidates.length - 1) : Math.min(Math.max(candidateAt + by, 0), candidates.length - 1);
-      void tick().then(() =>
-        panel?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-      );
-    } else if (event.key === 'Enter' && candidateAt >= 0) {
-      event.preventDefault();
-      select(candidates[candidateAt]);
-    }
-  }
 
   // Opening takes the page away and gives it back: the scroll is locked with its
   // gutter kept so nothing shifts sideways, the field takes focus because the
@@ -247,13 +224,17 @@
 <svelte:window onkeydown={keydown} />
 
 {#if open}
-  <!-- The scrim is flat black at 55% and the panel carries a 1px rule, so
-       the layer needs no shadow. Both fade in over the surface step,
-       and under prefers-reduced-motion `motionMs` returns zero. -->
+  <!-- The scrim is the elevation and the border is the edge: black at 55% with
+       an 8px blur leaves the page behind present as shape and unreadable as
+       text, and the panel is the frosted material the palette is made of, so
+       nothing on this layer needs a shadow. Both fade in together over the
+       surface step, the one every surface in the application opens at — no
+       slide, no scale, and nothing at all under prefers-reduced-motion, which
+       is what `motionMs` returns zero for. -->
   <div
-    class="scrim z-50 flex items-center justify-center p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
     role="presentation"
-    data-scrim="flat"
+    data-scrim="dark-blurred"
     onmousedown={scrimPress}
     transition:fade={{ duration: motionMs('surface') }}
   >
@@ -262,7 +243,7 @@
          rather than growing past the viewport after the page scrollbar it would
          have needed has been locked away. -->
     <div
-      class="flex max-h-full w-full max-w-md flex-col overflow-hidden overlay-panel"
+      class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="follow-title"
@@ -273,8 +254,8 @@
     >
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
         <!-- Pinned, so the way out stays reachable at any height. -->
-        <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-          <h2 id="follow-title" class="text-lead font-semibold">
+        <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
+          <h2 id="follow-title" class="font-display text-lead font-bold">
             Follow artist
           </h2>
           {#if showingCandidates && candidates.length > 0}
@@ -284,7 +265,7 @@
             </span>
           {/if}
           <button
-            class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+            class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
             type="button"
             onclick={close}
             disabled={inFlight}
@@ -306,7 +287,6 @@
               id="artist-name"
               value={artistName}
               oninput={updateName}
-              onkeydown={fieldKeys}
               maxlength="200"
               autocomplete="off"
               data-inset="component"
@@ -352,17 +332,14 @@
                      rows to keep. -->
                 <SkeletonRows count={4} label="Searching artists" />
               {:else if candidates.length}
-                <div class="relative" use:glide={{ key: candidateAt }}>
-                {#each candidates as result, index (result.musicbrainzId)}
-                  {@const here = index === candidateAt}
+                {#each candidates as result (result.musicbrainzId)}
                   <button
                     type="button"
-                    class="row flex w-full items-center gap-3 px-3 py-1.5 text-left {here ? 'on-ink' : ''}"
-                    data-cursor={here}
+                    class="flex w-full items-center gap-3 border-b border-line-thin px-3 py-2 text-left transition last:border-b-0 hover:bg-surface-thick focus:bg-surface-thick focus:outline-none"
                     onclick={() => select(result)}
                   >
                     <span
-                      class="grid size-4 shrink-0 place-items-center bg-raised text-micro font-semibold text-ink-2"
+                      class="grid size-4 shrink-0 place-items-center rounded-row bg-ok/14 text-micro font-bold text-ok"
                     >
                       {result.name.slice(0, 1).toUpperCase()}
                     </span>
@@ -378,13 +355,12 @@
                     </span>
                   </button>
                 {/each}
-              </div>
               {:else}
                 <p class="px-3 py-4 text-center text-body text-ink-3">No matching artists</p>
               {/if}
             </div>
           {:else if selectedArtist}
-            <p class="mt-2 text-meta text-ink-2">
+            <p class="mt-2 text-meta text-ok">
               Selected {selectedArtist.name}{selectedArtist.disambiguation
                 ? ` · ${selectedArtist.disambiguation}`
                 : ''}
@@ -427,10 +403,10 @@
              a bug. Reading is never refused: the body still scrolls, text still
              selects, focus still moves. -->
         <div
-          class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
+          class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3"
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!selectedArtist || inFlight}>
+          <Button type="submit" disabled={!selectedArtist || inFlight}>
             {#if inFlight}
               <Icon name="busy" size={13} class="animate-spin" /> Following
             {:else}

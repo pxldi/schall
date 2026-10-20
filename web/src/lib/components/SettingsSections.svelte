@@ -27,6 +27,7 @@
   import { checkIsStale, failedThisWeek, type SourceName } from '$lib/source-health';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
+  import Card from '$lib/components/Card.svelte';
   import FormGrid from '$lib/components/FormGrid.svelte';
   import * as Select from '$lib/components/ui/select';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -34,7 +35,6 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import SettingsSaveButton from '$lib/components/SettingsSaveButton.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import StateMark from '$lib/components/StateMark.svelte';
   import TranscodeSettings from '$lib/components/TranscodeSettings.svelte';
   import InboxCleanup from '$lib/components/InboxCleanup.svelte';
 
@@ -265,6 +265,13 @@
     if ($settings.data.connectionStatus === 'failed') return { role: 'fail', label: 'Failed' };
     return { role: 'idle', label: 'Untested' };
   });
+
+  const dots: Record<Role, string> = {
+    ok: 'bg-ok',
+    idle: 'bg-idle',
+    busy: 'bg-busy',
+    fail: 'bg-fail'
+  };
 
   // The status row's state word is coloured only for the two states worth
   // colouring: a source answering and a source refusing. Untested and
@@ -1317,8 +1324,8 @@
        bordered box here would be the second border on this section. -->
   <div class="flex max-h-[calc(100dvh-18rem)] flex-col overflow-hidden">
     {#each rows as entry, index (entry.name || `placeholder-${index}`)}
-      <div class="flex items-center gap-2.5 border-b border-rule py-2">
-        <StateMark role={entry.role} />
+      <div class="flex items-center gap-2.5 border-b border-line-thin py-2">
+        <span class="size-[5px] shrink-0 rounded-full {dots[entry.role]}"></span>
         <!-- The name never gives ground. A flex child is allowed to shrink to
              its content by default, and the reading beside it does not wrap,
              so on a phone the name was the only thing that could give: slskd
@@ -1349,16 +1356,16 @@
 {#snippet SourcesStatus()}
   <!-- No card and no heading: this is the answer to "is Schall talking to
        anything", read in one glance before the forms below it say how. -->
-  <div class="flex flex-col pb-6">
+  <div class="flex flex-col">
     {#each sourceStatusRows as entry (entry.name)}
       <!-- Below `sm` there is no room for a dot, a name column and a state
            column on one line, so the state moves in beside the name (it is
            short) and the detail — the one thing here that runs long — drops
            to a line of its own. `sm` and up are the original four cells in a
            row, unchanged. -->
-      <div class="flex flex-col gap-0.5 border-b border-rule py-2.5 @xl:flex-row @xl:items-center @xl:gap-3.5">
+      <div class="flex flex-col gap-0.5 border-b border-line-thin py-2.5 @xl:flex-row @xl:items-center @xl:gap-3.5">
         <div class="flex min-w-0 items-center gap-3.5">
-          <StateMark role={entry.role} />
+          <span aria-hidden="true" class="size-2 shrink-0 rounded-full {dots[entry.role]}"></span>
           <span class="min-w-0 flex-1 truncate text-body text-ink @xl:w-[8.125rem] @xl:flex-none">
             {entry.name}
           </span>
@@ -1401,9 +1408,9 @@
 {/snippet}
 
 {#snippet LibraryStatus()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Status</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Status</h2>
     </div>
 
     {#if $library.isError || $storage.isError || $libraryReleases.isError}
@@ -1448,15 +1455,15 @@
         </span>
       {/if}
     </div>
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet Slskd()}
   <!-- Connected or not is already said in the status rows above, so the form
        carries only what changes it: the fields, and Test and Save beside
        each other, indented under the field column. -->
-  <section class="flex flex-col gap-3 pb-9">
-    <div class="border-b border-rule pb-1.5"><h2 class="label">slskd</h2></div>
+  <section class="flex flex-col gap-1.5 pt-6">
+    <h2 class="font-display text-lead font-bold text-ink">slskd</h2>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -1570,8 +1577,8 @@
 {/snippet}
 
 {#snippet Navidrome()}
-  <section class="flex flex-col gap-3 pb-9">
-    <div class="border-b border-rule pb-1.5"><h2 class="label">Navidrome</h2></div>
+  <section class="flex flex-col gap-1.5 pt-6">
+    <h2 class="font-display text-lead font-bold text-ink">Navidrome</h2>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -1694,9 +1701,9 @@
 {/snippet}
 
 {#snippet FormatPreferences()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Formats</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Formats</h2>
       <span class="text-meta font-medium text-ink-3">
         preferred and blocked formats
       </span>
@@ -1734,13 +1741,13 @@
           <div class="flex flex-wrap items-center gap-1.5">
             {#each preferred as format, position (format)}
               <span
-                class="inline-flex items-center gap-1 border border-rule bg-panel py-1 pl-2.5 pr-1"
+                class="inline-flex items-center gap-1 rounded-full border border-line-regular bg-surface-regular py-1 pl-2.5 pr-1"
               >
                 <span class="numeric text-micro text-ink-3">{position + 1}</span>
                 <span class="text-meta font-medium uppercase text-ink">{format}</span>
                 <button
                   type="button"
-                  class="tap grid size-5 place-items-center text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
+                  class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
                   aria-label="Move {format.toUpperCase()} up"
                   disabled={!$preferences.isSuccess || position === 0}
                   onclick={() => moveFormat(position, position - 1)}
@@ -1749,7 +1756,7 @@
                 </button>
                 <button
                   type="button"
-                  class="tap grid size-5 place-items-center text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
+                  class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-ink disabled:pointer-events-none disabled:opacity-50"
                   aria-label="Move {format.toUpperCase()} down"
                   disabled={!$preferences.isSuccess || position === preferred.length - 1}
                   onclick={() => moveFormat(position, position + 1)}
@@ -1758,7 +1765,7 @@
                 </button>
                 <button
                   type="button"
-                  class="tap grid size-5 place-items-center text-ink-3 transition hover:text-fail"
+                  class="tap grid size-5 place-items-center rounded-full text-ink-3 transition hover:text-fail"
                   aria-label="Remove {format.toUpperCase()}"
                   disabled={!$preferences.isSuccess}
                   onclick={() => (preferred = preferred.filter((named) => named !== format))}
@@ -1917,13 +1924,13 @@
         {/if}
       </div>
     </FormGrid>
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet UpgradeLowQuality()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Upgrade low-quality files</h2>
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Upgrade low-quality files</h2>
     </div>
 
     {#if $upgrades.isError}
@@ -2008,13 +2015,13 @@
     {:else}
       <span class="text-meta text-ink-4">a file is replaced only once the new copy is verified</span>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet Notifications()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Notifications</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Notifications</h2>
       <Chip role={notificationConnection.role}>{notificationConnection.label}</Chip>
       <span class="ml-auto text-meta font-medium text-ink-3">
         {ago('sent', $notifications.data?.lastCheckedAt)}
@@ -2155,12 +2162,12 @@
     <span class="text-meta text-ink-4">
       sent only when a copy or an import needs your decision
     </span>
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet ListenBrainz()}
-  <section class="flex flex-col gap-3 pb-9">
-    <div class="border-b border-rule pb-1.5"><h2 class="label">ListenBrainz</h2></div>
+  <section class="flex flex-col gap-1.5 pt-6">
+    <h2 class="font-display text-lead font-bold text-ink">ListenBrainz</h2>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -2287,9 +2294,9 @@
 {/snippet}
 
 {#snippet Weekly()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Weekly playlist</h2>
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Weekly playlist</h2>
     </div>
 
     {#if $weekly.isError}
@@ -2395,13 +2402,13 @@
         starred or kept songs are never deleted
       </span>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet NewReleases()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">New releases</h2>
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">New releases</h2>
     </div>
 
     {#if $newReleases.isError}
@@ -2470,7 +2477,7 @@
         tracks you remove in your player stay out
       </span>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 <!-- The same two-way choice the retention section draws, on the mode. This one
@@ -2481,17 +2488,17 @@
   {@const chosen = weeklyMode === value}
   <button
     type="button"
-    class="group flex items-start gap-2.5 border-b border-rule py-2.5 text-left last:border-b-0"
+    class="group flex items-start gap-2.5 border-b border-line-thin py-2.5 text-left last:border-b-0"
     disabled={!$weekly.isSuccess}
     onclick={() => (weeklyMode = value)}
   >
     <span class="mt-px grid size-6 shrink-0 place-items-center">
       <span
-        class="grid size-6 place-items-center border transition {chosen
-          ? 'border-ink bg-ink'
-          : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
+        class="grid size-[15px] place-items-center rounded-tight border transition {chosen
+          ? 'border-line-live bg-ink'
+          : 'border-line-thick group-hover:border-line-live'}"
       >
-        {#if chosen}<Icon name="check" size={12} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2502,9 +2509,9 @@
 {/snippet}
 
 {#snippet Spotify()}
-  <section class="flex flex-col gap-3 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Spotify</h2>
+  <section class="flex flex-col gap-1.5 pt-6">
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Spotify</h2>
       <Chip role={spotifyConnection.role}>{spotifyConnection.label}</Chip>
       {#if $spotify.data?.accountName}
         <span class="text-meta font-medium text-ink-3">as {$spotify.data.accountName}</span>
@@ -2635,9 +2642,9 @@
 {/snippet}
 
 {#snippet Retention()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">
         Imported downloads
       </h2>
     </div>
@@ -2674,13 +2681,13 @@
         <span class="numeric break-all">{$imports.data.inboxPath}</span>
       </span>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet DuplicateResolution()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Resolve duplicates</h2>
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Resolve duplicates</h2>
     </div>
 
     {#if $duplicates.isError && !duplicatesUnavailable}
@@ -2756,15 +2763,15 @@
         </StatusBadge>
       {/if}
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet Acoustid()}
   <!-- Every other check reads what a file says about itself. This one decodes
        the audio, so it is the only one a mislabelled file cannot satisfy. -->
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">
         Verify imports by audio
       </h2>
       <label
@@ -2833,7 +2840,7 @@
         {acoustidKeySet ? 'Tick enabled to start.' : 'Save a key and tick enabled.'}
       </span>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 <!-- The 15px box carries "chosen"; the two options are told apart by a hairline
@@ -2842,7 +2849,7 @@
   {@const chosen = retention === value}
   <button
     type="button"
-    class="group flex items-start gap-2.5 border-b border-rule py-2.5 text-left last:border-b-0 {allowed
+    class="group flex items-start gap-2.5 border-b border-line-thin py-2.5 text-left last:border-b-0 {allowed
       ? ''
       : 'opacity-50'}"
     disabled={!allowed || !$imports.isSuccess || $saveRetention.isPending}
@@ -2850,11 +2857,11 @@
   >
     <span class="mt-px grid size-6 shrink-0 place-items-center">
       <span
-        class="grid size-6 place-items-center border transition {chosen
-          ? 'border-ink bg-ink'
-          : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
+        class="grid size-[15px] place-items-center rounded-tight border transition {chosen
+          ? 'border-line-live bg-ink'
+          : 'border-line-thick group-hover:border-line-live'}"
       >
-        {#if chosen}<Icon name="check" size={12} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2865,9 +2872,9 @@
 {/snippet}
 
 {#snippet LibraryLayoutSection()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Library layout</h2>
+  <Card>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Library layout</h2>
     </div>
 
     {#if $layout.isError}
@@ -2928,7 +2935,7 @@
         />
       </StatusBadge>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 <!-- Saving a template and migrating the files on disk are two different jobs:
@@ -2937,9 +2944,9 @@
      now the migration gets its own, so a plan in progress does not read as
      part of the form above it. -->
 {#snippet LibraryMigration()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Migrate library</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Migrate library</h2>
       <Chip role={migration.role}>{migration.label}</Chip>
       <Button
         variant="outline"
@@ -2951,13 +2958,13 @@
         {#if $planLayout.isPending}<Icon name="busy" size={12} class="animate-spin" />{/if}
         Plan
       </Button>
-      <!-- The one control on this screen drawn inverted, and only while
-           there is a plan to apply. Button.svelte's rule is one inverted button
-           per view, and this screen had six: five Saves and this. Six is none,
+      <!-- The one control on this screen the accent fills, and only while
+           there is a plan to apply. Button.svelte's rule is one accent per
+           view, and this screen had six: five Saves and this. Six is none,
            because a page where everything is emphasised points nowhere.
 
            Settings offers no single action — it is a stack of separate
-           panels, each with its own Save — so the inverted button goes to the one
+           panels, each with its own Save — so the accent goes to the one
            thing here that changes something outside the database. Applying a
            plan moves files on the disk. Saving a form does not. -->
       {#if run?.active}
@@ -3064,13 +3071,13 @@
         />
       </StatusBadge>
     {/if}
-  </section>
+  </Card>
 {/snippet}
 
 {#snippet FileTagsSection()}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">
         Tags in your files
       </h2>
       <Chip role={tagged.role}>{tagged.label}</Chip>
@@ -3159,5 +3166,5 @@
         />
       </StatusBadge>
     {/if}
-  </section>
+  </Card>
 {/snippet}

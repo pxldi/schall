@@ -10,13 +10,15 @@
     type SourceCandidate,
     type SourceSearchResult
   } from '$lib/api';
+  import { usePagePrint } from '$lib/duoton';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
@@ -58,6 +60,10 @@
 
   const items = $derived($run.data?.items ?? []);
 
+  // A strip of the releases this run searched, in the order it searched them.
+  usePagePrint(() =>
+    items.length ? { covers: items.slice(0, 8).map((item) => item.albumId) } : undefined
+  );
   const pending = $derived($run.data?.pending ?? 0);
   const cancelled = $derived($run.data?.cancelledCount ?? 0);
   // Added up from the two answers that mean a search happened, rather than
@@ -212,8 +218,12 @@
 
 <svelte:head><title>Sources · Schall</title></svelte:head>
 
-<!-- The run's counts sit under the title and Stop beside them. -->
-<PageHeader title="Sources" path={[{ label: 'Library', href: '/library?status=missing' }]}>
+<!-- The run printed as a strip of the releases it searched (ADR Duoton), with
+     its counts under the title and Stop beside them. -->
+<Hero title="Sources" size="m">
+  {#snippet back()}
+  <BackLink fallback="/library?status=missing" label="Library" />
+  {/snippet}
   {#snippet sub()}
   <!-- Counts occupy a reserved row from the first paint. The run query fills
        these slots without adding a second line to the header. -->
@@ -233,18 +243,18 @@
     {:else}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
         {@render Stat(searched, `of ${$run.data?.total ?? 0} searched`)}
-        <span class="hidden h-3 w-px bg-rule sm:block"></span>
+        <span class="hidden h-3 w-px bg-white/14 sm:block"></span>
         {@render Stat($run.data?.foundCount ?? 0, 'with sources')}
         {#if $run.data?.noneCount}
-          <span class="hidden h-3 w-px bg-rule sm:block"></span>
+          <span class="hidden h-3 w-px bg-white/14 sm:block"></span>
           {@render Stat($run.data.noneCount, 'with none')}
         {/if}
         {#if $run.data?.failedCount}
-          <span class="hidden h-3 w-px bg-rule sm:block"></span>
+          <span class="hidden h-3 w-px bg-white/14 sm:block"></span>
           {@render Stat($run.data.failedCount, 'not searched')}
         {/if}
         {#if cancelled}
-          <span class="hidden h-3 w-px bg-rule sm:block"></span>
+          <span class="hidden h-3 w-px bg-white/14 sm:block"></span>
           {@render Stat(cancelled, 'cancelled')}
         {/if}
       </div>
@@ -283,10 +293,10 @@
       {/if}
   </div>
   {/snippet}
-</PageHeader>
+</Hero>
 
 {#if $cancel.isError}
-  <div class="px-5 pt-4">
+  <div class="px-4 sm:px-6 pt-4">
     <ErrorNote error={$cancel.error} />
   </div>
 {/if}
@@ -295,11 +305,11 @@
   <!-- The run is still here and still worth reading; what stopped is the asking
        after it. Said in one quiet line, with nothing to press: while any release
        is still queued the page asks again by itself. -->
-  <p class="px-5 pt-4 text-meta text-ink-3">{trouble.stale}</p>
+  <p class="px-4 sm:px-6 pt-4 text-meta text-ink-3">{trouble.stale}</p>
 {/if}
 
 {#if trouble && !$run.data}
-  <div class="px-5 py-6">
+  <div class="px-4 sm:px-6 py-6">
     <EmptyPanel role="fail" heading={trouble.heading}>
       <!-- The note carries the server's own words behind its disclosure, for a
            bug report. Only a server that did not answer is asked again, and the
@@ -321,7 +331,7 @@
   <Settle pending={$run.isPending}>
     {#snippet placeholder()}
       <div
-    class="max-h-[calc(100dvh-9rem)] flex flex-col gap-2 overflow-hidden px-5 py-6"
+    class="max-h-[calc(100dvh-9rem)] flex flex-col gap-2 overflow-hidden px-4 sm:px-6 py-6"
     role="status"
     aria-label="Loading source results"
   >
@@ -330,13 +340,13 @@
     {/each}
       </div>
     {/snippet}
-  <div class="flex flex-col gap-2 px-5 py-5">
+  <div class="flex flex-col gap-2 px-4 sm:px-6 py-5">
     {#each items as result (result.albumId)}
       {@const status = statusOf(result)}
       {@const best = pick(result)}
       {@const open = opened.includes(result.albumId)}
       {@const done = alreadyRequested(result)}
-      <section class="flex min-h-48 flex-col gap-3 bg-panel p-3">
+      <section class="flex min-h-48 flex-col gap-3 rounded-card border border-line-thin p-3">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span class="flex min-w-0 flex-1 flex-col gap-1">
             <span class="truncate text-body font-semibold leading-tight text-ink">
@@ -361,7 +371,7 @@
         {#if result.status === 'failed'}
           <!-- The card is already a surface; the message inside it separates by
                its tint rather than by a second border. -->
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-fail/14 px-3 py-2">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-fail/14 px-3 py-2">
             <StateMark role="fail">!</StateMark>
             <span class="text-meta leading-relaxed text-ink">
               {result.error ?? 'Search failed.'}
@@ -376,7 +386,7 @@
             </Button>
           </div>
         {:else if result.status === 'cancelled'}
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised px-3 py-2">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-surface-thick px-3 py-2">
             <span class="text-meta text-ink-2">
               Stopped before this release was searched.
             </span>
@@ -390,7 +400,7 @@
             </Button>
           </div>
         {:else if result.status === 'none'}
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised px-3 py-2">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row bg-surface-thick px-3 py-2">
             <span class="text-meta text-ink-2">
               {#if result.refused.length > 0}
                 Copies found, none match your format settings.
@@ -411,7 +421,7 @@
 
           {@render Refused(result)}
         {:else if result.status === 'found' && best}
-          <div class="flex flex-col gap-px overflow-hidden bg-rule">
+          <div class="flex flex-col gap-px overflow-hidden rounded-panel bg-line-thin">
             {@render Candidate(result, best, chosen[result.albumId] ?? 0, true)}
 
             {#if open}
@@ -505,7 +515,7 @@
      line; the copies themselves are behind the press. -->
 {#snippet Refused(result: SourceSearchResult)}
   {#if result.refused.length > 0}
-    <details class="group border-t border-rule pt-2">
+    <details class="group border-t border-line-thin pt-2">
       <summary
         class="tap-tall flex cursor-pointer list-none items-center gap-1.5 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
       >
@@ -549,13 +559,13 @@
   index: number,
   isChosen: boolean
 )}
-  <!-- The rows are clipped by the box they sit in, which is what makes
+  <!-- The rows are clipped by the rounded box they sit in, which is what makes
        one list out of them and what would clip an invisible touch box back to
        the height it was escaping. So the room a fingertip needs is taken as
        padding on a coarse pointer, where it grows the row, and a mouse keeps
        the density it is accurate enough for. -->
   <button
-    class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-3 py-2 text-left transition hover:bg-raised pointer-coarse:py-3"
+    class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-ground px-3 py-2 text-left transition hover:bg-surface-thick pointer-coarse:py-3"
     onclick={() => (chosen = { ...chosen, [result.albumId]: index })}
     aria-pressed={isChosen}
     aria-label={`${quality(candidate)} from ${candidate.username}, ${files(
@@ -564,11 +574,11 @@
   >
     <span class="grid size-6 shrink-0 place-items-center">
       <span
-        class="grid size-[15px] place-items-center {isChosen
-          ? 'bg-ink'
-          : 'border border-rule-strong'}"
+        class="grid size-[15px] place-items-center rounded-full {isChosen
+          ? 'bg-accent'
+          : 'border border-line-thick'}"
       >
-        {#if isChosen}<span class="size-[5px] bg-ground"></span>{/if}
+        {#if isChosen}<span class="size-[5px] rounded-full bg-accent-ink"></span>{/if}
       </span>
     </span>
 

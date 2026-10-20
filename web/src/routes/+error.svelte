@@ -1,8 +1,9 @@
 <script lang="ts">
   import { page } from '$app/state';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { useNewestPrint } from '$lib/duoton';
   import { openSearch } from '$lib/search';
 
   // What SvelteKit draws when a page cannot be reached: an address that names
@@ -19,37 +20,41 @@
   // one with an ordinary cause a reader can act on. Everything else is the
   // application failing, and the reader can do the same one thing about it.
   const missing = $derived(page.status === 404);
+
+  // Printed from the three newest arrivals, tall, so a wrong address still
+  // lands on the collection rather than on a blank page.
+  useNewestPrint({ height: 26, count: 3 });
 </script>
 
 <svelte:head>
   <title>{missing ? 'Not found' : 'Error'} · Schall</title>
 </svelte:head>
 
-<PageHeader title={missing ? '404' : 'Error'}>
+<Hero title={missing ? '404' : 'Error'} size="xl">
   {#snippet sub()}
     {#if missing}
       <!-- The address is named, because the ordinary cause is a typed or
            stale link and the reader cannot check one they are not shown. -->
-      <b class="font-semibold text-ink">Nothing at <span class="mono font-normal">{page.url.pathname}</span></b>
+      <b class="font-semibold text-ink">Nothing at {page.url.pathname}</b>
       <span>It may have moved, or the link is wrong.</span>
     {:else}
       <b class="font-semibold text-ink">This page didn't load.</b>
       <span>Reload it, or go back to Overview.</span>
     {/if}
   {/snippet}
-</PageHeader>
+</Hero>
 
-<div class="flex flex-col gap-4 px-5 pb-10 pt-5">
+<div class="flex flex-col gap-4 px-4 pb-10 pt-5 sm:px-6">
   <!-- `data-sveltekit-reload` is what makes the link work from an error the
        router itself raised: it leaves the client-side router out of it and
        asks the server for the page, so a broken route cannot swallow the way
-       out of itself. The way back is the one primary action; Enter takes it. -->
-  <div class="flex flex-wrap items-center gap-2 border-t border-rule pt-4">
-    <Button href="/" variant="primary" key="enter" verb="go to overview" data-sveltekit-reload>Go to Overview</Button>
+       out of itself. -->
+  <div class="flex flex-wrap items-center gap-2">
+    <Button href="/" data-sveltekit-reload>Go to Overview</Button>
     {#if missing}
-      <Button onclick={openSearch}>Search</Button>
+      <Button variant="outline" onclick={openSearch}>Search</Button>
     {:else}
-      <Button key="r" onclick={() => location.reload()}>Reload</Button>
+      <Button variant="outline" onclick={() => location.reload()}>Reload</Button>
     {/if}
   </div>
 

@@ -32,9 +32,8 @@
     /** Draw the + only while the row is hovered or holds focus. The row says
      *  where it starts with the `want-row` class. A wanted toggle always shows,
      *  unless this is 'all': a row the library holds already draws its tick
-     *  elsewhere, so its toggle waits for the pointer in both states. 'focus'
-     *  shows it only to a keyboard that has reached it. */
-    reveal?: boolean | 'all' | 'focus';
+     *  elsewhere, so its toggle waits for the pointer in both states. */
+    reveal?: boolean | 'all';
     disabled?: boolean;
     class?: string;
   };
@@ -107,7 +106,7 @@
   )}
   data-wanted={shown ? 'true' : 'false'}
   data-fresh={fresh ? 'true' : 'false'}
-  data-reveal={reveal === 'all' || reveal === 'focus' ? reveal : reveal ? 'true' : 'false'}
+  data-reveal={reveal === 'all' ? 'all' : reveal ? 'true' : 'false'}
   aria-pressed={label ? shown : undefined}
   aria-label={label ? undefined : hint}
   aria-busy={inFlight}
@@ -121,7 +120,7 @@
 >
   <span class="want-ink" aria-hidden="true"></span>
   <span class={cn('relative grid place-items-center', label ? sizes[size].glyph : 'size-full')}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <g class="want-plus"><path d="M12 6v12M6 12h12" /></g>
       <path class="want-tick" pathLength="1" d="M6.5 12.5l3.75 3.75L17.5 8.5" />
     </svg>

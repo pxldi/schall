@@ -14,7 +14,7 @@
 
 <div
   class={cn(
-    'flex flex-col gap-1 border-b border-rule px-4 py-3 pr-12',
+    'flex flex-col gap-1 border-b border-line-thin px-4 py-3 pr-12',
     className
   )}
   {...rest}

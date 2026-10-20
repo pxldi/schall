@@ -892,8 +892,7 @@ func (q *Queries) recentlyAdded(ctx context.Context) ([]OverviewAdded, error) {
 		LEFT JOIN albums al ON al.id = t.album_id
 		LEFT JOIN artists a ON a.id = al.artist_id
 		WHERE f.missing_at IS NULL
-		-- Files imported together share a timestamp; the path keeps their order stable.
-		ORDER BY f.created_at DESC, f.path
+		ORDER BY f.created_at DESC
 		LIMIT `+listRows)
 	if err != nil {
 		return nil, fmt.Errorf("read the recently added: %w", err)

@@ -4,6 +4,7 @@
   import { api, type MintedPhone } from '$lib/api';
   import { calendarDate, relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Card from '$lib/components/Card.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import FormGrid from '$lib/components/FormGrid.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -55,7 +56,7 @@
       return;
     }
     let live = true;
-    QRCode.toString(carried, { type: 'svg', margin: 2 })
+    QRCode.toString(carried, { type: 'svg', margin: 0 })
       .then((svg) => {
         if (live) qr = svg;
       })
@@ -75,8 +76,8 @@
 </script>
 
 <div class="flex max-w-[760px] flex-col gap-3.5">
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="border-b border-rule pb-1.5"><h2 class="label">Phone</h2></div>
+  <Card>
+    <h2 class="font-display text-lead font-bold text-ink">Phone</h2>
 
     <FormGrid
       onsubmit={(event) => {
@@ -104,13 +105,13 @@
 
     {#if minted}
       <!-- A tint rather than a border: a card draws the only frame here. -->
-      <div class="flex flex-col gap-3 bg-raised p-3">
+      <div class="flex flex-col gap-3 rounded-row bg-surface-thick p-3">
         <span class="text-meta text-ink">Shown once. Scan it or copy it now.</span>
         <div class="flex flex-wrap items-start gap-4">
           <div
             role="img"
             aria-label="Sign-in code for {minted.name}"
-            class="size-40 shrink-0 [&>svg]:size-full"
+            class="size-40 shrink-0 rounded-row bg-white p-2 text-ink [&>svg]:size-full"
           >
             {@html qr}
           </div>
@@ -148,7 +149,7 @@
                line, so the name takes a line of its own (`basis-full` forces
                the wrap) and the dates wrap onto the next. `sm` and up are the
                original single row. -->
-          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-rule py-2">
+          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line-thin py-2">
             <span class="min-w-0 grow shrink basis-full truncate text-body text-ink @xl:basis-0">
               {phone.name}
             </span>
@@ -171,5 +172,5 @@
       </div>
     {/if}
     </Settle>
-  </section>
+  </Card>
 </div>

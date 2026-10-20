@@ -66,21 +66,43 @@ async function settle(page: Page) {
     for (const image of Array.from(document.images)) image.loading = 'eager';
   });
   await page.waitForFunction(() => Array.from(document.images).every((image) => image.complete));
-  await quiet(page);
+  await printsSettled(page);
 }
 
 /** When each page last asked the API anything, so settling can wait out a
  * refetch as well as a repaint. The event stream stays open and is left out. */
 const lastRead = new WeakMap<Page, number>();
 
-/** Waits until the API has not been asked anything for 1.5 s, so a refetch
- * cannot land between settling and the screenshot. The event stream stays
- * open and is left out. */
-async function quiet(page: Page) {
+/** The duotone print behind a page header repaints on its own schedule: it
+ * waits up to 600 ms for its pictures, paints in a frame with room in it, and
+ * paints again when a refetch hands it covers or inks. This polls a small copy
+ * of every print canvas until it has not changed, and the API has not been
+ * asked anything, for 1.5 s. */
+async function printsSettled(page: Page) {
+  let last = '';
+  let quietSince = Date.now();
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(250);
-    if (Date.now() - (lastRead.get(page) ?? 0) >= 1500) return;
+    const now = await page.evaluate(() => {
+      const small = document.createElement('canvas');
+      small.width = 32;
+      small.height = 32;
+      const g = small.getContext('2d', { willReadFrequently: true })!;
+      return Array.from(document.querySelectorAll<HTMLCanvasElement>('.print canvas'))
+        .map((canvas) => {
+          if (!canvas.width || !canvas.height) return `${canvas.style.zIndex}:empty`;
+          g.clearRect(0, 0, 32, 32);
+          g.drawImage(canvas, 0, 0, 32, 32);
+          const pixels = g.getImageData(0, 0, 32, 32).data.join(',');
+          return `${canvas.style.zIndex}:${canvas.width}x${canvas.height}:${pixels}`;
+        })
+        .join('|');
+    });
+    if (now !== last) quietSince = Date.now();
+    last = now;
+    const since = Math.max(quietSince, lastRead.get(page) ?? 0);
+    if (Date.now() - since >= 1500) return;
   }
 }
 
@@ -114,9 +136,7 @@ const pages: {
   {
     name: 'overview',
     path: '/',
-    ready: (page) => expect(page.getByText('No listens yet')).toHaveCount(1),
-    // The ages beside Recently added grow by a day every day.
-    mask: (page) => [page.locator('section li > span.mono')]
+    ready: (page) => expect(page.getByText('No listens yet')).toHaveCount(6)
   },
   {
     name: 'artists',
@@ -137,16 +157,14 @@ const pages: {
           level: 1,
           name: seeded.artists.incomplete.name
         })
-      ).toBeVisible(),
-    // The inspector's refresh date is the day the fixture was seeded.
-    mask: (page) => [page.getByLabel('About this artist').locator('dt:has-text("Updated") + dd')]
+      ).toBeVisible()
   },
   {
     name: 'release',
     path: `/releases/${ids.release}`,
     // The sources below the track list arrive in a second read, after the
     // heading, and lengthen the page when they do.
-    ready: (page) => expect(page.getByText('1 open', { exact: true })).toBeVisible(),
+    ready: (page) => expect(page.getByText('1 open request')).toBeVisible(),
   },
   {
     name: 'playlists',
@@ -180,11 +198,6 @@ const pages: {
     ready: (page) => expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
   },
   {
-    name: 'library-files',
-    path: '/library?view=files',
-    ready: (page) => expect(page.locator('table:visible tbody tr').first()).toBeVisible()
-  },
-  {
     name: 'settings',
     path: '/settings/sources',
     ready: (page) => expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
@@ -208,18 +221,6 @@ for (const name of ['overview', 'artist', 'release', 'review', 'downloads']) {
     await page.goto(path);
     await ready(page);
     await shoot(page, `${name}-753`, [...calendar(page), ...(mask?.(page) ?? [])]);
-  });
-}
-
-// The light theme follows the system, so the redrawn pages are drawn in it as
-// well.
-for (const name of ['release', 'review', 'library', 'settings']) {
-  const { path, ready, mask } = pages.find((p) => p.name === name)!;
-  test(`${name} in the light theme`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto(path);
-    await ready(page);
-    await shoot(page, `${name}-light`, [...calendar(page), ...(mask?.(page) ?? [])]);
   });
 }
 

@@ -22,7 +22,7 @@
   const unresolved = $derived(files.filter((file) => file.state === 'unresolved'));
 </script>
 
-<div class="border border-rule bg-panel px-5 py-4">
+<div class="rounded-panel border border-line-regular bg-decide/14 px-5 py-4">
   <div class="flex items-start gap-3">
     <Icon name="library" size={17} class="mt-0.5 shrink-0 text-decide" />
     <div class="min-w-0">
@@ -38,7 +38,7 @@
     <p class="label mt-4">Unclear</p>
     <div class="mt-1">
       {#each unresolved as file (file.id)}
-        <div class="border-b border-rule px-1 py-2 last:border-b-0">
+        <div class="border-b border-line-thin px-1 py-2 last:border-b-0">
           <p class="truncate text-body text-ink">{file.path}</p>
           <p class="mt-0.5 text-meta text-ink-3">
             {file.tags ? `${file.tags} · ` : ''}{file.evidence}
@@ -52,7 +52,7 @@
     <p class="label mt-4">Already owned</p>
     <div class="mt-1 max-h-56 overflow-auto">
       {#each owned as file (file.id)}
-        <div class="border-b border-rule px-1 py-2 last:border-b-0">
+        <div class="border-b border-line-thin px-1 py-2 last:border-b-0">
           <p class="truncate text-body text-ink">{file.path}</p>
           <p class="mt-0.5 text-meta text-ink-3">{file.evidence}</p>
         </div>
@@ -60,7 +60,7 @@
     </div>
   {/if}
 
-  <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-rule pt-4">
+  <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-line-thin pt-4">
     <Button disabled={pending} onclick={onconfirm}>
       <Icon name="check" size={15} /> Download anyway
     </Button>

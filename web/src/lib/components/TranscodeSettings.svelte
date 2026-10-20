@@ -3,6 +3,7 @@
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, transcodeBitrates, type ImportSettings, type TranscodeBitrate } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
+  import Card from '$lib/components/Card.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
@@ -91,9 +92,9 @@
        for the wrong reason. -->
   <ErrorNote error={$imports.error} retry={() => $imports.refetch()} />
 {:else}
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Transcode after import</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Transcode after import</h2>
       <!-- "off" before the setting is read is a claim about it, and a wrong one
            for somebody who turned it on. -->
       {#if $imports.isPending}
@@ -134,19 +135,19 @@
     <div class="flex flex-col">
       <button
         type="button"
-        class="group flex items-start gap-2.5 border-b border-rule py-2.5 text-left"
+        class="group flex items-start gap-2.5 border-b border-line-thin py-2.5 text-left"
         disabled={$imports.isPending || $savePolicy.isPending}
         onclick={() => $savePolicy.mutate({ when: 'lossless' })}
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-6 place-items-center border transition {when === 'lossless'
-              ? 'border-ink bg-ink'
-              : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
+            class="grid size-[15px] place-items-center rounded-tight transition {when === 'lossless'
+              ? 'bg-accent'
+              : 'border border-line-thick group-hover:border-line-live'}"
           >
             {#if when === 'lossless'}<Icon name="check"
-                size={12}
-                class="text-ground" />{/if}
+                size={10}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -166,13 +167,13 @@
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-6 place-items-center border transition {when === 'above_target'
-              ? 'border-ink bg-ink'
-              : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
+            class="grid size-[15px] place-items-center rounded-tight transition {when === 'above_target'
+              ? 'bg-accent'
+              : 'border border-line-thick group-hover:border-line-live'}"
           >
             {#if when === 'above_target'}<Icon name="check"
-                size={12}
-                class="text-ground" />{/if}
+                size={10}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -206,11 +207,11 @@
         </Select.Content>
       </Select.Root>
     </div>
-  </section>
+  </Card>
 
-  <section class="flex flex-col gap-3.5 pb-9">
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
-      <h2 class="label">Transcode the library</h2>
+  <Card>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <h2 class="font-display text-lead font-bold text-ink">Transcode the library</h2>
       <Button
         variant="outline"
         size="sm"
@@ -271,5 +272,5 @@
     {#if $queueSweep.isError}
       <ErrorNote error={$queueSweep.error} />
     {/if}
-  </section>
+  </Card>
 {/if}

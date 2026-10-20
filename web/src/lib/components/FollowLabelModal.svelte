@@ -1,11 +1,11 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
   import { api, type LabelSearchResult } from '$lib/api';
-  import { glide, motionMs } from '$lib/motion.svelte';
+  import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
   import CyclingPlaceholder from './CyclingPlaceholder.svelte';
   import ErrorNote from './ErrorNote.svelte';
@@ -71,29 +71,6 @@
   const inFlight = $derived($followLabel.isPending);
   const candidates = $derived($labelSearch.data?.items ?? []);
   const showingCandidates = $derived(debouncedLabelName.length >= 2 && !selectedLabel);
-
-  // The cursor over the candidates (ADR 0042): Up and Down in the field move one
-  // inverted row, and Enter takes it. Without a cursor Enter submits, as before.
-  let candidateAt = $state(-1);
-  $effect(() => {
-    void debouncedLabelName;
-    candidateAt = -1;
-  });
-
-  function fieldKeys(event: KeyboardEvent) {
-    if (!showingCandidates || candidates.length === 0) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const by = event.key === 'ArrowDown' ? 1 : -1;
-      candidateAt = candidateAt < 0 ? (by > 0 ? 0 : candidates.length - 1) : Math.min(Math.max(candidateAt + by, 0), candidates.length - 1);
-      void tick().then(() =>
-        panel?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-      );
-    } else if (event.key === 'Enter' && candidateAt >= 0) {
-      event.preventDefault();
-      select(candidates[candidateAt]);
-    }
-  }
 
   // Opening takes the page away and gives it back, the same arrangement
   // FollowArtistModal uses: scroll locked with its gutter kept, the field
@@ -201,13 +178,13 @@
 
 {#if open}
   <div
-    class="scrim z-50 flex items-center justify-center p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
     role="presentation"
     onmousedown={scrimPress}
     transition:fade={{ duration: motionMs('surface') }}
   >
     <div
-      class="flex max-h-full w-full max-w-md flex-col overflow-hidden overlay-panel"
+      class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="follow-label-title"
@@ -215,8 +192,8 @@
       bind:this={panel}
     >
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
-        <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-          <h2 id="follow-label-title" class="text-lead font-semibold">Follow label</h2>
+        <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
+          <h2 id="follow-label-title" class="font-display text-lead font-bold">Follow label</h2>
           {#if showingCandidates && candidates.length > 0}
             <span class="text-meta text-ink-3">
               {candidates.length}
@@ -224,7 +201,7 @@
             </span>
           {/if}
           <button
-            class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+            class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
             type="button"
             onclick={close}
             disabled={inFlight}
@@ -241,7 +218,6 @@
               id="label-name"
               value={labelName}
               oninput={updateName}
-              onkeydown={fieldKeys}
               maxlength="200"
               autocomplete="off"
               class="field trailing w-full"
@@ -274,17 +250,14 @@
                      rows to keep. -->
                 <SkeletonRows count={4} label="Searching labels" />
               {:else if candidates.length}
-                <div class="relative" use:glide={{ key: candidateAt }}>
-                {#each candidates as result, index (result.musicbrainzId)}
-                  {@const here = index === candidateAt}
+                {#each candidates as result (result.musicbrainzId)}
                   <button
                     type="button"
-                    class="row flex w-full items-center gap-3 px-3 py-1.5 text-left {here ? 'on-ink' : ''}"
-                    data-cursor={here}
+                    class="flex w-full items-center gap-3 border-b border-line-thin px-3 py-2 text-left transition last:border-b-0 hover:bg-surface-thick focus:bg-surface-thick focus:outline-none"
                     onclick={() => select(result)}
                   >
                     <span
-                      class="grid size-4 shrink-0 place-items-center bg-raised text-micro font-semibold text-ink-2"
+                      class="grid size-4 shrink-0 place-items-center rounded-row bg-ok/14 text-micro font-bold text-ok"
                     >
                       {result.name.slice(0, 1).toUpperCase()}
                     </span>
@@ -300,13 +273,12 @@
                     </span>
                   </button>
                 {/each}
-              </div>
               {:else}
                 <p class="px-3 py-4 text-center text-body text-ink-3">No matching labels</p>
               {/if}
             </div>
           {:else if selectedLabel}
-            <p class="mt-2 text-meta text-ink-2">
+            <p class="mt-2 text-meta text-ok">
               Selected {selectedLabel.name}{selectedLabel.disambiguation
                 ? ` · ${selectedLabel.disambiguation}`
                 : ''}
@@ -319,10 +291,10 @@
         </div>
 
         <div
-          class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
+          class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3"
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!selectedLabel || inFlight}>
+          <Button type="submit" disabled={!selectedLabel || inFlight}>
             {#if inFlight}
               <Icon name="busy" size={13} class="animate-spin" /> Following
             {:else}

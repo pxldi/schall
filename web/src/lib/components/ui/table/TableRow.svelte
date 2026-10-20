@@ -7,8 +7,10 @@
   // rather than a colour: nothing about a table row is a state the API reports,
   // so nothing about it may borrow a status hue.
   //
-  // A row is 36px with a 1px rule under it, and a hovered row takes the raised
-  // fill.
+  // The separator between rows is Line Inset, the quietest line token: sixty
+  // rows of it in one glance read as a texture, not sixty individual borders.
+  // Line Thin stays on the table's own outer frame, which only has to read
+  // once.
   let {
     class: className,
     selected = false,
@@ -21,7 +23,7 @@
   data-selected={selected ? '' : undefined}
   aria-selected={selected ? true : undefined}
   class={cn(
-    'h-9 border-b border-rule transition hover:bg-raised data-selected:bg-panel',
+    'border-b border-line-inset transition hover:bg-surface-thick data-selected:bg-surface-regular',
     className
   )}
   {...rest}

@@ -8,4 +8,4 @@
   let { class: className, ...rest }: MenuPrimitive.SeparatorProps = $props();
 </script>
 
-<MenuPrimitive.Separator class={cn('-mx-1 my-1 h-px bg-rule', className)} {...rest} />
+<MenuPrimitive.Separator class={cn('-mx-1 my-1 h-px bg-line-thin', className)} {...rest} />

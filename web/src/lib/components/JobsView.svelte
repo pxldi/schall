@@ -749,8 +749,8 @@
 <div class="flex flex-col gap-11">
   <!-- ── In flight ────────────────────────────────────────────────────── -->
   <section>
-    <div class="mb-[18px] flex items-baseline justify-between border-b border-rule pb-2">
-      <h2 class=" text-lead font-bold text-ink">In flight</h2>
+    <div class="mb-[18px] flex items-baseline justify-between border-b border-line-thin pb-2">
+      <h2 class="font-display text-lead font-bold text-ink">In flight</h2>
       <span class="numeric text-meta text-ink-4">
         <!-- A queue that has not loaded, or failed to, has no totals to report:
              0 lanes, 0 running and 0 queued reads as an empty queue rather than
@@ -769,10 +769,10 @@
     <Settle pending={$queue.isPending}>
       {#snippet placeholder()}
         <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading the queue">
-          <span class="mb-1 block border-b border-rule pb-2"><Skeleton class="h-3.5 w-40" /></span>
+          <span class="mb-1 block border-b border-line-thin pb-2"><Skeleton class="h-3.5 w-40" /></span>
           {#each Array(placeholderRowCount) as _, index (index)}
-            <div class="border-b border-rule last:border-b-0">
-              <div class="flex items-center gap-3 px-3 py-2">
+            <div class="border-b border-line-thin last:border-b-0">
+              <div class="flex items-center gap-3 rounded-row px-3 py-2">
                 <Skeleton class="h-5 min-w-0 flex-1" />
                 <Skeleton class="h-5 w-16" />
                 <Skeleton class="h-4 w-12" />
@@ -811,7 +811,7 @@
       <div class="flex flex-col gap-[26px]">
         {#each lanes.filter((lane) => lane.jobs.length > 0) as lane (lane.lane)}
           <div>
-            <span class="label mb-1 block border-b border-rule pb-2">
+            <span class="label mb-1 block border-b border-line-thin pb-2">
               {laneNames[lane.lane] ?? lane.label}
               <span class="numeric ml-2 tracking-normal text-ink-4">
                 {lane.runningCount} running · {lane.queuedCount} queued
@@ -825,7 +825,7 @@
                  reaches this: kindBacklogs only counts a kind past one. -->
             {#each kindBacklogs(lane, $queue.data?.truncated ?? false) as backlog (backlog.kind)}
               {@const press = kindCancels[backlog.kind]}
-              <div class="mb-1 flex flex-col gap-1.5 bg-panel px-3 py-2">
+              <div class="mb-1 flex flex-col gap-1.5 rounded-row bg-surface-regular px-3 py-2">
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-meta text-ink-3">
                     {kindName(backlog.kind)} — {backlogCount(backlog)} queued
@@ -857,7 +857,7 @@
             {/each}
 
             <div
-              class="hidden text-ink-3 @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-x-3 @xl:border-b @xl:border-rule @xl:px-3 @xl:pb-1.5"
+              class="hidden text-ink-3 @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-x-3 @xl:border-b @xl:border-line-thin @xl:px-3 @xl:pb-1.5"
             >
               <span class="label">Job</span>
               <span class="label">Status</span>
@@ -871,9 +871,9 @@
               <!-- The hairline sits on the whole entry, so a detail line under a
                    row stays inside that row's rule rather than starting a new
                    one. -->
-              <div class="border-b border-rule last:border-b-0">
+              <div class="border-b border-line-thin last:border-b-0">
                 <div
-                  class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-y-0"
+                  class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1.4fr)_92px_80px_minmax(0,1fr)_84px] @xl:gap-y-0"
                 >
                   <span class="truncate text-body text-ink" title={primaryOf(job)}>
                     {primaryOf(job)}
@@ -920,7 +920,7 @@
                   <!-- An error that stopped nothing is not reported in red. This
                        job failed once, has attempts left and is waiting on
                        purpose. -->
-                  <div class="mx-3 mb-2.5 flex flex-col gap-1 bg-panel px-2.5 py-2 text-meta leading-[1.5] text-ink-3">
+                  <div class="mx-3 mb-2.5 flex flex-col gap-1 rounded-row bg-surface-regular px-2.5 py-2 text-meta leading-[1.5] text-ink-3">
                     <!-- The reason a job recorded is written in the same words
                          the server's own refusals are, and the words it recorded
                          are one press away underneath. Bare, because this row is
@@ -952,8 +952,8 @@
 
   <!-- ── Failed for good ──────────────────────────────────────────────── -->
   <section>
-    <div class="mb-[18px] flex items-baseline justify-between border-b border-rule pb-2">
-      <h2 class=" text-lead font-bold text-ink">Failed for good</h2>
+    <div class="mb-[18px] flex items-baseline justify-between border-b border-line-thin pb-2">
+      <h2 class="font-display text-lead font-bold text-ink">Failed for good</h2>
       <!-- Schall deletes a spent failure after a fortnight. Saying so here is
            what makes this list trustworthy: without it a row that vanishes
            reads as a row that was fixed. -->
@@ -964,7 +964,7 @@
       {#snippet placeholder()}
         <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading failed jobs">
           {#each Array(placeholderRowCount) as _, index (index)}
-            <div class="border-b border-rule py-2.5 last:border-b-0">
+            <div class="border-b border-line-thin py-2.5 last:border-b-0">
               <div class="flex items-start gap-3">
                 <Skeleton class="h-5 min-w-0 flex-1" />
                 <Skeleton class="h-7 w-16" />
@@ -991,7 +991,7 @@
           {@const press = causePresses[cause.cause]}
           {@const row = causeRow(cause, press)}
           {@const held = jobsFor(cause)}
-          <div class="border-b border-rule py-2.5 last:border-b-0">
+          <div class="border-b border-line-thin py-2.5 last:border-b-0">
             <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
               <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1036,7 +1036,7 @@
                  what slskd is are worth having and not worth reading first.
                  Nothing is cut — what is quoted in a bug report has to be the
                  whole string. -->
-            <details class="group mt-3 border-t border-rule pt-2">
+            <details class="group mt-3 border-t border-line-thin pt-2">
               <!-- This press is what reveals the recorded error, which is what
                    the reader came for, and the words and the chevron are both
                    12px. `tap-tall` gives a thumb the 44px it needs by taking
@@ -1057,9 +1057,9 @@
                 <p class="px-3 pb-2 text-meta leading-[1.65] text-ink-2">{causeDetail(cause)}</p>
                 {#each held as failure (failure.id)}
                   {@const jobRow = failureRow(failure, presses[failure.id], now)}
-                  <div class="border-b border-rule last:border-b-0">
+                  <div class="border-b border-line-thin last:border-b-0">
                     <div
-                      class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised @xl:grid @xl:grid-cols-[minmax(0,1.7fr)_124px_76px_96px] @xl:gap-y-0"
+                      class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1.7fr)_124px_76px_96px] @xl:gap-y-0"
                     >
                       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                         <!-- The primary truncates on one line like every other
@@ -1101,7 +1101,7 @@
                            evidence under it, and it is set as reference text so
                            that the whole of it can be read and copied. -->
                       <div
-                        class="mx-3 mb-2.5 bg-panel px-2.5 py-2 text-meta leading-[1.5] break-words whitespace-pre-wrap text-ink-3"
+                        class="mx-3 mb-2.5 rounded-row bg-surface-regular px-2.5 py-2 text-meta leading-[1.5] break-words whitespace-pre-wrap text-ink-3"
                         data-tone="quiet"
                         data-truncated="false"
                       >
@@ -1139,13 +1139,13 @@
          well in a document about how Schall works, and on the screen it names
          nothing a reader can point at. The section is a list of the recurring
          sweeps, so it is called that. -->
-    <h2 class=" text-lead font-bold text-ink mb-[18px] block border-b border-rule pb-2">Sweeps</h2>
+    <h2 class="font-display text-lead font-bold text-ink mb-[18px] block border-b border-line-thin pb-2">Sweeps</h2>
 
     <Settle pending={$schedule.isPending}>
       {#snippet placeholder()}
         <div class="flex flex-col" role="status" aria-busy="true" aria-label="Loading the sweeps">
           <div
-            class="hidden border-b border-rule px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
+            class="hidden border-b border-line-thin px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
           >
             <span class="label">Sweep</span>
             <span class="label text-right">Last run</span>
@@ -1153,7 +1153,7 @@
           </div>
           {#each Array(placeholderRowCount) as _, index (index)}
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-3 py-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
             >
               <Skeleton class="h-9 min-w-0 flex-1" />
               <Skeleton class="h-7 w-24 justify-self-end" />
@@ -1172,7 +1172,7 @@
     {:else}
       <div class="flex flex-col">
         <div
-          class="hidden border-b border-rule px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
+          class="hidden border-b border-line-thin px-3 pb-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:items-center @xl:gap-x-3"
         >
           <span class="label">Sweep</span>
           <span class="label text-right">Last run</span>
@@ -1182,7 +1182,7 @@
         {#each $schedule.data?.items ?? [] as item (item.kind)}
           {@const condition = waitsFor(item)}
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-3 py-2 transition last:border-b-0 hover:bg-raised @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row border-b border-line-thin px-3 py-2 transition last:border-b-0 hover:bg-surface-thick @xl:grid @xl:grid-cols-[minmax(0,1fr)_128px_188px] @xl:gap-y-0"
           >
             <!-- A line of its own when the columns stack, or the two times
                  beside it squeezed the name to two letters. -->

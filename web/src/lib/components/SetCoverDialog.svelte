@@ -186,13 +186,13 @@
 
 {#if open}
   <div
-    class="scrim z-50 flex items-center justify-center p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
     role="presentation"
     onmousedown={scrimPress}
     transition:fade={{ duration: motionMs('surface') }}
   >
     <div
-      class="flex max-h-full w-full max-w-md flex-col overflow-hidden overlay-panel"
+      class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="set-cover-title"
@@ -200,10 +200,10 @@
       bind:this={panel}
     >
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
-        <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-          <h2 id="set-cover-title" class=" text-lead font-bold">Set cover</h2>
+        <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
+          <h2 id="set-cover-title" class="font-display text-lead font-bold">Set cover</h2>
           <button
-            class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+            class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
             type="button"
             onclick={close}
             disabled={inFlight}
@@ -219,9 +219,9 @@
                drag is a control half the readers cannot press. -->
           <button
             type="button"
-            class="flex w-full flex-col items-center gap-1.5 border border-dashed px-4 py-6 text-center transition disabled:opacity-50 {dragging
-              ? 'border-ink bg-raised'
-              : 'border-rule hover:bg-raised'}"
+            class="flex w-full flex-col items-center gap-1.5 rounded-control border border-dashed px-4 py-6 text-center transition disabled:opacity-50 {dragging
+              ? 'border-accent-soft bg-surface-thick'
+              : 'border-line-regular hover:bg-surface-thick'}"
             onclick={() => picker?.click()}
             ondragover={(event) => {
               event.preventDefault();
@@ -271,7 +271,7 @@
         </div>
 
         <div
-          class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
+          class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3"
         >
           {#if settable}
             <Button

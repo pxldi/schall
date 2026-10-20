@@ -3,9 +3,11 @@
   import { page } from '$app/state';
   import { api } from '$lib/api';
   import { formatBytes, urlChoice } from '$lib/utils';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import Hero from '$lib/components/Hero.svelte';
   import DuplicateRecordings from '$lib/components/DuplicateRecordings.svelte';
   import LibraryFiles from '$lib/components/LibraryFiles.svelte';
+  import ControlRail from '$lib/components/ControlRail.svelte';
   import ReleasesBrowser from '$lib/components/ReleasesBrowser.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -46,14 +48,29 @@
   });
 
   // The counts beside the three view chips. Each is a cheap read of its own —
-  // the release total, the library summary, the held-twice total — and each
+  // the first eight releases (the print is made of them), the library summary, the held-twice total — and each
   // is kept under the query key its own view already reads by, so opening that
   // view never asks twice for what this row already knows.
   const releaseTotal = createQuery({
     queryKey: ['releases', 'library-head'],
-    queryFn: () => api.releases({ scope: 'library', limit: 1 })
+    queryFn: () => api.releases({ scope: 'library', limit: 8 })
   });
 
+  // The print is the first releases in the catalogue's own order, artist A to
+  // Z, inked from the first (ADR Duoton). Only cached covers are asked for,
+  // as the list below does; the rest are drawn as generated art.
+  usePagePrint(() => {
+    const items = $releaseTotal.data?.items;
+    if (!items) return undefined;
+    return {
+      covers: items.map((release) => ({
+        src: release.hasCover ? `${coverSrc(release.id)}?cached=1` : null,
+        seed: release.id,
+        inks: release.inks
+      })),
+      height: 15
+    };
+  });
   const librarySummary = createQuery({ queryKey: ['library'], queryFn: api.library });
   const heldTwiceTotal = createQuery({
     queryKey: ['library-duplicates', 'to-decide-total'],
@@ -81,40 +98,44 @@
 
 <svelte:head><title>Library · Schall</title></svelte:head>
 
-<!-- One page for the music, in the three shapes it comes in. The catalogue is
-     what the library is meant to hold, the files are what is on the disk, and
-     held twice is what the disk holds more than once. Which one answers a
-     question depends on the question, not on which page you opened. The
-     switch sits in the title row, where a page's own actions go. -->
-<PageHeader title="Library">
+<!-- Only the size under the title: the release and file counts are on the
+     chips below. -->
+<Hero title="Library" section>
   {#snippet sub()}
     {#if $librarySummary.data}
-      <span class="mono text-meta text-ink-3">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
+      <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
     {/if}
   {/snippet}
-  {#snippet actions()}
-    <Segmented
-      options={[
-        { value: 'releases', name: 'Releases', count: $releaseTotal.isError ? null : $releaseTotal.data?.scopeTotal },
-        { value: 'files', name: 'Files', count: $librarySummary.isError ? null : filesTotal },
-        { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.isError ? null : $heldTwiceTotal.data?.total }
-      ]}
-      value={view}
-      onchange={(value) => (view = value as (typeof views)[number])}
-      label="Which part of the library to show"
-      pending={$releaseTotal.isPending || $librarySummary.isPending || $heldTwiceTotal.isPending}
-      variant="tabs"
-    />
-  {/snippet}
-</PageHeader>
+</Hero>
+
+<!-- One page for the music, in the two shapes it comes in. They were two pages
+     saying the same thing from either end: the catalogue is what the library is
+     meant to hold, and the files are what is actually on the disk. Which one
+     answers a question depends on the question, not on which page you opened.
+
+     The three chips below say which of it is showing. -->
+<ControlRail label="Which part of the library to show">
+  <Segmented
+    options={[
+      { value: 'releases', name: 'Releases', count: $releaseTotal.isError ? null : $releaseTotal.data?.scopeTotal },
+      { value: 'files', name: 'Files', count: $librarySummary.isError ? null : filesTotal },
+      { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.isError ? null : $heldTwiceTotal.data?.total }
+    ]}
+    value={view}
+    onchange={(value) => (view = value as (typeof views)[number])}
+    label="Which part of the library to show"
+    pending={$releaseTotal.isPending || $librarySummary.isPending || $heldTwiceTotal.isPending}
+    variant="tabs"
+  />
+</ControlRail>
 
 {#if failedCount}
-  <div class="px-5 pb-2">
+  <div class="px-4 pb-2 sm:px-6">
     <ErrorNote error={failedCount.error} fallback="Counts didn't load." retry={retryCounts} />
   </div>
 {/if}
 
-<div class="mt-3" class:hidden={view !== 'releases'}>
+<div class:hidden={view !== 'releases'}>
   <ReleasesBrowser
     {view}
     onviewfiles={() => {
@@ -125,15 +146,15 @@
 </div>
 
 {#if filesOpened}
-  <div class="mt-3" class:hidden={view !== 'files'}>
+  <div class:hidden={view !== 'files'}>
     {#key filesKey}
-      <LibraryFiles active={view === 'files'} onheldtwice={() => (view = 'duplicates')} />
+      <LibraryFiles onheldtwice={() => (view = 'duplicates')} />
     {/key}
   </div>
 {/if}
 
 {#if duplicatesOpened}
-  <div class="mt-3" class:hidden={view !== 'duplicates'}>
-    <DuplicateRecordings active={view === 'duplicates'} />
+  <div class:hidden={view !== 'duplicates'}>
+    <DuplicateRecordings />
   </div>
 {/if}

@@ -17,9 +17,9 @@
 
 <MenuPrimitive.Item
   class={cn(
-    'flex w-full cursor-default select-none items-center gap-2 h-9 px-2.5',
-    'text-left text-body font-medium text-ink transition-[background]',
-    'data-highlighted:bg-raised',
+    'flex w-full cursor-default select-none items-center gap-2 rounded-control px-2.5 py-[7px]',
+    'text-left text-dense-body font-medium text-ink transition-[background]',
+    'data-highlighted:bg-surface-thick',
     'data-disabled:pointer-events-none data-disabled:opacity-50',
     className
   )}

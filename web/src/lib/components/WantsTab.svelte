@@ -330,7 +330,7 @@
          every want row, including these placeholders. -->
     <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
       {#each Array(10) as _, placeholderIndex (placeholderIndex)}
-        <div class="border-b border-rule px-3 py-2 last:border-b-0">
+        <div class="border-b border-line-thin px-3 py-2 last:border-b-0">
           <Skeleton class="h-4 w-full" />
           <Skeleton class="mt-1.5 h-3.5 w-2/3" />
         </div>
@@ -346,11 +346,11 @@
         <!-- A row stopped or taken back leaves this pile, and folds away rather
              than vanishing; rows leaving because the page changed go on the cut. -->
         <article
-          class="border-b border-rule last:border-b-0"
+          class="border-b border-line-thin last:border-b-0"
           out:leave={{ active: $stop.variables === want.id || $resume.variables === want.id }}
         >
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_112px_auto] md:gap-y-0"
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-row px-3 py-2 transition hover:bg-surface-thick md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_112px_auto] md:gap-y-0"
           >
             <!-- Icons, never typed glyphs, as on the transfers beside it. The
                  mark carries the state's name on hover and for a screen

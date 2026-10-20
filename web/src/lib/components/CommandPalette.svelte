@@ -3,15 +3,14 @@
   import { goto } from '$app/navigation';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
-  import { glide, motionMs } from '$lib/motion.svelte';
-  import { echo } from '$lib/keys.svelte';
+  import { cubicOut } from 'svelte/easing';
+  import { motionMs } from '$lib/motion.svelte';
   import { api } from '$lib/api';
   import { cn } from '$lib/utils';
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import Keycap from '$lib/components/Keycap.svelte';
 
   // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
@@ -20,8 +19,8 @@
   // own. When the answer is bigger than five, the way forward is out of the
   // palette and into that category's own list with the query pre-filled.
   //
-  // It is not a dialog. Nothing behind it is blocked: the page dims so
-  // the panel is the one thing to read, but presses go through the dim to
+  // It is not a dialog. Nothing behind it is blocked: the page dims and blurs
+  // so the panel is the one thing to read, but presses go through the dim to
   // the page, and a press outside the panel closes it.
 
   // How long a keystroke waits before the question is asked. Long enough that
@@ -127,34 +126,41 @@
     if (id) document.getElementById(id)?.scrollIntoView({ block: 'nearest' });
   });
 
-  // The mark is the thing's own state, in the state's colour beside its glyph.
-  // Selection is drawn inverted and state is coloured: colour reports what a
-  // thing is, and "the arrow keys are here" is not a state.
+  // The mark is the thing's own state, tinted the way every other list in Schall
+  // tints one. Achromatic selection, coloured state: colour reports what a thing
+  // is, and "the arrow keys are here" is not a state.
   const markTones: Record<PaletteRole, string> = {
-    ok: 'text-ok',
-    idle: 'text-idle',
-    busy: 'text-busy',
-    decide: 'text-decide',
-    fail: 'text-fail'
+    ok: 'bg-ok/14 text-ok',
+    idle: 'bg-idle/14 text-idle',
+    busy: 'bg-busy/14 text-busy',
+    decide: 'bg-decide/14 text-decide',
+    fail: 'bg-fail/14 text-fail'
   };
 
-  const rowClass =
-    'row grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
-    'px-[1.125rem] py-2 text-inherit no-underline last:border-b-0';
-
-  // The keyboard selection is the one inverted block that glides between rows
-  // (`glide`), and the chosen row only swaps its words to match. A row under
-  // the pointer takes the raised fill, and the pointer moves the selection onto
-  // itself, so the two never show at once.
-  const chosenClass = 'on-ink';
-  const idleClass = '';
-
-  // The keys the footer names echo when they are pressed in the field, which
-  // the key registry does not see.
-  function pressed(key: string) {
-    echo.key = key;
-    echo.at++;
+  // The panel drops 8px into place while it fades in, and lifts away faster
+  // than it came. Both are 0 under reduced motion, which Svelte reads as no
+  // transition.
+  function drop(_node: Element, { duration }: { duration: number }) {
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) =>
+        `opacity: ${t}; transform: translateY(${(1 - t) * -8}px) scale(${0.98 + t * 0.02})`
+    };
   }
+
+  const rowClass =
+    'relative grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
+    'rounded-row border-b border-line-thin px-[1.125rem] py-2 text-inherit no-underline ' +
+    'transition-[background] last:border-b-0 hover:bg-duo-light/10';
+
+  // The keyboard selection mark: --raise-2, one step above the hover tint, plus
+  // a 2px --ink-2 bar at the leading edge. Not the accent, which is chrome and
+  // never encodes state, and not the focus ring, which would say keystrokes go
+  // to the row when they are still going to the field.
+  const chosenClass =
+    "bg-duo-light/10 before:absolute before:inset-y-1 before:left-0 before:w-0.5 " +
+    "before:rounded-full before:bg-ink-2 before:content-['']";
 
   function summon() {
     opener = document.activeElement;
@@ -291,7 +297,6 @@
     switch (event.key) {
       case 'Escape':
         event.preventDefault();
-        pressed('escape');
         // The first esc with text in the field clears the field; the second
         // closes.
         if (typed) {
@@ -303,17 +308,14 @@
         return;
       case 'ArrowDown':
         event.preventDefault();
-        pressed('arrowdown');
         move(1);
         return;
       case 'ArrowUp':
         event.preventDefault();
-        pressed('arrowup');
         move(-1);
         return;
       case 'Enter':
         event.preventDefault();
-        pressed('enter');
         if (current) leaveFor(current.href);
         return;
       // Tab is not handled here: it moves focus in the ordinary order, out of
@@ -335,22 +337,24 @@
 <svelte:window onkeydown={onWindowKeydown} onpointerdown={onWindowPointerdown} />
 
 {#if open}
-  <!-- The way in is the stylesheet's own drop and fade; only the way out needs
-       a script, because the element is gone the moment `open` is false. -->
-  <div class="scrim pointer-events-none z-50" out:fade={{ duration: motionMs('state') }}></div>
+  <div
+    class="palette-scrim pointer-events-none fixed inset-0 z-50"
+    transition:fade={{ duration: motionMs('surface') }}
+  ></div>
   <div
     class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[1.125rem] pb-[26px] pt-[90px]"
   >
     <aside
       bind:this={panel}
       aria-label="Search Schall"
-      out:fade={{ duration: motionMs('state') }}
-      class="overlay-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden"
+      in:drop={{ duration: motionMs('surface') }}
+      out:drop={{ duration: motionMs('state') }}
+      class="palette-panel pointer-events-auto relative flex max-h-[70vh] w-[620px] max-w-full flex-col self-start overflow-hidden rounded-[16px]"
     >
       <div
         class={cn(
           'palette-row grid h-[3.25rem] shrink-0 grid-cols-[1.25rem_minmax(0,1fr)_1.5rem] items-center gap-x-3 px-[1.125rem]',
-          hasBody && 'border-b border-rule'
+          hasBody && 'border-b border-line-thin'
         )}
       >
         <span class="grid place-items-center text-ink-3"><Icon name="search" size="lg" /></span>
@@ -368,7 +372,7 @@
           aria-controls="palette-results"
           aria-activedescendant={current?.id ?? undefined}
           aria-autocomplete="list"
-          class="palette-field min-w-0 border-0 bg-transparent p-0 text-lead font-medium text-ink placeholder:text-ink-4 focus:outline-none"
+          class="palette-field min-w-0 border-0 bg-transparent p-0 text-[17px] font-medium text-ink placeholder:text-ink-4 focus:outline-none"
         />
       </div>
 
@@ -387,7 +391,9 @@
             <!-- A failed query is reported here rather than in a toast: the
                  palette is open, it is under the eye, and it is the thing that
                  failed. Closing it closes the error with it. -->
-            <div class="mx-3 my-1.5 flex items-start gap-2 px-[11px] py-[9px]">
+            <div
+              class="mx-3 my-1.5 flex items-start gap-2 rounded-row border border-line-regular bg-fail/14 px-[11px] py-[9px]"
+            >
               <Icon name="alert" size="sm" class="mt-px shrink-0 text-fail" />
               <!-- The button that said Try again did one thing: ask the search
                    the question that had just failed. The palette asks it now,
@@ -403,23 +409,16 @@
               Nothing matches <span class="text-ink">{query}</span>.
             </p>
           {:else}
-            <div
-              id="palette-results"
-              class="relative"
-              role="listbox"
-              aria-label="Search results"
-              tabindex="-1"
-              use:glide={{ key: selected }}
-            >
+            <div id="palette-results" role="listbox" aria-label="Search results" tabindex="-1">
               {#each categories as category, group (category.key)}
                 <!-- A category that answered with nothing is absent, not listed
                      as empty. The one that is present is still drawn: the
                      category of a result is never implied by being the only
                      one. -->
                 <div role="group" aria-label={category.label} class={cn(group > 0 && 'mt-[14px]')}>
-                  <div class="mb-0.5 border-b border-rule px-[1.125rem] pb-1.5">
+                  <div class="mb-0.5 border-b border-line-thin px-[1.125rem] pb-1.5">
                     <span
-                      class="label inline-flex items-center gap-1.5"
+                      class="inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase leading-none tracking-[0.08em] text-ink-3"
                       ><Icon name={category.icon} size={12} />{category.label}</span
                     >
                   </div>
@@ -431,8 +430,7 @@
                       href={row.href}
                       role="option"
                       aria-selected={chosen}
-                      data-cursor={chosen}
-                      class={cn(rowClass, chosen ? chosenClass : idleClass)}
+                      class={cn(rowClass, chosen && chosenClass)}
                       onclick={(event) => {
                         event.preventDefault();
                         leaveFor(row.href);
@@ -444,7 +442,7 @@
                           <Cover
                             src={row.cover.src}
                             seed={row.cover.seed}
-                            class="size-9 object-cover"
+                            class="size-9 rounded-[6px] object-cover"
                           />
                         {/if}
                         <!-- The thing's state as an icon, pinned to the
@@ -454,13 +452,13 @@
                         {#if row.mark}
                           <span
                             class={cn(
-                              'absolute',
+                              'absolute rounded-row',
                               row.cover ? 'palette-badge -bottom-1 -right-1' : 'inset-0 m-auto size-5'
                             )}
                           >
                             <span
                               class={cn(
-                                'grid place-items-center',
+                                'grid place-items-center rounded-row',
                                 row.cover ? 'size-4' : 'size-5',
                                 markTones[row.role]
                               )}
@@ -491,7 +489,7 @@
                       </span>
                       <!-- The one figure this category is counted in, in a
                            column the eye can run down. Never a second title. -->
-                      <span class="numeric min-w-0 truncate text-right text-meta text-ink-2"
+                      <span class="min-w-0 truncate text-right text-meta text-ink-2"
                         >{row.meta}</span
                       >
                     </a>
@@ -510,10 +508,9 @@
                       {href}
                       role="option"
                       aria-selected={chosen}
-                      data-cursor={chosen}
                       class={cn(
-                        'row flex items-center justify-between px-[1.125rem] py-2 text-body font-medium text-ink-3 no-underline last:border-b-0',
-                        chosen ? chosenClass : 'hover:text-ink'
+                        'flex items-center justify-between rounded-row border-b border-line-thin px-3 py-2 text-body font-medium text-ink-3 no-underline transition-[background] last:border-b-0 hover:bg-surface-thick hover:text-ink',
+                        chosen && chosenClass
                       )}
                       onclick={(event) => {
                         event.preventDefault();
@@ -533,18 +530,18 @@
 
         <!-- Always present, so the keys are learnable by looking. -->
         <div
-          class="flex shrink-0 flex-wrap items-center gap-5 border-t border-rule px-[1.125rem] py-2.5 text-meta text-ink-3"
+          class="flex shrink-0 flex-wrap items-center gap-5 border-t border-line-thin px-[1.125rem] py-2.5 text-meta text-ink-3"
         >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><span class="inline-flex gap-0.5"
-              ><Keycap key="arrowup" /><Keycap key="arrowdown" /></span
+            ><span class="inline-flex"
+              ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /></span
             >move</span
           >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><Keycap key="enter" />open</span
+            ><Icon name="enter" size="sm" />open</span
           >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><Keycap key="escape" />close</span
+            ><kbd class="font-sans text-meta font-semibold leading-none">Esc</kbd>close</span
           >
         </div>
       {/if}
@@ -558,7 +555,7 @@
         type="button"
         onclick={dismiss}
         aria-label="Close search"
-        class="tap absolute right-[1.125rem] top-[0.875rem] grid size-6 place-items-center text-ink-4 transition hover:bg-raised hover:text-ink"
+        class="tap absolute right-[1.125rem] top-[0.875rem] grid size-6 place-items-center rounded-control text-ink-4 transition hover:bg-surface-thick hover:text-ink"
       >
         <Icon name="close" size="sm" />
       </button>
@@ -567,10 +564,34 @@
 {/if}
 
 <style>
-  /* The state badge sits on the picture, on a solid ground chip so it reads on
-     any cover. */
+  /* Glass tinted with the page's dark ink: the print and the covers behind
+     show through as colour, and the blur keeps text behind unreadable. Poldi
+     chose this over an opaque panel on 2026-10-05. */
+  .palette-panel {
+    background: color-mix(
+      in srgb,
+      var(--color-duo-dark) 45%,
+      rgb(20 22 27 / 0.42)
+    );
+    backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    -webkit-backdrop-filter: blur(32px) saturate(1.6) brightness(0.85);
+    border: 1px solid rgb(255 255 255 / 0.14);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 30px 80px rgb(0 0 0 / 0.55);
+  }
+
+  /* A light dim, so the page stays visible around the glass but steps back
+     behind it. At 0.28 the live audit could not tell it was there. */
+  .palette-scrim {
+    background: rgb(5 6 8 / 0.4);
+  }
+
+  /* The state badge sits on the picture, in a solid chip so it reads on any
+     cover. */
   .palette-badge {
     background-color: var(--color-ground);
+    box-shadow: 0 0 0 2px rgb(5 6 8 / 0.5);
   }
 
   /* The focus ring goes round the whole search row, inside the panel. Drawn
@@ -582,7 +603,9 @@
   }
 
   .palette-row:has(.palette-field:focus-visible) {
-    outline: 2px solid var(--color-ink);
+    outline: 2px solid var(--color-accent);
     outline-offset: -2px;
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
   }
 </style>

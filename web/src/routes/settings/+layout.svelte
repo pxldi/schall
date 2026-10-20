@@ -1,16 +1,17 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import AppearanceSetting from '$lib/components/AppearanceSetting.svelte';
-  import { glide } from '$lib/motion.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { useNewestPrint } from '$lib/duoton';
 
-  // Settings was one page: eleven sections stacked in a single column, 3,400
+  // Settings was one page: eleven cards stacked in a single column, 3,400
   // pixels of scroll, and no way to reach the one you wanted except to
-  // recognise it going past. It is five addresses now, shown as a strip of
-  // tabs above one column of sections.
+  // recognise it going past. A row of chips fixed that once already; this
+  // narrows it further into a section rail beside the content, so a category
+  // stays in view while the one before it scrolls past rather than sitting in
+  // a strip that has to be found again after a jump.
   //
-  // Five categories, grouped by what a section
+  // Five categories, each an address of its own, grouped by what a card
   // configures rather than by service name: Sources holds the four things
   // with a connect-and-test cycle, Library holds everything that changes
   // what is kept and how files are named — including the audio check that
@@ -27,6 +28,10 @@
 
   let { children }: { children: Snippet } = $props();
 
+  // Settings has no music of its own, so it is printed from the newest
+  // arrivals, at the height every top-bar destination prints at.
+  useNewestPrint({ height: 15, count: 4 });
+
   const current = $derived(
     categories.find((category) => page.url.pathname.startsWith(category.href))
   );
@@ -34,41 +39,29 @@
 
 <svelte:head><title>{current?.name ?? 'Settings'} · Schall</title></svelte:head>
 
-<!-- The appearance choice is a page action: it is the one setting that takes
-     effect at once and is kept in this browser alone. -->
-<PageHeader title="Settings">
-  {#snippet actions()}
-    <AppearanceSetting />
-  {/snippet}
-</PageHeader>
+<Hero title="Settings" section />
 
-<!-- Each category is an address of its own, shown as a strip of tabs. The
-     current one is the inverted block, which slides to the next on navigation. -->
-<div class="px-5 pt-3">
+<!-- Each category page carries a hidden h2 naming itself, under the Hero's h1. -->
+<div class="flex flex-row gap-10 px-4 pb-10 pt-6 sm:px-6">
   <nav
     aria-label="Settings sections"
-    class="relative inline-flex h-7 items-stretch border border-rule"
-    use:glide={{ axis: 'x', key: current?.href }}
+    class="sticky top-[calc(var(--topbar-height)+1.5rem)] flex w-[10.5rem] shrink-0 flex-col gap-0.5 self-start"
   >
     {#each categories as category (category.href)}
       {@const active = category.href === current?.href}
       <a
         href={category.href}
         aria-current={active ? 'page' : undefined}
-        data-cursor={active}
-        class="relative flex items-center border-r border-rule px-3 text-body transition last:border-r-0 {active
-          ? 'on-ink font-medium'
-          : 'text-ink-3 hover:bg-raised hover:text-ink'}"
+        class="flex h-9 items-center rounded-[0.625rem] px-3 text-body font-semibold transition {active
+          ? 'bg-duo-light/12 text-ink'
+          : 'text-ink-2 hover:text-ink'}"
       >
         {category.name}
       </a>
     {/each}
   </nav>
-</div>
 
-<!-- Each category page carries a hidden h2 naming itself, under the PageHeader's h1. -->
-<div class="px-5 pb-6 pt-6">
-  <div class="settings-body @container max-w-[56rem]">
+  <div class="settings-body @container min-w-0 flex-1">
     {@render children()}
   </div>
 </div>
@@ -76,7 +69,7 @@
 <!-- The credit for the two open projects Schall is built on. It used to sit
      at the foot of every release page; a person reads a release many times
      and Settings once, so it belongs here instead. -->
-<footer class="border-t border-rule px-5 py-6 text-meta text-ink-4">
+<footer class="border-t border-line-thin px-4 sm:px-6 py-6 text-meta text-ink-4">
   <p>
     Release data from
     <a
@@ -93,3 +86,26 @@
     >.
   </p>
 </footer>
+
+<style>
+  /* Settings in Duoton (ADR Duoton): sections are blocks on the ground with a
+     bold heading, as the prototype draws them. Card and FormGrid keep their
+     look on the other pages that use them, so the change is scoped here. */
+  .settings-body :global(section.rounded-card) {
+    border: 0;
+    border-radius: 0;
+    padding: 0 0 2.125rem;
+  }
+
+  .settings-body :global(section.rounded-card h2),
+  .settings-body :global(section > h2) {
+    font-size: 1.375rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .settings-body :global(form label) {
+    font-weight: 600;
+  }
+</style>

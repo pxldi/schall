@@ -10,18 +10,15 @@
   // labels somebody chose (queries/labels.sql explains why), so it stays
   // small and reads as one list rather than a browse.
   import { createMutation, createQuery, queryOptions, useQueryClient } from '@tanstack/svelte-query';
-  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import Icon from '$lib/components/Icon.svelte';
-  import { goto } from '$app/navigation';
   import { api, type LabelListItem, type MonitorLevel } from '$lib/api';
-  import { useKeys } from '$lib/keys.svelte';
-  import { changed, glide, slideInto } from '$lib/motion.svelte';
   import { calendarDate } from '$lib/utils';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Cover from '$lib/components/Cover.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { coverSrc } from '$lib/cover-size';
+  import Hero from '$lib/components/Hero.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -30,9 +27,7 @@
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Settle from '$lib/components/Settle.svelte';
 
-  // Cover, label, owned, monitor, updated, actions. The header row and every
-  // label row use the same columns.
-  const COLUMNS = 'grid-cols-[1.75rem_minmax(0,1fr)_11rem_10rem_9rem_8rem]';
+  const COLUMNS = 'grid-cols-[2.625rem_minmax(0,1fr)_150px_170px_110px_100px]';
 
   const queryClient = useQueryClient();
   let showAddLabel = $state(false);
@@ -66,7 +61,7 @@
         : false
   });
   const labels = createQuery(toStore(() => labelsOptions));
-  // Enough rows to fill a tall 4K window.
+  // Fill about 2016px of rows so a 4K viewport does not outgrow the wait.
   const labelSkeletonCount = 60;
 
   const dashboard = createQuery({ queryKey: ['dashboard'], queryFn: api.dashboard });
@@ -80,6 +75,21 @@
   const labelsTotal = $derived($labels.data?.total);
   const followedTotal = $derived($labels.data?.followedCount);
   const artistsTotal = $derived($dashboard.data?.artistCount);
+
+  // A strip of the labels' covers, one each, inked from the first (ADR Duoton).
+  usePagePrint(() => {
+    if (!$labels.data) return undefined;
+    return {
+      covers: items
+        .filter((label) => label.coverAlbumIds?.length)
+        .slice(0, 8)
+        .map((label) => ({
+          src: coverSrc(label.coverAlbumIds[0]),
+          seed: label.coverAlbumIds[0],
+          inks: label.coverInks
+        }))
+    };
+  });
 
   function invalidate() {
     return Promise.all([
@@ -122,66 +132,20 @@
       return invalidate();
     }
   });
-
-  // The cursor (ADR 0042): none until J or K or a tab onto a row, then one
-  // inverted block that glides between labels. Kept by id, so a refresh that
-  // reorders the list does not move it to another label.
-  let cursorId = $state('');
-  let listElement = $state<HTMLElement>();
-  $effect(() => {
-    void search;
-    cursorId = '';
-  });
-
-  function moveCursor(by: number) {
-    if (!filtered.length) return;
-    const at = filtered.findIndex((label) => label.id === cursorId);
-    const next = at < 0 ? 0 : Math.min(Math.max(at + by, 0), filtered.length - 1);
-    cursorId = filtered[next].id;
-    void tick().then(() =>
-      listElement?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  useKeys(() => [
-    {
-      keys: ['j', 'k', 'arrowdown', 'arrowup'],
-      caps: ['j', 'k'],
-      verb: 'move',
-      order: 0,
-      enabled: () => filtered.length > 0,
-      run: (event) => moveCursor(event.key === 'j' || event.key === 'ArrowDown' ? 1 : -1)
-    },
-    ...(cursorId
-      ? [
-          {
-            keys: ['enter'],
-            verb: 'open',
-            order: 1,
-            run: () => void goto(`/artists/labels/${cursorId}`)
-          }
-        ]
-      : [])
-  ]);
-
-  // The label figure ticks when a follow lands, never on the first draw.
-  const labelsTick = changed(() => labelsTotal);
 </script>
-
 
 <svelte:head><title>Labels · Schall</title></svelte:head>
 
-<PageHeader title="Labels" path={[{ label: 'Artists', href: '/artists' }]}>
+<Hero title="Labels" size="xl">
+  {#snippet back()}
+    <BackLink fallback="/artists" label="Artists" />
+  {/snippet}
   {#snippet sub()}
     <!-- The counts hold their place while the list is read, as /artists does,
          so the line does not grow when they land. A failed read shows a dash. -->
     {#if labelsTotal !== undefined}
       <span>
-        <b
-          class="numeric font-semibold text-ink"
-          class:tick={labelsTick.now}
-          onanimationend={labelsTick.settle}>{labelsTotal.toLocaleString()}</b
-        >
+        <b class="numeric font-semibold text-ink">{labelsTotal.toLocaleString()}</b>
         {labelsTotal === 1 ? 'label' : 'labels'}
       </span>
     {:else if $labels.isError}
@@ -202,21 +166,21 @@
     {/if}
     <a href="/artists" class="transition hover:text-ink">
       <span class="underline underline-offset-3">
-        {#if artistsTotal !== undefined}
-          <span class="numeric">{artistsTotal.toLocaleString()}</span>
-          {artistsTotal === 1 ? 'artist' : 'artists'}
-        {:else}
-          Artists
-        {/if}
+      {#if artistsTotal !== undefined}
+        <span class="numeric">{artistsTotal.toLocaleString()}</span>
+        {artistsTotal === 1 ? 'artist' : 'artists'}
+      {:else}
+        Artists
+      {/if}
       </span>
     </a>
   {/snippet}
   {#snippet actions()}
-    <Button variant="primary" key="f" verb="follow label" onclick={() => (showAddLabel = true)}>
+    <Button onclick={() => (showAddLabel = true)}>
       <Icon name="plus" size="sm" /> Follow label
     </Button>
   {/snippet}
-</PageHeader>
+</Hero>
 
 <ControlRail>
   <form class="w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
@@ -232,185 +196,170 @@
   </form>
 </ControlRail>
 
-<div class="flex flex-col gap-4 pb-8">
+<div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
   {#if $labels.isError}
-    <div class="px-5 pt-5">
-      <ErrorNote error={$labels.error} retry={() => $labels.refetch()} />
-    </div>
+    <ErrorNote error={$labels.error} retry={() => $labels.refetch()} />
   {:else}
     <Settle pending={$labels.isPending}>
       {#snippet placeholder()}
         <ul
-          class="max-h-[calc(100dvh-9rem)] overflow-hidden"
+          class="max-h-[calc(100dvh-9rem)] flex flex-col divide-y divide-line-thin overflow-hidden"
           role="status"
           aria-label="Loading labels"
         >
           {#each Array(labelSkeletonCount) as _, placeholderIndex (placeholderIndex)}
-            <li class="h-9 border-b border-rule px-5 py-2" aria-hidden="true">
-              <Skeleton class="h-full" />
+            <li class="flex items-center gap-3 px-1 py-3.5" aria-hidden="true">
+              <Skeleton class="h-4 w-40" />
+              <Skeleton class="h-4 w-28" />
+              <Skeleton class="ml-auto h-4 w-36" />
             </li>
           {/each}
         </ul>
       {/snippet}
       {#if items.length === 0}
-        <div class="px-5 pt-5">
-          <EmptyPanel heading="No labels followed" role="idle">
-            <p class="text-body text-ink-3">Follow a label to track its releases.</p>
-          </EmptyPanel>
-        </div>
+        <EmptyPanel
+          heading="No labels followed"
+          role="idle"
+        >
+          <p class="text-body text-ink-3">Follow a label to track its releases.</p>
+        </EmptyPanel>
       {:else if filtered.length === 0}
-        <div class="px-5 pt-5">
-          <EmptyPanel heading="No labels match that search" role="idle" />
-        </div>
+        <EmptyPanel
+          heading="No labels match that search"
+          role="idle"
+        />
       {:else}
         {#each [$follow.error, $unfollow.error, $refresh.error, $setMonitor.error] as error, errorIndex (errorIndex)}
           {#if error}
-            <div class="px-5 pt-5"><ErrorNote {error} /></div>
+            <ErrorNote {error} />
           {/if}
         {/each}
 
         <div class="flex flex-col">
-          <div
-            class="grid {COLUMNS} label h-7 items-center gap-x-3 border-b border-rule-strong px-5"
-            aria-hidden="true"
-          >
+          <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-meta text-ink-3`}>
             <span></span>
-            <span>Label</span>
-            <span>Owned</span>
-            <span>Monitor</span>
-            <span>Updated</span>
-            <span></span>
+            <span class="flex h-7 items-center">Label</span>
+            <span class="flex h-7 items-center">Owned</span>
+            <span class="flex h-7 items-center">Monitor</span>
+            <span class="flex h-7 items-center">Updated</span>
+            <span class="flex h-7 items-center"></span>
           </div>
 
-          <div class="relative" bind:this={listElement} use:glide={{ key: `${cursorId}:${search}` }}>
-            <ul class="flex flex-col">
-              {#each filtered as label (label.id)}
-                {@const here = label.id === cursorId}
-                <li
-                  class="row scroll-mt-24 scroll-mb-12 grid {COLUMNS} items-center gap-x-3 px-5 {here
-                    ? 'on-ink'
-                    : ''}"
-                  data-label={label.id}
-                  data-cursor={here}
-                  onfocusin={() => (cursorId = label.id)}
-                  animate:slideInto
-                >
-                  {#if confirming === label.id}
-                    <div class="col-span-6 flex flex-wrap items-center gap-3 py-1">
-                      <p class="text-meta">
-                        Unfollow {label.name}? Its releases stay; nothing you own is touched.
-                      </p>
-                      <div class="ml-auto flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          disabled={$unfollow.isPending}
-                          onclick={() => $unfollow.mutate(label.id)}
-                        >
-                          {$unfollow.isPending ? 'Unfollowing…' : 'Unfollow'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={$unfollow.isPending}
-                          onclick={() => (confirming = '')}
-                        >
-                          Keep following
-                        </Button>
-                      </div>
-                    </div>
-                  {:else}
-                    <!-- The label's most-held cover. Only covers already cached
-                         are named, and a label with none gets the flat placeholder. -->
-                    <span class="block size-7 overflow-hidden rounded-cover" aria-hidden="true">
-                      <Cover
-                        src={label.coverAlbumIds?.[0] ? coverSrc(label.coverAlbumIds[0]) : undefined}
-                        seed={label.id}
-                        class="size-full object-cover"
-                      />
-                    </span>
-                    <!-- The link covers the row through its ::after; the controls
-                         beside it sit above it. -->
-                    <span class="flex min-w-0 items-baseline gap-2">
-                      <a
-                        href="/artists/labels/{label.id}"
-                        class="truncate text-body after:absolute after:inset-0 {here ? 'font-medium' : ''}"
+          <ul class="flex flex-col divide-y divide-line-thin">
+            {#each filtered as label (label.id)}
+              <li class={`grid ${COLUMNS} min-h-[52px] items-center gap-x-4 px-1 py-2`}>
+                {#if confirming === label.id}
+                  <div class="col-span-6 flex flex-wrap items-center gap-3 py-1">
+                    <p class="text-meta text-ink-2">
+                      Unfollow {label.name}? Its releases stay; nothing you own is touched.
+                    </p>
+                    <div class="ml-auto flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        disabled={$unfollow.isPending}
+                        onclick={() => $unfollow.mutate(label.id)}
                       >
-                        {label.name}
-                      </a>
-                      {#if label.type || label.country}
-                        <span class="truncate text-meta {here ? '' : 'text-ink-3'}">
-                          {[label.type, label.country].filter(Boolean).join(' · ')}
-                        </span>
-                      {/if}
-                    </span>
+                        {$unfollow.isPending ? 'Unfollowing…' : 'Unfollow'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={$unfollow.isPending}
+                        onclick={() => (confirming = '')}
+                      >
+                        Keep following
+                      </Button>
+                    </div>
+                  </div>
+                {:else}
+                  <!-- The label's most-held cover. Only covers already cached
+                       are named, and a label with none gets generated art. -->
+                  <span class="size-[2.625rem] overflow-hidden rounded-row" aria-hidden="true">
+                    <Cover
+                      src={label.coverAlbumIds?.[0] ? coverSrc(label.coverAlbumIds[0]) : undefined}
+                      seed={label.id}
+                      class="size-full object-cover"
+                    />
+                  </span>
+                  <span class="flex min-w-0 flex-col gap-0.5">
+                    <a
+                      href="/artists/labels/{label.id}"
+                      class="truncate text-body font-medium text-ink underline-offset-2 hover:underline"
+                    >
+                      {label.name}
+                    </a>
+                    {#if label.type || label.country}
+                      <span class="truncate text-meta text-ink-3">
+                        {[label.type, label.country].filter(Boolean).join(' · ')}
+                      </span>
+                    {/if}
+                  </span>
 
-                    <span class="flex items-center">
-                      {#if label.releaseCount > 0}
-                        <OwnedBar
-                          owned={label.ownedReleaseCount}
-                          total={label.releaseCount}
-                          noun="releases"
-                          compact
-                        />
-                      {:else}
-                        <span class="truncate text-meta {here ? '' : 'text-ink-3'}">catalogue not fetched</span>
-                      {/if}
-                    </span>
+                  <span>
+                    {#if label.releaseCount > 0}
+                      <OwnedBar owned={label.ownedReleaseCount} total={label.releaseCount} width={56} noun="releases" />
+                    {:else}
+                      <span class="text-meta text-ink-3">catalogue not fetched</span>
+                    {/if}
+                  </span>
 
-                    <span class="relative z-[2] flex items-center">
-                      {#if label.followed}
-                        <PillSelect
-                          options={monitorLevels}
-                          value={label.monitorLevel}
-                          onchange={(next) =>
-                            $setMonitor.mutate({ id: label.id, level: next as MonitorLevel })}
-                          label="Monitor {label.name}"
-                        />
-                      {/if}
-                    </span>
+                  <span>
+                    {#if label.followed}
+                      <PillSelect
+                        options={monitorLevels}
+                        value={label.monitorLevel}
+                        onchange={(next) =>
+                          $setMonitor.mutate({ id: label.id, level: next as MonitorLevel })}
+                        label="Monitor {label.name}"
+                      />
+                    {/if}
+                  </span>
 
-                    <span class="mono truncate text-meta {here ? '' : 'text-ink-3'}">
-                      {#if label.followed}
-                        {label.lastRefreshedAt ? calendarDate(label.lastRefreshedAt) : 'not refreshed yet'}
-                      {/if}
-                    </span>
+                  <span class="text-meta text-ink-3">
+                    {#if label.followed}
+                      {label.lastRefreshedAt ? calendarDate(label.lastRefreshedAt) : 'not refreshed yet'}
+                    {/if}
+                  </span>
 
-                    <span class="relative z-[2] flex items-center justify-end gap-1">
-                      {#if label.followed}
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          icon
-                          title="Refresh {label.name}"
-                          aria-label="Refresh {label.name}"
-                          disabled={$refresh.isPending || label.refreshStatus === 'running'}
-                          onclick={() => $refresh.mutate(label.id)}
-                        >
-                          <Icon name="refresh" size="sm" class={label.refreshStatus === 'running' ? 'animate-spin' : ''} />
-                        </Button>
-                        <Button size="xs" variant="ghost" onclick={() => (confirming = label.id)}>
-                          <Icon name="unfollow" size="sm" /> Unfollow
-                        </Button>
-                      {:else}
-                        <!-- Held but not followed: an earlier follow was
-                             withdrawn and its releases were kept. Following
-                             again is that decision made a second time, not a
-                             fresh fetch. -->
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled={$follow.isPending}
-                          onclick={() => $follow.mutate(label)}
-                        >
-                          {$follow.isPending ? 'Following…' : 'Follow'}
-                        </Button>
-                      {/if}
-                    </span>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </div>
+                  <span class="flex items-center justify-end gap-1">
+                    {#if label.followed}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon
+                        title="Refresh {label.name}"
+                        aria-label="Refresh {label.name}"
+                        disabled={$refresh.isPending || label.refreshStatus === 'running'}
+                        onclick={() => $refresh.mutate(label.id)}
+                      >
+                        <Icon name="refresh" size="sm" class={label.refreshStatus === 'running' ? 'animate-spin' : ''} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onclick={() => (confirming = label.id)}
+                      >
+                        <Icon name="unfollow" size="sm" /> Unfollow
+                      </Button>
+                    {:else}
+                      <!-- Held but not followed: an earlier follow was
+                           withdrawn and its releases were kept. Following
+                           again is that decision made a second time, not a
+                           fresh fetch. -->
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={$follow.isPending}
+                        onclick={() => $follow.mutate(label)}
+                      >
+                        {$follow.isPending ? 'Following…' : 'Follow'}
+                      </Button>
+                    {/if}
+                  </span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
         </div>
       {/if}
     </Settle>
