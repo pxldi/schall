@@ -7,9 +7,8 @@ import type { Overview } from '$lib/api';
 // reads every `+` file in a route folder as a route file.
 //
 // The Overview is one read drawn nine ways. What is under test is that each
-// section says what the read said — the period beside its name, the figures,
-// the tooltip on a mark — that Recently added answers J, K and Enter, and that
-// the one action on it sends the right want.
+// panel says what the read said — the period beside its name, the figures,
+// the tooltip on a mark — and that the one action on it sends the right want.
 vi.mock('$app/state', () => ({
   page: { params: {}, url: new URL('http://localhost/') }
 }));
@@ -21,7 +20,6 @@ vi.mock('$app/navigation', () => ({
 }));
 
 const { default: Overview } = await import('./+page.svelte');
-const { goto } = await import('$app/navigation');
 
 function days(n: number, count: (index: number) => number, last = new Date('2026-09-06T12:00:00Z')) {
   return Array.from({ length: n }, (_, index) => {
@@ -160,7 +158,7 @@ describe('the overview', () => {
     vi.unstubAllGlobals();
   });
 
-  it('names the nine sections with their periods', async () => {
+  it('names the nine panels with their periods', async () => {
     answering(overview());
     show();
     await screen.findByText('812');
@@ -447,54 +445,19 @@ describe('the overview', () => {
     expect(screen.queryAllByLabelText(/^Loading /)).toHaveLength(0);
   });
 
-  it('collapses the listening sections to one line until listens have been read', async () => {
+  it('says the listening panels are empty until listens have been read', async () => {
     const data = overview();
     data.listening.available = false;
     answering(data);
     show();
     await screen.findByText('files');
-    expect(screen.getAllByText('No listens yet')).toHaveLength(1);
-    expect(screen.getByText('Listens arrive from Navidrome.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Listening', level: 2 })).toBeTruthy();
-    for (const title of ['Listens', 'Most played', 'Top artists', 'When you listen', 'Top albums', 'Recently played']) {
-      expect(screen.queryByRole('heading', { name: title, level: 2 })).toBeNull();
-    }
+    expect(screen.getAllByText('No listens yet')).toHaveLength(6);
     expect(screen.getByText('2,500')).toBeTruthy();
     expect(screen.getByText('files')).toBeTruthy();
     expect(screen.getByText('Nachtfalter')).toBeTruthy();
   });
 
-  it('moves the cursor in Recently added with J and K and opens the release with Enter', async () => {
-    const data = overview();
-    const addedAt = new Date(Date.now() - 60_000).toISOString();
-    data.recentlyAdded = [
-      { title: 'One', artist: 'Ye', addedAt, trackId: null, releaseId: 'rel1', coverUrl: null, inks: null },
-      { title: 'Two', artist: 'Ye', addedAt, trackId: null, releaseId: 'rel2', coverUrl: null, inks: null },
-      { title: 'Three', artist: 'Ye', addedAt, trackId: null, releaseId: null, coverUrl: null, inks: null }
-    ];
-    answering(data);
-    show();
-    await screen.findByText('Two');
-    const rowOf = (title: string) => screen.getByText(title).closest('li')!;
-    expect(rowOf('One').getAttribute('data-cursor')).toBe('true');
-    await fireEvent.keyDown(document.body, { key: 'j' });
-    expect(rowOf('Two').getAttribute('data-cursor')).toBe('true');
-    expect(rowOf('One').getAttribute('data-cursor')).toBe('false');
-    await fireEvent.keyDown(document.body, { key: 'Enter' });
-    expect(goto).toHaveBeenCalledWith('/releases/rel2');
-    // A row without a release opens nothing.
-    await fireEvent.keyDown(document.body, { key: 'j' });
-    vi.mocked(goto).mockClear();
-    await fireEvent.keyDown(document.body, { key: 'Enter' });
-    expect(goto).not.toHaveBeenCalled();
-    // The first row is the floor.
-    await fireEvent.keyDown(document.body, { key: 'k' });
-    await fireEvent.keyDown(document.body, { key: 'k' });
-    await fireEvent.keyDown(document.body, { key: 'k' });
-    expect(rowOf('One').getAttribute('data-cursor')).toBe('true');
-  });
-
-  it('says a listening section has nothing this month, not a blank box', async () => {
+  it('says a listening panel has nothing this month, not a blank box', async () => {
     const data = overview({ recentlyAdded: [] });
     data.listening.mostPlayed = [];
     data.listening.topArtists = [];

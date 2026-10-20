@@ -114,9 +114,7 @@ const pages: {
   {
     name: 'overview',
     path: '/',
-    ready: (page) => expect(page.getByText('No listens yet')).toHaveCount(1),
-    // The ages beside Recently added grow by a day every day.
-    mask: (page) => [page.locator('section li > span.mono')]
+    ready: (page) => expect(page.getByText('No listens yet')).toHaveCount(6)
   },
   {
     name: 'artists',

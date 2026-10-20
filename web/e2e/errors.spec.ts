@@ -82,5 +82,5 @@ test('an address that names nothing is answered inside the application, with a w
   // And the way out is a control, not a sentence about pressing Back.
   await page.getByRole('link', { name: 'Go to Overview' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'Library', level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Listens', level: 2 })).toBeVisible();
 });
