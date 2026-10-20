@@ -555,6 +555,13 @@
 
   // Every identifier disclosure on a version question, opened together by I.
   let identifiers = $state(false);
+  // Whether the form that keys a want to a link is open. It closes with the
+  // question.
+  let linking = $state(false);
+  $effect(() => {
+    void held;
+    linking = false;
+  });
 
   // Review's keys (ADR 0042). The buttons that carry their own key (S, N)
   // register themselves; these are the keys with no single button. An open
@@ -748,15 +755,8 @@
               {#snippet rowBody(question: (typeof filtered)[number], here: boolean)}
                 {@const kind = reasons.get(question.id)}
                 <span class="truncate text-body {here ? 'font-medium' : 'text-ink-2'}">{question.title}</span>
-                <span class="flex min-w-0 items-baseline gap-2">
-                  <span class="min-w-0 flex-1 truncate text-meta {here ? 'text-ink-3' : 'text-ink-4'}">
-                    {question.detail}
-                  </span>
-                  {#if kind}
-                    <span class="mono shrink-0 text-micro uppercase {here ? 'text-ink-2' : 'text-ink-4'}" aria-hidden="true">
-                      {REASONS[kind].label}
-                    </span>
-                  {/if}
+                <span class="truncate text-meta {here ? 'text-ink-3' : 'text-ink-4'}">
+                  {question.detail}{#if kind}<span class="text-ink-4">{` · ${REASONS[kind].label}`}</span>{/if}
                 </span>
               {/snippet}
               {#if albums}
@@ -838,7 +838,7 @@
 
         <section aria-label="Review" class="flex min-w-0 flex-col">
           {#if batch}
-            <PageHeader title={batch.album} level={2} path={[{ label: 'Review', href: '/review' }]}>
+            <PageHeader title={batch.album} level={2}>
               {#snippet sub()}
                 <span>{batch?.artist}</span>
               {/snippet}
@@ -862,12 +862,7 @@
             </div>
           {:else}
             {#key current.id}
-              <PageHeader
-                title={current.title}
-                level={2}
-                path={[{ label: 'Review', href: '/review' }]}
-                class="rise"
-              >
+              <PageHeader title={current.title} level={2} class="rise">
                 {#snippet sub()}
                   {#if current?.detail}<span>{current.detail}</span>{/if}
                   {#if current?.want?.target.durationMs}
@@ -931,6 +926,8 @@
                     }}
                   />
                   <UseAddress
+                    bind:open={linking}
+                    trigger={false}
                     targetId={current.want.target.id}
                     entryTitle={current.want.target.title}
                     entryArtist={current.want.target.artist}
@@ -1000,6 +997,7 @@
               {/if}
               {#if current.kind === 'folder' && current.download}
                 <Button
+                  variant="primary"
                   disabled={deciding || !current.download.revalidatable}
                   onclick={() => $revalidate.mutate(current.download!.id)}
                 >
@@ -1007,7 +1005,16 @@
                   Check again
                 </Button>
               {:else if current.kind === 'version'}
-                <Button disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
+                <Button
+                  variant="outline"
+                  aria-expanded={linking}
+                  disabled={deciding}
+                  onclick={() => (linking = !linking)}
+                >
+                  <Icon name="link" size="sm" />
+                  Use link
+                </Button>
+                <Button variant="primary" disabled={deciding || !choiceMade || !candidates[chosen]} onclick={confirm}>
                   Use version
                   <Keycap key="enter" class="-mr-1" />
                 </Button>

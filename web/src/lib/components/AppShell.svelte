@@ -93,7 +93,10 @@
         run: () => void goto(destination.href)
       })),
       { keys: ['/'], verb: 'search', run: openSearch },
-      { keys: ['?'], verb: 'all keys', run: () => (sheetOpen = true) }
+      { keys: ['?'], verb: 'all keys', run: () => (sheetOpen = true) },
+      // J and K move a list's cursor. A screen without a list still claims
+      // them, so the letters never open search.
+      { keys: ['j', 'k'], verb: 'move', hidden: true, enabled: () => false, run: () => {} }
     ],
     { global: true }
   );

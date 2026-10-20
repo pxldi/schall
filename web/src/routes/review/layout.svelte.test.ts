@@ -305,11 +305,11 @@ describe('the three kinds Review holds', () => {
     );
   });
 
-  it('answers a version question with Skip, Remove and Use version, in order', async () => {
+  it('answers a version question with Skip, Remove, Use link and Use version, in order', async () => {
     piles.wants = [want('resolution')];
     await open('Evensong');
 
-    expect(headerActions()).toEqual(['Skip', 'Remove', 'Use version']);
+    expect(headerActions()).toEqual(['Skip', 'Remove', 'Use link', 'Use version']);
   });
 
   it('answers a folder question with Skip before Check again', async () => {

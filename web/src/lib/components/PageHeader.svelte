@@ -5,7 +5,7 @@
   import { useKeys } from '$lib/keys.svelte';
 
   // The title spot, at one place on every page (ADR 0042): a one-line path of
-  // links in mono to the places above this one, then the page's name. A line of context and the page's
+  // links to the places above this one, then the page's name. A line of context and the page's
   // actions sit under it. Nothing goes above the path; there are no kicker
   // labels.
   //
@@ -51,10 +51,11 @@
 </script>
 
 <header class="flex flex-col gap-1 px-5 pt-3.5 {className}">
-  <!-- The line is drawn empty on a top-level page, so the title sits at the
-       same height on every page. -->
-  {#if path.length}
-    <nav aria-label="Path" class="mono flex h-4 min-w-0 items-center gap-1.5 text-micro text-ink-4">
+  <!-- A path of one step only names the section the top strip already marks,
+       so the line is drawn only for two or more. It is left empty otherwise,
+       so the title sits at the same height on every page. -->
+  {#if path.length > 1}
+    <nav aria-label="Path" class="flex h-4 min-w-0 items-center gap-1.5 text-meta text-ink-4">
       {#each path as step, index (step.href)}
         {#if index > 0}<span aria-hidden="true">/</span>{/if}
         <a href={step.href} class="truncate transition hover:text-ink hover:underline">{step.label}</a>

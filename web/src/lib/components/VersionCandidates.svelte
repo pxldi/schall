@@ -34,11 +34,15 @@
 
   const COLUMNS = 'grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_6.5rem_minmax(0,2fr)]';
 
-  /** A verdict entry ("duration (3 seconds out)") as a short word
-   * ("duration"). The measurement is printed in the length column. */
+  /** A verdict entry ("duration (3 seconds out)") as a short word in
+   * sentence case ("Length"). The measurement is printed in the length
+   * column. */
   function word(entry: string) {
     const opened = entry.indexOf(' (');
-    return opened < 0 ? entry : entry.slice(0, opened);
+    const field = (opened < 0 ? entry : entry.slice(0, opened)).trim();
+    if (field === 'duration' || field === 'length') return 'Length';
+    if (field.toLowerCase() === 'isrc') return 'ISRC';
+    return field.charAt(0).toUpperCase() + field.slice(1);
   }
 
   /** The difference from the entry's length, signed, in whole seconds. */
@@ -92,7 +96,7 @@
               <Keycap key={String(index + 1)} class="w-fit" />
               <span class="min-w-0 truncate text-body">
                 <span class="text-ink">{candidate.trackTitle}</span>
-                <span class="mono ml-1.5 text-meta text-ink-3">{candidate.artistName}</span>
+                <span class="ml-1.5 text-meta text-ink-3">{candidate.artistName}</span>
               </span>
               <span class="min-w-0 truncate text-body text-ink-2">{candidate.releaseTitle || '—'}</span>
               <span class="mono flex items-center justify-end gap-1.5 text-meta text-ink-2">
@@ -103,7 +107,7 @@
                   </span>
                 {/if}
               </span>
-              <span class="mono flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-micro uppercase">
+              <span class="flex min-w-0 gap-x-3 overflow-hidden whitespace-nowrap text-meta">
                 {#each candidate.agrees as entry (entry)}
                   <span class="flex items-center gap-1 whitespace-nowrap text-ink-2">
                     <Icon name={STATE_GLYPH.ok} size={12} class="text-ok" aria-label="agrees" />

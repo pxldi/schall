@@ -18,7 +18,6 @@
   import { glide } from '$lib/motion.svelte';
   import { STATE_GLYPH } from '$lib/states';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import Keycap from '$lib/components/Keycap.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -505,13 +504,6 @@
       order: 0,
       enabled: () => trackItems.length > 0,
       run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
-    },
-    {
-      keys: ['backspace'],
-      verb: 'remove',
-      order: 40,
-      enabled: () => !$tracks.isPending && removable && !$removeRelease.isPending,
-      run: () => (confirmingRemove = true)
     }
   ]);
 </script>
@@ -558,95 +550,96 @@
               <a href={`/artists/${data.artistId}`} class="text-ink transition hover:underline">
                 {data.artistName}
               </a>
-              <span class="mono text-meta text-ink-3">
+              <span class="text-ink-3 tabular-nums">
                 {[data.albumType ? data.albumType[0].toUpperCase() + data.albumType.slice(1) : '', ...heroFacts]
                   .filter(Boolean)
                   .join(' · ')}
               </span>
             {/snippet}
+            <!-- The actions, each with the key that presses it, in the title
+                 row. The one primary press is wanting what is missing. -->
+            {#snippet actions()}
+              {#if $tracks.isPending}
+                <span class="flex gap-1.5" role="status" aria-label="Loading track actions">
+                  <span class="invisible h-[1.875rem] w-24" aria-hidden="true"></span>
+                </span>
+              {:else}
+                {#if missingCount > 0 && unwantedCount > 0}
+                  <Button
+                    variant="primary"
+                    key="w"
+                    verb="want"
+                    aria-label={`Want ${unwantedCount} missing`}
+                    disabled={$wantRelease.isPending}
+                    onclick={() => $wantRelease.mutate()}
+                  >
+                    <Icon
+                      name={$wantRelease.isPending ? 'busy' : 'plus'}
+                      size="sm"
+                      class={$wantRelease.isPending ? 'animate-spin' : ''}
+                    />
+                    Want {unwantedCount}
+                  </Button>
+                {/if}
+              {/if}
+              <Button
+                variant="outline"
+                key="f"
+                verb="search sources"
+                aria-label="Find sources"
+                title="Find sources"
+                onclick={() => findSources(sourcesOpen ? sourceQuery : undefined)}
+                disabled={sourcesLoading}
+              >
+                <Icon
+                  name={sourcesLoading ? 'busy' : 'search'}
+                  size="sm"
+                  class={sourcesLoading ? 'animate-spin' : ''}
+                />
+                Search
+              </Button>
+              {#if !$tracks.isPending}
+                {#if missingCount > 0}
+                  <Button
+                    variant="outline"
+                    key="n"
+                    verb="not wanted"
+                    title={`Dismiss the ${missingCount} missing`}
+                    aria-label={missingCount === 1 ? 'Dismiss it' : 'Dismiss the rest'}
+                    disabled={$dismissRemainder.isPending}
+                    onclick={() => $dismissRemainder.mutate()}
+                  >
+                    <Icon
+                      name={$dismissRemainder.isPending ? 'busy' : 'dismiss'}
+                      size="sm"
+                      class={$dismissRemainder.isPending ? 'animate-spin' : ''}
+                    />
+                    Not wanted
+                  </Button>
+                {/if}
+                {#if removable}
+                  <!-- Pressed, it removes at once. Its key asks first. -->
+                  <Button
+                    variant="outline"
+                    key="backspace"
+                    verb="remove"
+                    onkey={() => (confirmingRemove = true)}
+                    aria-label="Remove"
+                    title="Remove"
+                    disabled={$removeRelease.isPending}
+                    onclick={() => $removeRelease.mutate()}
+                  >
+                    <Icon
+                      name={$removeRelease.isPending ? 'busy' : 'delete'}
+                      size="sm"
+                      class={$removeRelease.isPending ? 'animate-spin' : ''}
+                    />
+                    Remove
+                  </Button>
+                {/if}
+              {/if}
+            {/snippet}
           </PageHeader>
-
-          <!-- The actions, each with the key that presses it. The one primary
-               press is wanting what is missing. -->
-          <div class="flex min-h-[1.875rem] flex-wrap items-center gap-1.5 px-5 pt-4">
-            {#if $tracks.isPending}
-              <span class="flex gap-1.5" role="status" aria-label="Loading track actions">
-                <span class="invisible h-[1.875rem] w-24" aria-hidden="true"></span>
-              </span>
-            {:else}
-              {#if missingCount > 0 && unwantedCount > 0}
-                <Button
-                  key="w"
-                  verb="want"
-                  aria-label={`Want ${unwantedCount} missing`}
-                  disabled={$wantRelease.isPending}
-                  onclick={() => $wantRelease.mutate()}
-                >
-                  <Icon
-                    name={$wantRelease.isPending ? 'busy' : 'plus'}
-                    size="sm"
-                    class={$wantRelease.isPending ? 'animate-spin' : ''}
-                  />
-                  Want {unwantedCount}
-                </Button>
-              {/if}
-            {/if}
-            <Button
-              variant="outline"
-              key="f"
-              verb="search sources"
-              aria-label="Find sources"
-              title="Find sources"
-              onclick={() => findSources(sourcesOpen ? sourceQuery : undefined)}
-              disabled={sourcesLoading}
-            >
-              <Icon
-                name={sourcesLoading ? 'busy' : 'search'}
-                size="sm"
-                class={sourcesLoading ? 'animate-spin' : ''}
-              />
-              Search
-            </Button>
-            {#if !$tracks.isPending}
-              {#if missingCount > 0}
-                <Button
-                  variant="outline"
-                  key="n"
-                  verb="not wanted"
-                  title={`Dismiss the ${missingCount} missing`}
-                  aria-label={missingCount === 1 ? 'Dismiss it' : 'Dismiss the rest'}
-                  disabled={$dismissRemainder.isPending}
-                  onclick={() => $dismissRemainder.mutate()}
-                >
-                  <Icon
-                    name={$dismissRemainder.isPending ? 'busy' : 'dismiss'}
-                    size="sm"
-                    class={$dismissRemainder.isPending ? 'animate-spin' : ''}
-                  />
-                  Not wanted
-                </Button>
-              {/if}
-              {#if removable}
-                <!-- Pressed, it removes at once. Its key asks first. -->
-                <Button
-                  variant="outline"
-                  aria-label="Remove"
-                  title="Remove"
-                  aria-keyshortcuts="Backspace"
-                  disabled={$removeRelease.isPending}
-                  onclick={() => $removeRelease.mutate()}
-                >
-                  <Icon
-                    name={$removeRelease.isPending ? 'busy' : 'delete'}
-                    size="sm"
-                    class={$removeRelease.isPending ? 'animate-spin' : ''}
-                  />
-                  Remove
-                  <Keycap key="backspace" class="-mr-1" />
-                </Button>
-              {/if}
-            {/if}
-          </div>
 
           <!-- The answer sits under the button that asked. -->
           <div class="flex flex-col gap-2 px-5 empty:hidden [&:not(:empty)]:pt-3">
@@ -746,13 +739,15 @@
                                 {track.title}
                               </p>
                             </td>
-                            <!-- The + shows on the hovered, focused or cursor row;
-                                 a wanted track keeps its filled tick. -->
+                            <!-- The + shows on the hovered or cursor row of a track
+                                 the library lacks. A held track's toggle, which
+                                 removes it, shows only to a keyboard that
+                                 reaches it. -->
                             <td class="px-1">
                               <span class="flex items-center justify-center">
                                 {#if track.musicbrainzRecordingId && !lost(track)}
                                   <WantToggle
-                                    reveal={trackDone(track) ? 'all' : true}
+                                    reveal={trackDone(track) ? 'focus' : true}
                                     wanted={trackDone(track) ? !track.removesAt : isWanted(track)}
                                     title={track.title}
                                     onwant={() => $toggleTrack.mutateAsync({ kind: 'want', trackId: track.id })}
@@ -795,6 +790,8 @@
                                   {:else if tag}
                                     <StateIcon icon={STATE_GLYPH.decide} label={tag.label} role="decide" />
                                     <span class="text-meta text-decide">{tag.label}</span>
+                                  {:else}
+                                    <StateIcon icon={STATE_GLYPH.idle} label="Missing" role="idle" />
                                   {/if}
                                 {/if}
                               </span>
@@ -1079,22 +1076,34 @@
               {#if $tracks.isPending}
                 <span class="skeleton block h-4 w-32" role="status" aria-label="Loading track summary"></span>
               {:else if $tracks.data?.items.length}
-                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <!-- One line: the blocks and the fraction, then each other count as
+                     its glyph and figure, with the words in the tooltip. -->
+                <span class="flex items-center gap-x-3 whitespace-nowrap">
                   <OwnedBar owned={ownedCount} total={$tracks.data.items.length} />
                   {#if missingCount > 0}
-                    <span class="mono whitespace-nowrap text-meta text-ink-3">
-                      · {missingCount} {data.artistFollowed ? 'missing' : 'not owned'}
+                    {@const missingWord = data.artistFollowed ? 'missing' : 'not owned'}
+                    <span class="flex items-center gap-1 text-meta text-idle" title={`${missingCount} ${missingWord}`}>
+                      <Icon name={STATE_GLYPH.idle} size="sm" />
+                      <span class="mono">{missingCount}</span><span class="sr-only">{` ${missingWord}`}</span>
                     </span>
                   {/if}
                   {#if wantedCount > 0}
-                    <span class="mono whitespace-nowrap text-meta text-ink-3">· {wantedCount} wanted</span>
+                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${wantedCount} wanted`}>
+                      <Icon name="want" size="sm" />
+                      <span class="mono">{wantedCount}</span><span class="sr-only">{' wanted'}</span>
+                    </span>
                   {/if}
                   {#if dismissedCount > 0}
-                    <span class="mono whitespace-nowrap text-meta text-ink-3">· {dismissedCount} dismissed</span>
+                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${dismissedCount} dismissed`}>
+                      <Icon name="dismiss" size="sm" />
+                      <span class="mono">{dismissedCount}</span><span class="sr-only">{' dismissed'}</span>
+                    </span>
                   {/if}
                   {#if leaving.length > 0}
-                    <span class="mono whitespace-nowrap text-meta text-ink-3">
-                      · {leaving.length} deleted on {calendarDate(firstLeaving)}
+                    {@const leavingWord = `deleted on ${calendarDate(firstLeaving)}`}
+                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${leaving.length} ${leavingWord}`}>
+                      <Icon name="delete" size="sm" />
+                      <span class="mono">{leaving.length}</span><span class="sr-only">{` ${leavingWord}`}</span>
                     </span>
                   {/if}
                 </span>
@@ -1106,12 +1115,16 @@
             <dt class="label pt-0.5">Edition</dt>
             <dd class="text-ink-2">
               {#if data.musicbrainzReleaseGroupId}
-                <span class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <!-- The three facts stay on one line, so no separator is left alone
+                     at the start of the next. -->
+                <span class="flex flex-col items-start gap-1.5">
                   {#if selectedEdition}
-                    <span class="mono text-meta">
-                      {selectedEdition.releaseDate || '—'} · {selectedEdition.country || '—'} · {selectedEdition.status ||
-                        '—'}
-                    </span>
+                    {@const facts = [
+                      selectedEdition.releaseDate || '—',
+                      selectedEdition.country || '—',
+                      selectedEdition.status || '—'
+                    ].join(' · ')}
+                    <span class="block max-w-full truncate whitespace-nowrap text-meta tabular-nums" title={facts}>{facts}</span>
                   {:else}
                     <span class="text-meta">No pressing selected</span>
                   {/if}
@@ -1155,13 +1168,6 @@
               <dd class="text-meta text-ink-2">{data.genres.join(', ')}</dd>
             {/if}
 
-            <dt class="label pt-0.5">Artist</dt>
-            <dd class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-ink-2">
-              <span class="truncate">{data.artistName}</span>
-              <Button variant="outline" size="xs" key="a" verb="artist" href={`/artists/${data.artistId}`}>
-                Artist
-              </Button>
-            </dd>
           </dl>
 
           <ArtistReleases artistID={data.artistId} artistName={data.artistName} {releaseID} />

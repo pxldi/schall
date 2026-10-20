@@ -9,16 +9,21 @@
     targetId,
     entryTitle,
     entryArtist,
-    entryDurationMs
+    entryDurationMs,
+    open = $bindable(false),
+    trigger = true
   }: {
     targetId: string;
     entryTitle: string;
     entryArtist: string;
     entryDurationMs: number | null | undefined;
+    open?: boolean;
+    /** Off where the caller draws its own control for `open`, as Review
+     *  does in its answer bar. */
+    trigger?: boolean;
   } = $props();
 
   const queryClient = useQueryClient();
-  let open = $state(false);
   let field = $state<HTMLInputElement | undefined>();
 
   // The click leaves focus on the button, and autofocus on an element drawn
@@ -76,15 +81,17 @@
 <!-- A link in the line under a row. Opened, the link stays where it is and
      the form takes the next line of the same row, at a width an address
      needs. -->
-<button
-  type="button"
-  aria-expanded={open}
-  aria-controls="source-address-form-{targetId}"
-  class="cursor-pointer text-meta font-medium text-ink-2 underline decoration-rule-strong underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-ink)]"
-  onclick={() => (open = !open)}
->
-  Use link
-</button>
+{#if trigger}
+  <button
+    type="button"
+    aria-expanded={open}
+    aria-controls="source-address-form-{targetId}"
+    class="cursor-pointer text-meta font-medium text-ink-2 underline decoration-rule-strong underline-offset-[3px] hover:text-ink hover:decoration-[var(--color-ink)]"
+    onclick={() => (open = !open)}
+  >
+    Use link
+  </button>
+{/if}
 {#if open}
   <div
     id="source-address-form-{targetId}"

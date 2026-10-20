@@ -2,6 +2,7 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
   import { api, type Release } from '$lib/api';
+  import Button from '$lib/components/Button.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -57,12 +58,9 @@
         <span class="numeric text-meta font-normal text-ink-4">{items.length}</span>
       {/if}
     </h2>
-    <a
-      href={`/artists/${artistID}`}
-      class="tap ml-auto inline-flex shrink-0 items-center gap-1 text-meta font-medium text-ink-3 transition hover:text-ink"
-    >
+    <Button variant="ghost" size="xs" key="a" verb="artist" href={`/artists/${artistID}`} class="ml-auto">
       Artist <Icon name="chevron-right" size="sm" />
-    </a>
+    </Button>
   </div>
   {#if $releases.isError}
     <ErrorNote error={$releases.error} retry={() => $releases.refetch()} class="mt-2" />

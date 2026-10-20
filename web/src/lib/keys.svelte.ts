@@ -26,8 +26,12 @@ export interface KeyBinding {
   hidden?: boolean;
   /** Answered even while a button or a link has focus (never in a field). */
   fromControls?: boolean;
-  /** Sort position in the strip; lower comes first. Default 50. */
+  /** Sort position in the strip; lower comes first. Default 50. Bindings
+   *  with the same order follow the screen, by `element`. */
   order?: number;
+  /** The control the key presses, so the strip lists keys in the order the
+   *  controls sit on screen. */
+  element?: () => Element | undefined;
 }
 
 interface Scope {
@@ -76,29 +80,42 @@ export function useKeys(bindings: () => KeyBinding[], options: { global?: boolea
   });
 }
 
+/** Order: the explicit order first, then where the controls sit on screen,
+ *  then the order the bindings were registered in. */
+function byPlace(bindings: KeyBinding[]): KeyBinding[] {
+  return bindings
+    .map((binding, index) => ({ binding, index, element: binding.element?.() }))
+    .sort((a, b) => {
+      const order = (a.binding.order ?? 50) - (b.binding.order ?? 50);
+      if (order) return order;
+      if (a.element && b.element && a.element !== b.element) {
+        return a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      }
+      return a.index - b.index;
+    })
+    .map(({ binding }) => binding);
+}
+
 /** What the strip draws: every visible binding of the screen, in order. */
 export function stripBindings(): KeyBinding[] {
   void registry.version;
-  return scopes
-    .filter((scope) => !scope.global)
-    .flatMap((scope) => scope.bindings())
-    .filter((binding) => !binding.hidden)
-    .map((binding, index) => ({ binding, index }))
-    .sort((a, b) => (a.binding.order ?? 50) - (b.binding.order ?? 50) || a.index - b.index)
-    .map(({ binding }) => binding);
+  return byPlace(
+    scopes
+      .filter((scope) => !scope.global)
+      .flatMap((scope) => scope.bindings())
+      .filter((binding) => !binding.hidden)
+  );
 }
 
 /** What the key sheet lists: the screen's keys, then the ones that work
  *  everywhere. */
 export function sheetBindings(): { screen: KeyBinding[]; everywhere: KeyBinding[] } {
   void registry.version;
-  const screen = scopes
-    .filter((scope) => !scope.global)
+  const screen = byPlace(scopes.filter((scope) => !scope.global).flatMap((scope) => scope.bindings()));
+  const everywhere = scopes
+    .filter((scope) => scope.global)
     .flatMap((scope) => scope.bindings())
-    .map((binding, index) => ({ binding, index }))
-    .sort((a, b) => (a.binding.order ?? 50) - (b.binding.order ?? 50) || a.index - b.index)
-    .map(({ binding }) => binding);
-  const everywhere = scopes.filter((scope) => scope.global).flatMap((scope) => scope.bindings());
+    .filter((binding) => !binding.hidden);
   return { screen, everywhere };
 }
 

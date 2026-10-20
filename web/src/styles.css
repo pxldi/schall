@@ -424,13 +424,12 @@ h1 {
    declared outside it would win every argument with a utility written beside
    it at the call site. */
 @layer components {
-  /* Figures, durations, dates, counts, identifiers, paths and keycaps. The
-     tabular figures keep a column of numbers lined up and stop a changing
-     count from reflowing. */
+  /* Durations, counts, dates, file sizes, identifiers, file paths and
+     keycaps, and nothing else. The tabular figures keep a column of numbers
+     lined up and stop a changing count from reflowing. */
   .mono,
   .numeric,
   .font-mono,
-  .label,
   .keycap,
   kbd,
   code {
@@ -439,11 +438,13 @@ h1 {
     font-variant-numeric: tabular-nums;
   }
 
-  /* A label over a column or beside a value: 11px mono capitals in the
-     quietest grey. It repeats a name, so it is never the only words. */
+  /* A label over a column, beside a value or over a section: small Barlow
+     capitals in the quietest grey. It repeats a name, so it is never the only
+     words. */
   .label {
-    font-size: var(--text-micro);
-    font-weight: 400;
+    font-family: var(--font-sans);
+    font-size: 0.71875rem;
+    font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-ink-4);
@@ -636,6 +637,7 @@ h1 {
      $lib/motion.svelte). It is one element and slides between rows. */
   .glider {
     position: absolute;
+    z-index: 0;
     left: 0;
     top: 0;
     pointer-events: none;
@@ -645,6 +647,21 @@ h1 {
 
   .glider[data-still] {
     transition: none;
+  }
+
+  /* The rows a glider runs under sit above it, and their words change colour
+     on the same step and curve as the glider moves, so a row being left or
+     reached stays readable at every frame. Zero specificity, so a transition
+     a child writes for itself still wins. */
+  [data-cursor] {
+    position: relative;
+    z-index: 1;
+  }
+
+  :where([data-cursor], [data-cursor] *) {
+    transition-property: color, background-color, border-color, fill, stroke;
+    transition-duration: var(--motion-state);
+    transition-timing-function: var(--motion-ease-arrive);
   }
 
   /* The wordmark: Barlow at 700, lowercase. */
@@ -812,7 +829,7 @@ h1 {
     place-items: center;
     flex-shrink: 0;
     color: var(--color-ink-3);
-    box-shadow: inset 0 0 0 1px currentColor;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
     transition:
       background-color var(--motion-state) var(--motion-ease),
       color var(--motion-state) var(--motion-ease);
@@ -856,8 +873,11 @@ h1 {
   }
 
   .want-toggle[data-wanted='true'] {
-    color: var(--color-ground);
-    box-shadow: inset 0 0 0 1px var(--color-ink);
+    color: var(--color-ink);
+  }
+
+  .want-toggle[data-reveal='focus']:not(:focus-visible) {
+    opacity: 0;
   }
 
   .want-toggle[data-wanted='true'][data-fresh='false']:hover:not(:disabled) {
@@ -865,10 +885,12 @@ h1 {
     box-shadow: inset 0 0 0 1px currentColor;
   }
 
+  /* The square stays unfilled: the tick in ink says it is wanted. The layer
+     is kept for the remove tint under a pointer. */
   .want-ink {
     position: absolute;
     inset: 1px;
-    background-color: var(--color-ink);
+    background-color: transparent;
     clip-path: inset(100% 0 0 0);
     pointer-events: none;
     transition:

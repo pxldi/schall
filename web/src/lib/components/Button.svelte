@@ -6,8 +6,9 @@
   import Keycap from './Keycap.svelte';
 
   type Shape = {
-    // `primary` is drawn inverted and marks the one action the screen exists
-    // to offer. `outline` is every other action: a raised fill and a 1px rule.
+    // `outline`, the default, is every action but one: a raised fill and a 1px
+    // rule. `primary` is drawn inverted and marks the one action the screen
+    // exists to offer, so a call site asks for it by name.
     // `danger` destroys something and says so in the fail colour with its
     // glyph. `ghost` is only a word until it is hovered.
     variant?: 'primary' | 'outline' | 'danger' | 'ghost';
@@ -26,6 +27,9 @@
     key?: string;
     /** What the key strip says the key does. Defaults to the button's label. */
     verb?: string;
+    /** What the key does when it is not a press of this button, such as a
+     *  key that asks before it removes. The strip still lists it here. */
+    onkey?: () => void;
   };
 
   // Given an href this is an <a>. A link has no `disabled`, so asking for both
@@ -36,12 +40,13 @@
   let {
     class: className,
     children,
-    variant = 'primary',
+    variant = 'outline',
     size = 'md',
     icon = false,
     tall = false,
     key,
     verb,
+    onkey,
     href,
     ...props
   }: Props = $props();
@@ -91,10 +96,12 @@
             verb: label.toLocaleLowerCase(),
             enabled: () => !button.disabled,
             fromControls: key !== 'enter' && key !== ' ',
+            element: () => element,
             run: () => {
               pressing = false;
               requestAnimationFrame(() => (pressing = true));
-              element?.click();
+              if (onkey) onkey();
+              else element?.click();
             }
           }
         ]

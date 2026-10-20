@@ -46,7 +46,7 @@
       title={source.label}
       aria-label={source.label}
     >
-      <span class="mono">slskd</span>
+      <span>slskd</span>
       <Icon name={STATE_GLYPH[source.role]} size="sm" class={STATE_TEXT[source.role]} />
     </a>
   {/if}

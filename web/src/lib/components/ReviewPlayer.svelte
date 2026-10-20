@@ -39,6 +39,9 @@
   let paused = $state(true);
   let elapsed = $state(0);
   let duration = $state(0);
+  // The file would not load: the copy is not on disk yet, or the server
+  // refused it. The play button says so instead of pressing into silence.
+  let missing = $state(false);
   let peaks = $state<number[] | null>(null);
   // Where to start the source that is loading, and whether to play it.
   let resume = { at: -1, play: false };
@@ -234,6 +237,7 @@
   onplay={() => (paused = false)}
   onpause={() => (paused = true)}
   onended={() => (paused = true)}
+  onerror={() => (missing = true)}
   preload="metadata"
 ></audio>
 
@@ -247,8 +251,9 @@
       (event.currentTarget as HTMLElement).blur();
     }}
     aria-label={paused ? `Play ${name}` : `Pause ${name}`}
-    title={paused ? 'Play (Space)' : 'Pause (Space)'}
-    class="inverted press flex size-[2.125rem] shrink-0 items-center justify-center transition"
+    title={missing ? 'No audio yet' : paused ? 'Play (Space)' : 'Pause (Space)'}
+    disabled={missing}
+    class="inverted press flex size-[2.125rem] shrink-0 items-center justify-center transition disabled:opacity-50"
   >
     <Icon name={paused ? 'play' : 'pause'} size="md" />
   </button>
@@ -256,7 +261,9 @@
   <div class="flex min-w-0 flex-col gap-1.5">
     <p class="flex min-w-0 items-center gap-2 text-meta text-ink-3">
       <span class="truncate text-ink-2">{label}</span>
-      <span class="mono ml-auto shrink-0">{clock(elapsed)} / {clock(duration)}</span>
+      {#if duration > 0}
+        <span class="mono ml-auto shrink-0">{clock(elapsed)} / {clock(duration)}</span>
+      {/if}
     </p>
     <div
       role="slider"

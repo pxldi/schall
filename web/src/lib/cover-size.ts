@@ -8,12 +8,6 @@ export function coverAt(src: string, width: (typeof COVER_WIDTHS)[number]): stri
   return `${src}${src.includes('?') ? '&' : '?'}size=${width}`;
 }
 
-/** The smallest stored width that covers `needed` pixels, or undefined when
- *  only the full 500 pixel picture does. */
-export function widthFor(needed: number): (typeof COVER_WIDTHS)[number] | undefined {
-  return COVER_WIDTHS.find((width) => width >= needed);
-}
-
 /** The address Schall serves an album's cover at. */
 export function coverSrc(albumId: string): string {
   return `/api/v1/albums/${encodeURIComponent(albumId)}/cover`;
