@@ -519,15 +519,14 @@ describe('the format column', () => {
   });
 
   // The states matching's refusals are readable in. A table column of them is
-  // read at a glance, so the row shows a short tag now rather than the full
-  // sentence; the sentence stays reachable as the tag's title.
+  // read at a glance, so the row shows a glyph now rather than the full
+  // sentence; the word and the sentence stay reachable as the glyph's title.
   it('keeps saying where the file stands', async () => {
     answering();
     listed = [file({ matchStatus: 'ambiguous' })];
     opened();
 
-    const tag = await screen.findByText('ambiguous');
-    expect(tag.getAttribute('title')).toBe('Fits more than one track');
+    expect(await screen.findByTitle('ambiguous · Fits more than one track')).toBeTruthy();
   });
 });
 
@@ -591,5 +590,60 @@ describe('the music folders disclosure', () => {
     await fireEvent.click(screen.getByRole('button', { name: '0 folders' }));
 
     expect(await screen.findByRole('heading', { name: 'No music folders' })).toBeTruthy();
+  });
+});
+
+// The cursor (ADR 0042): J and K move one row and Enter opens it, the same row
+// Decide opens. All three library views stay mounted, so a view that is not
+// showing leaves the keys to the one that is.
+describe('the cursor row', () => {
+  const second = () =>
+    file({
+      id: 'c1d2e3f4-0000-4000-8000-000000000002',
+      titleTag: 'Happiness Is Easy',
+      matchStatus: 'ambiguous'
+    });
+
+  function cursorRow() {
+    return document.querySelector('[aria-current="true"]');
+  }
+
+  it('starts on the first row and moves to the next on J', async () => {
+    answering();
+    listed = [file(), second()];
+    opened();
+    await screen.findByText('Myrrhman');
+    expect(cursorRow()?.textContent).toContain('Myrrhman');
+
+    await fireEvent.keyDown(window, { key: 'j' });
+
+    expect(cursorRow()?.textContent).toContain('Happiness Is Easy');
+  });
+
+  it('opens the file under the cursor on Enter', async () => {
+    answering();
+    listed = [file(), second()];
+    opened();
+    await screen.findByText('Myrrhman');
+    await fireEvent.keyDown(window, { key: 'j' });
+
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(await screen.findByRole('textbox', { name: 'Search catalogue tracks' })).toBeTruthy();
+  });
+
+  it('opens nothing while another library view is showing', async () => {
+    answering();
+    listed = [file(), second()];
+    render(LibraryFiles, { active: false }, {
+      wrapper: QueryClientProvider,
+      wrapperProps: { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }
+    });
+    await screen.findByText('Myrrhman');
+    await fireEvent.keyDown(window, { key: 'j' });
+
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(screen.queryByRole('textbox', { name: 'Search catalogue tracks' })).toBeNull();
   });
 });

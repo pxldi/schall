@@ -3,13 +3,15 @@
   import { goto } from '$app/navigation';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
-  import { motionMs } from '$lib/motion.svelte';
+  import { glide, motionMs } from '$lib/motion.svelte';
+  import { echo } from '$lib/keys.svelte';
   import { api } from '$lib/api';
   import { cn } from '$lib/utils';
   import { highlight, paletteCategories, paletteRows, type PaletteRole } from '$lib/palette';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import Keycap from '$lib/components/Keycap.svelte';
 
   // One search field, opened by typing on any page, answering across the five
   // categories Schall holds at once. It is a front door to browsing that already
@@ -137,15 +139,22 @@
   };
 
   const rowClass =
-    'relative grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
-    ' border-b border-rule px-[1.125rem] py-2 text-inherit no-underline ' +
-    'transition-[background] last:border-b-0';
+    'row grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,132px)] items-center gap-x-3 ' +
+    'px-[1.125rem] py-2 text-inherit no-underline last:border-b-0';
 
-  // The keyboard selection is the inverted row. A row under the pointer takes
-  // the raised fill instead, and the pointer moves the selection onto itself,
-  // so the two never show at once.
-  const chosenClass = 'inverted';
-  const idleClass = 'hover:bg-raised';
+  // The keyboard selection is the one inverted block that glides between rows
+  // (`glide`), and the chosen row only swaps its words to match. A row under
+  // the pointer takes the raised fill, and the pointer moves the selection onto
+  // itself, so the two never show at once.
+  const chosenClass = 'on-ink';
+  const idleClass = '';
+
+  // The keys the footer names echo when they are pressed in the field, which
+  // the key registry does not see.
+  function pressed(key: string) {
+    echo.key = key;
+    echo.at++;
+  }
 
   function summon() {
     opener = document.activeElement;
@@ -282,6 +291,7 @@
     switch (event.key) {
       case 'Escape':
         event.preventDefault();
+        pressed('escape');
         // The first esc with text in the field clears the field; the second
         // closes.
         if (typed) {
@@ -293,14 +303,17 @@
         return;
       case 'ArrowDown':
         event.preventDefault();
+        pressed('arrowdown');
         move(1);
         return;
       case 'ArrowUp':
         event.preventDefault();
+        pressed('arrowup');
         move(-1);
         return;
       case 'Enter':
         event.preventDefault();
+        pressed('enter');
         if (current) leaveFor(current.href);
         return;
       // Tab is not handled here: it moves focus in the ordinary order, out of
@@ -322,10 +335,9 @@
 <svelte:window onkeydown={onWindowKeydown} onpointerdown={onWindowPointerdown} />
 
 {#if open}
-  <div
-    class="scrim pointer-events-none z-50"
-    transition:fade={{ duration: motionMs('surface') }}
-  ></div>
+  <!-- The way in is the stylesheet's own drop and fade; only the way out needs
+       a script, because the element is gone the moment `open` is false. -->
+  <div class="scrim pointer-events-none z-50" out:fade={{ duration: motionMs('state') }}></div>
   <div
     class="pointer-events-none fixed inset-0 z-50 flex justify-center px-[1.125rem] pb-[26px] pt-[90px]"
   >
@@ -375,9 +387,7 @@
             <!-- A failed query is reported here rather than in a toast: the
                  palette is open, it is under the eye, and it is the thing that
                  failed. Closing it closes the error with it. -->
-            <div
-              class="mx-3 my-1.5 flex items-start gap-2 border border-rule bg-panel px-[11px] py-[9px]"
-            >
+            <div class="mx-3 my-1.5 flex items-start gap-2 px-[11px] py-[9px]">
               <Icon name="alert" size="sm" class="mt-px shrink-0 text-fail" />
               <!-- The button that said Try again did one thing: ask the search
                    the question that had just failed. The palette asks it now,
@@ -393,7 +403,14 @@
               Nothing matches <span class="text-ink">{query}</span>.
             </p>
           {:else}
-            <div id="palette-results" role="listbox" aria-label="Search results" tabindex="-1">
+            <div
+              id="palette-results"
+              class="relative"
+              role="listbox"
+              aria-label="Search results"
+              tabindex="-1"
+              use:glide={{ key: selected }}
+            >
               {#each categories as category, group (category.key)}
                 <!-- A category that answered with nothing is absent, not listed
                      as empty. The one that is present is still drawn: the
@@ -414,6 +431,7 @@
                       href={row.href}
                       role="option"
                       aria-selected={chosen}
+                      data-cursor={chosen}
                       class={cn(rowClass, chosen ? chosenClass : idleClass)}
                       onclick={(event) => {
                         event.preventDefault();
@@ -492,10 +510,10 @@
                       {href}
                       role="option"
                       aria-selected={chosen}
+                      data-cursor={chosen}
                       class={cn(
-                        'flex items-center justify-between border-b border-rule px-3 py-2 text-body font-medium text-ink-3 no-underline transition-[background] last:border-b-0',
-                        chosen ? chosenClass : 'hover:bg-raised hover:text-ink'
-
+                        'row flex items-center justify-between px-[1.125rem] py-2 text-body font-medium text-ink-3 no-underline last:border-b-0',
+                        chosen ? chosenClass : 'hover:text-ink'
                       )}
                       onclick={(event) => {
                         event.preventDefault();
@@ -518,15 +536,15 @@
           class="flex shrink-0 flex-wrap items-center gap-5 border-t border-rule px-[1.125rem] py-2.5 text-meta text-ink-3"
         >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><span class="inline-flex"
-              ><Icon name="arrow-up" size="sm" /><Icon name="arrow-down" size="sm" /></span
+            ><span class="inline-flex gap-0.5"
+              ><Keycap key="arrowup" /><Keycap key="arrowdown" /></span
             >move</span
           >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><Icon name="enter" size="sm" />open</span
+            ><Keycap key="enter" />open</span
           >
           <span class="inline-flex items-center gap-1.5 leading-none"
-            ><kbd class="keycap">Esc</kbd>close</span
+            ><Keycap key="escape" />close</span
           >
         </div>
       {/if}

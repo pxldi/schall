@@ -4,7 +4,6 @@
   import { api, type MintedPhone } from '$lib/api';
   import { calendarDate, relativeTime } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
-  import Card from '$lib/components/Card.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import FormGrid from '$lib/components/FormGrid.svelte';
   import Settle from '$lib/components/Settle.svelte';
@@ -76,8 +75,8 @@
 </script>
 
 <div class="flex max-w-[760px] flex-col gap-3.5">
-  <Card>
-    <h2 class=" text-lead font-bold text-ink">Phone</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="border-b border-rule pb-1.5"><h2 class="label">Phone</h2></div>
 
     <FormGrid
       onsubmit={(event) => {
@@ -172,5 +171,5 @@
       </div>
     {/if}
     </Settle>
-  </Card>
+  </section>
 </div>

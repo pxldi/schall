@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { page } from '$app/state';
@@ -27,9 +28,9 @@
   import ReviewMatch from '$lib/components/ReviewMatch.svelte';
   import { listening } from '$lib/preview.svelte';
   import Button from '$lib/components/Button.svelte';
-  import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Keycap from '$lib/components/Keycap.svelte';
   import Pager from '$lib/components/Pager.svelte';
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -37,16 +38,20 @@
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import SoundCloudTrackModal from '$lib/components/SoundCloudTrackModal.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
-  import StateTag from '$lib/components/StateTag.svelte';
-  import * as Table from '$lib/components/ui/table';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { glide } from '$lib/motion.svelte';
+  import type { IconName } from '$lib/icons';
 
   // Where "Held twice" is. The library's three views are one page that hides two
   // of itself rather than three routes, and the view is read out of the address
   // bar once when the page mounts — so a link to it would change the address and
   // leave the reader looking at the same screen. The page owns which view is
   // showing, so the page is asked.
-  let { onheldtwice }: { onheldtwice?: () => void } = $props();
+  //
+  // All three views stay mounted, so `active` says whether this one is showing.
+  // Only the one showing answers keys.
+  let { onheldtwice, active = true }: { onheldtwice?: () => void; active?: boolean } = $props();
 
   const queryClient = useQueryClient();
   let path = $state('/music');
@@ -59,8 +64,9 @@
   let unidentifiedOnly = $state(page.url.searchParams.get('unidentified') === 'true');
   // The file a link opened. It narrows the list to that one row until any
   // filter changes, so the reader can get back to the whole list.
-  let deepLinkFileID = $state(page.url.searchParams.get('id') ?? '');
-  let expandedFileID = $state(deepLinkFileID);
+  const openedFileID = page.url.searchParams.get('id') ?? '';
+  let deepLinkFileID = $state(openedFileID);
+  let expandedFileID = $state(openedFileID);
   let setAsideOnly = $state(page.url.searchParams.get('setAside') === 'true');
   let status = $state<LibraryFileStatus | ''>('');
   let resolution = $state<ResolutionStatus | ''>('');
@@ -380,37 +386,35 @@
   ];
 
   // What the Standing column draws: a tick for a file the catalogue can name
-  // with certainty, and a short hairline tag everywhere else. The tag's own
-  // words are one or two, because a table column of them is read at a glance;
-  // the full sentence `fileStanding` already writes stays on the tag as its
-  // title, for whoever rests a pointer on it.
+  // with certainty, and a glyph everywhere else. The glyph's word is its
+  // tooltip, with the full sentence `fileStanding` already writes after it.
   type Standing =
     | { kind: 'tick'; title: string }
-    | { kind: 'tag'; tone: 'neutral' | 'attention' | 'broken' | 'warn'; label: string; title: string };
+    | { kind: 'state'; icon: IconName; role: 'idle' | 'decide' | 'busy' | 'fail'; label: string; title: string };
 
   function standingOf(file: LibraryFile): Standing {
     const { text, state } = fileStanding(file);
     // A file gone from disk or one the scanner could not open are their own
     // shapes, ahead of anything matching found: neither is a matching
     // question, and both this page's own status filters ask for directly.
-    if (file.missingAt) return { kind: 'tag', tone: 'neutral', label: 'missing', title: text };
-    if (file.scanError) return { kind: 'tag', tone: 'broken', label: 'unreadable', title: file.scanError };
+    if (file.missingAt) return { kind: 'state', icon: 'minus', role: 'idle', label: 'missing', title: text };
+    if (file.scanError) return { kind: 'state', icon: 'close', role: 'fail', label: 'unreadable', title: file.scanError };
     if (state === 'ok') return { kind: 'tick', title: text };
-    if (file.matchStatus === 'duplicate') return { kind: 'tag', tone: 'neutral', label: 'held twice', title: text };
-    if (file.matchStatus === 'ambiguous') return { kind: 'tag', tone: 'attention', label: 'ambiguous', title: text };
+    if (file.matchStatus === 'duplicate') return { kind: 'state', icon: 'minus', role: 'idle', label: 'held twice', title: text };
+    if (file.matchStatus === 'ambiguous') return { kind: 'state', icon: 'alert', role: 'decide', label: 'ambiguous', title: text };
     switch (file.resolutionStatus) {
       case 'resolved':
-        return { kind: 'tag', tone: 'neutral', label: 'unmatched', title: text };
+        return { kind: 'state', icon: 'minus', role: 'idle', label: 'unmatched', title: text };
       case 'needs_review':
-        return { kind: 'tag', tone: 'attention', label: 'unidentified', title: text };
+        return { kind: 'state', icon: 'alert', role: 'decide', label: 'unidentified', title: text };
       case 'conflict':
-        return { kind: 'tag', tone: 'broken', label: 'conflict', title: text };
+        return { kind: 'state', icon: 'close', role: 'fail', label: 'conflict', title: text };
       case 'local_only':
-        return { kind: 'tag', tone: 'neutral', label: 'local only', title: text };
+        return { kind: 'state', icon: 'minus', role: 'idle', label: 'local only', title: text };
       case 'failed':
-        return { kind: 'tag', tone: 'broken', label: 'lookup failed', title: text };
+        return { kind: 'state', icon: 'close', role: 'fail', label: 'lookup failed', title: text };
       default:
-        return { kind: 'tag', tone: 'neutral', label: 'pending', title: text };
+        return { kind: 'state', icon: 'minus', role: 'idle', label: 'pending', title: text };
     }
   }
 
@@ -515,15 +519,117 @@
       missing: data.missingCount
     } as Record<LibraryFileStatus | 'unidentified' | '', number>;
   });
+
+  // The cursor (ADR 0042): the row J and K move, Enter opens and Space plays.
+  // It starts on the first row and goes back there when the list is asked a new
+  // question.
+  const rows = $derived($files.data?.items ?? []);
+  let at = $state(0);
+  let list = $state<HTMLElement>();
+  let searchForm = $state<HTMLElement>();
+  let searchBox = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    void [status, resolution, fileSearch, offset, setAsideOnly, unidentifiedOnly, deepLinkFileID];
+    at = 0;
+  });
+
+  $effect(() => {
+    if (at > 0 && at >= rows.length) at = Math.max(0, rows.length - 1);
+  });
+
+  function move(by: number) {
+    if (rows.length === 0) return;
+    at = Math.min(Math.max(at + by, 0), rows.length - 1);
+    void tick().then(() =>
+      list?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  useKeys(() =>
+    active
+      ? [
+          {
+            keys: ['j', 'k', 'arrowdown', 'arrowup'],
+            caps: ['j', 'k'],
+            verb: 'move',
+            order: 0,
+            enabled: () => rows.length > 0,
+            run: (event) => move(['k', 'arrowup'].includes(event.key.toLowerCase()) ? -1 : 1)
+          },
+          {
+            keys: ['enter'],
+            verb: 'open',
+            order: 1,
+            enabled: () => Boolean(rows[at]),
+            run: () => {
+              const file = rows[at];
+              if (file) toggleExpansion(file);
+            }
+          },
+          {
+            keys: [' '],
+            verb: 'play',
+            order: 2,
+            enabled: () => Boolean(rows[at]) && !rows[at].missingAt,
+            run: () => {
+              const file = rows[at];
+              if (file && !file.missingAt) hear(file.id);
+            }
+          },
+          {
+            keys: ['f'],
+            verb: 'search',
+            element: () => searchForm,
+            run: () => searchBox?.focus()
+          }
+        ]
+      : []
+  );
 </script>
 
-<ControlRail label="Scan the library and search its files" sticky={false}>
-  <!-- The dim line the board draws beside the chips: what the last scan did,
-       and how long ago. "N folder(s)" is also the way into the folders
-       disclosure below — the paths themselves used to sit here as their own
-       row of chips, which only repeated what that disclosure already lists in
-       full. -->
-  <span class="text-meta text-ink-3">
+<div
+  role="group"
+  aria-label="Scan the library and search its files"
+  class="flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-rule px-5 py-2"
+>
+  <!-- "Duplicates" used to be here, and it was the wrong word twice over. This
+       filter never meant "the library holds this twice": that question is the
+       Held twice tab, and it is asked about recordings rather than about
+       files. It means the narrow thing the matcher records: every track this
+       file could be is already held by a decision somebody made by hand, so
+       there is nothing left to ask about it. -->
+  <Segmented
+    options={[
+      { value: '', name: 'All', count: fileCounts?.[''] },
+      { value: 'matched', name: 'Matched', count: fileCounts?.matched },
+      { value: 'unmatched', name: 'Unmatched', count: fileCounts?.unmatched },
+      { value: 'ambiguous', name: 'Ambiguous', count: fileCounts?.ambiguous },
+      { value: 'unidentified', name: 'Unidentified', count: fileCounts?.unidentified },
+      { value: 'duplicate', name: 'Already held', count: fileCounts?.duplicate },
+      { value: 'unreadable', name: 'Unreadable', count: fileCounts?.unreadable },
+      { value: 'missing', name: 'Missing', count: fileCounts?.missing }
+    ]}
+    value={unidentifiedOnly ? 'unidentified' : status}
+    onchange={(value) => value === 'unidentified' ? setUnidentified(true) : (setUnidentified(false), setStatus(value as LibraryFileStatus | ''))}
+    label="Filter by state"
+    pending={$summary.isPending}
+  />
+
+  <PillSelect
+    options={resolutionChoices}
+    value={resolution}
+    onchange={(next) => setResolution(next as ResolutionStatus | '')}
+    label="Filter by identity state"
+  />
+
+  {#if hasFilters}
+    <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
+  {/if}
+
+  <!-- What the last scan did, and how long ago. "N folder(s)" is also the way
+       into the folders disclosure below. -->
+  <span class="ml-auto text-meta text-ink-3">
     {scanLine}
     <span class="text-ink-4">·</span>
     <button
@@ -536,30 +642,40 @@
     </button>
   </span>
 
-  <form class="ml-auto flex min-w-0 items-center gap-2" onsubmit={applyFileSearch}>
-    <input
-      bind:value={fileSearchInput}
-      aria-label="Search discovered files"
-      placeholder="Search files"
-      class="field min-w-0 max-w-44 flex-1"
-    />
-    <Button type="submit" variant="outline"><Icon name="search" size={12} /> Search</Button>
+  <form bind:this={searchForm} class="w-56" onsubmit={applyFileSearch}>
+    <label class="field flex h-7 w-full items-center gap-2">
+      <Icon name="search" size={13} class="shrink-0 text-ink-4" />
+      <input
+        bind:this={searchBox}
+        bind:value={fileSearchInput}
+        aria-label="Search discovered files"
+        placeholder="Search files"
+        class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
+      />
+      {#if active}<Keycap key="f" />{/if}
+    </label>
   </form>
 
-  <Button onclick={() => $scan.mutate()} disabled={scanning || rootCount === 0}>
+  <Button
+    size="sm"
+    key={active ? 'r' : undefined}
+    verb="scan"
+    onclick={() => $scan.mutate()}
+    disabled={scanning || rootCount === 0}
+  >
     {#if scanning}
       <Icon name="busy" size={13} class="animate-spin" /> Scanning
     {:else}
       <Icon name="refresh" size={13} /> {scanned ? 'Rescan' : 'Scan'}
     {/if}
   </Button>
-</ControlRail>
+</div>
 
-<div class="flex flex-col gap-4 px-6 py-4">
+<div class="flex flex-col gap-3 px-5 pt-3">
   <!-- Reads of the library: the figures and the folders here, the files where
-       the table stands. Each one is only a read, so where asking again is the whole answer the note
-       asks by itself rather than handing the reader a button that repeats what
-       just failed. -->
+       the table stands. Each one is only a read, so where asking again is the
+       whole answer the note asks by itself rather than handing the reader a
+       button that repeats what just failed. -->
   {#if $summary.error}
     <ErrorNote error={$summary.error} retry={() => $summary.refetch()} />
   {/if}
@@ -571,7 +687,7 @@
   {/if}
 
   {#if showFolders}
-    <section class="flex flex-col gap-2.5">
+    <section class="flex flex-col gap-2.5 pb-2">
       <div class="flex items-center gap-2.5">
         <span class="label">Music folders</span>
         <span class="h-px flex-1 bg-rule"></span>
@@ -599,7 +715,7 @@
         <div class="flex flex-col">
           {#each $roots.data.items as root (root.id)}
             <div class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
-              <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={root.path}>
+              <span class="mono min-w-0 flex-1 truncate text-body text-ink" title={root.path}>
                 {root.path}
               </span>
               <span class="text-meta text-ink-4">
@@ -620,366 +736,300 @@
     </section>
   {/if}
 
-  <section class="flex flex-col gap-2.5">
-    {#if setAsideOnly}
-      <div class="flex flex-wrap items-center gap-2.5">
-        <span class="text-meta font-medium text-ink">Set-aside files</span>
-        <Button variant="ghost" size="xs" onclick={() => (setAsideOnly = false)}>
-          Show all files
-        </Button>
-      </div>
-    {/if}
-
-    <div class="flex flex-wrap items-center gap-2">
-      <!-- "Duplicates" used to be here, and it was the wrong word twice over.
-           This filter never meant "the library holds this twice" — that question
-           is the Held twice tab, and it is asked about recordings rather than
-           about files. It means the narrow thing the matcher records: every
-           track this file could be is already held by a decision somebody made
-           by hand, so there is nothing left to ask about it. A reader looking
-           for their duplicates pressed it, read "No audio files found", and
-           concluded the library was clean while the tab beside it said
-           eighteen. -->
-      <Segmented
-        options={[
-          { value: '', name: 'All', count: fileCounts?.[''] },
-          { value: 'matched', name: 'Matched', count: fileCounts?.matched },
-          { value: 'unmatched', name: 'Unmatched', count: fileCounts?.unmatched },
-          { value: 'ambiguous', name: 'Ambiguous', count: fileCounts?.ambiguous },
-          { value: 'unidentified', name: 'Unidentified', count: fileCounts?.unidentified },
-          { value: 'duplicate', name: 'Already held', count: fileCounts?.duplicate },
-          { value: 'unreadable', name: 'Unreadable', count: fileCounts?.unreadable },
-          { value: 'missing', name: 'Missing', count: fileCounts?.missing }
-        ]}
-        value={unidentifiedOnly ? 'unidentified' : status}
-        onchange={(value) => value === 'unidentified' ? setUnidentified(true) : (setUnidentified(false), setStatus(value as LibraryFileStatus | ''))}
-        label="Filter by state"
-        pending={$summary.isPending}
-      />
-
-      <!-- "Any identity" is a filter somebody chose, not an empty box. The
-           picker calls any value of `''` unchosen and dims the trigger for it,
-           so the dimming is said back off here. -->
-      <PillSelect
-        options={resolutionChoices}
-        value={resolution}
-        onchange={(next) => setResolution(next as ResolutionStatus | '')}
-        label="Filter by identity state"
-      />
-
-      {#if hasFilters}
-        <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
-      {/if}
+  {#if setAsideOnly}
+    <div class="flex flex-wrap items-center gap-2.5">
+      <span class="text-meta font-medium text-ink">Set-aside files</span>
+      <Button variant="ghost" size="xs" onclick={() => (setAsideOnly = false)}>
+        Show all files
+      </Button>
     </div>
+  {/if}
+</div>
 
-    <!-- One <audio> element for the whole table. A page is twenty-five rows,
-         and twenty-five media elements is twenty-five things the browser holds
-         open in order to play one file. Where this one points is the row that
-         is sounding. -->
-    <audio bind:this={audio} class="hidden" preload="none" onended={() => (sounding = '')}
-    ></audio>
+<!-- One <audio> element for the whole table. A page is twenty-five rows, and
+     twenty-five media elements is twenty-five things the browser holds open in
+     order to play one file. Where this one points is the row that is sounding. -->
+<audio bind:this={audio} class="hidden" preload="none" onended={() => (sounding = '')}></audio>
 
-    <Settle pending={$files.isPending}>
-      {#snippet placeholder()}
-      <!-- A list still on its way is not an empty list. Each filter is its own
-           question with its own answer, so pressing one leaves nothing on
-           screen until that answer lands, and "No audio files found" in that
-           gap is a wrong answer rather than a wait.
-
-           The wait is drawn as the table it is waiting for: the same box, a
-           strip where the column names will stand, and bars the height of a
-           row. The list keeps its shape when the files land. -->
-      <div
-        class="max-h-[calc(100dvh-9rem)] overflow-hidden border border-rule"
-        role="status"
-        aria-label="Loading files"
-      >
-        <div class="h-9 border-b border-rule"></div>
-        <!-- Fill about 2016px of rows so a 4K viewport does not outgrow the wait. -->
-        {#each Array(60) as _, placeholderIndex (placeholderIndex)}
-          <div
-            class="h-[3.46875rem] border-b border-rule px-3 py-2 last:border-b-0"
-            aria-hidden="true"
-          >
+<Settle pending={$files.isPending}>
+  {#snippet placeholder()}
+    <!-- A list still on its way is not an empty list. Each filter is its own
+         question with its own answer, so pressing one leaves nothing on screen
+         until that answer lands, and "No audio files found" in that gap is a
+         wrong answer rather than a wait. The wait is drawn as the table it is
+         waiting for. -->
+    <div class="px-5" role="status" aria-label="Loading files">
+      <div class="max-h-[calc(100dvh-9rem)] overflow-hidden">
+        <div class="h-7 border-b border-rule-strong"></div>
+        {#each Array(25) as _, placeholderIndex (placeholderIndex)}
+          <div class="h-9 border-b border-rule py-1.5" aria-hidden="true">
             <Skeleton class="h-full" />
           </div>
         {/each}
       </div>
-      {/snippet}
-    {#if $files.error}
-      <!-- Where the table would be, so the failure is not read as an empty
-           space under the filters. -->
-      <ErrorNote error={$files.error} retry={() => $files.refetch()} class="mb-2.5" />
-    {/if}
-    {#if ($files.data?.items ?? []).length}
-      <!-- The scroll happens in the table's own box rather than on the page,
-           because that is what the column names are held against: a header
-           sticks to the nearest thing that scrolls, and if that thing is the
-           whole document the header slides away with the rows. Below the
-           column names' own width the box scrolls sideways instead of
-           reflowing the row — `Table.Root` scrolls by default. -->
-      <Table.Root wrapperClass="max-h-[68dvh] scroll-pt-9 border border-rule">
-        <Table.Header>
-          <Table.Row class="hover:bg-transparent">
-            <Table.Head class="w-10 text-center">#</Table.Head>
-            <Table.Head>Title</Table.Head>
-            <Table.Head>Album</Table.Head>
-            <!-- What kind of audio file this is, read off the extension. The
-                 scanner stores no codec, no bit depth and no sample rate, so
-                 this says FLAC or MP3 and stops there. -->
-            <Table.Head>Format</Table.Head>
-            <Table.Head numeric>Length</Table.Head>
-            <Table.Head numeric>Size</Table.Head>
-            <Table.Head>Standing</Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {#each $files.data?.items ?? [] as file, index (file.id)}
-            {@const standing = standingOf(file)}
-            {@const open = expandedFileID === file.id}
-            <!-- Pointing at a row swaps its mode: it lifts onto a raised
-                 surface, its hairline goes, and the row number is replaced in
-                 place by the play control. Nothing changes width or height
-                 while that happens — the number and the play control share one
-                 box and take turns being the visible one, and the hairline
-                 turns transparent rather than being removed.
-
-                 The row below a hairline is the one that draws it, so the rule
-                 above a pointed-at row is taken down by its neighbour. -->
-            <Table.Row
-              selected={open}
-              class="group hover:border-transparent [&:has(+tr:hover)]:border-transparent {file.missingAt
-                ? 'opacity-45'
-                : ''}"
-            >
-              <Table.Cell class="w-10 shrink-0 px-2">
-                <span class="grid size-7 place-items-center">
-                  <span
-                    class="numeric col-start-1 row-start-1 text-micro text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3 {file.missingAt
-                      ? ''
-                      : 'md:group-hover:opacity-0 md:group-focus-within:opacity-0'} {sounding ===
-                    file.id
-                      ? 'opacity-0'
-                      : ''}"
-                  >
-                    {offset + index + 1}
-                  </span>
-                  <!-- A file the last scan did not find on disk has nothing to
-                       play, so it keeps its number and is offered no control.
-                       Visible without a hover below `md`, where a touch screen
-                       never sends one; hidden behind a pointer or a keyboard at
-                       `md` and above, where the number is the useful default. -->
-                  {#if !file.missingAt}
-                    <button
-                      type="button"
-                      class="tap col-start-1 row-start-1 grid size-7 place-items-center text-ink-2 opacity-100 transition md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 hover:text-ink {sounding ===
-                      file.id
-                        ? 'opacity-100'
+    </div>
+  {/snippet}
+  {#if $files.error}
+    <!-- Where the table would be, so the failure is not read as an empty space
+         under the filters. -->
+    <div class="px-5 pt-3">
+      <ErrorNote error={$files.error} retry={() => $files.refetch()} />
+    </div>
+  {/if}
+  {#if rows.length}
+    <div class="px-5">
+      <div class="relative" bind:this={list} use:glide={{ key: at }}>
+        <table class="w-full border-separate border-spacing-0 text-left text-body text-ink [&_td]:border-b [&_td]:border-rule [&_th]:border-b [&_th]:border-rule-strong">
+          <thead>
+            <tr>
+              <th class="label sticky top-10 z-[2] h-7 w-10 bg-ground px-2 text-center">#</th>
+              <th class="label sticky top-10 z-[2] h-7 bg-ground px-2.5 text-left">Title</th>
+              <th class="label sticky top-10 z-[2] h-7 bg-ground px-2.5 text-left">Album</th>
+              <!-- What kind of audio file this is, read off the extension. The
+                   scanner stores no codec, no bit depth and no sample rate, so
+                   this says FLAC or MP3 and stops there. -->
+              <th class="label sticky top-10 z-[2] h-7 w-20 bg-ground px-2.5 text-left">Format</th>
+              <th class="label sticky top-10 z-[2] h-7 w-24 bg-ground px-2.5 text-right">Length</th>
+              <th class="label sticky top-10 z-[2] h-7 w-24 bg-ground px-2.5 text-right">Size</th>
+              <th class="label sticky top-10 z-[2] h-7 w-56 bg-ground px-2.5 text-left">Standing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each rows as file, index (file.id)}
+              {@const standing = standingOf(file)}
+              {@const open = expandedFileID === file.id}
+              {@const here = index === at}
+              <!-- The row number and the play control share one box and take
+                   turns being the visible one, under the cursor or a pointer.
+                   Nothing changes width or height while that happens. -->
+              <tr
+                data-cursor={here}
+                data-selected={open ? '' : undefined}
+                aria-current={here ? 'true' : undefined}
+                class="row group scroll-mt-12 scroll-mb-10 {here ? 'on-ink' : open ? 'bg-panel' : ''} {file.missingAt
+                  ? 'opacity-45'
+                  : ''}"
+                onclick={() => (at = index)}
+              >
+                <td class="h-9 w-10 px-2">
+                  <span class="grid size-7 place-items-center">
+                    <span
+                      class="mono col-start-1 row-start-1 text-micro text-ink-4 transition {file.missingAt
+                        ? ''
+                        : 'md:group-hover:opacity-0 md:group-focus-within:opacity-0'} {sounding === file.id || (here && !file.missingAt)
+                        ? 'md:opacity-0'
                         : ''}"
-                      aria-label={sounding === file.id
-                        ? `Stop ${file.titleTag ?? 'this file'}`
-                        : `Play ${file.titleTag ?? 'this file'}`}
-                      onclick={() => hear(file.id)}
                     >
-                      {#if sounding === file.id}
-                        <Icon name="pause" size={13} />
-                      {:else}
-                        <Icon name="play" size={13} />
-                      {/if}
-                    </button>
-                  {/if}
-                </span>
-              </Table.Cell>
-
-              <!-- The title wraps. It is the thing being identified, and a name
-                   cut off in the middle is a name the reader has to hover to
-                   read. Everything beside it is metadata and takes the
-                   ellipsis instead. -->
-              <Table.Cell class="tap-tall min-w-52">
-                <span class="block text-body text-ink" data-text-size="body" title={file.path}>
-                  {file.titleTag ?? file.path.split('/').pop()}
-                </span>
-                <!-- Ink 4 clears the contrast floor up to the regular surface
-                     and no further, and a pointed-at or open row is drawn on a
-                     thicker one — so the quiet line promotes. -->
-                <span
-                  class="mt-0.5 block max-w-72 truncate text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
-                  data-truncated="true"
-                  data-tone="quiet"
-                  data-promotes-on-hover="true"
-                >
-                  {file.artistTag ?? file.path}
-                </span>
-              </Table.Cell>
-
-              <Table.Cell>
-                <!-- A matched file is on a catalogue release, and that release
-                     is its album whether or not the file's own tags name one. -->
-                {#if file.mappedAlbumId && file.mappedAlbumTitle}
-                  <a
-                    href="/releases/{file.mappedAlbumId}"
-                    class="block max-w-40 truncate text-meta text-ink-2 hover:text-ink"
-                    data-truncated="true"
-                  >
-                    {file.mappedAlbumTitle}
-                  </a>
-                {:else}
-                  <span class="block max-w-40 truncate text-meta text-ink-2" data-truncated="true">
-                    {file.albumTag ?? '—'}
-                  </span>
-                {/if}
-              </Table.Cell>
-
-              <Table.Cell>
-                <span
-                  class="numeric text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
-                  data-truncated="false"
-                  data-tone="quiet"
-                  data-promotes-on-hover="true"
-                >
-                  {fileFormat(file.path) || '—'}
-                </span>
-              </Table.Cell>
-
-              <Table.Cell numeric class="text-meta text-ink-2">
-                {formatDuration(file.durationMs)}
-              </Table.Cell>
-              <Table.Cell numeric class="text-meta text-ink-2">
-                {formatBytes(file.sizeBytes)}
-              </Table.Cell>
-
-              <!-- Where the file stands, and the row's own actions beside it:
-                   a tick or a short tag says what it is, and a quiet button
-                   says what to do about it. The two used to sit at opposite
-                   ends of the row; the board reads them as one statement. -->
-              <Table.Cell>
-                <span class="flex flex-wrap items-center gap-1.5">
-                  <!-- Damaged audio sits beside the standing: a damaged file
-                       can still be matched, and the upgrade sweep replaces it. -->
-                  {#if file.decodeError && !file.missingAt}
-                    <StateIcon icon="alert" label="Damaged audio" role="fail" note={file.decodeError} />
-                  {/if}
-                  <!-- How it was matched is the tick's tooltip. As a line of
-                       text it was cut off in a column this narrow. -->
-                  {#if standing.kind === 'tick'}
-                    <StateIcon
-                      icon="check"
-                      role="ok"
-                      label={file.matchStatus !== 'matched'
-                        ? 'Identified'
-                        : file.mappingManual
-                          ? 'Manual match'
-                          : `Matched by ${matchMethodName(file.mappingMethod)}`}
-                      note={standing.title}
-                    />
-                  {:else}
-                    <StateTag tone={standing.tone} title={standing.title}>{standing.label}</StateTag>
-                  {/if}
-
-                  {#if !file.missingAt}
-                    {#if file.setAside}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="shrink-0"
-                        disabled={$setAside.isPending}
-                        onclick={() => changeSetAside(file)}
+                      {offset + index + 1}
+                    </span>
+                    <!-- A file the last scan did not find on disk has nothing to
+                         play, so it keeps its number and is offered no control.
+                         Hidden behind a pointer, a keyboard or the cursor at `md`
+                         and above, where the number is the useful default. -->
+                    {#if !file.missingAt}
+                      <button
+                        type="button"
+                        class="tap col-start-1 row-start-1 grid size-7 place-items-center text-ink-2 transition md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 hover:text-ink {sounding ===
+                          file.id || here
+                          ? 'md:opacity-100'
+                          : ''}"
+                        aria-label={sounding === file.id
+                          ? `Stop ${file.titleTag ?? 'this file'}`
+                          : `Play ${file.titleTag ?? 'this file'}`}
+                        onclick={() => hear(file.id)}
                       >
-                        Return to review
-                      </Button>
-                    {:else}
-                      {#if file.matchStatus !== 'matched'}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon
-                          title="Identify"
-                          aria-label="Identify"
-                          onclick={() => showIdentity(file.id)}
-                        >
-                          <Icon name="fingerprint" size={13} />
-                        </Button>
-                      {/if}
-                      <!-- A track MusicBrainz has never heard of is named by its
-                           page instead. The control is only on files nothing has
-                           placed: a file that answers a catalogue track already
-                           has a name, and one already held by its address has
-                           this one behind it. -->
-                      {#if file.matchStatus !== 'matched' && file.resolutionStatus !== 'source'}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon
-                          title="Name from SoundCloud"
-                          aria-label="Name from SoundCloud"
-                          onclick={() => nameFromSoundCloud(file)}
-                        >
-                          <Icon name="link" size={13} />
-                        </Button>
-                      {:else if file.identityUrl}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon
-                          href={file.identityUrl}
-                          title="Open on SoundCloud"
-                          aria-label="Open on SoundCloud"
-                        >
-                          <Icon name="external" size={13} />
-                        </Button>
-                      {/if}
-                      <!-- Every decision about a file is taken in Review, a
-                           matched one included: withdrawing its manual match is a
-                           decision too, and it belongs in the same queue as the
-                           rest. A duplicate goes to the same place under its own
-                           question — which of the two copies to keep — including
-                           one somebody already answered, because asking for it is
-                           asking again. -->
-                      <!-- The verb follows what the row is. `Decide` names a
-                           question, and a file that is matched has no open
-                           question: the button is still there, because a settled
-                           match can be withdrawn and Review is where that is
-                           done, but it offers a change rather than asking one. -->
-                      <Button variant="ghost" size="sm" class="shrink-0" onclick={() => toggleExpansion(file)}>
-                        Decide
-                      </Button>
+                        {#if sounding === file.id}
+                          <Icon name="pause" size={13} />
+                        {:else}
+                          <Icon name="play" size={13} />
+                        {/if}
+                      </button>
                     {/if}
+                  </span>
+                </td>
+
+                <!-- The title and the artist share one line, and both truncate:
+                     the full path is the title's tooltip. -->
+                <td class="w-[34%] max-w-0 px-2.5">
+                  <span class="block truncate">
+                    <span class="text-body" data-text-size="body" title={file.path}>
+                      {file.titleTag ?? file.path.split('/').pop()}
+                    </span>
+                    <span
+                      class="ml-2 text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
+                      data-truncated="true"
+                      data-tone="quiet"
+                      data-promotes-on-hover="true"
+                    >
+                      {file.artistTag ?? file.path}
+                    </span>
+                  </span>
+                </td>
+
+                <td class="w-[18%] max-w-0 px-2.5">
+                  <!-- A matched file is on a catalogue release, and that release
+                       is its album whether or not the file's own tags name one. -->
+                  {#if file.mappedAlbumId && file.mappedAlbumTitle}
+                    <a
+                      href="/releases/{file.mappedAlbumId}"
+                      class="block truncate text-meta text-ink-2 hover:text-ink"
+                      data-truncated="true"
+                    >
+                      {file.mappedAlbumTitle}
+                    </a>
+                  {:else}
+                    <span class="block truncate text-meta text-ink-2" data-truncated="true">
+                      {file.albumTag ?? '—'}
+                    </span>
                   {/if}
-                </span>
-              </Table.Cell>
-            </Table.Row>
+                </td>
 
-            {#if open}
-              <Table.Row class="hover:bg-transparent">
-                <Table.Cell colspan={columnCount} class="pt-0">
-                  <div class="flex flex-col gap-3 bg-panel px-3 py-2.5">
-                    {#if file.matchStatus === 'ambiguous'}
-                      <ReviewMatch file={file} ondecided={() => (expandedFileID = '')} />
-                    {:else if file.resolutionStatus === 'needs_review' || file.resolutionStatus === 'conflict'}
-                      <FileIdentity resolution={fileResolution} fileId={file.id} loading={loadingIdentity} error={identityError} chosen={chosenIdentity} onchoose={(index) => (chosenIdentity = index)} expectedMs={file.durationMs} />
-                      {#if fileResolution && !loadingIdentity}
-                        <div class="flex flex-wrap gap-2">
-                          <Button disabled={identityPending || chosenIdentity < 0 || fileResolution.candidates[chosenIdentity] === undefined} onclick={() => $identityDecision.mutate({ fileId: file.id, recordingId: fileResolution!.candidates[chosenIdentity].recordingId })}>Accept</Button>
-                          <Button variant="outline" disabled={identityPending} onclick={() => $localOnly.mutate(file.id)}>Keep local</Button>
-                        </div>
+                <td class="px-2.5">
+                  <span
+                    class="mono text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
+                    data-truncated="false"
+                    data-tone="quiet"
+                    data-promotes-on-hover="true"
+                  >
+                    {fileFormat(file.path) || '—'}
+                  </span>
+                </td>
+
+                <td class="mono px-2.5 text-right text-meta text-ink-2">
+                  {formatDuration(file.durationMs)}
+                </td>
+                <td class="mono px-2.5 text-right text-meta text-ink-2">
+                  {formatBytes(file.sizeBytes)}
+                </td>
+
+                <!-- Where the file stands, and the row's own actions beside it: a
+                     tick or a short tag says what it is, and a quiet button says
+                     what to do about it. -->
+                <td class="px-2.5">
+                  <span class="flex items-center gap-1">
+                    <!-- Damaged audio sits beside the standing: a damaged file can
+                         still be matched, and the upgrade sweep replaces it. -->
+                    {#if file.decodeError && !file.missingAt}
+                      <StateIcon icon="alert" label="Damaged audio" role="fail" note={file.decodeError} />
+                    {/if}
+                    <!-- How it was matched is the tick's tooltip. As a line of
+                         text it was cut off in a column this narrow. -->
+                    {#if standing.kind === 'tick'}
+                      <StateIcon
+                        icon="check"
+                        role="ok"
+                        label={file.matchStatus !== 'matched'
+                          ? 'Identified'
+                          : file.mappingManual
+                            ? 'Manual match'
+                            : `Matched by ${matchMethodName(file.mappingMethod)}`}
+                        note={standing.title}
+                      />
+                    {:else}
+                      <StateIcon icon={standing.icon} role={standing.role} label={standing.label} note={standing.title} />
+                    {/if}
+
+                    {#if !file.missingAt}
+                      {#if file.setAside}
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          class="shrink-0"
+                          disabled={$setAside.isPending}
+                          onclick={() => changeSetAside(file)}
+                        >
+                          Return to review
+                        </Button>
+                      {:else}
+                        {#if file.matchStatus !== 'matched'}
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            icon
+                            title="Identify"
+                            aria-label="Identify"
+                            onclick={() => showIdentity(file.id)}
+                          >
+                            <Icon name="fingerprint" size={13} />
+                          </Button>
+                        {/if}
+                        <!-- A track MusicBrainz has never heard of is named by its
+                             page instead. The control is only on files nothing has
+                             placed: a file that answers a catalogue track already
+                             has a name, and one already held by its address has
+                             this one behind it. -->
+                        {#if file.matchStatus !== 'matched' && file.resolutionStatus !== 'source'}
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            icon
+                            title="Name from SoundCloud"
+                            aria-label="Name from SoundCloud"
+                            onclick={() => nameFromSoundCloud(file)}
+                          >
+                            <Icon name="link" size={13} />
+                          </Button>
+                        {:else if file.identityUrl}
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            icon
+                            href={file.identityUrl}
+                            title="Open on SoundCloud"
+                            aria-label="Open on SoundCloud"
+                          >
+                            <Icon name="external" size={13} />
+                          </Button>
+                        {/if}
+                        <!-- Every decision about a file is taken in Review, a
+                             matched one included: withdrawing its manual match is
+                             a decision too. The verb follows what the row is. A
+                             file that is matched has no open question, and the
+                             button is still there because a settled match can be
+                             withdrawn. -->
+                        <Button variant="ghost" size="xs" class="shrink-0" onclick={() => toggleExpansion(file)}>
+                          Decide
+                        </Button>
                       {/if}
                     {/if}
-                  </div>
-                </Table.Cell>
-              </Table.Row>
-            {/if}
-          {/each}
-        </Table.Body>
-      </Table.Root>
-    {:else if !$files.isError}
-      <!-- An empty list says which question came back empty. "No audio files
-           found" under a filter is an answer to a question nobody asked: the
-           library has 1,500 files, and what is empty is this filter. Where the
-           reader almost certainly meant a different screen, it says which one.
+                  </span>
+                </td>
+              </tr>
 
-           A failed request is not an empty list. The ErrorNote above reports
-           the failure; this branch is skipped so "No audio files found"
-           does not also appear. -->
+              {#if open}
+                <tr>
+                  <td colspan={columnCount} class="px-2.5 pb-2 pt-0">
+                    <div class="flex flex-col gap-3 bg-panel px-3 py-2.5">
+                      {#if file.matchStatus === 'ambiguous'}
+                        <ReviewMatch file={file} ondecided={() => (expandedFileID = '')} />
+                      {:else if file.resolutionStatus === 'needs_review' || file.resolutionStatus === 'conflict'}
+                        <FileIdentity resolution={fileResolution} fileId={file.id} loading={loadingIdentity} error={identityError} chosen={chosenIdentity} onchoose={(index) => (chosenIdentity = index)} expectedMs={file.durationMs} />
+                        {#if fileResolution && !loadingIdentity}
+                          <div class="flex flex-wrap gap-2">
+                            <Button disabled={identityPending || chosenIdentity < 0 || fileResolution.candidates[chosenIdentity] === undefined} onclick={() => $identityDecision.mutate({ fileId: file.id, recordingId: fileResolution!.candidates[chosenIdentity].recordingId })}>Accept</Button>
+                            <Button variant="outline" disabled={identityPending} onclick={() => $localOnly.mutate(file.id)}>Keep local</Button>
+                          </div>
+                        {/if}
+                      {/if}
+                    </div>
+                  </td>
+                </tr>
+              {/if}
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {:else if !$files.isError}
+    <!-- An empty list says which question came back empty. "No audio files
+         found" under a filter is an answer to a question nobody asked: the
+         library has 1,500 files, and what is empty is this filter. Where the
+         reader almost certainly meant a different screen, it says which one.
+
+         A failed request is not an empty list. The ErrorNote above reports the
+         failure; this branch is skipped so "No audio files found" does not
+         also appear. -->
+    <div class="px-5 pt-3">
       <EmptyPanel
         role={scanning ? 'busy' : 'idle'}
         heading={scanning ? 'Scanning' : empty.heading}
@@ -997,12 +1047,11 @@
           </button>
         {/if}
       </EmptyPanel>
-    {/if}
+    </div>
+  {/if}
 
-    <Pager total={$files.data?.total ?? 0} {offset} {pageSize} onchange={(next) => changePage(next)} />
-    </Settle>
-  </section>
-</div>
+  <Pager total={$files.data?.total ?? 0} {offset} {pageSize} keys={active} onchange={(next) => changePage(next)} />
+</Settle>
 
 {#if soundCloudFile}
   <SoundCloudTrackModal

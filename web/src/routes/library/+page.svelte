@@ -6,7 +6,6 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import DuplicateRecordings from '$lib/components/DuplicateRecordings.svelte';
   import LibraryFiles from '$lib/components/LibraryFiles.svelte';
-  import ControlRail from '$lib/components/ControlRail.svelte';
   import ReleasesBrowser from '$lib/components/ReleasesBrowser.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -82,36 +81,32 @@
 
 <svelte:head><title>Library · Schall</title></svelte:head>
 
-<!-- Only the size under the title: the release and file counts are on the
-     chips below. -->
+<!-- One page for the music, in the three shapes it comes in. The catalogue is
+     what the library is meant to hold, the files are what is on the disk, and
+     held twice is what the disk holds more than once. Which one answers a
+     question depends on the question, not on which page you opened. The
+     switch sits in the title row, where a page's own actions go. -->
 <PageHeader title="Library">
   {#snippet sub()}
     {#if $librarySummary.data}
-      <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
+      <span class="mono text-meta text-ink-3">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
     {/if}
   {/snippet}
+  {#snippet actions()}
+    <Segmented
+      options={[
+        { value: 'releases', name: 'Releases', count: $releaseTotal.isError ? null : $releaseTotal.data?.scopeTotal },
+        { value: 'files', name: 'Files', count: $librarySummary.isError ? null : filesTotal },
+        { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.isError ? null : $heldTwiceTotal.data?.total }
+      ]}
+      value={view}
+      onchange={(value) => (view = value as (typeof views)[number])}
+      label="Which part of the library to show"
+      pending={$releaseTotal.isPending || $librarySummary.isPending || $heldTwiceTotal.isPending}
+      variant="tabs"
+    />
+  {/snippet}
 </PageHeader>
-
-<!-- One page for the music, in the two shapes it comes in. They were two pages
-     saying the same thing from either end: the catalogue is what the library is
-     meant to hold, and the files are what is actually on the disk. Which one
-     answers a question depends on the question, not on which page you opened.
-
-     The three chips below say which of it is showing. -->
-<ControlRail label="Which part of the library to show">
-  <Segmented
-    options={[
-      { value: 'releases', name: 'Releases', count: $releaseTotal.isError ? null : $releaseTotal.data?.scopeTotal },
-      { value: 'files', name: 'Files', count: $librarySummary.isError ? null : filesTotal },
-      { value: 'duplicates', name: 'Held twice', count: $heldTwiceTotal.isError ? null : $heldTwiceTotal.data?.total }
-    ]}
-    value={view}
-    onchange={(value) => (view = value as (typeof views)[number])}
-    label="Which part of the library to show"
-    pending={$releaseTotal.isPending || $librarySummary.isPending || $heldTwiceTotal.isPending}
-    variant="tabs"
-  />
-</ControlRail>
 
 {#if failedCount}
   <div class="px-5 pb-2">
@@ -119,7 +114,7 @@
   </div>
 {/if}
 
-<div class:hidden={view !== 'releases'}>
+<div class="mt-3" class:hidden={view !== 'releases'}>
   <ReleasesBrowser
     {view}
     onviewfiles={() => {
@@ -130,15 +125,15 @@
 </div>
 
 {#if filesOpened}
-  <div class:hidden={view !== 'files'}>
+  <div class="mt-3" class:hidden={view !== 'files'}>
     {#key filesKey}
-      <LibraryFiles onheldtwice={() => (view = 'duplicates')} />
+      <LibraryFiles active={view === 'files'} onheldtwice={() => (view = 'duplicates')} />
     {/key}
   </div>
 {/if}
 
 {#if duplicatesOpened}
-  <div class:hidden={view !== 'duplicates'}>
-    <DuplicateRecordings />
+  <div class="mt-3" class:hidden={view !== 'duplicates'}>
+    <DuplicateRecordings active={view === 'duplicates'} />
   </div>
 {/if}

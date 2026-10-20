@@ -127,12 +127,12 @@ function arrived() {
   return screen.findByText('Mothearth');
 }
 
-function openedAt(query: string) {
+function openedAt(query: string, props: Record<string, unknown> | undefined = undefined) {
   routed.url = new URL(`http://localhost/library${query}`);
   // The client is per test: a cache shared between them would answer the second
   // one from the first one's page without asking anything.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(ReleasesBrowser, undefined, {
+  return render(ReleasesBrowser, props, {
     wrapper: QueryClientProvider,
     wrapperProps: { client }
   });
@@ -514,7 +514,7 @@ describe('the Status column', () => {
     answering(releasePage([releaseRow({ trackRefreshStatus: 'failed' })]));
     openedAt('');
 
-    expect(await screen.findByText('failed')).toBeTruthy();
+    expect(await screen.findByTitle('failed')).toBeTruthy();
   });
 });
 
@@ -536,5 +536,85 @@ describe('the cover slot', () => {
 
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByRole('img', { name: 'Cover for Mothearth' })).toBeTruthy();
+  });
+});
+
+// The cursor (ADR 0042): J and K move one row, Enter opens it. All three library
+// views stay mounted, so a view that is not showing has to leave the keys to
+// the one that is.
+describe('the cursor row', () => {
+  const second = releaseRow({
+    id: 'e2d1b0a9-2222-4333-8444-555566667777',
+    title: 'Broken Heart',
+    artistName: 'Burial'
+  });
+
+  function cursorRow() {
+    return document.querySelector('[aria-current="true"]');
+  }
+
+  it('starts on the first row', async () => {
+    answering(releasePage([releaseRow(), second]));
+    openedAt('');
+    await arrived();
+
+    expect(cursorRow()?.id).toBe(`release-${releaseRow().id}`);
+  });
+
+  it('moves to the next row on J and back on K', async () => {
+    answering(releasePage([releaseRow(), second]));
+    openedAt('');
+    await arrived();
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(cursorRow()?.id).toBe(`release-${second.id}`);
+
+    await fireEvent.keyDown(window, { key: 'k' });
+    expect(cursorRow()?.id).toBe(`release-${releaseRow().id}`);
+  });
+
+  it('stops at the last row instead of wrapping', async () => {
+    answering(releasePage([releaseRow(), second]));
+    openedAt('');
+    await arrived();
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    await fireEvent.keyDown(window, { key: 'j' });
+
+    expect(cursorRow()?.id).toBe(`release-${second.id}`);
+  });
+
+  it('opens the release under the cursor on Enter', async () => {
+    routed.goto.mockClear();
+    answering(releasePage([releaseRow(), second]));
+    openedAt('');
+    await arrived();
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(routed.goto).toHaveBeenCalledWith(`/releases/${second.id}`);
+  });
+
+  it('opens nothing while another library view is showing', async () => {
+    routed.goto.mockClear();
+    answering(releasePage([releaseRow(), second]));
+    openedAt('', { view: 'files' });
+    await arrived();
+
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(routed.goto).not.toHaveBeenCalled();
+  });
+
+  it('goes back to the first row when a filter changes the list', async () => {
+    answering(releasePage([releaseRow(), second]));
+    openedAt('');
+    await arrived();
+    await fireEvent.keyDown(window, { key: 'j' });
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^Partial/ }));
+
+    await vi.waitFor(() => expect(cursorRow()?.id).toBe(`release-${releaseRow().id}`));
   });
 });

@@ -3,7 +3,6 @@
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, transcodeBitrates, type ImportSettings, type TranscodeBitrate } from '$lib/api';
   import Button from '$lib/components/Button.svelte';
-  import Card from '$lib/components/Card.svelte';
   import Chip from '$lib/components/Chip.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
@@ -92,9 +91,9 @@
        for the wrong reason. -->
   <ErrorNote error={$imports.error} retry={() => $imports.refetch()} />
 {:else}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Transcode after import</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Transcode after import</h2>
       <!-- "off" before the setting is read is a claim about it, and a wrong one
            for somebody who turned it on. -->
       {#if $imports.isPending}
@@ -141,12 +140,12 @@
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-[15px] place-items-center transition {when === 'lossless'
-              ? 'bg-ink'
-              : 'border border-rule-strong group-hover:border-rule-strong'}"
+            class="grid size-6 place-items-center border transition {when === 'lossless'
+              ? 'border-ink bg-ink'
+              : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
           >
             {#if when === 'lossless'}<Icon name="check"
-                size={10}
+                size={12}
                 class="text-ground" />{/if}
           </span>
         </span>
@@ -167,12 +166,12 @@
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-[15px] place-items-center transition {when === 'above_target'
-              ? 'bg-ink'
-              : 'border border-rule-strong group-hover:border-rule-strong'}"
+            class="grid size-6 place-items-center border transition {when === 'above_target'
+              ? 'border-ink bg-ink'
+              : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
           >
             {#if when === 'above_target'}<Icon name="check"
-                size={10}
+                size={12}
                 class="text-ground" />{/if}
           </span>
         </span>
@@ -207,11 +206,11 @@
         </Select.Content>
       </Select.Root>
     </div>
-  </Card>
+  </section>
 
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Transcode the library</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Transcode the library</h2>
       <Button
         variant="outline"
         size="sm"
@@ -272,5 +271,5 @@
     {#if $queueSweep.isError}
       <ErrorNote error={$queueSweep.error} />
     {/if}
-  </Card>
+  </section>
 {/if}

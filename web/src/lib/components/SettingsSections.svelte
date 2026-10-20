@@ -27,7 +27,6 @@
   import { checkIsStale, failedThisWeek, type SourceName } from '$lib/source-health';
   import Button from '$lib/components/Button.svelte';
   import Chip from '$lib/components/Chip.svelte';
-  import Card from '$lib/components/Card.svelte';
   import FormGrid from '$lib/components/FormGrid.svelte';
   import * as Select from '$lib/components/ui/select';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -1350,7 +1349,7 @@
 {#snippet SourcesStatus()}
   <!-- No card and no heading: this is the answer to "is Schall talking to
        anything", read in one glance before the forms below it say how. -->
-  <div class="flex flex-col">
+  <div class="flex flex-col pb-6">
     {#each sourceStatusRows as entry (entry.name)}
       <!-- Below `sm` there is no room for a dot, a name column and a state
            column on one line, so the state moves in beside the name (it is
@@ -1402,9 +1401,9 @@
 {/snippet}
 
 {#snippet LibraryStatus()}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Status</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Status</h2>
     </div>
 
     {#if $library.isError || $storage.isError || $libraryReleases.isError}
@@ -1449,15 +1448,15 @@
         </span>
       {/if}
     </div>
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet Slskd()}
   <!-- Connected or not is already said in the status rows above, so the form
        carries only what changes it: the fields, and Test and Save beside
        each other, indented under the field column. -->
-  <section class="flex flex-col gap-1.5 pt-6">
-    <h2 class=" text-lead font-bold text-ink">slskd</h2>
+  <section class="flex flex-col gap-3 pb-9">
+    <div class="border-b border-rule pb-1.5"><h2 class="label">slskd</h2></div>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -1571,8 +1570,8 @@
 {/snippet}
 
 {#snippet Navidrome()}
-  <section class="flex flex-col gap-1.5 pt-6">
-    <h2 class=" text-lead font-bold text-ink">Navidrome</h2>
+  <section class="flex flex-col gap-3 pb-9">
+    <div class="border-b border-rule pb-1.5"><h2 class="label">Navidrome</h2></div>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -1695,9 +1694,9 @@
 {/snippet}
 
 {#snippet FormatPreferences()}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Formats</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Formats</h2>
       <span class="text-meta font-medium text-ink-3">
         preferred and blocked formats
       </span>
@@ -1918,13 +1917,13 @@
         {/if}
       </div>
     </FormGrid>
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet UpgradeLowQuality()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Upgrade low-quality files</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Upgrade low-quality files</h2>
     </div>
 
     {#if $upgrades.isError}
@@ -2009,13 +2008,13 @@
     {:else}
       <span class="text-meta text-ink-4">a file is replaced only once the new copy is verified</span>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet Notifications()}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Notifications</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Notifications</h2>
       <Chip role={notificationConnection.role}>{notificationConnection.label}</Chip>
       <span class="ml-auto text-meta font-medium text-ink-3">
         {ago('sent', $notifications.data?.lastCheckedAt)}
@@ -2156,12 +2155,12 @@
     <span class="text-meta text-ink-4">
       sent only when a copy or an import needs your decision
     </span>
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet ListenBrainz()}
-  <section class="flex flex-col gap-1.5 pt-6">
-    <h2 class=" text-lead font-bold text-ink">ListenBrainz</h2>
+  <section class="flex flex-col gap-3 pb-9">
+    <div class="border-b border-rule pb-1.5"><h2 class="label">ListenBrainz</h2></div>
 
     <form
       class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 @xl:grid-cols-[130px_340px_minmax(0,1fr)]"
@@ -2288,9 +2287,9 @@
 {/snippet}
 
 {#snippet Weekly()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Weekly playlist</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Weekly playlist</h2>
     </div>
 
     {#if $weekly.isError}
@@ -2396,13 +2395,13 @@
         starred or kept songs are never deleted
       </span>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet NewReleases()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">New releases</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">New releases</h2>
     </div>
 
     {#if $newReleases.isError}
@@ -2471,7 +2470,7 @@
         tracks you remove in your player stay out
       </span>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 <!-- The same two-way choice the retention section draws, on the mode. This one
@@ -2488,11 +2487,11 @@
   >
     <span class="mt-px grid size-6 shrink-0 place-items-center">
       <span
-        class="grid size-[15px] place-items-center border transition {chosen
-          ? 'border-rule-strong bg-ink'
-          : 'border-rule-strong group-hover:border-rule-strong'}"
+        class="grid size-6 place-items-center border transition {chosen
+          ? 'border-ink bg-ink'
+          : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
       >
-        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={12} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2503,9 +2502,9 @@
 {/snippet}
 
 {#snippet Spotify()}
-  <section class="flex flex-col gap-1.5 pt-6">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Spotify</h2>
+  <section class="flex flex-col gap-3 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Spotify</h2>
       <Chip role={spotifyConnection.role}>{spotifyConnection.label}</Chip>
       {#if $spotify.data?.accountName}
         <span class="text-meta font-medium text-ink-3">as {$spotify.data.accountName}</span>
@@ -2636,9 +2635,9 @@
 {/snippet}
 
 {#snippet Retention()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">
         Imported downloads
       </h2>
     </div>
@@ -2675,13 +2674,13 @@
         <span class="numeric break-all">{$imports.data.inboxPath}</span>
       </span>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet DuplicateResolution()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Resolve duplicates</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Resolve duplicates</h2>
     </div>
 
     {#if $duplicates.isError && !duplicatesUnavailable}
@@ -2757,15 +2756,15 @@
         </StatusBadge>
       {/if}
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet Acoustid()}
   <!-- Every other check reads what a file says about itself. This one decodes
        the audio, so it is the only one a mislabelled file cannot satisfy. -->
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">
         Verify imports by audio
       </h2>
       <label
@@ -2834,7 +2833,7 @@
         {acoustidKeySet ? 'Tick enabled to start.' : 'Save a key and tick enabled.'}
       </span>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 <!-- The 15px box carries "chosen"; the two options are told apart by a hairline
@@ -2851,11 +2850,11 @@
   >
     <span class="mt-px grid size-6 shrink-0 place-items-center">
       <span
-        class="grid size-[15px] place-items-center border transition {chosen
-          ? 'border-rule-strong bg-ink'
-          : 'border-rule-strong group-hover:border-rule-strong'}"
+        class="grid size-6 place-items-center border transition {chosen
+          ? 'border-ink bg-ink'
+          : 'border-rule-strong bg-inset group-hover:border-ink-3'}"
       >
-        {#if chosen}<Icon name="check" size={10} class="text-ground" />{/if}
+        {#if chosen}<Icon name="check" size={12} class="text-ground" />{/if}
       </span>
     </span>
     <span class="flex min-w-0 flex-col gap-1">
@@ -2866,9 +2865,9 @@
 {/snippet}
 
 {#snippet LibraryLayoutSection()}
-  <Card>
-    <div class="flex flex-wrap items-baseline gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Library layout</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-baseline gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Library layout</h2>
     </div>
 
     {#if $layout.isError}
@@ -2929,7 +2928,7 @@
         />
       </StatusBadge>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 <!-- Saving a template and migrating the files on disk are two different jobs:
@@ -2938,9 +2937,9 @@
      now the migration gets its own, so a plan in progress does not read as
      part of the form above it. -->
 {#snippet LibraryMigration()}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Migrate library</h2>
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">Migrate library</h2>
       <Chip role={migration.role}>{migration.label}</Chip>
       <Button
         variant="outline"
@@ -3065,13 +3064,13 @@
         />
       </StatusBadge>
     {/if}
-  </Card>
+  </section>
 {/snippet}
 
 {#snippet FileTagsSection()}
-  <Card>
-    <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">
+  <section class="flex flex-col gap-3.5 pb-9">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-1.5">
+      <h2 class="label">
         Tags in your files
       </h2>
       <Chip role={tagged.role}>{tagged.label}</Chip>
@@ -3160,5 +3159,5 @@
         />
       </StatusBadge>
     {/if}
-  </Card>
+  </section>
 {/snippet}

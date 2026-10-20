@@ -940,7 +940,7 @@ describe('a settings read that fails', () => {
     opened('sources');
 
     const heading = await screen.findByRole('heading', { name: 'slskd' });
-    const form = heading.parentElement?.querySelector('form');
+    const form = heading.closest('section')?.querySelector('form');
     if (!form) throw new Error('slskd form not found');
     await vi.waitFor(() =>
       expect(
