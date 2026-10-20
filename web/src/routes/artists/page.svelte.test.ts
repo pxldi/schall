@@ -28,15 +28,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the artists loading grid', () => {
+describe('the artists loading list', () => {
   it('fills its pending shell with a fixed screen-filling count', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     opened();
 
     expect(screen.getByRole('status', { name: 'Loading artists' })).toBeTruthy();
-    // 210 tiles is 23 columns of 9 rows, which fills a 4K screen; the shell
-    // clips whatever the viewport cannot show.
-    expect(screen.getByRole('status').querySelectorAll('[aria-hidden="true"]').length).toBe(210);
+    // 60 rows of 36px fill a tall 4K window; the shell clips whatever the
+    // viewport cannot show.
+    expect(screen.getByRole('status').querySelectorAll('[aria-hidden="true"]').length).toBe(60);
   });
 });
 
@@ -65,8 +65,8 @@ describe('artist filters', () => {
   });
 });
 
-describe('artist cards', () => {
-  it('shows the compact fraction so the footer fits on one line', async () => {
+describe('artist rows', () => {
+  it('shows the compact fraction so the row fits on one line', async () => {
     pageState.url = new URL('http://localhost/artists');
     vi.stubGlobal(
       'fetch',
@@ -361,7 +361,7 @@ describe('a long artist list', () => {
     });
   }
 
-  it('draws the first cards before the reader scrolls', async () => {
+  it('draws the first rows before the reader scrolls', async () => {
     pageState.url = new URL('http://localhost/artists?scope=followed');
     vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
     vi.stubGlobal('fetch', artistsAnswering(300));
@@ -408,5 +408,102 @@ describe('reads that fail', () => {
     expect(await screen.findByRole('option', { name: 'Genres unavailable' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: 'Any genre' })).toBeNull();
     expect(await screen.findByText('–')).toBeTruthy();
+  });
+});
+
+describe('the artist list cursor', () => {
+  function threeArtists() {
+    pageState.url = new URL('http://localhost/artists');
+    const row = (id: string, name: string) => ({
+      id,
+      musicbrainzId: null,
+      name,
+      sortName: name,
+      followed: true,
+      followedAt: '2026-01-01T00:00:00Z',
+      lastRefreshedAt: '2026-01-01T00:00:00Z',
+      refreshStatus: 'completed',
+      releaseCount: 2,
+      ownedReleaseCount: 1,
+      trackCount: 2,
+      ownedTrackCount: 1,
+      inFlightCount: 0,
+      reviewCount: 0,
+      needsAttention: false,
+      hasImage: false,
+      coverAlbumIds: [],
+      coverInks: null
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+        if (url.pathname === '/api/v1/artists') {
+          return body({
+            items: [row('a1', 'Burial'), row('a2', 'Sewerslvt'), row('a3', 'Autechre')],
+            total: 3,
+            limit: 50,
+            offset: 0,
+            followedCount: 3,
+            heldCount: 0,
+            allCount: 3,
+            incompleteCount: 3,
+            completeCount: 0,
+            attentionCount: 0,
+            refreshingCount: 0
+          });
+        }
+        return body({});
+      })
+    );
+  }
+
+  const current = () =>
+    Array.from(document.querySelectorAll('a[aria-current="true"]')).map((node) =>
+      node.getAttribute('data-artist')
+    );
+
+  it('puts no cursor on a row until a key moves it', async () => {
+    threeArtists();
+    opened();
+    await screen.findByText('Burial');
+
+    expect(current()).toEqual([]);
+  });
+
+  it('moves down with J and up with K', async () => {
+    threeArtists();
+    opened();
+    await screen.findByText('Burial');
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(current()).toEqual(['a1']);
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(current()).toEqual(['a2']);
+    await fireEvent.keyDown(window, { key: 'k' });
+    expect(current()).toEqual(['a1']);
+  });
+
+  it('opens the artist under the cursor with Enter', async () => {
+    const { goto } = await import('$app/navigation');
+    threeArtists();
+    opened();
+    await screen.findByText('Burial');
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(goto).toHaveBeenCalledWith('/artists/a1');
+  });
+
+  it('leaves J alone while a field has focus', async () => {
+    threeArtists();
+    opened();
+    await screen.findByText('Burial');
+
+    await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search artists' }), { key: 'j' });
+
+    expect(current()).toEqual([]);
   });
 });
