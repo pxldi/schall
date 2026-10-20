@@ -1,5 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { tick } from 'svelte';
+  import { goto } from '$app/navigation';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
   import {
     api,
@@ -19,6 +21,10 @@
   import SoundCloudNamingFieldsInput from '$lib/components/SoundCloudNamingFields.svelte';
   import UploadResolvePass from '$lib/components/UploadResolvePass.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
+  import UploadRow from '$lib/components/UploadRow.svelte';
+  import { glide, slideInto } from '$lib/motion.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { arrivals, leaveMs, listCursor, settleDelays, strike } from '$lib/live-list.svelte';
 
   type Role = 'ok' | 'idle' | 'decide' | 'busy' | 'fail';
 
@@ -200,12 +206,69 @@
     if (busy) return { role: 'busy', text: 'Importing' };
     return { role: 'ok', text: 'Ready' };
   });
+
+  // A discard, an import settling and a refetch each change the list the
+  // reader is looking at. Only a discard strikes a row; the rest are the
+  // list being replaced.
+  // Whether the list had rows a moment ago, so the empty panel waits for the
+  // last one to leave instead of arriving over it.
+  let hadRows = $state(false);
+  $effect(() => {
+    if (items.length > 0) hadRows = true;
+  });
+
+  const ids = $derived(items.map((item) => item.id));
+  const cursor = listCursor(() => ids);
+  const arrived = arrivals(() => ids);
+
+  let rows = $state<HTMLElement>();
+  // Rows slide to their new places over the arriving step, and the cursor block
+  // measures them where they are, so it is placed again once they have landed.
+  let settled = $state(0);
+  $effect(() => {
+    void ids.join('|');
+    // Once the slide has landed, and once a leaving row has folded away.
+    const timers = settleDelays().map((ms) => setTimeout(() => settled++, ms));
+    return () => timers.forEach(clearTimeout);
+  });
+
+  function moveCursor(by: number) {
+    cursor.move(by);
+    void tick().then(() =>
+      rows?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  useKeys(() => [
+    {
+      keys: ['j', 'k'],
+      caps: ['j', 'k'],
+      verb: 'move',
+      order: 0,
+      enabled: () => items.length > 0,
+      run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
+    },
+    {
+      keys: ['enter'],
+      verb: 'open',
+      order: 2,
+      enabled: () => {
+        const upload = items[cursor.at];
+        return Boolean(upload && upload.status === 'imported' && libraryLink(upload));
+      },
+      run: () => {
+        const upload = items[cursor.at];
+        const link = upload && upload.status === 'imported' ? libraryLink(upload) : null;
+        if (link) void goto(link);
+      }
+    }
+  ]);
 </script>
 
-<div class="flex flex-col gap-4 px-6 py-4">
+<div class="flex flex-col gap-4 px-5 pt-3 pb-6">
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
     <span
-      class="numeric truncate border border-rule bg-panel px-2 py-[3px] text-meta font-medium text-ink-2"
+      class="mono truncate bg-panel px-2 py-[3px] text-micro text-ink-2"
       title={$uploads.data?.stagingPath || 'Staging path'}
     >
       {$uploads.data?.stagingPath || '—'}
@@ -215,19 +278,24 @@
 
     <!-- The limit is what somebody needs to know before choosing files; what an
          upload is for is not. -->
-    <span class="hidden text-meta font-medium text-ink-4 lg:block">
+    <span class="mono hidden text-micro text-ink-4 lg:block">
       up to {maxBytes && maxBytes > 0 ? formatBytes(maxBytes) : '—'} at a time
     </span>
 
-    <div class="ml-auto flex items-center gap-2.5">
+    <div class="ml-auto flex items-center gap-2">
       <Button
         variant="outline"
+        key="f"
+        verb="choose files"
         disabled={unconfigured || $send.isPending}
         onclick={() => picker?.click()}
       >
         Choose files
       </Button>
       <Button
+        variant="primary"
+        key="u"
+        verb="upload"
         disabled={chosen.length === 0 ||
           tooLarge ||
           unresolvedSoundCloudAddress ||
@@ -254,9 +322,9 @@
   />
 
   <!-- One address names one track, so the link below is only offered over a
-       single chosen file. Any other selection — none chosen, or several —
-       falls back to naming from the row in Library, the way every upload has
-       always been named. -->
+       single chosen file. Any other selection (none chosen, or several) falls
+       back to naming from the row in Library, the way every upload has always
+       been named. -->
   {#if !unconfigured && chosen.length !== 1}
     <p class="text-meta text-ink-3">
       SoundCloud edits land unmatched. Name one in Library with "This is a SoundCloud track".
@@ -266,39 +334,37 @@
   {#if unconfigured}
     <EmptyPanel role="decide" heading="Uploads not set up">
       <p class="text-meta leading-relaxed text-ink-2">
-        Set <span class="numeric">SCHALL_UPLOAD_STAGING_PATH</span> to a folder outside every music
-        folder, and <span class="numeric">SCHALL_IMPORT_LIBRARY_PATH</span> to the managed library
+        Set <span class="mono">SCHALL_UPLOAD_STAGING_PATH</span> to a folder outside every music
+        folder, and <span class="mono">SCHALL_IMPORT_LIBRARY_PATH</span> to the managed library
         uploads are filed into.
       </p>
     </EmptyPanel>
   {/if}
 
   {#if chosen.length > 0}
-    <section class="flex flex-col gap-3 border border-rule p-4">
-      <div class="flex flex-wrap items-center gap-2">
+    <section class="rise flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-2.5">
         <span class="label">Ready to send</span>
-        <span class="numeric whitespace-nowrap text-meta text-ink-4">
+        <span class="mono whitespace-nowrap text-micro text-ink-4">
           {chosen.length}
           {chosen.length === 1 ? 'file' : 'files'} · {formatBytes(chosenBytes)}
         </span>
         <span class="h-px flex-1 bg-rule"></span>
       </div>
 
-      <!-- No border of its own: the panel around it is already a surface, and a
-           box inside a box is one border too many. A hairline separates them. -->
       <div class="flex flex-col">
         {#each chosen as file (file.name)}
-          <div class="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
-            <span class="numeric min-w-0 flex-1 truncate text-body text-ink" title={file.name}>
+          <div class="flex min-h-9 items-center gap-3 border-b border-rule py-1.5 last:border-b-0">
+            <span class="mono min-w-0 flex-1 truncate text-micro text-ink" title={file.name}>
               {file.name}
             </span>
-            <span class="numeric whitespace-nowrap text-meta text-ink-4">{formatBytes(file.size)}</span>
+            <span class="mono whitespace-nowrap text-micro text-ink-4">{formatBytes(file.size)}</span>
           </div>
         {/each}
       </div>
 
       {#if chosen.length === 1}
-        <div class="flex flex-col gap-3 border-t border-rule pt-3">
+        <div class="flex flex-col gap-3">
           <div>
             <label for="upload-soundcloud-url" class="label">SoundCloud link</label>
             <input
@@ -345,30 +411,29 @@
       {#if $send.isError}<ErrorNote error={$send.error} />{/if}
 
       {#if $send.isPending}
-        <div>
+        <div class="flex items-center gap-3">
           <div
             role="progressbar"
             aria-label="Upload progress"
             aria-valuenow={Math.round(progress * 100)}
             aria-valuemin="0"
             aria-valuemax="100"
-            class="h-1.5 overflow-hidden bg-raised"
+            class="h-0.5 flex-1 bg-rule-strong"
           >
             <div
-              class="h-full bg-busy transition-[width]"
-              style="width: {Math.round(progress * 100)}%"
+              class="h-full origin-left bg-ink transition-transform"
+              style="transform: scaleX({progress})"
             ></div>
           </div>
           <!-- The bar is the glance; the figure is the answer. -->
-          <p class="numeric mt-1 text-meta text-ink-4">
+          <p class="mono text-micro text-ink-3">
             {Math.round(progress * 100)}% of {formatBytes(chosenBytes)}
           </p>
         </div>
       {/if}
 
       <!-- A limit nothing here enforces: two releases in one send are only
-           refused later, at the import. "No folders" went — the picker cannot
-           take one, so saying so restated a control the user already has. -->
+           refused later, at the import. -->
       <span class="text-meta leading-relaxed text-ink-3">one release at a time</span>
     </section>
   {/if}
@@ -382,14 +447,13 @@
     <Settle pending={$uploads.isPending}>
       {#snippet placeholder()}
         <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 18rem)">
-        {#each Array(6) as _, placeholderIndex (placeholderIndex)}
-          <div data-placeholder-row class="border-b border-rule px-3 py-2 last:border-b-0">
-            <Skeleton class="h-5" />
-            <Skeleton class="mt-1 h-4 w-2/3" />
-            <Skeleton class="mt-1 h-4 w-1/3" />
-            <Skeleton class="mt-2 h-4 w-1/4" />
-          </div>
-        {/each}
+          {#each Array(6) as _, placeholderIndex (placeholderIndex)}
+            <div data-placeholder-row class="flex h-9 items-center gap-3 border-b border-rule px-3">
+              <Skeleton shape="round" class="size-4 shrink-0" />
+              <Skeleton class="h-4 flex-1" />
+              <Skeleton class="h-3 w-20" />
+            </div>
+          {/each}
         </div>
       {/snippet}
       {#if $uploads.isError}
@@ -398,82 +462,57 @@
              the note asks again by itself. -->
         <ErrorNote error={$uploads.error} retry={() => $uploads.refetch()} class="mb-2" />
       {/if}
-      {#if items.length}
-        {#each items as upload (upload.id)}
-        {@const state = label(upload)}
-        {@const link = upload.status === 'imported' ? libraryLink(upload) : null}
-        <div class="border-b border-rule last:border-b-0">
-          <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-[1rem_minmax(0,1fr)_84px_auto_auto] md:gap-y-0"
-          >
-            <StateMark role={state.role} />
+        <div
+          bind:this={rows}
+          use:glide={{ key: `${cursor.at}:${items.length}:${settled}` }}
+          class="relative flex flex-col"
+        >
+          {#each items as upload, index (upload.id)}
+            {@const state = label(upload)}
+            {@const link = upload.status === 'imported' ? libraryLink(upload) : null}
+            <article
+              class="flex flex-col {arrived.has(upload.id) ? 'rise' : ''}"
+              animate:slideInto
+              out:strike={{ active: $discard.variables === upload.id }}
+            >
+              <UploadRow
+                {upload}
+                role={state.role}
+                state={state.text}
+                detail={detail(upload)}
+                libraryHref={link}
+                here={index === cursor.at}
+                discarding={$discard.isPending}
+                ondiscard={() => $discard.mutate(upload.id)}
+              />
 
-            <span class="min-w-0 flex-1">
-              <span class="numeric block truncate text-body text-ink">
-                {upload.files.length > 0
-                  ? upload.files.join(' · ')
-                  : `upload ${upload.id.slice(0, 8)}`}
-              </span>
-              <span class="mt-0.5 block truncate text-meta text-ink-3" title={detail(upload)}>
-                {detail(upload)}
-              </span>
-              <span class="mt-0.5 block min-h-4">
-                {#if link}
-                  <a
-                    href={link}
-                    class="inline-block text-meta font-medium text-ink-2 underline decoration-ink-4 underline-offset-4 transition hover:text-ink"
-                  >
-                    Open in Library
-                  </a>
-                {/if}
-              </span>
-            </span>
-
-            <span class="numeric hidden whitespace-nowrap text-right text-meta text-ink-4 sm:block">
-              {formatBytes(upload.sizeBytes)}
-            </span>
-
-            <Chip role={state.role} aria-live="polite" aria-atomic="true">{state.text}</Chip>
-
-            <span class="ml-auto flex shrink-0 items-center md:ml-0 md:justify-end">
-              {#if upload.staged}
-                <Button
-                  variant="ghost"
-                  icon
-                  size="xs"
-                  title="Discard files"
-                  aria-label="Discard files"
-                  disabled={$discard.isPending || busyStatuses.includes(upload.status)}
-                  onclick={() => $discard.mutate(upload.id)}
-                >
-                  <Icon name="delete" size={13} />
-                </Button>
+              <!-- A discard is an action on this row, so its failure is reported
+                   against the row it was pressed on and no other. -->
+              {#if $discard.isError && $discard.variables === upload.id}
+                <div class="px-3 pb-2"><ErrorNote error={$discard.error} /></div>
               {/if}
-            </span>
-          </div>
 
-          <!-- A discard is an action on this row, so its failure is reported
-               against the row it was pressed on and no other. -->
-          {#if $discard.isError && $discard.variables === upload.id}
-            <div class="px-3 pb-2"><ErrorNote error={$discard.error} /></div>
-          {/if}
-
-          <div class="min-h-4 px-3 pb-3 {upload.fileStates?.length ? '' : 'invisible'}">
-            {#if upload.fileStates?.length}
-              <UploadResolvePass files={upload.fileStates} />
-            {/if}
-          </div>
+              {#if upload.fileStates?.length}
+                <div class="px-3 pb-3">
+                  <UploadResolvePass files={upload.fileStates} />
+                </div>
+              {/if}
+            </article>
+          {/each}
         </div>
-        {/each}
-      {:else if !$uploads.isError}
-        <EmptyPanel role="idle" heading="Nothing uploaded yet" />
+      {#if items.length === 0 && !$uploads.isError}
+        <!-- The list stays mounted so its last row can strike and fold away;
+             the panel waits for it. -->
+        <div class="rise" style={hadRows ? `animation-delay: ${leaveMs()}ms` : ''}>
+          <EmptyPanel role="idle" heading="Nothing uploaded yet" />
+        </div>
       {/if}
     </Settle>
   </section>
 </div>
 
 {#snippet Problem(message: string)}
-  <div class="flex items-start gap-2 border border-rule bg-panel px-2.5 py-2">
+  <div class="flex items-start gap-2 bg-panel px-2.5 py-2">
     <StateMark role="fail" />
     <span class="min-w-0 text-meta leading-relaxed text-fail">{message}</span>
   </div>

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
     createMutation,
@@ -11,17 +10,17 @@
   } from '@tanstack/svelte-query';
   import { api, lookingFor, type AcquisitionTarget, type AcquisitionTargets } from '$lib/api';
   import { fileFormat, relativeTime, sinceTime } from '$lib/utils';
-  import type { IconName } from '$lib/icons';
-  import Button from '$lib/components/Button.svelte';
-  import Chip from '$lib/components/Chip.svelte';
+  import { goto } from '$app/navigation';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Pager from '$lib/components/Pager.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { leave } from '$lib/motion.svelte';
-  import StateMark from '$lib/components/StateMark.svelte';
+  import { glide, slideInto } from '$lib/motion.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { WANT_COLUMNS, arrivals, leaveMs, listCursor, settleDelays, strike } from '$lib/live-list.svelte';
+  import WantRow from '$lib/components/WantRow.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import UseAddress from '$lib/components/UseAddress.svelte';
 
@@ -155,6 +154,7 @@
   ]);
 
   function show(next: Pile) {
+    if (next !== pile) replaceList();
     pile = next;
     offset = 0;
   }
@@ -254,12 +254,6 @@
     return parts.join(' · ');
   }
 
-  // The chip repeats the mark, so it is only drawn when it says more than the
-  // state almost every row on the wishlist is in.
-  function chipWorthShowing(mark: { text: string }) {
-    return mark.text !== 'Looking for a copy';
-  }
-
   // When something last happened, and when the next thing will. A want with
   // neither has been recorded and not yet reached, which is its own answer.
   function timing(want: AcquisitionTarget) {
@@ -277,32 +271,141 @@
     return [main, search].filter(Boolean).join(' · ');
   }
 
-  const markIcons: Record<Role, 'check' | 'minus' | 'pause' | 'busy' | 'close'> = {
-    ok: 'check',
-    idle: 'minus',
-    decide: 'pause',
-    busy: 'busy',
-    fail: 'close'
-  };
-
   const emptyHeadings: Record<Pile, string> = {
     looking: 'Wishlist is empty',
     stopped: 'Nothing removed'
   };
+
+  // The row's one action. Each has its own key, which the cursor row registers.
+  function actionOf(want: AcquisitionTarget) {
+    if (want.floorWaivedAt) {
+      return {
+        label: 'Keep floor',
+        name: 'Keep the floor',
+        key: 'f',
+        pending: $keepFloor.isPending,
+        run: () => $keepFloor.mutate(want.id)
+      };
+    }
+    if (want.status === 'pending' && want.belowFloorSince) {
+      return {
+        label: 'Take best',
+        name: 'Take best available',
+        key: 'b',
+        pending: $takeBest.isPending,
+        run: () => $takeBest.mutate(want.id)
+      };
+    }
+    if (want.status === 'not_wanted') {
+      return {
+        label: 'Add back',
+        name: 'Add back',
+        key: 'a',
+        pending: $resume.isPending,
+        run: () => $resume.mutate(want.id)
+      };
+    }
+    return {
+      label: 'Remove',
+      name: 'Remove',
+      key: 'x',
+      pending: $stop.isPending,
+      run: () => $stop.mutate(want.id)
+    };
+  }
+
+  // A page, a pile or a filter swaps the list wholesale. Those rows leave on
+  // the cut and the rows that replace them do not slide in.
+  let replacing = $state(false);
+  let replacingTimer: ReturnType<typeof setTimeout> | undefined;
+  function replaceList() {
+    replacing = true;
+    clearTimeout(replacingTimer);
+    replacingTimer = setTimeout(() => (replacing = false), leaveMs() + 60);
+  }
+  $effect(() => {
+    void asked;
+    untrack(replaceList);
+  });
+
+  // Whether the list had rows a moment ago, so the empty panel waits for the
+  // last one to leave instead of arriving over it.
+  let hadRows = $state(false);
+  $effect(() => {
+    if (items.length > 0) hadRows = true;
+    else if (replacing) hadRows = false;
+  });
+  const lastRowLeft = $derived(hadRows && !replacing);
+
+  const ids = $derived(items.map((want) => want.id));
+  const cursor = listCursor(() => ids);
+  const arrived = arrivals(
+    () => ids,
+    () => replacing
+  );
+
+  let rows = $state<HTMLElement>();
+  // Rows slide to their new places over the arriving step, and the cursor block
+  // measures them where they are, so it is placed again once they have landed.
+  let settled = $state(0);
+  $effect(() => {
+    void ids.join('|');
+    // Once the slide has landed, and once a leaving row has folded away.
+    const timers = settleDelays().map((ms) => setTimeout(() => settled++, ms));
+    return () => timers.forEach(clearTimeout);
+  });
+
+  function moveCursor(by: number) {
+    cursor.move(by);
+    void tick().then(() =>
+      rows?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  // Enter opens the want's question, or the release it came from.
+  function openCursor() {
+    const want = items[cursor.at];
+    if (!want) return;
+    if (waitingOnYou(want)) void goto(`/review?want=${want.id}`);
+    else if (want.originAlbumId) void goto(`/releases/${want.originAlbumId}`);
+  }
+
+  useKeys(() => [
+    {
+      keys: ['j', 'k'],
+      caps: ['j', 'k'],
+      verb: 'move',
+      order: 0,
+      enabled: () => items.length > 0,
+      run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
+    },
+    {
+      keys: ['enter'],
+      verb: 'open',
+      order: 2,
+      enabled: () => {
+        const want = items[cursor.at];
+        return Boolean(want && (waitingOnYou(want) || want.originAlbumId));
+      },
+      run: openCursor
+    },
+    {
+      keys: ['h', 'l'],
+      caps: ['h', 'l'],
+      verb: 'pile',
+      order: 3,
+      run: (event) => show(event.key.toLowerCase() === 'l' ? 'stopped' : 'looking')
+    }
+  ]);
 </script>
 
-{#snippet RowAction(label: string, icon: IconName, pending: boolean, act: () => void)}
-  <Button variant="ghost" size="xs" icon title={label} aria-label={label} disabled={pending} onclick={act}>
-    <Icon name={icon} size="sm" />
-  </Button>
-{/snippet}
-
-<div class="flex flex-col gap-4 px-6 py-5">
+<div class="flex flex-col gap-3 px-5 pt-2.5 pb-6">
   <Segmented
     options={piles}
     value={pile}
     onchange={(value) => show(value as Pile)}
     label="Filter the wishlist"
+    variant="filter"
     pending={$looking.isPending || $stopped.isPending}
   />
 
@@ -326,132 +429,113 @@
     {/if}
     <Settle pending={$wants.isPending}>
       {#snippet placeholder()}
-    <!-- Fill the visible viewport. The reserved summary line below is part of
-         every want row, including these placeholders. -->
-    <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
-      {#each Array(10) as _, placeholderIndex (placeholderIndex)}
-        <div class="border-b border-rule px-3 py-2 last:border-b-0">
-          <Skeleton class="h-4 w-full" />
-          <Skeleton class="mt-1.5 h-3.5 w-2/3" />
+        <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
+          {#each Array(12) as _, placeholderIndex (placeholderIndex)}
+            <div class="flex h-9 items-center gap-3 border-b border-rule px-3">
+              <Skeleton shape="round" class="size-4 shrink-0" />
+              <Skeleton class="h-4 flex-1" />
+              <Skeleton class="h-3 w-24" />
+            </div>
+          {/each}
         </div>
-      {/each}
-    </div>
       {/snippet}
-  {#if items.length}
-    <div class="flex flex-col">
-      {#each items as want (want.id)}
-        {@const mark = standing(want)}
-        {@const sample = sampleStatus(want)}
-        {@const why = reason(want, sample)}
-        <!-- A row stopped or taken back leaves this pile, and folds away rather
-             than vanishing; rows leaving because the page changed go on the cut. -->
-        <article
-          class="border-b border-rule last:border-b-0"
-          out:leave={{ active: $stop.variables === want.id || $resume.variables === want.id }}
+        <div
+          bind:this={rows}
+          use:glide={{ key: `${cursor.at}:${items.length}:${settled}` }}
+          class="relative flex flex-col"
         >
-          <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-[1rem_minmax(0,1fr)_128px_112px_auto] md:gap-y-0"
-          >
-            <!-- Icons, never typed glyphs, as on the transfers beside it. The
-                 mark carries the state's name on hover and for a screen
-                 reader, because the chip is left off the common case. -->
-            <span class="flex shrink-0" title={[mark.text, why].filter(Boolean).join(' · ')}>
-              <StateMark role={mark.role}>
-                <Icon name={markIcons[mark.role]} size="sm" class="size-2.5 stroke-[3]" />
-              </StateMark>
-              <span class="sr-only">{[chipWorthShowing(mark) ? '' : mark.text, why].filter(Boolean).join(' · ')}</span>
-            </span>
-
-            <!-- On a phone the name takes the whole line and everything after
-                 it wraps underneath, as it does on the transfers beside it. -->
-            <span class="min-w-0 flex-1 basis-full md:basis-auto">
-              <span class="block truncate text-body font-medium text-ink" title={name(want)}>
-                {name(want)}
-              </span>
-              <span class="mt-0.5 block truncate text-meta text-ink-3" title={detail(want)}>
-                {#if want.externalUrl}
-                  <a href={want.externalUrl} class="hover:text-ink underline-offset-2 hover:underline">
-                    {detail(want)}
-                  </a>
-                {:else}
-                  {detail(want)}
-                {/if}
-              </span>
-            </span>
-
-            <!-- On a phone this wraps under the name rather than being dropped.
-                 When a want was last looked for is half of what the row is for:
-                 without it the reader is back to asking whether anything is
-                 happening at all. -->
-            <span class="numeric whitespace-nowrap text-meta text-ink-4">{timing(want)}</span>
-
-            <span class="flex min-w-0 items-center">
-              {#if chipWorthShowing(mark)}
-                <Chip role={mark.role} class="shrink-0">{mark.text}</Chip>
-              {/if}
-              {#if want.floorWaivedAt}
-                <Chip role="idle" class="ml-2 shrink-0">Floor waived</Chip>
-              {/if}
-            </span>
-
-            <!-- One icon button per row, whichever action it is, so the column
-                 keeps one width. A text link beside a wide outline button made
-                 the rows jump. The words are the tooltip and the name. -->
-            <span class="ml-auto flex shrink-0 items-center md:ml-0 md:justify-end">
-              {#if want.floorWaivedAt}
-                {@render RowAction('Keep the floor', 'undo', $keepFloor.isPending, () => $keepFloor.mutate(want.id))}
-              {:else if want.status === 'pending' && want.belowFloorSince}
-                {@render RowAction('Take best available', 'download', $takeBest.isPending, () => $takeBest.mutate(want.id))}
-              {:else if want.status === 'not_wanted'}
-                {@render RowAction('Add back', 'plus', $resume.isPending, () => $resume.mutate(want.id))}
-              {:else}
-                {@render RowAction('Remove', 'dismiss', $stop.isPending, () => $stop.mutate(want.id))}
-              {/if}
-            </span>
-          </div>
-
-          {#if want.status === 'unresolved' && !want.source}
-            <div class="px-3 pb-2">
-              <UseAddress
-                targetId={want.id}
-                entryTitle={want.title}
-                entryArtist={want.artist}
-                entryDurationMs={want.durationMs}
-              />
+          {#if items.length}
+            <div
+              class="label hidden border-b border-rule-strong px-3 md:grid md:gap-x-3 {WANT_COLUMNS}"
+              aria-hidden="true"
+            >
+              <span class="h-7"></span>
+              <span class="flex h-7 items-center">Song</span>
+              <span class="hidden h-7 items-center lg:flex">Origin</span>
+              <span class="flex h-7 items-center">Searched</span>
+              <span class="h-7"></span>
             </div>
           {/if}
+          {#each items as want, index (want.id)}
+            {@const mark = standing(want)}
+            {@const sample = sampleStatus(want)}
+            {@const why = reason(want, sample)}
+            <!-- A row stopped or taken back leaves this pile, struck through and
+                 folded away; rows leaving because the page changed go on the
+                 cut. -->
+            <article
+              class="flex flex-col {arrived.has(want.id) ? 'rise' : ''}"
+              animate:slideInto
+              out:strike={{
+                active: !replacing && ($stop.variables === want.id || $resume.variables === want.id)
+              }}
+            >
+              <WantRow
+                name={name(want)}
+                role={mark.role}
+                state={mark.text}
+                {why}
+                detail={detail(want)}
+                detailHref={want.externalUrl}
+                timing={timing(want)}
+                floorWaived={Boolean(want.floorWaivedAt)}
+                here={index === cursor.at}
+                action={actionOf(want)}
+              />
 
-          <!-- Both actions are pressed on a row, so their failures are reported
-               against the row they were pressed on and no other. -->
-          {#if $stop.isError && $stop.variables === want.id}
-            <div class="px-3 pb-2"><ErrorNote error={$stop.error} /></div>
-          {/if}
-          {#if $resume.isError && $resume.variables === want.id}
-            <div class="px-3 pb-2"><ErrorNote error={$resume.error} /></div>
-          {/if}
-          {#if $takeBest.isError && $takeBest.variables === want.id}
-            <div class="px-3 pb-2"><ErrorNote error={$takeBest.error} /></div>
-          {/if}
-          {#if $keepFloor.isError && $keepFloor.variables === want.id}
-            <div class="px-3 pb-2"><ErrorNote error={$keepFloor.error} /></div>
-          {/if}
-        </article>
-      {/each}
+              {#if want.status === 'unresolved' && !want.source}
+                <div class="px-3 pb-2">
+                  <UseAddress
+                    targetId={want.id}
+                    entryTitle={want.title}
+                    entryArtist={want.artist}
+                    entryDurationMs={want.durationMs}
+                  />
+                </div>
+              {/if}
 
-      <Pager {total} {offset} {pageSize} onchange={(next) => (offset = next)} />
-    </div>
-  {:else}
-    <EmptyPanel role="idle" heading={asked ? 'Nothing matches that search' : emptyHeadings[pile]}>
-      {#if asked}
-        Clear the filter to see the whole list.
-      {:else if pile === 'looking'}
-        Songs come from playlists, followed artists, suggestions and the Want it button on a
-        release.
-      {:else}
-        Songs you remove land here. You can add them back.
+              <!-- Every action is pressed on a row, so its failure is reported
+                   against the row it was pressed on and no other. -->
+              {#if $stop.isError && $stop.variables === want.id}
+                <div class="px-3 pb-2"><ErrorNote error={$stop.error} /></div>
+              {/if}
+              {#if $resume.isError && $resume.variables === want.id}
+                <div class="px-3 pb-2"><ErrorNote error={$resume.error} /></div>
+              {/if}
+              {#if $takeBest.isError && $takeBest.variables === want.id}
+                <div class="px-3 pb-2"><ErrorNote error={$takeBest.error} /></div>
+              {/if}
+              {#if $keepFloor.isError && $keepFloor.variables === want.id}
+                <div class="px-3 pb-2"><ErrorNote error={$keepFloor.error} /></div>
+              {/if}
+            </article>
+          {/each}
+        </div>
+        <Pager
+          {total}
+          {offset}
+          {pageSize}
+          onchange={(next) => {
+            replaceList();
+            offset = next;
+          }}
+        />
+      {#if items.length === 0}
+        <!-- The list stays mounted so its last row can strike and fold away;
+             the panel waits for it. -->
+        <div class="rise" style={lastRowLeft ? `animation-delay: ${leaveMs()}ms` : ''}>
+          <EmptyPanel role="idle" heading={asked ? 'Nothing matches that search' : emptyHeadings[pile]}>
+            {#if asked}
+              Clear the filter to see the whole list.
+            {:else if pile === 'looking'}
+              Songs come from playlists, followed artists, suggestions and the Want it button on a
+              release.
+            {:else}
+              Songs you remove land here. You can add them back.
+            {/if}
+          </EmptyPanel>
+        </div>
       {/if}
-    </EmptyPanel>
-  {/if}
     </Settle>
   {/if}
 </div>

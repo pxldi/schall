@@ -226,9 +226,9 @@
         <div class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3">
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           {#if found}
-            <Button type="submit" disabled={inFlight || !namedEnough}>Confirm</Button>
+            <Button type="submit" variant="primary" disabled={inFlight || !namedEnough}>Confirm</Button>
           {:else}
-            <Button type="submit" disabled={inFlight || url.trim() === ''}>Look up</Button>
+            <Button type="submit" variant="primary" disabled={inFlight || url.trim() === ''}>Look up</Button>
           {/if}
         </div>
       </form>

@@ -9,6 +9,7 @@
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type PlayerPairing, type PlaylistEntry, type UnpairedFile } from '$lib/api';
   import AddToMusicBrainz from '$lib/components/AddToMusicBrainz.svelte';
@@ -29,6 +30,9 @@
   import { lineSeparators } from '$lib/separators';
   import { nearEnd } from '$lib/grow';
   import { tick } from 'svelte';
+  import { glide } from '$lib/motion.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { listCursor } from '$lib/live-list.svelte';
 
   const queryClient = useQueryClient();
   const playlistId = page.params.id ?? '';
@@ -189,6 +193,41 @@
   // weekly list drops entries and keeps the others' positions, which numbered
   // it 2, 3, 4, 8. The unpaired list uses the same numbers so the two agree.
   const rowNumber = $derived(new Map(entries.map((entry, index) => [entry.id, index + 1])));
+
+  // The list's cursor (ADR 0042): one inverted row that glides between the
+  // songs drawn. W wants a song the list
+  // never made a want for.
+  const ids = $derived(drawn.map((entry) => entry.id));
+  const cursor = listCursor(() => ids);
+  let table = $state<HTMLElement>();
+
+  function moveCursor(by: number) {
+    cursor.move(by);
+    void tick().then(() =>
+      table?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  const here = $derived(drawn[cursor.at]);
+  const hereWantable = $derived(Boolean(here && states.get(here.id)?.label === 'not on wishlist'));
+
+  useKeys(() => [
+    {
+      keys: ['j', 'k'],
+      caps: ['j', 'k'],
+      verb: 'move',
+      order: 0,
+      enabled: () => drawn.length > 0,
+      run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
+    },
+    {
+      keys: ['w'],
+      verb: 'want',
+      order: 3,
+      enabled: () => hereWantable && !$wantEntry.isPending,
+      run: () => here && $wantEntry.mutate(here.id)
+    }
+  ]);
 </script>
 
 <svelte:head><title>{playlist?.name ?? 'Playlist'} · Schall</title></svelte:head>
@@ -199,6 +238,8 @@
   <Button
     variant="outline"
     disabled={!playlist || $pairing.isFetching}
+    key="c"
+    verb="check player"
     onclick={checkPlayer}
     title="Check which files the player has"
   >
@@ -215,6 +256,8 @@
     <Button
       variant="outline"
       disabled={!playlist || $reimport.isPending}
+      key="r"
+      verb="re-import"
       onclick={() => $reimport.mutate()}
       title="Re-import from Spotify"
     >
@@ -227,6 +270,9 @@
     </Button>
   {/if}
   <Button
+    variant="primary"
+    key="s"
+    verb="send to player"
     disabled={!playlist || $sendToPlayer.isPending}
     onclick={() => $sendToPlayer.mutate()}
     title="Send owned songs to Navidrome"
@@ -322,7 +368,7 @@
     <Settle pending={$detail.isPending}>
       {#snippet placeholder()}
         <section
-      class="max-h-[calc(100dvh-10rem)] overflow-hidden border border-rule"
+      class="max-h-[calc(100dvh-10rem)] overflow-hidden"
       aria-busy="true"
       aria-label="Loading playlist entries"
     >
@@ -437,15 +483,16 @@
         </div>
       {/if}
       <div class="overflow-x-auto">
+        <div class="relative" bind:this={table} use:glide={{ key: `${cursor.at}:${drawn.length}` }}>
         <table class="w-full border-collapse text-left md:min-w-[640px]">
           <thead>
-            <tr class="border-b border-rule text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
-              <th class="numeric px-4 py-2 font-medium">#</th>
-              <th class="px-3 py-2 font-medium">Title</th>
-              <th class="hidden px-3 py-2 font-medium md:table-cell">Artist</th>
-              <th class="hidden px-3 py-2 font-medium xl:table-cell">Album</th>
-              <th class="hidden px-3 py-2 text-right font-medium md:table-cell">Length</th>
-              <th class="px-4 py-2 font-medium">State</th>
+            <tr class="border-b border-rule-strong">
+              <th class="label h-7 px-4 text-left font-normal">#</th>
+              <th class="label h-7 px-3 text-left font-normal">Title</th>
+              <th class="label hidden h-7 px-3 text-left font-normal md:table-cell">Artist</th>
+              <th class="label hidden h-7 px-3 text-left font-normal xl:table-cell">Album</th>
+              <th class="label hidden h-7 px-3 text-right font-normal md:table-cell">Length</th>
+              <th class="label h-7 px-4 text-left font-normal">State</th>
             </tr>
           </thead>
           <tbody>
@@ -464,9 +511,13 @@
                    waits for whichever of the two is last. -->
               <tr
                 id="entry-{entry.id}"
-                class="want-row scroll-mt-24 {line ? '' : 'border-b border-rule last:border-b-0'}"
+                data-cursor={index === cursor.at}
+                class="row want-row scroll-mt-24 {index === cursor.at ? 'on-ink' : ''} {line
+                  ? 'border-b-0'
+                  : ''}"
+                onclick={() => cursor.set(index)}
               >
-                <td class="numeric px-4 py-1.5 text-meta text-ink-4">{index + 1}</td>
+                <td class="mono px-4 py-1.5 text-micro text-ink-4">{index + 1}</td>
                 <td class="max-w-64 px-3 py-1.5 text-body font-medium text-ink">
                   <span class="block truncate">{entry.title}</span>
                   <span class="block truncate text-meta font-normal text-ink-3 md:hidden">
@@ -479,21 +530,21 @@
                 <td class="hidden max-w-48 truncate px-3 py-1.5 text-meta text-ink-3 xl:table-cell">
                   {entry.album}
                 </td>
-                <td class="numeric hidden px-3 py-1.5 text-right text-meta text-ink-3 md:table-cell">
+                <td class="mono hidden px-3 py-1.5 text-right text-micro text-ink-3 md:table-cell">
                   {length(entry)}
                 </td>
                 <td class="px-4 py-1.5">
                   {#if entry.externalUrl}
                     <a
                       href={entry.externalUrl}
-                      class="text-meta text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+                      class="text-meta underline-offset-2 hover:underline"
                     >
                       Keyed{#if entry.minimumBitrate} · {entry.minimumBitrate} kbit/s{/if}
                     </a>
                   {:else if decide}
                     <a
                       href={reviewHref(entry)}
-                      class="inline-flex text-fail hover:text-ink"
+                      class="inline-flex text-fail"
                       title={[state.label, state.note].filter(Boolean).join(' · ')}
                       aria-label="{state.label}, open in Review"
                     >
@@ -525,12 +576,15 @@
                   <td class="px-3 pb-2" colspan="5">
                     <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       {#if decide}
-                        <a
+                        <Button
                           href={reviewHref(entry)}
-                          class="text-meta font-medium text-ink-2 underline decoration-rule-strong underline-offset-[3px] hover:text-ink"
+                          variant="outline"
+                          size="xs"
+                          key={index === cursor.at ? 'd' : undefined}
+                          verb="decide"
                         >
                           Decide in Review
-                        </a>
+                        </Button>
                       {/if}
                       {#if seed}
                         <AddToMusicBrainz {seed} />
@@ -550,6 +604,7 @@
             {/each}
           </tbody>
         </table>
+        </div>
       </div>
       {#if drawn.length < entries.length}
         <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>

@@ -787,6 +787,12 @@ h1 {
     animation: schall-tick var(--motion-enter) var(--motion-ease-arrive);
   }
 
+  /* A cell whose state has just changed under the reader: it holds the
+     inverted fill for two state beats, then lets go. */
+  .flash {
+    animation: schall-echo calc(var(--motion-state) * 2) var(--motion-ease);
+  }
+
   /* A control being pressed. */
   .press:active:not(:disabled) {
     transform: scale(0.97);

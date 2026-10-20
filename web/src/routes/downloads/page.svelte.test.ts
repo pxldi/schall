@@ -122,6 +122,12 @@ function downloadsAsked() {
 
 beforeAll(setup);
 
+// jsdom has no Web Animations. Svelte reads `getAnimations` to pin a row that
+// is moving while another leaves the list.
+beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
+});
+
 beforeEach(() => {
   asked = [];
 });
@@ -616,5 +622,97 @@ describe('the needs-review pile', () => {
 
     expect(await screen.findByText('12')).toBeTruthy();
     expect(screen.queryByText('1,449')).toBeNull();
+  });
+});
+
+// The list is read with the keys (ADR 0042): rows come in the order of what
+// each needs next, one row holds the cursor, and its buttons answer keys.
+describe('the console list', () => {
+  const paused = () =>
+    request({
+      id: 'f1a2b3c4-0000-4000-8000-000000000010',
+      albumTitle: 'Needs You',
+      status: 'completed',
+      importStatus: 'needs_review',
+      requestedAt: '2026-07-01T10:00:00Z',
+      importEvidence: { files: [], unmatchedTracks: [], problems: [] }
+    });
+  const moving = () =>
+    request({
+      id: 'f1a2b3c4-0000-4000-8000-000000000011',
+      albumTitle: 'Moving',
+      requestedAt: '2026-08-01T10:00:00Z'
+    });
+  const startable = (id: string, albumTitle: string, requestedAt: string) =>
+    request({ id, albumTitle, status: 'requested', startable: true, requestedAt });
+
+  it('lists what needs a person ahead of a download that is moving, whatever their dates', async () => {
+    answering(() => listing({ items: [moving(), paused()] }));
+    opened();
+
+    await screen.findAllByRole('article');
+    const names = screen.getAllByRole('article').map((row) => row.textContent ?? '');
+    expect(names[0]).toContain('Needs You');
+    expect(names[1]).toContain('Moving');
+  });
+
+  it('gives a key only to the buttons on the row holding the cursor', async () => {
+    const first = startable('f1a2b3c4-0000-4000-8000-000000000020', 'First', '2026-08-02T10:00:00Z');
+    const second = startable('f1a2b3c4-0000-4000-8000-000000000021', 'Second', '2026-08-01T10:00:00Z');
+    answering(() => listing({ items: [first, second] }));
+    opened();
+
+    await screen.findAllByRole('article');
+    const starts = screen.getAllByRole('button', { name: 'Start' });
+    expect(starts.map((button) => button.getAttribute('aria-keyshortcuts'))).toEqual(['S', null]);
+  });
+
+  it('starts the cursor row from the keyboard and no other', async () => {
+    const sent: string[] = [];
+    const first = startable('f1a2b3c4-0000-4000-8000-000000000020', 'First', '2026-08-02T10:00:00Z');
+    const second = startable('f1a2b3c4-0000-4000-8000-000000000021', 'Second', '2026-08-01T10:00:00Z');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname.endsWith('/start')) {
+          sent.push(url.pathname);
+          return new Response(JSON.stringify(first), { status: 200 });
+        }
+        if (url.pathname === '/api/v1/downloads') {
+          return new Response(JSON.stringify(listing({ items: [first, second] })), { status: 200 });
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      })
+    );
+    opened();
+
+    await screen.findAllByRole('article');
+    // J moves to the second row, and S starts that one.
+    await fireEvent.keyDown(window, { key: 'j' });
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('button', { name: 'Start' })
+          .map((button) => button.getAttribute('aria-keyshortcuts'))
+      ).toEqual([null, 'S'])
+    );
+    await fireEvent.keyDown(window, { key: 's' });
+
+    await vi.waitFor(() => expect(sent).toEqual([`/api/v1/downloads/${second.id}/start`]));
+  });
+
+  it('opens the files of the cursor row on Enter', async () => {
+    answering(listing);
+    opened();
+
+    await screen.findByRole('article');
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Show requested files' }).getAttribute('aria-expanded')
+      ).toBe('true')
+    );
   });
 });

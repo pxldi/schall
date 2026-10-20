@@ -1,6 +1,6 @@
 <script lang="ts">
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import {
     createInfiniteQuery,
@@ -24,33 +24,25 @@
     lookingFor,
     type SourceOffer
   } from '$lib/api';
-  import {
-    downloadName,
-    formatBytes,
-    keepInUrl,
-    relativeTime,
-    urlChoice,
-    urlText
-  } from '$lib/utils';
+  import { formatBytes, keepInUrl, urlChoice, urlText } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
-  import Cover from '$lib/components/Cover.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import { coverSrc } from '$lib/cover-size';
   import Chip from '$lib/components/Chip.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
   import { progress } from '$lib/vocabulary';
-  import ControlRail from '$lib/components/ControlRail.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
-  import StateTag from '$lib/components/StateTag.svelte';
   import UploadsTab from '$lib/components/UploadsTab.svelte';
   import WantsTab from '$lib/components/WantsTab.svelte';
-
-  type Role = 'ok' | 'idle' | 'decide' | 'busy' | 'fail';
+  import { useKeys } from '$lib/keys.svelte';
+  import { glide, slideInto } from '$lib/motion.svelte';
+  import { arrivals, leaveMs, listCursor, settleDelays, strike } from '$lib/live-list.svelte';
+  import DownloadRow from './DownloadRow.svelte';
+  import { DOWNLOAD_COLUMNS, nextAction, requestedOn, rowHeading, rowSubject } from './download-rows';
 
   const queryClient = useQueryClient();
   let expanded = $state<string | null>(null);
@@ -165,8 +157,15 @@
     for (const loaded of $downloads.data?.pages ?? []) {
       for (const item of loaded.items) seen.set(item.id, item);
     }
+    // The piles still in motion are read by what each row needs next; the
+    // settled ones by when they were asked for. Either way the newest request
+    // comes first among equals.
+    const byNext = view === 'open' || view === 'review';
     return [...seen.values()].sort(
-      (a, b) => b.requestedAt.localeCompare(a.requestedAt) || a.id.localeCompare(b.id)
+      (a, b) =>
+        (byNext ? nextAction(a) - nextAction(b) : 0) ||
+        b.requestedAt.localeCompare(a.requestedAt) ||
+        a.id.localeCompare(b.id)
     );
   });
   const moreToRead = $derived(Boolean($downloads.hasNextPage));
@@ -187,23 +186,6 @@
   }
   const counts = $derived($downloads.data?.pages[0]?.counts);
 
-  // Release and artist, in the order the row draws them: the release named
-  // plainly, the artist beside it in ink-3 only when there is a release to
-  // set it apart from. A request with no release names the wanted recording
-  // instead, and there is nothing left to dim beside it.
-  function releaseTitle(item: DownloadRequest) {
-    return item.albumTitle ?? item.entryTitle ?? '';
-  }
-  function releaseArtist(item: DownloadRequest) {
-    return item.artistName ?? item.entryArtist ?? '';
-  }
-  function rowHeading(item: DownloadRequest) {
-    return releaseTitle(item) || releaseArtist(item) || 'Unnamed download';
-  }
-  function rowSubject(item: DownloadRequest) {
-    return releaseTitle(item) && releaseArtist(item) ? releaseArtist(item) : '';
-  }
-
   // What the search box matches against: the words already on the row, so a
   // search never finds a row it could not also justify by pointing at it.
   const filteredItems = $derived(
@@ -219,8 +201,101 @@
   );
 
   function setView(next: DownloadView) {
+    if (next !== view) replaceList();
     view = next;
   }
+
+  // Rows that leave because the list was swapped for another go on the cut,
+  // and rows that appear with it do not slide in: only a row finishing or
+  // arriving in the list the reader is looking at is news.
+  let replacing = $state(false);
+  let replacingTimer: ReturnType<typeof setTimeout> | undefined;
+  function replaceList() {
+    replacing = true;
+    clearTimeout(replacingTimer);
+    replacingTimer = setTimeout(() => (replacing = false), leaveMs() + 60);
+  }
+
+  // Whether the list had rows a moment ago, so the empty panel waits for the
+  // last one to leave instead of arriving over it.
+  let hadRows = $state(false);
+  $effect(() => {
+    if (filteredItems.length > 0) hadRows = true;
+    else if (replacing) hadRows = false;
+  });
+  const lastRowLeft = $derived(hadRows && !replacing);
+
+  const ids = $derived(filteredItems.map((item) => item.id));
+  const cursor = listCursor(() => ids);
+  const arrived = arrivals(
+    () => ids,
+    () => replacing
+  );
+
+  let rows = $state<HTMLElement>();
+  // Rows slide to their new places over the arriving step, and the cursor block
+  // measures them where they are, so it is placed again once they have landed.
+  let settled = $state(0);
+  $effect(() => {
+    void ids.join('|');
+    // Once the slide has landed, and once a leaving row has folded away.
+    const timers = settleDelays().map((ms) => setTimeout(() => settled++, ms));
+    return () => timers.forEach(clearTimeout);
+  });
+  function moveCursor(by: number) {
+    cursor.move(by);
+    void tick().then(() =>
+      rows?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  const tabOrder = ['wanted', 'peers', 'uploads'] as const;
+  function stepTab(by: number) {
+    replaceList();
+    tab = tabOrder[(tabOrder.indexOf(tab) + by + tabOrder.length) % tabOrder.length];
+  }
+  function stepView(by: number) {
+    const keys = viewKeys as readonly DownloadView[];
+    setView(keys[Math.min(Math.max(keys.indexOf(view) + by, 0), keys.length - 1)]);
+  }
+
+  // Downloads' keys (ADR 0042). The row buttons register their own while the
+  // row holds the cursor; these are the keys with no single button.
+  useKeys(() => [
+    {
+      keys: ['[', ']'],
+      caps: ['[', ']'],
+      verb: 'tab',
+      order: 1,
+      run: (event) => stepTab(event.key === ']' ? 1 : -1)
+    },
+    ...(tab === 'peers'
+      ? [
+          {
+            keys: ['j', 'k'],
+            caps: ['j', 'k'],
+            verb: 'move',
+            order: 0,
+            enabled: () => filteredItems.length > 0,
+            run: (event: KeyboardEvent) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
+          },
+          {
+            keys: ['enter'],
+            verb: 'files',
+            order: 2,
+            enabled: () => Boolean(cursor.id),
+            run: () => (expanded = expanded === cursor.id ? null : cursor.id)
+          },
+          {
+            keys: ['h', 'l'],
+            caps: ['h', 'l'],
+            verb: 'pile',
+            order: 3,
+            run: (event: KeyboardEvent) => stepView(event.key.toLowerCase() === 'l' ? 1 : -1)
+          }
+        ]
+      : [])
+  ]);
 
   // A tab badge has to be right on the tab you are not looking at, which is the
   // only reason it exists — so this asks for the list rather than reading
@@ -385,120 +460,6 @@
     discarded: 'Copy discarded'
   };
 
-  function quality(item: DownloadRequest) {
-    const format = item.format ? item.format.toUpperCase() : 'Unknown format';
-    return item.averageBitRate ? `${format} · ${item.averageBitRate} kbps` : format;
-  }
-
-  // How much of what was asked for this request holds. A single-track request
-  // holds one track and that is the whole of what "1 of 1 tracks" says, which
-  // is nothing: most rows on this page are one track fetched for one want, so
-  // the phrase stood on nearly every row and told the reader apart from
-  // nothing. It is said only where the two figures can differ.
-  function completeness(item: DownloadRequest) {
-    if (!item.expectedTrackCount) {
-      return item.fileCount === 1 ? '' : `${item.fileCount} files`;
-    }
-    if (item.expectedTrackCount === 1 && item.fileCount === 1) return '';
-    return `${item.fileCount} of ${item.expectedTrackCount} tracks`;
-  }
-
-  function transferred(item: DownloadRequest) {
-    if (!item.totalSizeBytes) return 0;
-    return Math.min(100, Math.round((item.progress.transferredBytes / item.totalSizeBytes) * 100));
-  }
-
-  const statusLabels: Record<DownloadRequest['status'], string> = {
-    requested: 'Requested',
-    started: 'Downloading',
-    completed: 'Transferred',
-    failed: 'Failed',
-    cancelled: 'Cancelled'
-  };
-
-  // A started request whose every file is still sitting in the peer's upload
-  // queue is not downloading, and saying so was the difference between "this is
-  // slow" and "this is broken". Schall has always known — slskd reports
-  // `Queued, Remotely` and it is recorded per file — the count simply never
-  // reached here.
-  function waiting(item: DownloadRequest) {
-    return (
-      item.status === 'started' &&
-      item.progress.transferCount > 0 &&
-      item.progress.queuedCount === item.progress.transferCount
-    );
-  }
-
-  function statusLabel(item: DownloadRequest) {
-    if (waiting(item)) return 'Queued at peer';
-    if (item.status !== 'completed') return statusLabels[item.status];
-    switch (item.importStatus) {
-      case 'validating': return 'Validating';
-      case 'imported': return 'Imported';
-      case 'needs_review': return 'Needs review';
-      case 'discarded': return progress.discarded;
-      default: return 'Awaiting import';
-    }
-  }
-
-  // The status decides the row's mark and its chip, so both are graded once.
-  // A completed transfer is not yet an outcome: what happened to it afterwards
-  // is what the row reports.
-  function stateRole(item: DownloadRequest): Role {
-    switch (item.status) {
-      case 'failed': return 'fail';
-      case 'started': return 'busy';
-      case 'requested': return 'idle';
-      case 'cancelled': return 'idle';
-    }
-    switch (item.importStatus) {
-      case 'imported': return 'ok';
-      case 'needs_review': return 'decide';
-      case 'discarded': return 'idle';
-      default: return 'busy';
-    }
-  }
-
-  // The row's mark is graded a step dimmer than its status when the only thing
-  // happening is a wait rather than work: a file sitting in a peer's own queue
-  // is not the same fact as one actually moving, even though both are
-  // `started` underneath.
-  function dotRole(item: DownloadRequest): Role {
-    if (item.status === 'started' && waiting(item)) return 'idle';
-    return stateRole(item);
-  }
-
-  // Only "needs review" asks for a person; every other open state is
-  // information rather than a question, so it gets the plain tag. A failure
-  // gets the broken tone so a Failed row reads as broken at a glance, not just
-  // by its word.
-  function tagTone(item: DownloadRequest): 'neutral' | 'attention' | 'broken' {
-    if (item.status === 'failed') return 'broken';
-    if (item.status === 'completed' && item.importStatus === 'needs_review') return 'attention';
-    return 'neutral';
-  }
-
-  // Where the row's own Decide button goes. Evidence is recorded only while an
-  // import is paused for review, so this is the same address the disclosure
-  // already sends the reader to for that case.
-  function decideHref(item: DownloadRequest) {
-    return item.importEvidence ? `/review?download=${item.id}` : undefined;
-  }
-
-  // How long a request has been waiting, not the clock time it was made at.
-  // This line is read to decide whether a request that has not started yet is
-  // waiting normally or is stuck, and `8/15/2026, 11:47:00 AM` makes the reader
-  // do that subtraction themselves.
-  function requestedOn(value: string) {
-    return relativeTime(value);
-  }
-
-  function subLine(item: DownloadRequest) {
-    const parts = [item.username, quality(item), completeness(item)].filter(Boolean);
-    if (item.status === 'requested') parts.push(`requested ${requestedOn(item.requestedAt)}`);
-    return parts.join(' · ');
-  }
-
   // Every one of these failures was raised by a button on one row, so each is
   // kept against the request it was pressed for. Stacked at the top of the page
   // they said nothing about which transfer they belonged to.
@@ -537,11 +498,11 @@
   }
 
   const transferTones: Record<string, string> = {
-    completed: 'text-ok',
+    completed: 'text-ink-2',
     failed: 'text-fail',
     cancelled: 'text-ink-4',
-    queued: 'text-ink-2',
-    downloading: 'text-busy'
+    queued: 'text-ink-3',
+    downloading: 'text-ink'
   };
 
   // One name per transfer state, wherever the state is shown. The chip on a
@@ -574,24 +535,30 @@
 
 <PageHeader title="Downloads" />
 
-<ControlRail label="Incoming">
+<!-- The tabs, and the filter that narrows the list under them. While the field
+     has focus, typing filters here and does not open the global search. -->
+<div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 pt-3">
   <Segmented
     options={tabs}
     value={tab}
-    onchange={(value) => (tab = value as (typeof tabKeys)[number])}
+    onchange={(value) => {
+      replaceList();
+      tab = value as (typeof tabKeys)[number];
+    }}
     label="Incoming"
+    variant="tabs"
     pending={$downloads.isPending || $looking.isPending || $uploads.isPending}
   />
 
   {#if tab !== 'uploads'}
     <!-- The search narrows the transfers drawn on this page, and is handed to
          the wishlist, which asks the server: it is paged, and a filter over
-         the 25 rows on screen would miss the rest. While the field has focus,
-         typing filters here and does not open the global search. -->
+         the 25 rows on screen would miss the rest. -->
     <label class="field ml-auto flex w-full items-center gap-2 sm:w-56">
       <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:value={search}
+        oninput={replaceList}
         type="search"
         spellcheck="false"
         autocomplete="off"
@@ -601,24 +568,25 @@
       />
     </label>
   {/if}
-</ControlRail>
+</div>
 
 {#if tab === 'wanted'}
   <WantsTab query={search} />
 {:else if tab === 'uploads'}
   <UploadsTab />
 {:else}
-  <ControlRail label="Filter by status" sticky={false}>
+  <div class="px-5 pt-2.5">
     <Segmented
       options={views}
       value={view}
       onchange={(value) => setView(value as DownloadView)}
       label="Filter by status"
+      variant="filter"
       pending={$downloads.isPending}
     />
-  </ControlRail>
+  </div>
 
-  <div class="flex flex-col gap-4 px-5 py-5">
+  <div class="flex flex-col gap-4 px-5 pt-3 pb-6">
     {#if $downloads.isError && !$downloads.data}
       <!-- It is the list that failed, so the failure stands where the list
            would have been rather than above it. -->
@@ -631,527 +599,365 @@
       {/if}
       <Settle pending={$downloads.isPending}>
         {#snippet placeholder()}
-      <!-- The mark and, from md up, the cover column lead each placeholder the
-           way they lead a transfer row, so the text does not shift right when
-           the list lands. The progress slot is part of every row too. -->
-      <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
-        {#each Array(10) as _, placeholderIndex (placeholderIndex)}
-          <div class="flex items-center gap-3 border-b border-rule px-3 py-2 last:border-b-0">
-            <Skeleton shape="round" class="size-4 shrink-0" />
-            <Skeleton shape="cover" class="hidden size-10 shrink-0 md:block" />
-            <div class="min-w-0 flex-1">
-              <Skeleton class="h-5" />
-              <Skeleton class="mt-1 h-4 w-2/3" />
-              <Skeleton class="mt-2 h-1.5" />
-              <Skeleton class="mt-1 h-4 w-1/3" />
-            </div>
-          </div>
-        {/each}
-      </div>
-        {/snippet}
-    {#if filteredItems.length}
-      <!-- The first column is the 1rem mark plus the row's 0.75rem padding: a
-           subgrid's padding is taken out of its edge column, and at 1rem the
-           mark ran into the cover beside it. -->
-      <div
-        class="flex flex-col md:grid md:grid-cols-[1.75rem_2.5rem_minmax(0,1fr)_max-content_max-content_max-content] md:gap-x-3"
-      >
-        {#each filteredItems as item (item.id)}
-          {@const role = stateRole(item)}
-          {@const mark = dotRole(item)}
-          {@const decide = decideHref(item)}
-          {@const failures = rowErrors[item.id] ?? []}
-          {@const showProgress = item.status === 'started' && !waiting(item)}
-          <article
-            class="border-b border-rule last:border-b-0 md:col-span-full md:grid md:grid-cols-subgrid md:[&>*]:col-span-full {item.status === 'cancelled'
-              ? 'opacity-55'
-              : ''}"
-          >
-            <!-- The row takes its columns from the list's grid, so the state,
-                 the size and the buttons size to the widest row and still line
-                 up down the page. Fixed widths let `Start` and `Cancel` spill
-                 left over the size beside them. -->
-            <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 transition hover:bg-raised md:grid md:grid-cols-subgrid md:gap-y-0"
-            >
-              <!-- No badge for the score. It measures how good a copy is and knows
-                   nothing about which release it holds, so a green number here read
-                   as a verdict it cannot give; the state mark leads the row instead. -->
-              <StateMark role={mark}>
-                <!-- Icons, never typed glyphs: a "?" or "!" sat on its own
-                     baseline and read as text inside the mark. Pause is an
-                     import held for a person. -->
-                <Icon
-                  name={mark === 'ok' ? 'check' : mark === 'decide' ? 'pause' : mark === 'fail' ? 'close' : mark === 'busy' ? 'busy' : 'minus'}
-                  size="sm"
-                  class="size-2.5 stroke-[3]"
-                />
-              </StateMark>
-
-              <span class="hidden h-10 w-10 shrink-0 overflow-hidden bg-panel md:block" aria-hidden="true">
-                <Cover
-                  src={item.albumId ? coverSrc(item.albumId) : undefined}
-                  seed={item.albumId ?? item.id}
-                  class="h-10 w-10 object-cover"
-                />
-              </span>
-
-              <!-- On a phone the name takes the whole line and everything after
-                   it wraps underneath. Sharing one line with the state, the
-                   size and the buttons left it eight characters wide, so a
-                   screen of requests read as `Ninajirachi…` over and over with
-                   no way to tell one from the next. -->
-              <span class="min-w-0 flex-1 basis-full md:basis-auto">
-                {#if item.albumId}
-                  <a
-                    href={`/releases/${item.albumId}`}
-                    class="tap-tall block truncate text-body font-medium text-ink transition hover:text-ink"
-                  >
-                    {rowHeading(item)}{#if rowSubject(item)}{' '}<span class="font-normal text-ink-3">· {rowSubject(item)}</span>{/if}
-                  </a>
-                {:else}
-                  <span class="block truncate text-body font-medium text-ink">
-                    {rowHeading(item)}{#if rowSubject(item)}{' '}<span class="font-normal text-ink-3">· {rowSubject(item)}</span>{/if}
-                  </span>
-                {/if}
-                <span class="mt-0.5 block truncate text-meta text-ink-3" title={subLine(item)}>
-                  {subLine(item)}
-                </span>
-              </span>
-
-              <span class="flex min-w-0 items-center">
-                {#if role !== 'ok'}
-                  <!-- The tick above already said "in the library"; a tag
-                       beside it would say the same thing twice. -->
-                  <StateTag
-                    tone={tagTone(item)}
-                    class="shrink-0"
-                    aria-live="polite"
-                    aria-atomic="true"
-                  >
-                    {statusLabel(item)}
-                  </StateTag>
-                {/if}
-              </span>
-
-              <span class="numeric whitespace-nowrap text-right text-meta text-ink-2">
-                {formatBytes(item.totalSizeBytes)}
-              </span>
-
-              <span class="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0 md:justify-end">
-                {#if item.startable}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={$startDownload.isPending}
-                    onclick={() => $startDownload.mutate({ requestId: item.id })}
-                  >
-                    <Icon name="play" size={12} /> Start
-                  </Button>
-                {:else if item.status === 'started'}
-                  <!-- The counter is a second reading of the tag whenever it
-                       has nothing of its own to add. A row queued at the peer
-                       with one file to come reads "Queued at peer" and then
-                       "0/1 files", which is the same sentence twice; on a page
-                       of thirty-four such rows it is the same sentence
-                       sixty-eight times. It speaks once some of the files have
-                       arrived, or once there is more than one to count. -->
-                  {@const counted =
-                    item.progress.completedCount > 0 || item.progress.transferCount > 1}
-                  <span class="flex items-center gap-1.5 text-meta text-busy">
-                    <!-- A spinner beside a request nobody has started sending
-                         claims motion there is none of. -->
-                    {#if !waiting(item)}<Icon name="busy" size={12} class="animate-spin" />{/if}
-                    {#if counted}
-                      <span class="numeric whitespace-nowrap">
-                        {item.progress.completedCount}/{item.progress.transferCount} files
-                      </span>
-                    {/if}
-                  </span>
-                {:else if item.retryableCount}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={$retryDownload.isPending}
-                    onclick={() => $retryDownload.mutate({ requestId: item.id })}
-                  >
-                    <Icon name="undo" size={12} />
-                    Retry {item.retryableCount === 1 ? '1 file' : `${item.retryableCount} files`}
-                  </Button>
-                {/if}
-                {#if role === 'decide' && decide}
-                  <Button href={decide} variant="outline" size="sm">Decide</Button>
-                {/if}
-                {#if item.status === 'requested' || item.status === 'started'}
-                  <!-- A secondary action, so an icon with its name on hover,
-                       beside the one that opens the files. -->
-                  <Button
-                    variant="ghost"
-                    icon
-                    size="xs"
-                    title="Cancel download"
-                    aria-label="Cancel download"
-                    disabled={$cancelDownload.isPending}
-                    onclick={() => $cancelDownload.mutate(item.id)}
-                  >
-                    <Icon name="close" size={14} />
-                  </Button>
-                {/if}
-                <Button
-                  variant="ghost"
-                  icon
-                  size="xs"
-                  title="Show requested files"
-                  aria-label="Show requested files"
-                  onclick={() => (expanded = expanded === item.id ? null : item.id)}
-                >
-                  <Icon name="chevron-down" size={14} class={expanded === item.id ? 'rotate-180' : ''} />
-                </Button>
-              </span>
-
-              <!-- Reserve the progress block on every row. A requested transfer
-                   fills it after Start; a settled row keeps the same height.
-                   Indented past the mark, so the fill reads as the row's own
-                   rather than a bar for the whole width of the list. -->
-              <span class="mt-2 w-full md:col-span-4 md:col-start-3" aria-hidden={!showProgress}>
-                <span
-                  role="progressbar"
-                  aria-label={`Download progress for ${downloadName(item)}`}
-                  aria-valuenow={transferred(item)}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  class="dot-track block {showProgress ? '' : 'invisible'}"
-                >
-                  <span class="dot-fill block transition-[width]" style={`width: ${transferred(item)}%`}></span>
-                </span>
-                <span
-                  class="numeric mt-1 block whitespace-nowrap text-meta text-ink-4 {showProgress ? '' : 'invisible'}"
-                >
-                  {#if showProgress}
-                    {formatBytes(item.progress.transferredBytes)} of {formatBytes(
-                      item.totalSizeBytes
-                    )}{#if item.progress.failedCount}
-                      · {item.progress.failedCount} failed{/if}
-                  {/if}
-                </span>
-              </span>
-            </div>
-
-            {#each failures as failure, failureIndex (failureIndex)}
-              {@render RowProblem(failure)}
+          <div class="flex flex-col overflow-hidden" style="max-height: calc(100dvh - 11rem)">
+            {#each Array(12) as _, placeholderIndex (placeholderIndex)}
+              <div class="flex h-9 items-center gap-3 border-b border-rule px-3">
+                <Skeleton shape="round" class="size-4 shrink-0" />
+                <Skeleton class="h-4 flex-1" />
+                <Skeleton class="h-3 w-24" />
+              </div>
             {/each}
-
-            {#if duplicateQuestion && duplicateQuestion.requestId === item.id}
-              <div class="mx-3 mb-2">
-                <DuplicateNotice
-                  evidence={duplicateQuestion.evidence}
-                  pending={$startDownload.isPending}
-                  onconfirm={() =>
-                    duplicateQuestion &&
-                    $startDownload.mutate({
-                      requestId: duplicateQuestion.requestId,
-                      acknowledged: true
-                    })}
-                  oncancel={() => (duplicateQuestion = null)}
+          </div>
+        {/snippet}
+          <!-- One grid for the header and every row, so the progress, the size
+               and the buttons size to the widest row and still line up down the
+               page. The cursor is one inverted block that glides under the
+               rows. -->
+          <div
+            bind:this={rows}
+            use:glide={{ key: `${cursor.at}:${filteredItems.length}:${expanded ?? ''}:${settled}` }}
+            class="relative flex flex-col"
+          >
+            {#if filteredItems.length}
+              <div
+                class="label hidden border-b border-rule-strong px-3 md:grid md:gap-x-3 {DOWNLOAD_COLUMNS}"
+                aria-hidden="true"
+              >
+                <span class="h-7"></span>
+                <span class="flex h-7 items-center">Release</span>
+                <span class="hidden h-7 items-center lg:flex">Source</span>
+                <span class="flex h-7 items-center">Progress</span>
+                <span class="flex h-7 items-center justify-end">Size</span>
+                <span class="h-7"></span>
+              </div>
+            {/if}
+            {#each filteredItems as item, index (item.id)}
+              {@const failures = rowErrors[item.id] ?? []}
+              <article
+                class="flex flex-col {arrived.has(item.id) ? 'rise' : ''}"
+                animate:slideInto
+                out:strike={{ active: !replacing }}
+              >
+                <DownloadRow
+                  {item}
+                  here={index === cursor.at}
+                  expanded={expanded === item.id}
+                  ontoggle={() => (expanded = expanded === item.id ? null : item.id)}
+                  onstart={() => $startDownload.mutate({ requestId: item.id })}
+                  onretry={() => $retryDownload.mutate({ requestId: item.id })}
+                  oncancel={() => $cancelDownload.mutate(item.id)}
+                  starting={$startDownload.isPending}
+                  retrying={$retryDownload.isPending}
+                  cancelling={$cancelDownload.isPending}
                 />
-              </div>
-            {/if}
 
-            {#if sourceQuestion && sourceQuestion.requestId === item.id}
-              <div class="mx-3 mb-2 border border-rule bg-decide/14 px-3 py-2.5">
-                <p class="text-body font-semibold text-decide">The peer's folder changed</p>
-                {#if sourceQuestion.offer.missing.length}
-                  <p class="mt-1.5 text-meta leading-relaxed text-ink-2">
-                    No longer shared: {sourceQuestion.offer.missing.join(', ')}
-                  </p>
-                {/if}
-                {#if sourceQuestion.offer.changed.length}
-                  <p class="mt-1.5 text-meta leading-relaxed text-ink-2">
-                    Size changed: {sourceQuestion.offer.changed.join(', ')}
-                  </p>
-                {/if}
-                <p class="mt-1.5 text-meta text-ink-3">
-                  Start anyway to get what's left. The rest will fail.
-                </p>
-                <div class="mt-2.5 flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={$startDownload.isPending}
-                    onclick={() =>
-                      sourceQuestion &&
-                      $startDownload.mutate({
-                        requestId: sourceQuestion.requestId,
-                        sourceAcknowledged: true
-                      })}
-                  >
-                    Start anyway
-                  </Button>
-                  <Button variant="ghost" size="sm" onclick={() => (sourceQuestion = null)}>
-                    Leave it
-                  </Button>
-                </div>
-              </div>
-            {/if}
+                {#each failures as failure, failureIndex (failureIndex)}
+                  {@render RowProblem(failure)}
+                {/each}
 
-            {#if item.peerQuestion}
-              {@const question = item.peerQuestion}
-              {@const draft = peerReplies[item.id] ?? ''}
-              <!-- The peers that hold a transfer until a word is typed back are
-                   answered by Schall where the message is one it knows. This is
-                   what is left, and not all of it is a question — so the peer's
-                   own words are what it says, and the answer is a person's. -->
-              <div class="mx-3 mb-2 border border-rule bg-decide/14 px-3 py-2.5">
-                <p class="text-body text-ink-1" title={question.message}>
-                  Peer {question.username} wrote: &ldquo;{clipped(question.message)}&rdquo;
-                </p>
-                <p class="mt-1.5 text-meta text-ink-3">
-                  Schall can't answer this. If it asks for something, type it and press Send.
-                </p>
-                <form
-                  class="mt-2.5 flex gap-2"
-                  onsubmit={(event) => {
-                    event.preventDefault();
-                    if (!draft.trim()) return;
-                    $replyToPeer.mutate({
-                      requestId: item.id,
-                      username: question.username,
-                      message: draft.trim()
-                    });
-                  }}
-                >
-                  <label class="sr-only" for={`peer-reply-${item.id}`}>
-                    Reply to {question.username}
-                  </label>
-                  <input
-                    id={`peer-reply-${item.id}`}
-                    class="field w-full"
-                    type="text"
-                    maxlength="500"
-                    autocomplete="off"
-                    value={draft}
-                    oninput={(event) =>
-                      (peerReplies = {
-                        ...peerReplies,
-                        [item.id]: event.currentTarget.value
-                      })}
-                    disabled={$replyToPeer.isPending}
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!draft.trim() || $replyToPeer.isPending}
-                  >
-                    Send
-                  </Button>
-                </form>
-              </div>
-            {/if}
-
-            {#if expanded === item.id}
-              <!-- The detail opens inside the row's own hairline and at its own
-                   inset, so the row above it is the border. -->
-              <div class="mx-3 mb-2 flex flex-col gap-3 bg-panel px-3 py-2.5">
-                <!-- Why it stopped, and what to do about it, live behind the
-                     chevron. A row that has settled states its outcome in the
-                     chip; six open paragraphs down a list state nothing at all,
-                     because nobody reads the seventh. -->
-                {#if item.error}
-                  <div class="flex items-start gap-2 bg-fail/14 px-2.5 py-2">
-                    <StateMark role="fail">!</StateMark>
-                    <ErrorNote bare error={item.error} />
+                {#if duplicateQuestion && duplicateQuestion.requestId === item.id}
+                  <div class="mx-3 mb-2">
+                    <DuplicateNotice
+                      evidence={duplicateQuestion.evidence}
+                      pending={$startDownload.isPending}
+                      onconfirm={() =>
+                        duplicateQuestion &&
+                        $startDownload.mutate({
+                          requestId: duplicateQuestion.requestId,
+                          acknowledged: true
+                        })}
+                      oncancel={() => (duplicateQuestion = null)}
+                    />
                   </div>
                 {/if}
 
-                <!-- Downloads reports what became of a transfer and stops
-                     there. Every decision about an import is made in Review,
-                     which is the whole point of there being one queue, so the
-                     pause is stated here and handed over. -->
-                {#if item.importError || item.revalidatable}
-                  {@const unsettled = (item.importEvidence?.files ?? []).filter(
-                    (file) => file.problems.length
-                  ).length}
-                  <div class=" bg-decide/14 px-3 py-2.5">
-                    {#if item.importError}
-                      <ErrorNote bare error={item.importError} />
-                    {/if}
-                    {#if item.importEvidence}
-                      <!-- Decide is on the row itself now; this stays for what
-                           the button does not say. -->
-                      {#if unsettled}
-                        <p class="text-meta text-decide/70">
-                          {unsettled === 1 ? '1 file needs' : `${unsettled} files need`} a decision.
-                        </p>
-                      {/if}
-                    {:else if item.acquisitionTargetId}
-                      <!-- One file fetched for a want. What it turned out to be is
-                           recorded on the copy rather than on this request, so the
-                           decision is asked under the want and this row does not
-                           repeat it. Checking again is worth having here all the
-                           same: the file is still in the download folder, so it
-                           costs a re-read rather than another transfer. -->
-                      <p class="mt-1.5 text-meta text-decide/70">
-                        Downloaded for a song on your wishlist.
+                {#if sourceQuestion && sourceQuestion.requestId === item.id}
+                  <div class="rise mx-3 mb-2 flex flex-col gap-1.5 bg-panel px-3 py-2.5">
+                    <p class="flex items-center gap-2 text-body font-semibold text-ink">
+                      <StateMark role="decide" />
+                      The peer's folder changed
+                    </p>
+                    {#if sourceQuestion.offer.missing.length}
+                      <p class="text-meta leading-relaxed text-ink-2">
+                        No longer shared: {sourceQuestion.offer.missing.join(', ')}
                       </p>
-                      <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                        <Button
-                          href="/review?want={item.acquisitionTargetId}"
-                          variant="outline"
-                          size="xs"
-                        >
-                          Decide in Review
-                        </Button>
-                        {@render ValidateAgain(item)}
+                    {/if}
+                    {#if sourceQuestion.offer.changed.length}
+                      <p class="text-meta leading-relaxed text-ink-2">
+                        Size changed: {sourceQuestion.offer.changed.join(', ')}
+                      </p>
+                    {/if}
+                    <p class="text-meta text-ink-3">Start anyway to get what's left. The rest will fail.</p>
+                    <div class="mt-1 flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={$startDownload.isPending}
+                        onclick={() =>
+                          sourceQuestion &&
+                          $startDownload.mutate({
+                            requestId: sourceQuestion.requestId,
+                            sourceAcknowledged: true
+                          })}
+                      >
+                        Start anyway
+                      </Button>
+                      <Button variant="ghost" size="sm" onclick={() => (sourceQuestion = null)}>
+                        Leave it
+                      </Button>
+                    </div>
+                  </div>
+                {/if}
+
+                {#if item.peerQuestion}
+                  {@const question = item.peerQuestion}
+                  {@const draft = peerReplies[item.id] ?? ''}
+                  <!-- The peers that hold a transfer until a word is typed back
+                       are answered by Schall where the message is one it knows.
+                       This is what is left, and not all of it is a question, so
+                       the peer's own words are what it says, and the answer is a
+                       person's. -->
+                  <div class="rise mx-3 mb-2 flex flex-col gap-1.5 bg-panel px-3 py-2.5">
+                    <p class="flex items-start gap-2 text-body text-ink" title={question.message}>
+                      <StateMark role="decide" />
+                      <span>Peer {question.username} wrote: &ldquo;{clipped(question.message)}&rdquo;</span>
+                    </p>
+                    <p class="text-meta text-ink-3">
+                      Schall can't answer this. If it asks for something, type it and press Send.
+                    </p>
+                    <form
+                      class="mt-1 flex gap-2"
+                      onsubmit={(event) => {
+                        event.preventDefault();
+                        if (!draft.trim()) return;
+                        $replyToPeer.mutate({
+                          requestId: item.id,
+                          username: question.username,
+                          message: draft.trim()
+                        });
+                      }}
+                    >
+                      <label class="sr-only" for={`peer-reply-${item.id}`}>
+                        Reply to {question.username}
+                      </label>
+                      <input
+                        id={`peer-reply-${item.id}`}
+                        class="field w-full"
+                        type="text"
+                        maxlength="500"
+                        autocomplete="off"
+                        value={draft}
+                        oninput={(event) =>
+                          (peerReplies = {
+                            ...peerReplies,
+                            [item.id]: event.currentTarget.value
+                          })}
+                        disabled={$replyToPeer.isPending}
+                      />
+                      <Button type="submit" size="sm" disabled={!draft.trim() || $replyToPeer.isPending}>
+                        Send
+                      </Button>
+                    </form>
+                  </div>
+                {/if}
+
+                {#if expanded === item.id}
+                  <!-- The detail opens inside the row's own rule and at its own
+                       inset, so the row above it is the border. -->
+                  <div class="rise mx-3 mb-2 flex flex-col gap-3 bg-panel px-3 py-2.5">
+                    <!-- Why it stopped, and what to do about it, live behind the
+                         chevron. A row that has settled states its outcome in its
+                         mark; six open paragraphs down a list state nothing at
+                         all, because nobody reads the seventh. -->
+                    {#if item.error}
+                      <div class="flex items-start gap-2">
+                        <StateMark role="fail" />
+                        <ErrorNote bare error={item.error} />
                       </div>
-                    {:else}
-                      <!-- Nothing was compared, so nobody is being asked anything.
-                           The import ran out of attempts, and running it again is
-                           the only thing left to try — which makes it an action on
-                           a failure rather than a question, and it belongs here
-                           beside the other retries. -->
-                      <p class="mt-1.5 text-meta text-decide/70">
-                        Stopped before checking any files. Nothing to decide.
-                      </p>
-                      <div class="mt-2.5">{@render ValidateAgain(item)}</div>
                     {/if}
-                  </div>
-                {/if}
 
-                <p class="numeric truncate text-meta text-ink-3">
-                  {item.directory || 'No folder reported'}
-                </p>
-
-                {#if item.reasons.length}
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each item.reasons as reason (reason)}
-                      <Chip>{reason}</Chip>
-                    {/each}
-                  </div>
-                {/if}
-
-                {#if item.importReviews.length}
-                  <div class="flex flex-col gap-1.5">
-                    <div class="flex items-center gap-2.5">
-                      <span class="label">Import history</span>
-                      <span class="h-px flex-1 bg-rule"></span>
-                    </div>
-                    <ol class="flex flex-col gap-1">
-                      {#each item.importReviews as review, reviewIndex (reviewIndex)}
-                        <li class="flex flex-wrap items-baseline gap-x-2 text-meta text-ink-3">
-                          <span
-                            class="text-meta font-medium {review.kind === 'paused' ||
-                            review.kind === 'source_retained'
-                              ? 'text-decide'
-                              : review.kind === 'imported'
-                                ? 'text-ok'
-                                : 'text-busy'}"
-                          >
-                            {reviewLabels[review.kind]}
-                          </span>
-                          <span class="numeric text-ink-4">{requestedOn(review.recordedAt)}</span>
-                          {#if review.detail}<span class="w-full text-ink-2">{review.detail}</span>{/if}
-                        </li>
-                      {/each}
-                    </ol>
-                  </div>
-                {/if}
-
-                <div class="flex max-h-64 flex-col gap-1 overflow-auto">
-                  {#each item.files as file (file.path ?? file.name)}
-                    <div class="flex items-center gap-3 text-meta text-ink-3">
-                      <span class="numeric min-w-0 flex-1 truncate text-meta text-ink-2">
-                        {file.name}
-                      </span>
-                      {#if file.transfer}
-                        <span class="shrink-0 {transferTones[file.transfer.status] ?? 'text-ink-3'}">
-                          {transferState(file.transfer.status)}
-                        </span>
-                        {#if file.transfer.attempt > 1}
-                          <span
-                            class="numeric shrink-0 text-ink-4"
-                            title="Requested {file.transfer.attempt} times"
-                          >
-                            attempt {file.transfer.attempt}
-                          </span>
+                    <!-- Downloads reports what became of a transfer and stops
+                         there. Every decision about an import is made in Review,
+                         which is the whole point of there being one queue, so the
+                         pause is stated here and handed over. -->
+                    {#if item.importError || item.revalidatable}
+                      {@const unsettled = (item.importEvidence?.files ?? []).filter(
+                        (file) => file.problems.length
+                      ).length}
+                      <div class="flex flex-col gap-1.5">
+                        {#if item.importError}
+                          <div class="flex items-start gap-2">
+                            <StateMark role="decide" />
+                            <ErrorNote bare error={item.importError} />
+                          </div>
                         {/if}
-                      {/if}
-                      <span class="numeric shrink-0 whitespace-nowrap">{formatBytes(file.sizeBytes)}</span>
-                      {#if file.transfer?.retryable}
-                        {@const path = file.transfer.path}
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          tall
-                          class="text-ink hover:text-ink"
-                          disabled={$retryDownload.isPending}
-                          onclick={() => $retryDownload.mutate({ requestId: item.id, paths: [path] })}
-                        >
-                          Retry
-                        </Button>
-                      {/if}
-                    </div>
-                    {#if file.transfer?.status === 'failed' && file.transfer.error}
-                      <ErrorNote bare error={file.transfer.error} />
+                        {#if item.importEvidence}
+                          {#if unsettled}
+                            <p class="text-meta text-ink-3">
+                              {unsettled === 1 ? '1 file needs' : `${unsettled} files need`} a decision.
+                            </p>
+                          {/if}
+                        {:else if item.acquisitionTargetId}
+                          <!-- One file fetched for a want. What it turned out to
+                               be is recorded on the copy rather than on this
+                               request, so the decision is asked under the want.
+                               Checking again is worth having here all the same:
+                               the file is still in the download folder, so it
+                               costs a re-read rather than another transfer. -->
+                          <p class="text-meta text-ink-3">Downloaded for a song on your wishlist.</p>
+                          <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                              href="/review?want={item.acquisitionTargetId}"
+                              variant="outline"
+                              size="xs"
+                            >
+                              Decide in Review
+                            </Button>
+                            {@render ValidateAgain(item)}
+                          </div>
+                        {:else}
+                          <!-- Nothing was compared, so nobody is being asked
+                               anything. The import ran out of attempts, and
+                               running it again is the only thing left to try. -->
+                          <p class="text-meta text-ink-3">
+                            Stopped before checking any files. Nothing to decide.
+                          </p>
+                          <div>{@render ValidateAgain(item)}</div>
+                        {/if}
+                      </div>
                     {/if}
-                    {#if file.transfer}
-                      {@const earlier = file.transfer.attempts.filter(
-                        (a) => a.attempt < file.transfer!.attempt
-                      )}
-                      {#if earlier.length}
-                        <ol class="pl-3 text-meta text-ink-4">
-                          {#each earlier as attempt (attempt.attempt)}
-                            <li class="truncate">
-                              Attempt {attempt.attempt}
-                              {attemptOutcome(attempt.outcome)}{attempt.detail
-                                ? `: ${attempt.detail}`
-                                : ''}
+
+                    <p class="mono truncate text-micro text-ink-3">
+                      {item.directory || 'No folder reported'}
+                    </p>
+
+                    {#if item.reasons.length}
+                      <div class="flex flex-wrap gap-1.5">
+                        {#each item.reasons as reason (reason)}
+                          <Chip>{reason}</Chip>
+                        {/each}
+                      </div>
+                    {/if}
+
+                    {#if item.importReviews.length}
+                      <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center gap-2.5">
+                          <span class="label">Import history</span>
+                          <span class="h-px flex-1 bg-rule"></span>
+                        </div>
+                        <ol class="flex flex-col gap-1">
+                          {#each item.importReviews as review, reviewIndex (reviewIndex)}
+                            <li class="flex flex-wrap items-baseline gap-x-2 text-meta text-ink-3">
+                              <span class="text-meta font-medium text-ink-2">
+                                {reviewLabels[review.kind]}
+                              </span>
+                              <span class="mono text-micro text-ink-4">{requestedOn(review.recordedAt)}</span>
+                              {#if review.detail}<span class="w-full text-ink-2">{review.detail}</span>{/if}
                             </li>
                           {/each}
                         </ol>
-                      {/if}
+                      </div>
                     {/if}
-                  {/each}
-                </div>
-              </div>
-            {/if}
-          </article>
-        {/each}
-      </div>
-      {#if moreToRead}
-        <div use:readAhead class="flex justify-center">
-          <Button variant="outline" disabled={$downloads.isFetchingNextPage} onclick={readMore}>
-            Show more
-          </Button>
-        </div>
-      {/if}
 
-    {:else if nothingMatches}
-      <EmptyPanel role="idle" heading={emptyHeading}>
-        <div>
-          <Button variant="outline" onclick={() => (search = '')}>Clear search</Button>
-        </div>
-      </EmptyPanel>
-    {:else}
-      <!-- The empty pile has a direct route to the catalogue, where a reader
-           can search for a release and start a download. -->
-      <EmptyPanel role="idle" heading={emptyHeading}>
-        <div>
-          <Button href="/releases" variant="outline">Search releases</Button>
-        </div>
-      </EmptyPanel>
-    {/if}
+                    <div class="flex max-h-64 flex-col gap-1 overflow-auto">
+                      {#each item.files as file (file.path ?? file.name)}
+                        <div class="flex items-center gap-3 text-meta text-ink-3">
+                          <span class="mono min-w-0 flex-1 truncate text-micro text-ink-2">
+                            {file.name}
+                          </span>
+                          {#if file.transfer}
+                            <span class="shrink-0 {transferTones[file.transfer.status] ?? 'text-ink-3'}">
+                              {transferState(file.transfer.status)}
+                            </span>
+                            {#if file.transfer.attempt > 1}
+                              <span
+                                class="mono shrink-0 text-micro text-ink-4"
+                                title="Requested {file.transfer.attempt} times"
+                              >
+                                attempt {file.transfer.attempt}
+                              </span>
+                            {/if}
+                          {/if}
+                          <span class="mono shrink-0 whitespace-nowrap text-micro">{formatBytes(file.sizeBytes)}</span>
+                          {#if file.transfer?.retryable}
+                            {@const path = file.transfer.path}
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              tall
+                              class="text-ink hover:text-ink"
+                              disabled={$retryDownload.isPending}
+                              onclick={() => $retryDownload.mutate({ requestId: item.id, paths: [path] })}
+                            >
+                              Retry
+                            </Button>
+                          {/if}
+                        </div>
+                        {#if file.transfer?.status === 'failed' && file.transfer.error}
+                          <ErrorNote bare error={file.transfer.error} />
+                        {/if}
+                        {#if file.transfer}
+                          {@const earlier = file.transfer.attempts.filter(
+                            (a) => a.attempt < file.transfer!.attempt
+                          )}
+                          {#if earlier.length}
+                            <ol class="pl-3 text-meta text-ink-4">
+                              {#each earlier as attempt (attempt.attempt)}
+                                <li class="truncate">
+                                  Attempt {attempt.attempt}
+                                  {attemptOutcome(attempt.outcome)}{attempt.detail
+                                    ? `: ${attempt.detail}`
+                                    : ''}
+                                </li>
+                              {/each}
+                            </ol>
+                          {/if}
+                        {/if}
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </article>
+            {/each}
+          </div>
+          {#if moreToRead}
+            <div use:readAhead class="flex justify-center pt-3">
+              <Button variant="outline" disabled={$downloads.isFetchingNextPage} onclick={readMore}>
+                Show more
+              </Button>
+            </div>
+          {/if}
+          {#if filteredItems.length === 0}
+            <!-- The list stays mounted so its last row can strike and fold away;
+                 the panel waits for it. -->
+            <div class="rise" style={lastRowLeft ? `animation-delay: ${leaveMs()}ms` : ''}>
+              {#if nothingMatches}
+                <EmptyPanel role="idle" heading={emptyHeading}>
+                  <div>
+                    <Button variant="outline" onclick={() => (search = '')}>Clear search</Button>
+                  </div>
+                </EmptyPanel>
+              {:else}
+                <!-- The empty pile has a direct route to the catalogue, where a
+                     reader can search for a release and start a download. -->
+                <EmptyPanel role="idle" heading={emptyHeading}>
+                  <div>
+                    <Button href="/releases" variant="outline">Search releases</Button>
+                  </div>
+                </EmptyPanel>
+              {/if}
+            </div>
+          {/if}
       </Settle>
     {/if}
   </div>
 {/if}
 
 <!-- A failure belongs to the row whose button raised it, under that row and
-     inside its hairline. -->
+     inside its rule. -->
 {#snippet RowProblem(failure: unknown)}
-  <!-- The band is the row's own, so the note is drawn bare inside it: the tint
-       and the mark are already here, and a second band inside the first says
-       nothing the first has not said. -->
-  <div class="mx-3 mb-2 flex items-start gap-2 border border-rule bg-fail/14 px-2.5 py-2">
-    <StateMark role="fail">!</StateMark>
+  <!-- The row's own band, so the note is drawn bare inside it. -->
+  <div class="rise mx-3 mb-2 flex items-start gap-2 bg-panel px-2.5 py-2">
+    <StateMark role="fail" />
     <ErrorNote bare error={failure} />
   </div>
 {/snippet}

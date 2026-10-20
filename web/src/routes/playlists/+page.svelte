@@ -2,6 +2,8 @@
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+  import { tick } from 'svelte';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
@@ -10,7 +12,6 @@
   import { playlistOrigin } from '$lib/playlists';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -21,8 +22,9 @@
   import Settle from '$lib/components/Settle.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import WeeklyPlaylist from '$lib/components/WeeklyPlaylist.svelte';
-
-  const COLUMNS = 'grid-cols-[2.5rem_minmax(0,1fr)_max-content_max-content]';
+  import { glide, slideInto } from '$lib/motion.svelte';
+  import { useKeys } from '$lib/keys.svelte';
+  import { PLAYLIST_COLUMNS, arrivals, listCursor, settleDelays, strike } from '$lib/live-list.svelte';
 
   const queryClient = useQueryClient();
 
@@ -133,6 +135,51 @@
     removing = playlist;
     removeOpen = true;
   }
+
+  // The list's cursor (ADR 0042): one inverted row that glides between
+  // playlists. The row's buttons register their keys while it holds the cursor.
+  const ids = $derived(items.map((item) => item.id));
+  const cursor = listCursor(() => ids);
+  const arrived = arrivals(() => ids);
+  let rows = $state<HTMLElement>();
+  // Rows slide to their new places over the arriving step, and the cursor block
+  // measures them where they are, so it is placed again once they have landed.
+  let settled = $state(0);
+  $effect(() => {
+    void ids.join('|');
+    // Once the slide has landed, and once a leaving row has folded away.
+    const timers = settleDelays().map((ms) => setTimeout(() => settled++, ms));
+    return () => timers.forEach(clearTimeout);
+  });
+
+  function moveCursor(by: number) {
+    cursor.move(by);
+    void tick().then(() =>
+      rows?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    );
+  }
+
+  useKeys(() =>
+    view === 'playlists'
+      ? [
+          {
+            keys: ['j', 'k'],
+      caps: ['j', 'k'],
+            verb: 'move',
+            order: 0,
+            enabled: () => items.length > 0,
+            run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
+          },
+          {
+            keys: ['enter'],
+            verb: 'open',
+            order: 2,
+            enabled: () => cursor.at >= 0,
+            run: () => void goto(`/playlists/${cursor.id}`)
+          }
+        ]
+      : []
+  );
 </script>
 
 <svelte:head><title>Playlists · Schall</title></svelte:head>
@@ -149,7 +196,7 @@
 <!-- The page's name, with the ways to follow a new playlist beside it. -->
 <PageHeader title="Playlists">
   {#snippet actions()}
-    <Button type="button" variant="outline" onclick={() => (fileModalOpen = true)}>
+    <Button type="button" variant="outline" key="i" verb="import file" onclick={() => (fileModalOpen = true)}>
       <Icon name="upload" size="sm" />
       Import file
     </Button>
@@ -167,7 +214,7 @@
         placeholder="Spotify playlist link"
         class="field min-w-0 w-full flex-1 sm:w-[18.75rem] sm:flex-none"
       />
-      <Button type="submit" disabled={!url.trim() || $follow.isPending}>
+      <Button type="submit" variant="primary" disabled={!url.trim() || $follow.isPending}>
         {#if $follow.isPending}
           <Icon name="busy" size="sm" class="animate-spin" />
         {:else}
@@ -179,7 +226,7 @@
   {/snippet}
 </PageHeader>
 
-<ControlRail>
+<div class="px-5 pt-3">
   <Segmented
     options={[
       { value: 'playlists', name: 'Followed', count: $playlists.data ? items.length : undefined },
@@ -189,9 +236,10 @@
     value={view}
     onchange={chooseView}
     label="What to look at"
+    variant="tabs"
     pending={$playlists.isPending}
   />
-</ControlRail>
+</div>
 
 <ImportPlaylistFileModal bind:open={fileModalOpen} />
 
@@ -207,7 +255,7 @@
   </div>
 {/if}
 
-<div class="flex flex-col gap-4 px-5 py-5" class:hidden={view !== 'playlists'}>
+<div class="flex flex-col gap-4 px-5 pt-3 pb-6" class:hidden={view !== 'playlists'}>
   {#if $follow.isError}
     <ErrorNote error={$follow.error} />
   {/if}
@@ -234,31 +282,43 @@
         </EmptyPanel>
       {:else}
         <!-- One grid for the header and every row, so the owned and action
-             columns size to the widest row and line up down the list. A fixed
-             action column let a Spotify row's three buttons spill left over
-             its owned count. -->
-        <div class={`grid ${COLUMNS} gap-x-4`}>
-          <div class="col-span-full grid grid-cols-subgrid border-b border-rule px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
+             columns size to the widest row and line up down the list. The
+             cursor is one inverted block that glides under the rows. -->
+        <div class="flex flex-col">
+          <div class="label grid gap-x-4 border-b border-rule-strong px-3 {PLAYLIST_COLUMNS}">
             <span class="flex h-7 items-center"></span>
             <span class="flex h-7 items-center">Playlist</span>
             <span class="flex h-7 items-center">Owned</span>
             <span class="flex h-7 items-center"></span>
           </div>
 
-          <ul class="col-span-full grid grid-cols-subgrid divide-y divide-rule">
-            {#each items as playlist (playlist.id)}
+          <ul
+            bind:this={rows}
+            use:glide={{ key: `${cursor.at}:${items.length}:${settled}` }}
+            class="relative flex flex-col"
+          >
+            {#each items as playlist, index (playlist.id)}
               {@const cover = coverOf(playlist)}
-              <li class="col-span-full grid min-h-[52px] grid-cols-subgrid items-center px-1 py-2">
+              {@const here = index === cursor.at}
+              <li
+                data-cursor={here}
+                class="row grid min-h-10 items-center gap-x-4 px-3 py-1 {PLAYLIST_COLUMNS} {here
+                  ? 'on-ink'
+                  : ''} {arrived.has(playlist.id) ? 'rise' : ''}"
+                animate:slideInto
+                out:strike={{ active: $remove.variables === playlist.id }}
+              >
                 <Cover
                   src={cover.src ?? undefined}
                   seed={cover.seed}
-                  class="size-10 object-cover"
+                  class="size-8 object-cover"
                 />
                 <a
                   href={`/playlists/${playlist.id}`}
-                  class="flex min-w-0 flex-col gap-0.5"
+                  class="flex min-w-0 items-baseline gap-3"
+                  onclick={() => cursor.set(index)}
                 >
-                  <span class="truncate text-body font-medium text-ink">{playlist.name}</span>
+                  <span class="truncate text-body font-medium">{playlist.name}</span>
                   <span class="truncate text-meta text-ink-3">{playlistOrigin(playlist).join(' · ')}</span>
                 </a>
 
@@ -266,14 +326,16 @@
                   <OwnedBar owned={playlist.ownedCount} total={playlist.entryCount} width={64} noun="songs" />
                 </span>
 
-                <!-- Below 1024px the three buttons are icons with their name in
-                     the tooltip; with words they ran past the right edge of a
+                <!-- Below 1024px the buttons are icons with their name in the
+                     tooltip; with words they ran past the right edge of a
                      half-screen window. -->
                 <span class="flex items-center justify-end gap-1">
                   {#if playlist.source === 'spotify'}
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="ghost"
+                      key={here && view === 'playlists' ? 'r' : undefined}
+                      verb="re-import"
                       disabled={$reimport.isPending}
                       onclick={() => $reimport.mutate(playlist.id)}
                       title="Re-import"
@@ -282,8 +344,10 @@
                     </Button>
                   {/if}
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="ghost"
+                    key={here && view === 'playlists' ? 's' : undefined}
+                    verb="send to player"
                     disabled={$sendToPlayer.isPending}
                     onclick={() => $sendToPlayer.mutate(playlist.id)}
                     title="Send to player"
@@ -292,8 +356,10 @@
                   </Button>
                   {#if !schallMade(playlist)}
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="ghost"
+                      key={here && view === 'playlists' ? 'u' : undefined}
+                      verb="unfollow"
                       disabled={$remove.isPending}
                       onclick={() => confirmRemove(playlist)}
                       title="Unfollow"

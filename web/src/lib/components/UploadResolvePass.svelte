@@ -58,7 +58,7 @@
 </script>
 
 {#if files.length > 1}
-  <section class="flex flex-col gap-3 border border-rule p-4">
+  <section class="rise flex flex-col gap-3 bg-panel p-3">
     <div class="flex flex-wrap items-center gap-2">
       <Icon name="checklist" size={15} class="text-ink-3" />
       <span class="label">Files in this upload</span>

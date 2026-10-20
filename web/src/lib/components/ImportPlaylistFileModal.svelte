@@ -283,7 +283,7 @@
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           {#if result}
-            <Button type="submit" disabled={!listName.trim() || inFlight}>
+            <Button type="submit" variant="primary" disabled={!listName.trim() || inFlight}>
               {#if $importFile.isPending}
                 <Icon name="busy" size={13} class="animate-spin" /> Importing
               {:else}

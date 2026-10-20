@@ -453,3 +453,43 @@ describe('the poll for the wants list', () => {
     expect(refetchIntervalOf(client)).toBe(false);
   });
 });
+
+// The wishlist is read with the keys (ADR 0042): J and K move one cursor row,
+// and only that row's button answers its key.
+describe('the cursor row', () => {
+  const second = () =>
+    want({
+      id: '20000000-0000-4000-8000-000000000002',
+      title: 'Life’s What You Make It'
+    });
+
+  it('gives the key only to the button on the row holding the cursor', async () => {
+    answering({ looking: [want(), second()] });
+
+    opened();
+    await screen.findAllByRole('button', { name: 'Remove' });
+
+    const keys = screen
+      .getAllByRole('button', { name: 'Remove' })
+      .map((button) => button.getAttribute('aria-keyshortcuts'));
+    expect(keys).toEqual(['X', null]);
+  });
+
+  it('removes the want under the cursor when its key is pressed, after J moves it', async () => {
+    answering({ looking: [want(), second()] });
+
+    opened();
+    await screen.findAllByRole('button', { name: 'Remove' });
+    await fireEvent.keyDown(window, { key: 'j' });
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('button', { name: 'Remove' })
+          .map((button) => button.getAttribute('aria-keyshortcuts'))
+      ).toEqual([null, 'X'])
+    );
+    await fireEvent.keyDown(window, { key: 'x' });
+
+    await waitFor(() => expect(stopped).toEqual(['20000000-0000-4000-8000-000000000002']));
+  });
+});

@@ -21,6 +21,7 @@ vi.mock('$app/navigation', () => ({
 }));
 
 const { default: PlaylistsPage } = await import('./+page.svelte');
+const { page } = await import('$app/state');
 
 function playlist(overrides: Partial<Playlist> = {}): Playlist {
   return {
@@ -231,5 +232,80 @@ describe('the safety-net poll', () => {
         playlist({ id: 'd', name: 'Player', source: 'navidrome', importedAt: null })
       ])
     ).toBe(0);
+  });
+});
+
+// The list is played with the keys (ADR 0042): one row holds the cursor, and
+// only its buttons answer a key. The list stays mounted under the other two
+// views, so its keys have to know when it is not the one on screen.
+describe('the cursor row', () => {
+  const second = () =>
+    playlist({ id: 'a1b2c3d4-0000-4000-8000-000000000002', name: 'Sunday', source: 'manual' });
+
+  function answeringWithTwo(sent: { method?: string; path: string }[] = []) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/v1/playlists') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ items: [playlist(), second()] }), { status: 200 })
+          );
+        }
+        if (init?.method === 'POST') {
+          sent.push({ method: init.method, path: url.pathname });
+          return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), { status: 200 }));
+        }
+        return new Promise<Response>(() => {});
+      })
+    );
+  }
+
+  afterEach(() => {
+    (page as { url: URL }).url = new URL('http://localhost/playlists');
+  });
+
+  it('gives a key only to the buttons on the row holding the cursor', async () => {
+    answeringWithTwo();
+    opened();
+
+    await screen.findByText('Sunday');
+    const sends = screen.getAllByRole('button', { name: 'Send to player' });
+    expect(sends.map((button) => button.getAttribute('aria-keyshortcuts'))).toEqual(['S', null]);
+  });
+
+  it('sends the row under the cursor to the player when its key is pressed, after J moves it', async () => {
+    const sent: { method?: string; path: string }[] = [];
+    answeringWithTwo(sent);
+    opened();
+
+    await screen.findByText('Sunday');
+    await fireEvent.keyDown(window, { key: 'j' });
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('button', { name: 'Send to player' })
+          .map((button) => button.getAttribute('aria-keyshortcuts'))
+      ).toEqual([null, 'S'])
+    );
+    await fireEvent.keyDown(window, { key: 's' });
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual([
+        { method: 'POST', path: '/api/v1/playlists/a1b2c3d4-0000-4000-8000-000000000002/navidrome-sync' }
+      ])
+    );
+  });
+
+  it('offers no row key while the list is under another view', async () => {
+    (page as { url: URL }).url = new URL('http://localhost/playlists?view=recommended');
+    answeringWithTwo();
+    opened();
+
+    await screen.findByText('Sunday');
+    const keys = screen
+      .getAllByRole('button', { name: 'Send to player' })
+      .map((button) => button.getAttribute('aria-keyshortcuts'));
+    expect(keys).toEqual([null, null]);
   });
 });
