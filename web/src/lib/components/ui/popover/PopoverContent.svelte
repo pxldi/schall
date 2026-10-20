@@ -43,8 +43,8 @@
     avoidCollisions
     escapeKeydownBehavior="close"
     class={cn(
-      'overlay-panel z-50 max-w-[calc(100vw-1.5rem)] p-3',
-      'text-body text-ink outline-none',
+      'overlay-panel z-50 max-w-[calc(100vw-1.5rem)] rounded-panel p-3',
+      'text-dense-body text-ink outline-none',
       className
     )}
     {...rest}

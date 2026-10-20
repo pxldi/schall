@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import AppearanceSetting from '$lib/components/AppearanceSetting.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { useNewestPrint } from '$lib/duoton';
 
   // Settings was one page: eleven cards stacked in a single column, 3,400
   // pixels of scroll, and no way to reach the one you wanted except to
@@ -28,6 +28,10 @@
 
   let { children }: { children: Snippet } = $props();
 
+  // Settings has no music of its own, so it is printed from the newest
+  // arrivals, at the height every top-bar destination prints at.
+  useNewestPrint({ height: 15, count: 4 });
+
   const current = $derived(
     categories.find((category) => page.url.pathname.startsWith(category.href))
   );
@@ -35,12 +39,10 @@
 
 <svelte:head><title>{current?.name ?? 'Settings'} · Schall</title></svelte:head>
 
-<PageHeader title="Settings" />
+<Hero title="Settings" section />
 
-<div class="px-5 pt-3"><AppearanceSetting /></div>
-
-<!-- Each category page carries a hidden h2 naming itself, under the PageHeader's h1. -->
-<div class="flex flex-row gap-10 px-5 pb-10 pt-5">
+<!-- Each category page carries a hidden h2 naming itself, under the Hero's h1. -->
+<div class="flex flex-row gap-10 px-4 pb-10 pt-6 sm:px-6">
   <nav
     aria-label="Settings sections"
     class="sticky top-[calc(var(--topbar-height)+1.5rem)] flex w-[10.5rem] shrink-0 flex-col gap-0.5 self-start"
@@ -50,9 +52,9 @@
       <a
         href={category.href}
         aria-current={active ? 'page' : undefined}
-        class="flex h-9 items-center px-3 text-body font-semibold transition {active
-          ? 'inverted'
-          : 'text-ink-2 hover:bg-raised hover:text-ink'}"
+        class="flex h-9 items-center rounded-[0.625rem] px-3 text-body font-semibold transition {active
+          ? 'bg-duo-light/12 text-ink'
+          : 'text-ink-2 hover:text-ink'}"
       >
         {category.name}
       </a>
@@ -67,7 +69,7 @@
 <!-- The credit for the two open projects Schall is built on. It used to sit
      at the foot of every release page; a person reads a release many times
      and Settings once, so it belongs here instead. -->
-<footer class="border-t border-rule px-5 py-6 text-meta text-ink-4">
+<footer class="border-t border-line-thin px-4 sm:px-6 py-6 text-meta text-ink-4">
   <p>
     Release data from
     <a
@@ -86,18 +88,20 @@
 </footer>
 
 <style>
-  /* Sections are blocks on the ground with a bold heading. Card and FormGrid
-     keep their look on the other pages that use them, so the change is scoped
-     here. */
-  .settings-body :global(section) {
+  /* Settings in Duoton (ADR Duoton): sections are blocks on the ground with a
+     bold heading, as the prototype draws them. Card and FormGrid keep their
+     look on the other pages that use them, so the change is scoped here. */
+  .settings-body :global(section.rounded-card) {
     border: 0;
+    border-radius: 0;
     padding: 0 0 2.125rem;
   }
 
-  .settings-body :global(section h2),
+  .settings-body :global(section.rounded-card h2),
   .settings-body :global(section > h2) {
-    font-size: var(--text-lead);
-    font-weight: 600;
+    font-size: 1.375rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
     line-height: 1.15;
   }
 

@@ -4,7 +4,7 @@ import { PERSIST_MAX_AGE, persistQueries } from '$lib/persist';
 
 // The one query client of the application. It lives in a module rather than in
 // the root layout so a route's load can fill it before the page is drawn
-// (`$lib/preload`), and the page then reads the same answers.
+// (`$lib/duoton/preload`), and the page then reads the same answers.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

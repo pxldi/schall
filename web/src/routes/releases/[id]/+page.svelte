@@ -13,24 +13,23 @@
   } from '$lib/api';
   import { calendarDate, formatBytes, removedSummary, wantedSummary } from '$lib/utils';
   import { holding, progress, quiet } from '$lib/vocabulary';
-  import { goto } from '$app/navigation';
-  import { useKeys } from '$lib/keys.svelte';
-  import { glide } from '$lib/motion.svelte';
-  import { STATE_GLYPH } from '$lib/states';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { usePagePrint } from '$lib/duoton';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import WantToggle from '$lib/components/WantToggle.svelte';
   import Cover from '$lib/components/Cover.svelte';
+  import Chip from '$lib/components/Chip.svelte';
   import DuplicateNotice from '$lib/components/DuplicateNotice.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import ReleaseEditions from '$lib/components/ReleaseEditions.svelte';
   import SetCoverDialog from '$lib/components/SetCoverDialog.svelte';
+  import StateTag from '$lib/components/StateTag.svelte';
   import StateIcon from '$lib/components/StateIcon.svelte';
   import type { IconName } from '$lib/icons';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import ArtistReleases from './ArtistReleases.svelte';
   import { motionMs } from '$lib/motion.svelte';
@@ -50,6 +49,24 @@
   let coverVersion = $state(0);
   const coverSrc = $derived(
     `/api/v1/albums/${releaseID}/cover${coverVersion ? `?v=${coverVersion}` : ''}`
+  );
+
+  // The page is printed from its own sleeve (ADR Duoton): one cover, large,
+  // in the inks stored with it, or read from the picture on a server that
+  // stores none. A release with no picture prints generated art from its id in
+  // the house inks, the same art the sleeve frame draws. It is as tall as a
+  // playlist's print: at 24rem the title started 240px down, under an empty
+  // stretch of picture.
+  usePagePrint(() =>
+    $release.data
+      ? {
+          covers: [
+            { src: coverMissing ? null : coverSrc, seed: releaseID, inks: $release.data.inks }
+          ],
+          mode: 'single',
+          height: 20
+        }
+      : undefined
   );
 
   function coverSet() {
@@ -476,426 +493,400 @@
     if (($release.data?.mediaCount ?? 0) > 1) facts.push(`${$release.data?.mediaCount} discs`);
     return facts;
   });
-
-  // The track list's cursor (ADR 0042): none until the reader presses J or K,
-  // then one inverted row that glides between tracks.
-  let cursor = $state(-1);
-  let trackList = $state<HTMLElement>();
-  const trackItems = $derived($tracks.data?.items ?? []);
-
-  function moveCursor(by: number) {
-    if (!trackItems.length) return;
-    cursor = cursor < 0 ? 0 : Math.min(Math.max(cursor + by, 0), trackItems.length - 1);
-    void tick().then(() =>
-      trackList?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  // Removing from the keyboard asks first: Backspace is pressed by accident
-  // far more often than the Remove button is.
-  let confirmingRemove = $state(false);
-  const removable = $derived(ownedCount - leaving.length > 0 || wantedCount > 0);
-
-  useKeys(() => [
-    {
-      keys: ['j', 'k'],
-      caps: ['j', 'k'],
-      verb: 'move',
-      order: 0,
-      enabled: () => trackItems.length > 0,
-      run: (event) => moveCursor(event.key.toLowerCase() === 'j' ? 1 : -1)
-    }
-  ]);
 </script>
 
 <svelte:head><title>{$release.data?.title ?? 'Release'} · Schall</title></svelte:head>
 
 {#if $release.isError}
-  <div class="px-5 py-6">
+  <div class="px-4 sm:px-6 py-6">
     <ErrorNote error={$release.error} retry={() => void $release.refetch()} />
   </div>
 {:else}
   <Settle pending={$release.isPending}>
     {#snippet placeholder()}
-      <!-- The frame the release draws: the title spot and the list on the
-           left, the inspector on the right. -->
-      <div role="status" aria-label="Loading release" class="grid lg:grid-cols-[minmax(0,1fr)_21.25rem]">
-        <div class="flex flex-col gap-2 px-5 pt-3.5" aria-hidden="true">
-          <Skeleton class="h-3 w-40" />
-          <Skeleton class="h-8 w-[24rem] max-w-full" />
-          <Skeleton class="h-4 w-64" />
-          <div class="mt-6 flex flex-col">
+      <!-- The same frame the release draws: the hero fills the print, the
+           sleeve and the track list sit under it. -->
+      <div role="status" aria-label="Loading release">
+        <div
+          class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
+          style="min-height: calc(var(--print-height) - var(--topbar-height));"
+          aria-hidden="true"
+        >
+          <Skeleton class="h-3 w-16" />
+          <Skeleton class="h-20 w-[28rem] max-w-full" />
+          <Skeleton class="h-4 w-72" />
+        </div>
+        <div class="grid gap-x-8 gap-y-6 px-4 pt-4 sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]" aria-hidden="true">
+          <div class="flex flex-col gap-2">
             {#each Array(8) as _, placeholderIndex (placeholderIndex)}
-              <div class="h-9 border-b border-rule py-2"><Skeleton class="h-full" /></div>
+              <Skeleton class="h-9" />
             {/each}
           </div>
-        </div>
-        <div class="hidden border-l border-rule bg-panel p-5 lg:block" aria-hidden="true">
-          <Skeleton shape="cover" class="w-[18.75rem]" />
+          <Skeleton shape="block" class="size-30" />
         </div>
       </div>
     {/snippet}
-    {#if $release.data}
-      {@const data = $release.data}
-      <div class="grid items-start lg:grid-cols-[minmax(0,1fr)_21.25rem]">
-        <div class="flex min-w-0 flex-col pb-8">
-          <PageHeader
-            title={data.title}
-            path={[
-              { label: 'Library', href: '/library' },
-              { label: data.artistName, href: `/artists/${data.artistId}` }
-            ]}
-          >
-            {#snippet sub()}
-              <a href={`/artists/${data.artistId}`} class="text-ink transition hover:underline">
-                {data.artistName}
-              </a>
-              <span class="text-ink-3 tabular-nums">
-                {[data.albumType ? data.albumType[0].toUpperCase() + data.albumType.slice(1) : '', ...heroFacts]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            {/snippet}
-            <!-- The actions, each with the key that presses it, in the title
-                 row. The one primary press is wanting what is missing. -->
-            {#snippet actions()}
-              {#if $tracks.isPending}
-                <span class="flex gap-1.5" role="status" aria-label="Loading track actions">
-                  <span class="invisible h-[1.875rem] w-24" aria-hidden="true"></span>
-                </span>
-              {:else}
-                {#if missingCount > 0 && unwantedCount > 0}
-                  <Button
-                    variant="primary"
-                    key="w"
-                    verb="want"
-                    aria-label={`Want ${unwantedCount} missing`}
-                    disabled={$wantRelease.isPending}
-                    onclick={() => $wantRelease.mutate()}
-                  >
-                    <Icon
-                      name={$wantRelease.isPending ? 'busy' : 'plus'}
-                      size="sm"
-                      class={$wantRelease.isPending ? 'animate-spin' : ''}
-                    />
-                    Want {unwantedCount}
-                  </Button>
-                {/if}
-              {/if}
-              <Button
-                variant="outline"
-                key="f"
-                verb="search sources"
-                aria-label="Find sources"
-                title="Find sources"
-                onclick={() => findSources(sourcesOpen ? sourceQuery : undefined)}
-                disabled={sourcesLoading}
-              >
-                <Icon
-                  name={sourcesLoading ? 'busy' : 'search'}
-                  size="sm"
-                  class={sourcesLoading ? 'animate-spin' : ''}
-                />
-                Search
-              </Button>
-              {#if !$tracks.isPending}
-                {#if missingCount > 0}
-                  <Button
-                    variant="outline"
-                    key="n"
-                    verb="not wanted"
-                    title={`Dismiss the ${missingCount} missing`}
-                    aria-label={missingCount === 1 ? 'Dismiss it' : 'Dismiss the rest'}
-                    disabled={$dismissRemainder.isPending}
-                    onclick={() => $dismissRemainder.mutate()}
-                  >
-                    <Icon
-                      name={$dismissRemainder.isPending ? 'busy' : 'dismiss'}
-                      size="sm"
-                      class={$dismissRemainder.isPending ? 'animate-spin' : ''}
-                    />
-                    Not wanted
-                  </Button>
-                {/if}
-                {#if removable}
-                  <!-- Pressed, it removes at once. Its key asks first. -->
-                  <Button
-                    variant="outline"
-                    key="backspace"
-                    verb="remove"
-                    onkey={() => (confirmingRemove = true)}
-                    aria-label="Remove"
-                    title="Remove"
-                    disabled={$removeRelease.isPending}
-                    onclick={() => $removeRelease.mutate()}
-                  >
-                    <Icon
-                      name={$removeRelease.isPending ? 'busy' : 'delete'}
-                      size="sm"
-                      class={$removeRelease.isPending ? 'animate-spin' : ''}
-                    />
-                    Remove
-                  </Button>
-                {/if}
-              {/if}
-            {/snippet}
-          </PageHeader>
-
-          <!-- The answer sits under the button that asked. -->
-          <div class="flex flex-col gap-2 px-5 empty:hidden [&:not(:empty)]:pt-3">
-            {#if $wantRelease.isError}
-              <ErrorNote error={$wantRelease.error} />
-            {:else if $wantRelease.data}
-              <p class="text-meta text-ink-3">{wantedSummary($wantRelease.data)}.</p>
-            {/if}
-            {#if $removeRelease.isError}
-              <ErrorNote error={$removeRelease.error} />
-            {:else if $removeRelease.data}
-              <p class="text-meta text-ink-3">{removedSummary($removeRelease.data)}.</p>
-            {/if}
-            {#if $dismissRemainder.isError}
-              <ErrorNote error={$dismissRemainder.error} />
-            {:else if $dismissRemainder.data}
-              <p class="text-meta text-ink-3">
-                Dismissed {$dismissRemainder.data.dismissed}
-                {$dismissRemainder.data.dismissed === 1 ? 'track' : 'tracks'}.
-              </p>
-            {/if}
-          </div>
-
-          <!-- Mounted only for a release MusicBrainz knows a release group for,
-               and hidden with a class rather than an {#if} once it is: the
-               pressings are fetched on page open, and a component torn down
-               between presses of "Change" would ask musicbrainz.org again. -->
-          {#if data.musicbrainzReleaseGroupId}
-            <div class="px-5" class:hidden={!editionsOpen}>
-              <ReleaseEditions
-                {editions}
-                selectedId={data.musicbrainzReleaseId}
-                selected={selectedEdition}
-                loading={$editionList.isLoading}
-                error={$editionList.error}
-                retryEditions={() => void $editionList.refetch()}
-                linked
-                barcode={data.barcode ?? ''}
-                selectionReason={data.selectionReason ?? ''}
-                pending={$selectEdition.isPending}
-                selectError={$selectEdition.error}
-                onselect={(musicbrainzReleaseId) => $selectEdition.mutate(musicbrainzReleaseId)}
-              />
-            </div>
+  {#if $release.data}
+  <!-- The record over its own cover, printed in the cover's two inks. Who made
+       it, when, how much of it there is and how much of it the library holds
+       sit under the title, in the order a reader answers "is this the record I
+       want" in. -->
+  <Hero title={$release.data.title} size={$release.data.title.length > 24 ? 'm' : 'l'}>
+    {#snippet back()}
+      <BackLink fallback="/library" label="Library" />
+    {/snippet}
+    {#snippet kicker()}<span class="capitalize">{$release.data?.albumType}</span>{/snippet}
+    {#snippet sub()}
+      <a
+        href={`/artists/${$release.data?.artistId}`}
+        class="font-semibold text-ink transition hover:text-accent-soft"
+      >
+        {$release.data?.artistName}
+      </a>
+      {#each heroFacts as fact (fact)}
+        <span class="numeric whitespace-nowrap">{fact}</span>
+      {/each}
+      <!-- How much of the record the library holds, over what is missing,
+           wanted and dismissed — the same arithmetic the track list below
+           counts by, said once at the top rather than read off the rows. -->
+      {#if $tracks.isPending}
+        <span
+          class="skeleton h-4 w-40"
+          role="status"
+          aria-label="Loading track summary"
+          aria-hidden="true"
+        ></span>
+      {:else if $tracks.data?.items.length}
+        <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <OwnedBar owned={ownedCount} total={$tracks.data.items.length} width={120} />
+          {#if missingCount > 0}
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">
+              · {missingCount} {$release.data?.artistFollowed ? 'missing' : 'not owned'}
+            </span>
           {/if}
-
-          <section class="px-5 pt-5" aria-label="Tracks">
-            {#if $tracks.isError}
-              <ErrorNote error={$tracks.error} retry={() => void $tracks.refetch()} class="mb-3" />
-            {/if}
-            <!-- The list polls while a refresh runs, so a failed poll keeps the
-                 rows it already drew under the note. -->
-            {#if !$tracks.isError || $tracks.data}
-              <Settle pending={$tracks.isPending}>
-                {#snippet placeholder()}
-                  <div class="max-h-[calc(100dvh-20rem)] overflow-hidden" role="status" aria-label="Loading tracks">
-                    {#each Array(trackSkeletonCount) as _, placeholderIndex (placeholderIndex)}
-                      <div class="h-9 border-b border-rule py-2" aria-hidden="true">
-                        <Skeleton class="h-full" />
-                      </div>
-                    {/each}
-                  </div>
-                {/snippet}
-                {#if $tracks.data?.items.length}
-                  <div class="relative" bind:this={trackList} use:glide={{ key: cursor }}>
-                    <table class="w-full border-collapse">
-                      <thead>
-                        <tr class="border-b border-rule-strong">
-                          <th class="label h-7 w-12 px-2.5 text-left font-normal">#</th>
-                          <th class="label h-7 px-2.5 text-left font-normal">Title</th>
-                          <th class="w-8"><span class="sr-only">Want</span></th>
-                          <th class="label h-7 w-20 px-2.5 text-right font-normal">Length</th>
-                          <th class="label h-7 w-28 px-2.5 text-left font-normal">State</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {#each $tracks.data.items as track, index (track.id)}
-                          <!-- A track the library does not hold stands back a step
-                               of ink, and nothing on the row says "missing". The
-                               words that do appear are decisions somebody took. -->
-                          <tr
-                            data-track={track.id}
-                            data-cursor={index === cursor}
-                            class="row want-row {index === cursor ? 'on-ink' : ''}"
-                            onclick={() => (cursor = index)}
-                          >
-                            <td
-                              class="mono h-9 px-2.5 text-meta {held(track) ? 'text-ink-3' : 'text-ink-4'}"
-                            >
-                              {#if data.mediaCount > 1}{track.discNumber}.{/if}{String(track.trackNumber ?? '—').padStart(2, '0')}
-                            </td>
-                            <td class="max-w-0 px-2.5">
-                              <p
-                                class="truncate text-body {held(track) ? 'text-ink' : 'text-ink-3'}"
-                                data-tone={held(track) ? 'present' : 'absent'}
-                              >
-                                {track.title}
-                              </p>
-                            </td>
-                            <!-- The + shows on the hovered or cursor row of a track
-                                 the library lacks. A held track's toggle, which
-                                 removes it, shows only to a keyboard that
-                                 reaches it. -->
-                            <td class="px-1">
-                              <span class="flex items-center justify-center">
-                                {#if track.musicbrainzRecordingId && !lost(track)}
-                                  <WantToggle
-                                    reveal={trackDone(track) ? 'focus' : true}
-                                    wanted={trackDone(track) ? !track.removesAt : isWanted(track)}
-                                    title={track.title}
-                                    onwant={() => $toggleTrack.mutateAsync({ kind: 'want', trackId: track.id })}
-                                    onunwant={() => $toggleTrack.mutateAsync({ kind: 'remove', trackId: track.id })}
-                                  />
-                                {/if}
-                              </span>
-                            </td>
-                            <td class="mono px-2.5 text-right text-meta text-ink-3">
-                              {duration(track.durationMs)}
-                            </td>
-                            <td class="px-2.5">
-                              <span class="flex items-center gap-1.5">
-                                {#if track.removesAt}
-                                  <!-- Removed: the file is still here and goes on this day. -->
-                                  <StateIcon
-                                    icon="delete"
-                                    label={`Deleted on ${calendarDate(track.removesAt)}`}
-                                    note="Want it again to keep it"
-                                  />
-                                  <span class="mono whitespace-nowrap text-meta text-ink-3">
-                                    {calendarDate(track.removesAt)}
-                                  </span>
-                                {:else if trackDone(track)}
-                                  <StateIcon icon={STATE_GLYPH.ok} label={quiet(holding.complete)} role="ok" />
-                                {:else if lost(track)}
-                                  <StateIcon
-                                    icon="alert"
-                                    label="Fetched once, file gone"
-                                    note="Find sources to get it again"
-                                  />
-                                {:else}
-                                  {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
-                                  {#if tag?.icon}
-                                    <StateIcon
-                                      icon={tag.icon}
-                                      label={tag.label}
-                                      role={tag.icon === 'search' ? 'busy' : 'idle'}
-                                    />
-                                  {:else if tag}
-                                    <StateIcon icon={STATE_GLYPH.decide} label={tag.label} role="decide" />
-                                    <span class="text-meta text-decide">{tag.label}</span>
-                                  {:else}
-                                    <StateIcon icon={STATE_GLYPH.idle} label="Missing" role="idle" />
-                                  {/if}
-                                {/if}
-                              </span>
-                            </td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                  {#if $toggleTrack.isError}
-                    <ErrorNote error={$toggleTrack.error} class="mt-3" />
-                  {/if}
-                {:else if waiting(data.trackRefreshStatus)}
-                  <div class="flex min-h-40 items-center justify-center gap-3 bg-panel">
-                    <Icon name="busy" size="md" class="animate-spin text-busy" />
-                    <p class="text-body text-ink-2">Importing the track list…</p>
-                  </div>
-                {:else}
-                  <!-- No refresh is waiting or running, so nothing will fill
-                       this in by itself. -->
-                  <EmptyPanel
-                    role={data.trackRefreshStatus === 'failed' ? 'fail' : 'idle'}
-                    heading="No track list"
-                  >
-                    <p class="text-body text-ink-2">
-                      {data.trackRefreshStatus === 'failed'
-                        ? 'Reading the track list from MusicBrainz failed.'
-                        : data.trackRefreshStatus === 'completed'
-                          ? 'MusicBrainz lists no tracks for this release.'
-                          : 'This release has no MusicBrainz track list.'}
-                    </p>
-                  </EmptyPanel>
-                {/if}
-              </Settle>
-            {/if}
-          </section>
-
-          <!-- While sources are open the section is at least a screen tall, so
-               the page keeps its length when a short answer replaces the
-               placeholders. -->
-          <section
-            bind:this={sourcesPanel}
-            class="scroll-mt-12 px-5 pt-6"
-            style={sourcesOpen ? 'min-height: calc(100dvh - 4.5rem)' : undefined}
+          {#if wantedCount > 0}
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">· {wantedCount} wanted</span>
+          {/if}
+          {#if dismissedCount > 0}
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">· {dismissedCount} dismissed</span>
+          {/if}
+          {#if leaving.length > 0}
+            <span class="numeric whitespace-nowrap text-meta text-ink-3">
+              · {leaving.length} deleted on {calendarDate(firstLeaving)}
+            </span>
+          {/if}
+        </span>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      <!-- The quiet actions are icons with their names as tooltips, and the
+           one primary press keeps a word and its count. Remove and Dismiss
+           draw different glyphs and say what they touch: Remove is about what
+           the library has or wants, Dismiss about what it is missing. -->
+      <Button
+        variant="outline"
+        icon
+        title="Find sources"
+        aria-label="Find sources"
+        onclick={() => findSources(sourcesOpen ? sourceQuery : undefined)}
+        disabled={sourcesLoading}
+      >
+        <Icon name={sourcesLoading ? 'busy' : 'search'} size="md" class={sourcesLoading ? 'animate-spin' : ''} />
+      </Button>
+      {#if $tracks.isPending}
+        <span class="flex gap-2" role="status" aria-label="Loading track actions">
+          <span class="invisible size-8 rounded-pill bg-surface-regular" aria-hidden="true"></span>
+          <span class="invisible h-8 w-24 rounded-pill bg-surface-regular" aria-hidden="true"></span>
+        </span>
+      {:else}
+        {#if ownedCount - leaving.length > 0 || wantedCount > 0}
+          <Button
+            variant="outline"
+            icon
+            title="Remove"
+            aria-label="Remove"
+            disabled={$removeRelease.isPending}
+            onclick={() => $removeRelease.mutate()}
           >
-            <!-- The heading names what is under it, so it waits until there is
-                 something: alone, it read as a section that failed to load. -->
-            {#if duplicateQuestion || openRequests.length || sourcesOpen || $downloads.isError}
-              <h2 class="flex items-baseline gap-2.5 border-b border-rule-strong pb-1.5">
-                <span class="label">Sources</span>
-                {#if openRequests.length}
-                  <span class="mono text-micro text-ink-3">{openRequests.length} open</span>
-                {/if}
-              </h2>
-            {/if}
+            <Icon
+              name={$removeRelease.isPending ? 'busy' : 'delete'}
+              size="md"
+              class={$removeRelease.isPending ? 'animate-spin' : ''}
+            />
+          </Button>
+        {/if}
+        {#if missingCount > 0}
+          <Button
+            variant="outline"
+            icon
+            title={`Dismiss the ${missingCount} missing`}
+            aria-label={missingCount === 1 ? 'Dismiss it' : 'Dismiss the rest'}
+            disabled={$dismissRemainder.isPending}
+            onclick={() => $dismissRemainder.mutate()}
+          >
+            <Icon
+              name={$dismissRemainder.isPending ? 'busy' : 'dismiss'}
+              size="md"
+              class={$dismissRemainder.isPending ? 'animate-spin' : ''}
+            />
+          </Button>
+          {#if unwantedCount > 0}
+            <Button
+              aria-label={`Want ${unwantedCount} missing`}
+              disabled={$wantRelease.isPending}
+              onclick={() => $wantRelease.mutate()}
+            >
+              <Icon
+                name={$wantRelease.isPending ? 'busy' : 'plus'}
+                size="md"
+                class={$wantRelease.isPending ? 'animate-spin' : ''}
+              />
+              Want {unwantedCount}
+            </Button>
+          {/if}
+        {/if}
+      {/if}
+    {/snippet}
+  </Hero>
 
-            {#if $downloads.isError}
-              <!-- A failed read would otherwise look like a release with no open
-                   requests, and offer folders that may already be requested. -->
-              <ErrorNote error={$downloads.error} retry={() => void $downloads.refetch()} class="mt-3" />
-            {/if}
+  <div class="grid items-start gap-x-8 gap-y-6 px-4 pb-8 pt-4 sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+  <div class="flex min-w-0 flex-col gap-4">
+  <!-- The answer sits under the button that asked, because "wanted 3 of 12" is
+       what somebody pressing it needs to see and a page-level toast would say
+       it somewhere else. -->
+  {#if $wantRelease.isError}
+    <ErrorNote error={$wantRelease.error} />
+  {:else if $wantRelease.data}
+    <p class="text-meta text-ink-3">{wantedSummary($wantRelease.data)}.</p>
+  {/if}
+  {#if $removeRelease.isError}
+    <ErrorNote error={$removeRelease.error} />
+  {:else if $removeRelease.data}
+    <p class="text-meta text-ink-3">{removedSummary($removeRelease.data)}.</p>
+  {/if}
+  {#if $dismissRemainder.isError}
+    <ErrorNote error={$dismissRemainder.error} />
+  {:else if $dismissRemainder.data}
+    <p class="text-meta text-ink-3">
+      Dismissed {$dismissRemainder.data.dismissed}
+      {$dismissRemainder.data.dismissed === 1 ? 'track' : 'tracks'}.
+    </p>
+  {/if}
 
-            {#if duplicateQuestion}
-              <div class="mt-3">
-                <DuplicateNotice
-                  evidence={duplicateQuestion.evidence}
-                  pending={$requestDownload.isPending || $startDownload.isPending}
-                  onconfirm={answerDuplicates}
-                  oncancel={() => (duplicateQuestion = null)}
-                />
+    <!-- Mounted only for a release MusicBrainz knows a release group for —
+         the one case with a "Change" to reveal it — and hidden with a class
+         rather than an {#if} once it is: the query that fills this in
+         fetches on page open, and a component torn down between presses of
+         "Change" would ask musicbrainz.org again every time it is reopened. -->
+    {#if $release.data.musicbrainzReleaseGroupId}
+      <div class:hidden={!editionsOpen}>
+        <ReleaseEditions
+          {editions}
+          selectedId={$release.data.musicbrainzReleaseId}
+          selected={selectedEdition}
+          loading={$editionList.isLoading}
+          error={$editionList.error}
+          retryEditions={() => void $editionList.refetch()}
+          linked
+          barcode={$release.data.barcode ?? ''}
+          selectionReason={$release.data.selectionReason ?? ''}
+          pending={$selectEdition.isPending}
+          selectError={$selectEdition.error}
+          onselect={(musicbrainzReleaseId) => $selectEdition.mutate(musicbrainzReleaseId)}
+        />
+      </div>
+    {/if}
+
+    <section>
+      {#if $tracks.isError}
+        <ErrorNote error={$tracks.error} retry={() => void $tracks.refetch()} />
+      {/if}
+      <!-- The list polls while a refresh runs, so a failed poll keeps the rows
+           it already drew under the note. -->
+      {#if !$tracks.isError || $tracks.data}
+      <Settle pending={$tracks.isPending}>
+        {#snippet placeholder()}
+          <div
+            class="max-h-[calc(100dvh-27rem)] overflow-hidden rounded-panel border border-line-thin"
+            role="status"
+            aria-label="Loading tracks"
+          >
+            <!-- As many rows as the release has tracks, at the rows' own h-10, so
+                 the list lands in the space the wait held. -->
+            {#each Array(trackSkeletonCount) as _, placeholderIndex (placeholderIndex)}
+              <div class="h-10 border-b border-line-thin px-3 py-2 last:border-b-0" aria-hidden="true">
+                <Skeleton class="h-full" />
               </div>
-            {/if}
+            {/each}
+          </div>
+        {/snippet}
+      {#if $tracks.data?.items.length}
+        <div>
+          <div class="flex h-7 items-center gap-3.5 border-b border-line-regular px-3">
+            <span class="label w-7 shrink-0 text-center">#</span>
+            <span class="label min-w-0 flex-1"></span>
+            <span class="w-6 shrink-0"></span>
+            <span class="label w-16 shrink-0 whitespace-nowrap text-right">Length</span>
+            <span class="label w-24 shrink-0"></span>
+          </div>
+          {#each $tracks.data.items as track, index (track.id)}
+            <!-- A track the library does not hold is drawn as absent rather than
+                 labelled with a state word: the number and the title stand back
+                 a step of ink, and nothing on the row says "missing". The words
+                 that do appear are decisions somebody took — dismissed, wanted,
+                 needs review — and those stay. -->
+            <div
+              class="want-row flex h-10 items-center gap-3.5 px-3 {index ? 'border-t border-line-thin' : ''}"
+            >
+              <span
+                class="numeric w-7 shrink-0 text-center text-meta {held(track)
+                  ? 'text-ink-3'
+                  : 'text-ink-4'}"
+              >
+                {#if $release.data.mediaCount > 1}{track.discNumber}.{/if}{track.trackNumber ?? '—'}
+              </span>
+              <!-- The title is the thing being identified, so it truncates last;
+                   every other column is metadata. -->
+              <p
+                class="min-w-0 flex-1 truncate text-body font-medium {held(track)
+                  ? 'text-ink'
+                  : 'text-ink-3'}"
+                data-tone={held(track) ? 'present' : 'absent'}
+              >
+                {track.title}
+              </p>
+              <!-- The + sits just before the length, the way a player offers
+                   it, and shows on the hovered or focused row only; a wanted
+                   track keeps its filled tick. Pressing it on a removed track
+                   wants it again, and pressing a wanted one removes it. A
+                   track the library holds counts as wanted until it is
+                   removed; its toggle waits for the pointer, because the
+                   tick at the end of the row already says it is here. -->
+              <span class="flex w-6 shrink-0 items-center justify-center">
+                {#if track.musicbrainzRecordingId && !lost(track)}
+                  <WantToggle
+                    reveal={trackDone(track) ? 'all' : true}
+                    wanted={trackDone(track) ? !track.removesAt : isWanted(track)}
+                    title={track.title}
+                    onwant={() => $toggleTrack.mutateAsync({ kind: 'want', trackId: track.id })}
+                    onunwant={() => $toggleTrack.mutateAsync({ kind: 'remove', trackId: track.id })}
+                  />
+                {/if}
+              </span>
+              <span class="numeric w-16 shrink-0 text-right text-meta text-ink-3">
+                {duration(track.durationMs)}
+              </span>
+              <span class="flex w-24 shrink-0 items-center justify-end gap-1.5">
+                {#if track.removesAt}
+                  <!-- Removed: the file is still here and goes on this day. -->
+                  <span class="numeric whitespace-nowrap text-meta text-ink-3">
+                    {calendarDate(track.removesAt)}
+                  </span>
+                  <StateIcon
+                    icon="delete"
+                    label={`Deleted on ${calendarDate(track.removesAt)}`}
+                    note="Want it again to keep it"
+                  />
+                {:else if trackDone(track)}
+                  <!-- The same tick a playlist row draws, with the word as its
+                       tooltip and accessible name like every other state here. -->
+                  <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
+                {:else if lost(track)}
+                  <StateIcon icon="alert" label="Fetched once, file gone" note="Find sources to get it again" />
+                {:else}
+                  {@const tag = track.wantStatus ? trackTag(track.wantStatus) : null}
+                  {#if tag?.icon}
+                    <StateIcon icon={tag.icon} label={tag.label} role={tag.icon === 'search' ? 'busy' : 'idle'} />
+                  {:else if tag}
+                    <StateTag tone={tag.tone}>{tag.label}</StateTag>
+                  {/if}
+                {/if}
+              </span>
+            </div>
+          {/each}
+        </div>
+        {#if $toggleTrack.isError}
+          <ErrorNote error={$toggleTrack.error} class="mt-3" />
+        {/if}
+      {:else if waiting($release.data.trackRefreshStatus)}
+        <div
+          class="flex min-h-56 flex-col items-center justify-center rounded-panel border border-line-thin text-center"
+        >
+          <Icon name="busy" size="lg" class="animate-spin text-busy" />
+          <p class="mt-4 text-body text-ink-2">Importing the track list…</p>
+        </div>
+      {:else}
+        <!-- No refresh is waiting or running, so nothing will fill this in by
+             itself. A spinner here used to turn for as long as the tab was open. -->
+        <EmptyPanel
+          role={$release.data.trackRefreshStatus === 'failed' ? 'fail' : 'idle'}
+          heading="No track list"
+        >
+          <p class="text-body text-ink-2">
+            {$release.data.trackRefreshStatus === 'failed'
+              ? 'Reading the track list from MusicBrainz failed.'
+              : $release.data.trackRefreshStatus === 'completed'
+                ? 'MusicBrainz lists no tracks for this release.'
+                : 'This release has no MusicBrainz track list.'}
+          </p>
+        </EmptyPanel>
+      {/if}
+      </Settle>
+      {/if}
+    </section>
 
+    <!-- While sources are open the section is at least a screen tall, so the
+         page under it keeps its length when a short answer replaces the
+         placeholders and the browser has nothing to clamp. The space is the
+         page's, not the bordered box's. -->
+    <section
+      bind:this={sourcesPanel}
+      class="mt-2 scroll-mt-[calc(var(--topbar-height)+1.5rem)]"
+      style={sourcesOpen ? 'min-height: calc(100dvh - var(--topbar-height, 0px) - 1.5rem)' : undefined}
+    >
+      <!-- The heading names what is under it, so it waits until there is
+           something: alone, it read as a section that failed to load. -->
+      {#if duplicateQuestion || openRequests.length || sourcesOpen || $downloads.isError}
+        <span class="label">Sources</span>
+      {/if}
+
+      {#if $downloads.isError}
+        <!-- Without this a failed read looked like a release with no open
+             requests, and offered folders that may already be requested. -->
+        <ErrorNote error={$downloads.error} retry={() => void $downloads.refetch()} class="mt-5" />
+      {/if}
+
+      {#if duplicateQuestion}
+        <div class="mt-5">
+          <DuplicateNotice
+            evidence={duplicateQuestion.evidence}
+            pending={$requestDownload.isPending || $startDownload.isPending}
+            onconfirm={answerDuplicates}
+            oncancel={() => (duplicateQuestion = null)}
+          />
+        </div>
+      {/if}
+
+      {#if openRequests.length}
+        <div class="mt-5 rounded-panel border border-line-regular bg-ok/14 px-5 py-4">
+          <p class="text-body font-semibold text-ok">
+            {openRequests.length === 1 ? '1 open request' : `${openRequests.length} open requests`}
+          </p>
+          <!-- One bordered surface, not two: an open request is a row inside the
+               panel that reports it. -->
+          <div class="mt-2">
             {#each openRequests as item (item.id)}
-              {@const transferred = item.progress.transferCount
-                ? item.progress.completedCount / item.progress.transferCount
-                : 0}
-              <div class="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-rule py-2.5">
-                <Icon
-                  name={item.status === 'started' ? STATE_GLYPH.busy : 'download'}
-                  size="sm"
-                  class={item.status === 'started' ? 'animate-spin text-busy' : 'text-ink-3'}
-                />
+              <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line-thin px-3 py-2 last:border-b-0">
                 <span class="min-w-0">
-                  <span class="mono block truncate text-meta text-ink">{item.directory || item.username}</span>
-                  <span class="mt-0.5 block text-meta text-ink-3">
-                    {item.username} · {item.fileCount} files · {item.format.toUpperCase() || 'Unknown format'} ·
-                    <span class="mono">{formatBytes(item.totalSizeBytes)}</span>
+                  <span class="block truncate text-body text-ink">{item.directory || item.username}</span>
+                  <span class="numeric mt-0.5 block text-meta text-ink-3">
+                    {item.username} · {item.fileCount} files · {item.format.toUpperCase() || 'Unknown format'} · {formatBytes(item.totalSizeBytes)}
+                    {#if item.status === 'started'}
+                      · {item.progress.completedCount}/{item.progress.transferCount} transferred
+                    {/if}
                   </span>
                 </span>
-                <span class="flex items-center gap-3">
-                  {#if item.status === 'started'}
-                    <span class="flex flex-col items-end gap-1">
-                      <span class="mono text-micro text-busy">
-                        {item.progress.completedCount}/{item.progress.transferCount}
-                      </span>
-                      <span class="block h-0.5 w-20 bg-rule-strong" aria-hidden="true">
-                        <span
-                          class="block h-full origin-left bg-busy transition-transform"
-                          style="transform: scaleX({transferred})"
-                        ></span>
-                      </span>
-                    </span>
-                  {/if}
+                <span class="flex items-center gap-2">
                   {#if item.startable}
                     <Button
                       size="sm"
@@ -906,7 +897,7 @@
                     </Button>
                   {/if}
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     disabled={$cancelDownload.isPending}
                     onclick={() => $cancelDownload.mutate(item.id)}
@@ -916,278 +907,245 @@
                 </span>
               </div>
             {/each}
-            {#if $cancelDownload.isError}
-              <ErrorNote error={$cancelDownload.error} class="mt-3" />
-            {/if}
-            {#if $startDownload.isError && !isDuplicateQuestion($startDownload.error)}
-              <ErrorNote error={$startDownload.error} class="mt-3" />
-            {/if}
+          </div>
+          {#if $cancelDownload.isError}
+            <ErrorNote error={$cancelDownload.error} class="mt-3" />
+          {/if}
+          {#if $startDownload.isError && !isDuplicateQuestion($startDownload.error)}
+            <ErrorNote error={$startDownload.error} class="mt-3" />
+          {/if}
+        </div>
+      {/if}
 
-            {#if sourcesOpen}
-              <div class="pt-3" style={sourcesLoading ? 'min-height: 20rem' : undefined}>
-                <form
-                  class="flex flex-wrap gap-1.5"
-                  onsubmit={(event) => {
-                    event.preventDefault();
-                    findSources(sourceQuery);
-                  }}
-                >
-                  <input
-                    bind:value={sourceQuery}
-                    aria-label="Search terms"
-                    placeholder="Search terms"
-                    class="field w-full min-w-0 flex-1 sm:min-w-56"
-                  />
-                  <Button type="submit" variant="outline" disabled={sourcesLoading}>Search</Button>
-                </form>
+      {#if sourcesOpen}
+        <div
+          class="mt-5 rounded-panel border border-line-thin p-5"
+          style={sourcesLoading ? 'min-height: 20rem' : undefined}
+        >
+          <form class="flex flex-wrap gap-3" onsubmit={(event) => { event.preventDefault(); findSources(sourceQuery); }}>
+            <input
+              bind:value={sourceQuery}
+              aria-label="Search terms"
+              placeholder="Search terms"
+              class="field min-w-0 w-full flex-1 sm:min-w-56"
+            />
+            <Button type="submit" variant="ghost" disabled={sourcesLoading}>Search</Button>
+          </form>
 
-                {#if sourcesLoading}
-                  <div class="mt-4 flex flex-col" role="status" aria-label="Loading source results">
-                    <p class="flex items-center gap-2 pb-2 text-body text-ink-3">
-                      <Icon name="busy" size="sm" class="animate-spin text-busy" /> Searching peers for {sourceQuery
-                        ? `“${sourceQuery}”`
-                        : `${data.artistName ?? ''} – ${data.title ?? ''}`}…
-                    </p>
-                    {#each Array(4) as _, placeholderIndex (placeholderIndex)}
-                      <div class="h-14 border-b border-rule py-2.5"><Skeleton class="h-full" /></div>
-                    {/each}
-                  </div>
-                {:else if sourcesError}
-                  <ErrorNote error={sourcesError} class="mt-4" />
-                {:else if sources.length}
-                  <p class="mt-4 pb-1.5 text-meta text-ink-4">
-                    {sources.length === 1 ? '1 folder' : `${sources.length} folders`} matched “{searchedQuery}”
-                  </p>
-                  <div class="border-t border-rule">
-                    {#each sources as candidate (sourceKey(candidate))}
-                      {@const open = expandedSource === sourceKey(candidate)}
-                      <div class="border-b border-rule">
-                        <button
-                          class="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-left transition hover:bg-raised"
-                          aria-expanded={open}
-                          onclick={() => (expandedSource = open ? null : sourceKey(candidate))}
-                        >
-                          <!-- The mark carries corroboration, not the score: the
-                               score measures how good a copy is and knows nothing
-                               about which release it holds. -->
-                          <span class="flex items-center justify-center" title={candidate.match.summary}>
-                            {#if candidate.match.complete}
-                              <Icon name={STATE_GLYPH.ok} size="sm" class="text-ok" aria-label="Every track found" />
-                            {:else if candidate.match.checked}
-                              <span class="mono text-micro text-ink-3">
-                                {candidate.match.confirmed}/{candidate.match.expected}
-                              </span>
-                            {:else}
-                              <Icon name={STATE_GLYPH.idle} size="sm" class="text-idle" aria-label="Not checked" />
-                            {/if}
-                          </span>
-                          <span class="min-w-0">
-                            <span class="mono block truncate text-meta text-ink">
-                              {candidate.directory || candidate.username}
-                            </span>
-                            <span class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ink-3">
-                              <span class="flex items-center gap-1"><Icon name="peer" size="sm" /> {candidate.username}</span>
-                              <span>{quality(candidate)}</span>
-                              <span>{candidate.trackCount === 1 ? '1 track' : `${candidate.trackCount} tracks`}</span>
-                              <span class="mono">{formatBytes(candidate.totalSizeBytes)}</span>
-                              <span class={candidate.match.complete ? 'text-ok' : ''}>{candidate.match.summary}</span>
-                              {#if candidate.freeUploadSlot}
-                                <span class="flex items-center gap-1 text-ok">
-                                  <Icon name={STATE_GLYPH.ok} size={12} /> Free slot
-                                </span>
-                              {/if}
-                            </span>
-                          </span>
-                          <Icon
-                            name="chevron-down"
-                            size="sm"
-                            class="mr-1 shrink-0 text-ink-4 transition {open ? 'rotate-180' : ''}"
-                          />
-                        </button>
+          {#if sourcesLoading}
+            <div class="mt-5 flex flex-col gap-2" role="status" aria-label="Loading source results">
+              <!-- First, where it is read: under forty placeholders it was cut
+                   off by the panel and the search looked idle. -->
+              <p class="flex items-center gap-2 text-body text-ink-3">
+                <Icon name="busy" size="md" class="animate-spin" /> Searching peers for {sourceQuery
+                  ? `“${sourceQuery}”`
+                  : `${$release.data?.artistName ?? ''} – ${$release.data?.title ?? ''}`}…
+              </p>
+              {#each Array(4) as _, placeholderIndex (placeholderIndex)}
+                <Skeleton shape="block" class="h-24" />
+              {/each}
+            </div>
+          {:else if sourcesError}
+            <ErrorNote error={sourcesError} class="mt-5" />
+          {:else if sources.length}
+            <p class="mt-5 text-meta text-ink-4">
+              {sources.length === 1 ? '1 folder' : `${sources.length} folders`} matched “{searchedQuery}”
+            </p>
+            <!-- Rows in the panel, not cards inside it: the panel already is the
+                 bordered surface. -->
+            <div class="mt-3">
+              {#each sources as candidate (sourceKey(candidate))}
+                <div class="min-h-24 border-b border-line-thin last:border-b-0">
+                  <button
+                    class="flex w-full items-center gap-3 px-3 py-2 text-left"
+                    onclick={() => (expandedSource = expandedSource === sourceKey(candidate) ? null : sourceKey(candidate))}
+                  >
+                    <!-- The mark carries corroboration, not the score. The score
+                         measures how good a copy is and knows nothing about which
+                         release it holds, so showing it here — in a green badge,
+                         whatever its value — read as a verdict it cannot give. -->
+                    <Chip
+                      role={candidate.match.complete ? 'ok' : undefined}
+                      dot={false}
+                      class="shrink-0"
+                      title={candidate.match.summary}
+                    >
+                      {#if candidate.match.complete}
+                        <Icon name="check" size="sm" class="size-3" />
+                      {:else if candidate.match.checked}
+                        {candidate.match.confirmed}/{candidate.match.expected}
+                      {:else}
+                        —
+                      {/if}
+                    </Chip>
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-body font-medium text-ink">{candidate.directory || candidate.username}</span>
+                      <span class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ink-3">
+                        <span class="flex items-center gap-1"><Icon name="peer" size="sm" /> {candidate.username}</span>
+                        <span>{quality(candidate)}</span>
+                        <span>{candidate.trackCount === 1 ? '1 track' : `${candidate.trackCount} tracks`}</span>
+                        <span>{formatBytes(candidate.totalSizeBytes)}</span>
+                        <span class={candidate.match.complete ? 'text-ok' : ''}>
+                          {candidate.match.summary}
+                        </span>
+                        {#if candidate.freeUploadSlot}<span class="text-ok">Free slot</span>{/if}
+                      </span>
+                    </span>
+                    <Icon name="chevron-down" size="md" class="shrink-0 text-ink-4 transition {expandedSource === sourceKey(candidate) ? 'rotate-180' : ''}" />
+                  </button>
 
-                        {#if open}
-                          <div class="pb-3 pl-[3.25rem]">
-                            {#if candidate.reasons.length}
-                              <p class="text-meta text-ink-3">{candidate.reasons.join(' · ')}</p>
-                            {/if}
-                            <div class="mt-2 max-h-64 overflow-auto">
-                              {#each candidate.files as file (file.name)}
-                                <div class="mono flex items-center justify-between gap-4 text-micro text-ink-3">
-                                  <span class="min-w-0 truncate">{file.name}</span>
-                                  <span class="shrink-0">{formatBytes(file.sizeBytes)}</span>
-                                </div>
-                              {/each}
-                            </div>
-                            <div class="mt-3 flex flex-wrap items-center gap-3">
-                              {#if requestedKeys.has(sourceKey(candidate))}
-                                <span class="flex items-center gap-1.5 text-meta text-ok">
-                                  <Icon name={STATE_GLYPH.ok} size="sm" /> Requested
-                                </span>
-                              {:else}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={$requestDownload.isPending}
-                                  onclick={() => $requestDownload.mutate({ candidate })}
-                                >
-                                  <Icon name="download" size="sm" /> Request
-                                </Button>
-                              {/if}
-                            </div>
+                  {#if expandedSource === sourceKey(candidate)}
+                    <div class="px-3 pb-3">
+                      <div class="flex flex-wrap gap-1.5">
+                        {#each candidate.reasons as reason (reason)}
+                          <Chip>{reason}</Chip>
+                        {/each}
+                      </div>
+                      <div class="mt-3 max-h-64 space-y-1 overflow-auto">
+                        {#each candidate.files as file (file.name)}
+                          <div class="numeric flex items-center justify-between gap-4 text-meta text-ink-3">
+                            <span class="min-w-0 truncate">{file.name}</span>
+                            <span class="shrink-0">{formatBytes(file.sizeBytes)}</span>
                           </div>
+                        {/each}
+                      </div>
+
+                      <div class="mt-3 flex flex-wrap items-center gap-3">
+                        {#if requestedKeys.has(sourceKey(candidate))}
+                          <span class="flex items-center gap-1.5 text-meta text-ok">
+                            <Icon name="check" size="sm" /> Requested
+                          </span>
+                        {:else}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={$requestDownload.isPending}
+                            onclick={() => $requestDownload.mutate({ candidate })}
+                          >
+                            <Icon name="download" size="sm" /> Request
+                          </Button>
                         {/if}
                       </div>
-                    {/each}
-                  </div>
-                  {#if $requestDownload.isError && !isDuplicateQuestion($requestDownload.error)}
-                    <ErrorNote error={$requestDownload.error} class="mt-3" />
+                    </div>
                   {/if}
-                {:else}
-                  <p class="mt-4 text-body text-ink-2">
-                    No peer offered a folder matching “{searchedQuery}”. Try different search terms.
-                  </p>
-                {/if}
-              </div>
+                </div>
+              {/each}
+            </div>
+            {#if $requestDownload.isError && !isDuplicateQuestion($requestDownload.error)}
+              <ErrorNote error={$requestDownload.error} class="mt-3" />
             {/if}
-          </section>
+          {:else}
+            <p class="mt-5 text-body text-ink-2">
+              No peer offered a folder matching “{searchedQuery}”. Try different search terms.
+            </p>
+          {/if}
         </div>
+      {/if}
+    </section>
+  </div>
 
-        <!-- The inspector: the sleeve, the facts as keys and values, and the
-             artist's other records one press away. -->
-        <aside
-          class="flex min-w-0 flex-col gap-5 border-rule bg-panel p-5 max-lg:border-t lg:sticky lg:top-10 lg:max-h-[calc(100dvh-4.5rem)] lg:min-h-[calc(100dvh-4.5rem)] lg:overflow-y-auto lg:border-l"
-          aria-label="About this release"
+    <!-- The artist page's grid: the tracks take the wide column, and the box
+         where the artist page keeps Popular holds the sleeve, the pressing and
+         the artist's discography, so the next release is one press away. -->
+    <aside class="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[calc(var(--topbar-height)+1rem)]">
+      <div class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-start gap-3.5">
+      <!-- The sleeve, and the one way to put one there by hand. Some records
+           have no picture anywhere, so a release can be blank for good, and the
+           person looking at it usually has the sleeve. A missing one is drawn
+           from the release's seed so the frame is never a grey square; the
+           control appears on hover, or stays up when there is no picture. -->
+      <span class="group relative block aspect-square w-full overflow-hidden rounded-row shadow-[0_10px_28px_rgb(0_0_0/0.4)]">
+        <Cover
+          eager
+          onmissing={() => (coverMissing = true)}
+          src={coverSrc}
+          seed={releaseID}
+          inks={$release.data.inks}
+          class="size-full object-cover"
+        />
+        <span
+          class="absolute bottom-1.5 left-1.5 transition focus-within:opacity-100 group-hover:opacity-100 {coverMissing
+            ? ''
+            : 'opacity-0'}"
         >
-          <!-- Some records have no picture anywhere, and the person looking at
-               one usually has the sleeve, so a cover can be set by hand. -->
-          <span class="group relative block aspect-square w-full max-w-[18.75rem] overflow-hidden">
-            <Cover
-              eager
-              onmissing={() => (coverMissing = true)}
-              src={coverSrc}
-              seed={releaseID}
-              class="size-full object-cover"
-            />
-          </span>
+          <Button
+            size="xs"
+            variant="outline"
+            icon
+            class="bg-ground/70"
+            title="Set cover"
+            aria-label="Set cover"
+            onclick={() => (settingCover = true)}
+          >
+            <Icon name="image" size="sm" />
+          </Button>
+        </span>
+      </span>
+      <div class="flex min-w-0 flex-col gap-2.5">
+      <!-- A cover found by name is a guess and says so. One found by the
+           release's own identifier says nothing, because there is nothing to
+           qualify. -->
+      <span class="block text-meta leading-tight text-ink-3 empty:hidden">
+        {#if coverMissing}
+          No cover yet
+        {:else if $release.data.coverSource === 'itunes'}
+          Cover matched by name
+        {:else if $release.data.coverSource === 'embedded'}
+          Cover from your copy
+        {/if}
+      </span>
 
-          <dl class="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-body">
-            <dt class="label pt-0.5">Owned</dt>
-            <dd class="text-ink-2">
-              {#if $tracks.isPending}
-                <span class="skeleton block h-4 w-32" role="status" aria-label="Loading track summary"></span>
-              {:else if $tracks.data?.items.length}
-                <!-- One line: the blocks and the fraction, then each other count as
-                     its glyph and figure, with the words in the tooltip. -->
-                <span class="flex items-center gap-x-3 whitespace-nowrap">
-                  <OwnedBar owned={ownedCount} total={$tracks.data.items.length} />
-                  {#if missingCount > 0}
-                    {@const missingWord = data.artistFollowed ? 'missing' : 'not owned'}
-                    <span class="flex items-center gap-1 text-meta text-idle" title={`${missingCount} ${missingWord}`}>
-                      <Icon name={STATE_GLYPH.idle} size="sm" />
-                      <span class="mono">{missingCount}</span><span class="sr-only">{` ${missingWord}`}</span>
-                    </span>
-                  {/if}
-                  {#if wantedCount > 0}
-                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${wantedCount} wanted`}>
-                      <Icon name="want" size="sm" />
-                      <span class="mono">{wantedCount}</span><span class="sr-only">{' wanted'}</span>
-                    </span>
-                  {/if}
-                  {#if dismissedCount > 0}
-                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${dismissedCount} dismissed`}>
-                      <Icon name="dismiss" size="sm" />
-                      <span class="mono">{dismissedCount}</span><span class="sr-only">{' dismissed'}</span>
-                    </span>
-                  {/if}
-                  {#if leaving.length > 0}
-                    {@const leavingWord = `deleted on ${calendarDate(firstLeaving)}`}
-                    <span class="flex items-center gap-1 text-meta text-ink-3" title={`${leaving.length} ${leavingWord}`}>
-                      <Icon name="delete" size="sm" />
-                      <span class="mono">{leaving.length}</span><span class="sr-only">{` ${leavingWord}`}</span>
-                    </span>
-                  {/if}
-                </span>
-              {:else}
-                <span class="text-ink-4">No tracks</span>
-              {/if}
-            </dd>
+      <!-- What MusicBrainz's community voted this release is. A tag rather
+           than a filter chip, because a genre is information, not something to
+           narrow by. A release with no votes shows nothing. -->
+      {#if $release.data.genres?.length}
+        <ul class="flex flex-wrap items-center gap-1.5">
+          {#each $release.data.genres as genre (genre)}
+            <li><StateTag>{genre}</StateTag></li>
+          {/each}
+        </ul>
+      {/if}
 
-            <dt class="label pt-0.5">Edition</dt>
-            <dd class="text-ink-2">
-              {#if data.musicbrainzReleaseGroupId}
-                <!-- The three facts stay on one line, so no separator is left alone
-                     at the start of the next. -->
-                <span class="flex flex-col items-start gap-1.5">
-                  {#if selectedEdition}
-                    {@const facts = [
-                      selectedEdition.releaseDate || '—',
-                      selectedEdition.country || '—',
-                      selectedEdition.status || '—'
-                    ].join(' · ')}
-                    <span class="block max-w-full truncate whitespace-nowrap text-meta tabular-nums" title={facts}>{facts}</span>
-                  {:else}
-                    <span class="text-meta">No pressing selected</span>
-                  {/if}
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    key="e"
-                    verb="change edition"
-                    onclick={() => (editionsOpen = !editionsOpen)}
-                  >
-                    {editionsOpen ? 'Hide' : 'Change'}
-                  </Button>
-                </span>
-              {:else}
-                <span class="text-meta text-ink-3">
-                  This release is not linked to MusicBrainz, so there are no other pressings to compare.
-                </span>
-              {/if}
-            </dd>
-
-            <dt class="label pt-0.5">Cover</dt>
-            <dd class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-meta text-ink-2">
-              <!-- A cover found by name is a guess and says so. -->
-              <span>
-                {#if coverMissing}
-                  No cover yet
-                {:else if data.coverSource === 'itunes'}
-                  Matched by name
-                {:else if data.coverSource === 'embedded'}
-                  From your copy
-                {/if}
-              </span>
-              <Button variant="ghost" size="xs" title="Set cover" aria-label="Set cover" onclick={() => (settingCover = true)}>
-                <Icon name="image" size="sm" /> Set
-              </Button>
-            </dd>
-
-            {#if data.genres?.length}
-              <!-- What MusicBrainz's community voted this release is. -->
-              <dt class="label pt-0.5">Genre</dt>
-              <dd class="text-meta text-ink-2">{data.genres.join(', ')}</dd>
-            {/if}
-
-          </dl>
-
-          <ArtistReleases artistID={data.artistId} artistName={data.artistName} {releaseID} />
-        </aside>
+      <!-- The pressing in use, collapsed to the four facts a comparison needs.
+           Every other pressing MusicBrainz knows of sits behind "Change",
+           because most visits never question which one this is. -->
+      {#if $release.data.musicbrainzReleaseGroupId}
+        <p class="text-meta text-ink-3">
+          {#if selectedEdition}
+            Edition · {selectedEdition.releaseDate || '—'} · {selectedEdition.country || '—'} · {selectedEdition.status ||
+              '—'} ·
+          {:else}
+            No pressing selected ·
+          {/if}
+          <button
+            type="button"
+            class="font-semibold text-ink-2 underline-offset-2 transition hover:text-ink hover:underline"
+            onclick={() => (editionsOpen = !editionsOpen)}
+          >
+            {editionsOpen ? 'Hide' : 'Change'}
+          </button>
+        </p>
+      {:else}
+        <p class="text-meta text-ink-3">
+          This release is not linked to MusicBrainz, so there are no other pressings to compare.
+        </p>
+      {/if}
       </div>
-
-      <SetCoverDialog
-        bind:open={settingCover}
+      </div>
+      <ArtistReleases
+        artistID={$release.data.artistId}
+        artistName={$release.data.artistName}
         {releaseID}
-        settable={data.coverSource === 'user'}
-        onsaved={coverSet}
       />
-      <ConfirmDialog
-        bind:open={confirmingRemove}
-        title="Remove this release?"
-        description="Its wants stop now. Files Schall downloaded for it are deleted in 30 days unless you want them again."
-        action="Remove"
-        danger
-        onconfirm={() => $removeRelease.mutate()}
-      />
-    {/if}
+    </aside>
+  </div>
+
+  <SetCoverDialog
+    bind:open={settingCover}
+    {releaseID}
+    settable={$release.data.coverSource === 'user'}
+    onsaved={coverSet}
+  />
+  {/if}
   </Settle>
 {/if}

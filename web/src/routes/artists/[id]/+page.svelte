@@ -19,12 +19,14 @@
     type RemovedTracks
   } from '$lib/api';
   import { calendarDate, keepInUrl, removedSummary, urlChoice, wantedSummary } from '$lib/utils';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import { holding, progress, quiet } from '$lib/vocabulary';
   import Chip from '$lib/components/Chip.svelte';
   import Cover from '$lib/components/Cover.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Hero from '$lib/components/Hero.svelte';
+  import { usePagePrint } from '$lib/duoton';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -277,6 +279,22 @@
 
   const shown = $derived($releases.data?.items ?? []);
 
+  // The page is printed from the artist's lead release, the one with the most
+  // songs held, and takes its inks from it (ADR Duoton). A second pictured
+  // release is screened over it when the discography has one.
+  usePagePrint(() => {
+    const detail = $artist.data;
+    if (!detail) return undefined;
+    const lead = detail.leadAlbumId;
+    const second = shown.find((release) => release.hasCover && release.id !== lead)?.id;
+    return {
+      mode: 'single',
+      covers: [lead, second].filter((id): id is string => Boolean(id)),
+      inks: detail.inks
+    };
+  });
+  // A long name steps down a size so it stays on two lines at most.
+  const heroSize = $derived(($artist.data?.name.length ?? 0) > 18 ? 'm' : 'l');
   // 'pending' means a refresh has never run, not that one is under way: showing
   // a spinner for it would claim work that nothing is doing.
   const refreshing = $derived(['queued', 'running'].includes($artist.data?.refreshStatus ?? ''));
@@ -444,7 +462,7 @@
   );
 
   // The card's second line and the colour it reads in: ink-3 for a plain fact,
-  // ink-2 for a partial release, fail for one missing outright. One function
+  // accent for a partial release, fail for one missing outright. One function
   // rather than two, so the word and its colour can never disagree about which
   // state a release is in.
   function describe(release: Release): { text: string; tone: string } {
@@ -464,7 +482,8 @@
     if (state === 'partial') {
       return {
         text: `${year} · ${release.ownedTrackCount} of ${countable(release)}`,
-        // Plain ink: the chrome never says what state a release is in.
+        // Not the accent: the inks are chrome and never say what state a
+        // release is in (ADR Duoton).
         tone: 'text-ink-2'
       };
     }
@@ -475,7 +494,7 @@
 <svelte:head><title>{$artist.data?.name ?? 'Artist'} · Schall</title></svelte:head>
 
 {#if $artist.isError}
-  <div class="px-5 py-6">
+  <div class="px-4 sm:px-6 py-6">
     <!-- The artist is read, not written, so the note asks again by itself. -->
     <ErrorNote error={$artist.error} retry={() => $artist.refetch()} />
   </div>
@@ -485,7 +504,10 @@
       {@render ArtistSkeleton()}
     {/snippet}
   {#if $artist.data}
-  <PageHeader title={$artist.data.name} path={[{ label: 'Artists', href: '/artists' }]}>
+  <Hero title={$artist.data.name} size={heroSize}>
+    {#snippet back()}
+      <BackLink fallback="/artists" label="Artists" />
+    {/snippet}
     {#snippet sub()}
       <span>
         {#if countedReleases}
@@ -563,7 +585,7 @@
         </Button>
       {/if}
     {/snippet}
-  </PageHeader>
+  </Hero>
 
   <!-- Who this is, from Wikipedia. Collapsed, because somebody on this page is
        usually here for the music rather than the reading; and behind a
@@ -572,7 +594,7 @@
        text is CC BY-SA and the line under it satisfies the licence. An artist
        no encyclopaedia has heard of shows nothing at all. -->
   {#if $artist.data.biography}
-    <details class="group px-5 pb-3">
+    <details class="group px-4 pb-3 sm:px-6">
       <summary
         class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
       >
@@ -589,7 +611,7 @@
             href={$artist.data.biographySourceUrl}
             target="_blank"
             rel="noreferrer"
-            class="underline transition hover:text-ink">Wikipedia</a
+            class="underline transition hover:text-accent-soft">Wikipedia</a
           >
         </p>
       {/if}
@@ -600,7 +622,7 @@
        releases" is what somebody pressing it needs to see and a page-level
        toast would say it somewhere else. -->
   {#if $wantMissing.isError || $wantMissing.data?.wantMissing}
-    <div class="max-w-prose border-b border-rule px-5 py-2.5">
+    <div class="max-w-prose border-b border-line-thin px-4 sm:px-6 py-2.5">
       {#if $wantMissing.isError}
         <!-- Bare: this strip is already the band under the button, and a tinted
              badge inside it would be a second surface in the same row. -->
@@ -633,10 +655,10 @@
     </span>
   </ControlRail>
 
-  <div class="flex flex-col gap-4 px-5 py-5">
+  <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
     {#if confirmUnfollow && $artist.data.followed}
-      <div class="flex flex-col gap-3 bg-panel p-4">
-        <h2 class=" text-lead font-bold text-ink">
+      <div class="flex flex-col gap-3 rounded-panel border border-line-regular bg-surface-regular p-4">
+        <h2 class="font-display text-lead font-bold text-ink">
           Unfollow {$artist.data.name}?
         </h2>
         <p class="text-body leading-relaxed text-ink-2">
@@ -663,7 +685,7 @@
     {/each}
 
     {#if !$artist.data.followed}
-      <div class="flex flex-col gap-1.5 bg-panel p-4">
+      <div class="flex flex-col gap-1.5 rounded-panel border border-line-regular bg-idle/14 p-4">
         <span class="text-body font-semibold text-ink">
           {$artist.data.catalogueSummary ?? 'Here because you have their music.'}
         </span>
@@ -697,8 +719,8 @@
             {@const open = expanded.includes(section.kind)}
             {@const visible = open ? section.items : section.items.slice(0, rowLength)}
             <section class="flex flex-col gap-2.5" aria-label={section.kind}>
-              <div class="flex items-baseline gap-2.5 border-b border-rule pb-1.5">
-                <h2 class="text-body font-semibold text-ink">
+              <div class="flex items-baseline gap-2.5 border-b border-line-thin pb-1.5">
+                <h2 class="text-[0.9375rem] font-semibold text-ink">
                   {section.kind}
                   <span class="numeric text-meta font-normal text-ink-4">{section.items.length}</span>
                 </h2>
@@ -801,7 +823,7 @@
       </div>
     </section>
     <aside class="hidden min-w-0 flex-col xl:flex" aria-hidden="true">
-      <div class="border-b border-rule pb-1.5"><Skeleton class="h-4 w-20" /></div>
+      <div class="border-b border-line-thin pb-1.5"><Skeleton class="h-4 w-20" /></div>
       <SkeletonRows count={10} cover />
     </aside>
   </div>
@@ -811,7 +833,7 @@
   <div role="status" aria-label="Loading artist page">
     <!-- The same box the hero fills, so nothing moves when the artist lands. -->
     <section
-      class="flex flex-col justify-end gap-3 px-5 pb-4"
+      class="flex flex-col justify-end gap-3 px-4 pb-4 sm:px-6"
       style="min-height: calc(var(--print-height) - var(--topbar-height));"
       aria-hidden="true"
     >
@@ -829,7 +851,7 @@
       />
     </ControlRail>
 
-    <div class="flex flex-col gap-4 px-5 py-5">
+    <div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
       {@render ReleaseSkeleton()}
     </div>
   </div>

@@ -3,8 +3,9 @@
 </script>
 
 <script lang="ts">
-  import Icon from './Icon.svelte';
+  import GeneratedCover from './GeneratedCover.svelte';
   import { COVER_WIDTHS, coverAt } from '$lib/cover-size';
+  import type { Inks } from '$lib/duoton/inks';
 
   // A picture that arrives instead of appearing.
   //
@@ -20,8 +21,8 @@
   // once. The box under it is already the right size and colour, so nothing
   // moves.
   //
-  // A missing picture is drawn as a flat raised square with the release glyph
-  // when the caller gives a seed, or as the text fallback a caller supplies. The absence is
+  // A missing picture is drawn as generated art when the caller gives a seed
+  // (ADR Duoton), or as the text fallback a caller supplies. The absence is
   // remembered for the picture at every size, so a missing cover is not asked
   // for again by another component or after a remount.
 
@@ -32,16 +33,19 @@
     eager = false,
     onmissing,
     fallback,
-    seed
+    seed,
+    inks
   }: {
     src?: string;
     alt?: string;
     class?: string;
     eager?: boolean;
     fallback?: string;
-    /** Draws the placeholder square in place of a missing picture. Usually the
-     * album id. Wins over `fallback`. */
+    /** Draws generated art in place of a missing picture, seeded with this
+     * (usually the album id). Wins over `fallback`. */
     seed?: string;
+    /** The thing's own inks or palette, for the generated art. */
+    inks?: Partial<Inks> | null;
     /** Told once, when there turns out to be no picture. The release page uses
      * it to take down the caption that qualifies the picture: a note saying the
      * cover was matched by name, over no cover, is a note about nothing. */
@@ -97,12 +101,10 @@
       if (src) markCoverMissing(src);
       onmissing?.();
     }}
-    class="cover-arrive rounded-cover {stage === 'shown' ? 'is-here' : ''} {instant ? 'is-instant' : ''} {className}"
+    class="cover-arrive {stage === 'shown' ? 'is-here' : ''} {instant ? 'is-instant' : ''} {className}"
   />
 {:else if seed}
-  <span class="cover-fallback rounded-cover {className}" data-placeholder={seed} aria-hidden="true">
-    <Icon name="release" size="md" />
-  </span>
+  <GeneratedCover {seed} {inks} class={className} />
 {:else if fallback}
-  <span class="cover-fallback rounded-cover {className}" aria-hidden="true">{fallback}</span>
+  <span class="cover-fallback {className}" aria-hidden="true">{fallback}</span>
 {/if}

@@ -319,7 +319,7 @@
       <!-- The library has let these go and the disc still has them. Nothing
            else on this screen would ever mention them again: they have no
            library row, and their recording is no longer held twice. -->
-      <div class="flex flex-col gap-2 border border-rule bg-panel px-3 py-2.5">
+      <div class="flex flex-col gap-2 rounded-row border border-line-thin bg-surface-thin px-3 py-2.5">
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="min-w-0 flex-1 text-meta text-ink-2">
             {stranded.length}
@@ -350,7 +350,7 @@
     {/if}
 
     {#if spare.length > 0}
-      <div class="flex flex-wrap items-center gap-2.5 border border-rule bg-panel px-3 py-2.5">
+      <div class="flex flex-wrap items-center gap-2.5 rounded-row border border-line-thin bg-surface-thin px-3 py-2.5">
         <span class="min-w-0 flex-1 text-meta text-ink-2">
           {spare.length}
           {spare.length === 1 ? 'copy on this page is' : 'copies on this page are'} worse than one
@@ -379,7 +379,7 @@
              copies is the rows themselves: each names its own format, its
              path, its length and size, and offers Play and Keep this — there
              is no separate view to open first. -->
-        <div class="flex flex-col border-b border-rule px-3 py-2.5 last:border-b-0">
+        <div class="flex flex-col border-b border-line-thin px-3 py-2.5 last:border-b-0">
           <div class="flex items-baseline gap-2 pb-1.5">
             <span class="min-w-0 flex-1 truncate text-lead font-semibold text-ink">{name(recording)}</span>
             <span class="numeric text-meta text-ink-3">
@@ -401,13 +401,13 @@
                    separates. -->
               <span class="hidden size-4 shrink-0 place-items-center md:grid" aria-hidden="true">
                 <span
-                  class="size-2.5 border {copy.keeper
-                    ? 'border-ink bg-ink'
-                    : 'border-rule-strong bg-transparent'}"
+                  class="size-2.5 rounded-full border {copy.keeper
+                    ? 'border-accent bg-accent'
+                    : 'border-line-thick bg-transparent'}"
                 ></span>
               </span>
               <span
-                class="numeric shrink-0 bg-panel px-1.5 py-[3px] text-center text-micro font-medium text-ink-2"
+                class="numeric shrink-0 rounded-row bg-surface-regular px-1.5 py-[3px] text-center text-micro font-medium text-ink-2"
               >
                 {copy.format || 'file'}
               </span>

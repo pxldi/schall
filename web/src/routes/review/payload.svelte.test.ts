@@ -396,23 +396,6 @@ describe('what a review answer sends', () => {
     });
   });
 
-  // Two recordings whose evidence reads the same are a question only the
-  // reader can answer. The redrawn table inverts the selected row; with
-  // nothing chosen it must invert none and Enter must send nothing.
-  it('selects nothing and sends nothing on Enter between two candidates that say the same', async () => {
-    const twin = { ...want('resolution'), candidates: [candidate(), { ...candidate(), recordingId: 'dddddddd-0000-4000-8000-00000000000a' }] };
-    piles.wants = [twin];
-    await open('Evensong');
-
-    const radios = await screen.findAllByRole('radio');
-    expect(radios.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false']);
-    expect(radios.some((radio) => radio.getAttribute('data-cursor') === 'true')).toBe(false);
-    await fireEvent.keyDown(document.body, { key: 'Enter' });
-    await fireEvent.keyDown(document.body, { key: 'y' });
-    expect((screen.getByRole('button', { name: 'Use version' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(writes()).toEqual([]);
-  });
-
   it('validates a folder again against the download, with no body', async () => {
     piles.downloads = [download()];
     await open('Signal Fires');

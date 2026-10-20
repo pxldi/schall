@@ -1,7 +1,7 @@
 import type { GlobalSearchResults, GlobalSearchTrack } from './api';
 import type { IconName } from './icons';
 import { formatBytes } from './utils';
-import { coverSrc } from './cover-size';
+import { coverSrc } from './duoton/page.svelte';
 
 // What the palette shows, worked out away from the component that draws it.
 //

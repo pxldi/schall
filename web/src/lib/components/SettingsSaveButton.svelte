@@ -11,8 +11,8 @@
   // required field.
   //
   // `variant` defaults to the outline every card but Sources still uses.
-  // Sources draws Save as the one inverted button in each of its forms, next
-  // to an outline Test — the source's own form is the single action a person
+  // Sources draws Save as the one accent button in each of its forms, next to
+  // an outline Test — the source's own form is the single action a person
   // came to that section to take.
   //
   // `saved` says the mutation this button submits last succeeded. It flashes

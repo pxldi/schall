@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Keycap from './Keycap.svelte';
   import Icon from './Icon.svelte';
   import Button from './Button.svelte';
   import type { IconName } from '$lib/icons';
@@ -237,7 +236,7 @@
 
 {#snippet cell(value: Cell, on: boolean)}
   <td
-    class="max-w-[16rem] border-b border-rule px-3.5 py-2 align-top {on ? 'col-on' : ''}"
+    class="max-w-[16rem] border-b border-line-thin px-3.5 py-2 align-top {on ? 'col-on' : ''}"
     title={value.tip}
   >
     <span class="flex min-w-0 items-center gap-1.5 {TONES[value.mark]}">
@@ -255,11 +254,11 @@
 {/snippet}
 
 <div class="overflow-x-auto" role="radiogroup" aria-label="Copies" tabindex="-1" onkeydown={onRadioKeydown}>
-  <table class="copy-table w-full border-separate border-spacing-0 text-meta">
+  <table class="copy-table w-full border-separate border-spacing-0 text-quiet-meta">
     <thead>
       <tr>
-        <th class="w-28 border-b border-rule"></th>
-        <th class="wished border-b border-rule px-3.5 py-2.5 text-left align-bottom font-normal">
+        <th class="w-28 border-b border-line-regular"></th>
+        <th class="wished border-b border-line-regular px-3.5 py-2.5 text-left align-bottom font-normal">
           <span class="flex items-center gap-1.5 font-semibold text-ink-2">
             <Icon name="want" size={14} />
             Wished
@@ -268,8 +267,8 @@
         {#each columns as column, index (column.copy.id)}
           {@const on = index === chosen}
           <th
-            class="min-w-[11rem] border-b border-rule px-3.5 py-2.5 text-left align-bottom font-normal transition {on
-              ? 'inverted'
+            class="min-w-[11rem] border-b border-line-regular px-3.5 py-2.5 text-left align-bottom font-normal {on
+              ? 'col-on'
               : ''}"
           >
             <span class="flex items-center gap-2.5">
@@ -278,7 +277,7 @@
                 onclick={() => onplay(index)}
                 aria-label={`Play ${column.heading}`}
                 title="Play"
-                class="press flex size-8 shrink-0 items-center justify-center border border-rule-strong bg-raised text-ink transition hover:border-ink-4"
+                class="flex size-8 shrink-0 items-center justify-center rounded-full border border-line-regular bg-surface-thick text-ink transition hover:bg-surface-ultra"
               >
                 <Icon name="play" size={14} />
               </button>
@@ -296,10 +295,7 @@
                 }}
                 class="flex min-w-0 cursor-pointer flex-col"
               >
-                <span class="flex items-center gap-1.5 font-semibold {on ? 'text-ink' : 'text-ink-2'}">
-                  <Keycap key={String(index + 1)} />
-                  {column.heading}
-                </span>
+                <span class="font-semibold {on ? 'text-ink' : 'text-ink-2'}">{column.heading}</span>
                 <span class="flex items-center gap-1 truncate text-meta text-ink-4">
                   <Icon name={column.filed ? 'library' : 'download'} size={11} />
                   {column.filed
@@ -314,15 +310,15 @@
       </tr>
     </thead>
     <tbody>
-      {#each rows as row, rowIndex (row.key)}
-        <tr class="rise" style="animation-delay: calc({Math.min(rowIndex, 2)} * var(--motion-stagger))">
-          <th scope="row" class="border-b border-rule py-2 pr-3 text-left font-normal text-ink-3">
+      {#each rows as row (row.key)}
+        <tr>
+          <th scope="row" class="border-b border-line-thin py-2 pr-3 text-left font-normal text-ink-3">
             <span class="flex items-center gap-2">
               <Icon name={row.icon} size={14} />
               {row.label}
             </span>
           </th>
-          <td class="wished max-w-[16rem] border-b border-rule px-3.5 py-2 align-top" title={row.wished.tip}>
+          <td class="wished max-w-[16rem] border-b border-line-thin px-3.5 py-2 align-top" title={row.wished.tip}>
             <span class="block truncate {row.wished.mark === 'none' ? 'text-ink-4' : 'text-ink-2'}">
               {row.wished.text}
             </span>
@@ -358,11 +354,17 @@
 <style>
   /* What was wished for is the measure, not an answer: a dashed frame. */
   .wished {
-    border-left: 1px dashed var(--color-rule-strong);
-    border-right: 1px dashed var(--color-rule-strong);
+    border-left: 1px dashed var(--color-line-thick);
+    border-right: 1px dashed var(--color-line-thick);
   }
-  /* The chosen copy's cells, under its inverted heading. */
+  /* The chosen copy, washed in the page's light ink. Which column is chosen
+     is a place, not a state, so it takes the chrome ink. */
   .col-on {
-    background-color: var(--color-raised);
+    background-color: color-mix(in srgb, var(--color-duo-light) 7%, transparent);
+  }
+  /* Every other row printed with a fine dot screen (ADR Duoton, halftone tables). */
+  .copy-table tbody tr:nth-child(odd) > * {
+    background-image: radial-gradient(circle, rgb(255 255 255 / 0.035) 1px, transparent 1.3px);
+    background-size: 4px 4px;
   }
 </style>

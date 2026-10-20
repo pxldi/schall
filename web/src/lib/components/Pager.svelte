@@ -33,7 +33,7 @@
      repeat the total the page header already carries, and two dead buttons
      under a short list are chrome in the way. -->
 {#if total > pageSize}
-  <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-rule p-3">
+  <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line-thin p-3">
     <span class="text-meta text-ink-3">
       <span class="numeric">
         {offset + 1}–{Math.min(offset + pageSize, total)} of {total.toLocaleString()}

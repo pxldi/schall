@@ -168,10 +168,10 @@
       >
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="label">This week</span>
-          <span class="hidden h-px flex-1 bg-rule sm:block"></span>
+          <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
           <Skeleton class="h-4 w-48" />
         </div>
-        <div class=" border border-rule" aria-label="Loading weekly songs">
+        <div class="rounded-panel border border-line-thin" aria-label="Loading weekly songs">
           <SkeletonRows count={10} />
         </div>
       </section>
@@ -189,7 +189,7 @@
     <section class="flex flex-col gap-2.5">
       <div class="flex flex-wrap items-center gap-2.5">
         <span class="label">This week</span>
-        <span class="hidden h-px flex-1 bg-rule sm:block"></span>
+        <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
         <span class="text-meta text-ink-3">
           {removing ? 'unkept songs get deleted' : 'report only · nothing deleted'}
         </span>
@@ -208,9 +208,9 @@
           </span>
         </EmptyPanel>
       {:else}
-        <section class=" border border-rule">
+        <section class="rounded-panel border border-line-thin">
           {#each songs as lease (lease.id)}
-            <div class="flex flex-col gap-1.5 border-b border-rule px-3 py-2 last:border-b-0">
+            <div class="flex flex-col gap-1.5 border-b border-line-thin px-3 py-2 last:border-b-0">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span class="truncate text-body font-medium text-ink">{lease.title}</span>
@@ -277,7 +277,7 @@
                   </summary>
 
                   {#if openLease === lease.id}
-                    <div class="reveal mt-1 flex flex-col gap-1.5 bg-panel px-2.5 py-2">
+                    <div class="reveal mt-1 flex flex-col gap-1.5 rounded-row bg-surface-regular px-2.5 py-2">
                       {#if $evidence.error}
                         <!-- Bare: the disclosure is already a surface. Only a
                              read, so it asks again by itself. -->
@@ -329,13 +329,13 @@
       <section class="flex flex-col gap-2.5">
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="label">What each refresh did</span>
-          <span class="hidden h-px flex-1 bg-rule sm:block"></span>
+          <span class="hidden h-px flex-1 bg-line-thin sm:block"></span>
         </div>
 
-        <section class=" border border-rule">
+        <section class="rounded-panel border border-line-thin">
           {#each runs as run (run.id)}
             <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule px-3 py-2 last:border-b-0"
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-thin px-3 py-2 last:border-b-0"
             >
               <span class="shrink-0 text-meta text-ink-2">{relativeTime(run.startedAt)}</span>
               <span class="numeric min-w-0 flex-1 text-meta text-ink-3">{account(run)}</span>

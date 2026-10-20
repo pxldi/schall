@@ -1,12 +1,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, setup, within } from '@testing-library/svelte';
-import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
+import { cleanup, render, screen, setup, within } from '@testing-library/svelte';
 import { createRawSnippet, tick } from 'svelte';
 import { shimTheMissingBrowser } from './ui/test-window';
 
-// The top strip is the chrome every screen is drawn inside (ADR 0042): the
-// wordmark, the seven destinations each with its number key, what is running,
-// and search. A key strip along the foot names the screen's keys. There is no
+// The top bar is the chrome every screen is drawn inside (ADR Duoton): the
+// wordmark, the seven destinations as named pills, and search, sitting on the
+// page's print. There is no side rail, no readout, no per-room marks, and no
 // phone form of it.
 
 // Where the reader is. The shell reads it to decide which destination is the
@@ -38,16 +37,10 @@ vi.mock('$app/navigation', () => ({
 
 const { default: AppShell } = await import('./AppShell.svelte');
 
-/** What the strip's counts read: the review queue and the paused imports. */
-let questions = { wants: 0, folders: 0 };
-
 function opened() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    AppShell,
-    { children: createRawSnippet(() => ({ render: () => '<p>a page</p>' })) },
-    { wrapper: QueryClientProvider, wrapperProps: { client } } as never
-  );
+  return render(AppShell, {
+    children: createRawSnippet(() => ({ render: () => '<p>a page</p>' }))
+  });
 }
 
 /** The seven, in the order the top bar draws them. */
@@ -59,24 +52,10 @@ beforeAll(shimTheMissingBrowser);
 beforeEach(() => {
   address = 'http://localhost/';
   arrivals = [];
-  questions = { wants: 0, folders: 0 };
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      const body = url.startsWith('/api/v1/review-queue')
-        ? { items: [], total: questions.wants, offset: 0 }
-        : url.startsWith('/api/v1/downloads')
-          ? { items: [], total: questions.folders, offset: 0 }
-          : { activeDownloadCount: 0, sourceLoggedOutSince: null, sourceSilencedUntil: null };
-      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    })
-  );
 });
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 describe('AppShell', () => {
@@ -159,30 +138,15 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Playlists' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('numbers each destination with the key that opens it', () => {
+  it('draws no count or state mark on any destination', () => {
     opened();
 
-    const nav = screen.getByRole('navigation', { name: 'Sections' });
-    expect(nav.textContent?.replace(/\s+/g, '')).toBe(
-      '1Overview2Artists3Playlists4Downloads5Review6Library7Settings'
-    );
-  });
-
-  it('opens a destination from its number key', async () => {
-    const { goto } = await import('$app/navigation');
-    opened();
-
-    await fireEvent.keyDown(document.body, { key: '2' });
-
-    expect(goto).toHaveBeenCalledWith('/artists');
-  });
-
-  it('counts what Review holds beside its name', async () => {
-    questions = { wants: 2, folders: 1 };
-    opened();
-
-    expect(await screen.findByText('3 to decide')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Review' }).textContent).toContain('3');
+    // The owner scrapped the pills, the dots and the slskd reading alike:
+    // a destination is its icon and its name, nothing else.
+    for (const nav of screen.getAllByRole('navigation')) {
+      expect(nav.textContent).not.toMatch(/\d/);
+    }
+    expect(screen.queryByRole('link', { name: /slskd/ })).toBeNull();
   });
 
   it('names no settings category, and calls Settings the page being displayed', () => {

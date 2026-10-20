@@ -178,13 +178,13 @@
 
 {#if open}
   <div
-    class="scrim z-50 flex items-center justify-center p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[8px]"
     role="presentation"
     onmousedown={scrimPress}
     transition:fade={{ duration: motionMs('surface') }}
   >
     <div
-      class="flex max-h-full w-full max-w-md flex-col overflow-hidden overlay-panel"
+      class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-panel border border-[rgba(232,233,231,0.09)] bg-[rgba(32,34,39,0.55)] backdrop-blur-[14px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="follow-label-title"
@@ -192,8 +192,8 @@
       bind:this={panel}
     >
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
-        <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-          <h2 id="follow-label-title" class=" text-lead font-bold">Follow label</h2>
+        <div class="flex flex-none items-center gap-3 border-b border-line-thin px-4 py-3.5">
+          <h2 id="follow-label-title" class="font-display text-lead font-bold">Follow label</h2>
           {#if showingCandidates && candidates.length > 0}
             <span class="text-meta text-ink-3">
               {candidates.length}
@@ -201,7 +201,7 @@
             </span>
           {/if}
           <button
-            class="ml-auto grid size-6 flex-none place-items-center text-ink-3 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+            class="ml-auto grid size-6 flex-none place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
             type="button"
             onclick={close}
             disabled={inFlight}
@@ -253,11 +253,11 @@
                 {#each candidates as result (result.musicbrainzId)}
                   <button
                     type="button"
-                    class="flex w-full items-center gap-3 border-b border-rule px-3 py-2 text-left transition last:border-b-0 hover:bg-raised focus:bg-raised focus:outline-none"
+                    class="flex w-full items-center gap-3 border-b border-line-thin px-3 py-2 text-left transition last:border-b-0 hover:bg-surface-thick focus:bg-surface-thick focus:outline-none"
                     onclick={() => select(result)}
                   >
                     <span
-                      class="grid size-4 shrink-0 place-items-center bg-raised text-micro font-semibold text-ink-2"
+                      class="grid size-4 shrink-0 place-items-center rounded-row bg-ok/14 text-micro font-bold text-ok"
                     >
                       {result.name.slice(0, 1).toUpperCase()}
                     </span>
@@ -291,7 +291,7 @@
         </div>
 
         <div
-          class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
+          class="flex flex-none items-center justify-end gap-2 border-t border-line-thin px-4 py-3"
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
           <Button type="submit" disabled={!selectedLabel || inFlight}>

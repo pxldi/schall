@@ -92,7 +92,7 @@
 <section class="flex min-w-0 flex-col" aria-labelledby="popular-heading">
   <h2
     id="popular-heading"
-    class="border-b border-rule pb-1.5 text-body font-semibold text-ink"
+    class="border-b border-line-thin pb-1.5 text-[0.9375rem] font-semibold text-ink"
   >
     Popular
   </h2>
@@ -108,10 +108,10 @@
           {#each $popular.data.items as track, index (track.recordingId)}
             {@const done = held(track)}
             <li
-              class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 px-1.5 py-1"
+              class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 rounded-row px-1.5 py-1"
             >
               <span class="numeric text-right text-meta text-ink-4">{index + 1}</span>
-              <span class="size-10 overflow-hidden bg-raised {done ? '' : 'opacity-60'}">
+              <span class="size-10 overflow-hidden rounded-tight bg-surface-thick {done ? '' : 'opacity-60'}">
                 <Cover
                   src={track.albumId && track.hasCover
                     ? `/api/v1/albums/${track.albumId}/cover?cached=1`

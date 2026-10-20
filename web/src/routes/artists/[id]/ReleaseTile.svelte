@@ -49,47 +49,48 @@
 <div class="want-tile relative flex w-19 shrink-0 flex-col" data-held={owned > 0 ? 'some' : 'none'}>
   <a
     href={`/releases/${release.id}`}
-    class="group flex flex-col gap-1"
+    class="group flex flex-col gap-1 rounded-tight"
     title={`${release.title} · ${leaving || state}`}
   >
     <span
-      class="relative block size-19 overflow-hidden rounded-cover bg-raised"
+      class="relative block size-19 overflow-hidden rounded-row bg-surface-thick transition-transform duration-200 group-hover:-translate-y-0.5"
     >
       <!-- A release with nothing held is faded so the ones in the library
            stand out. Only cached covers are asked for, as everywhere a page
-           draws many. -->
+           draws many (ADR Duoton). -->
       <span class="block size-full {owned === 0 ? 'opacity-[0.38]' : ''}">
         <Cover
           src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
           seed={release.id}
+          inks={release.inks}
           class="size-full object-cover"
         />
       </span>
       {#if leaving}
         <span
-          class="absolute right-1 bottom-1 grid size-4.5 place-items-center bg-ground text-ink-2"
+          class="absolute right-1 bottom-1 grid size-4.5 place-items-center rounded-pill bg-ground/80 text-ink-2"
           aria-label={leaving}
         >
           <Icon name="delete" size="sm" class="size-3" />
         </span>
       {:else if complete}
         <span
-          class="absolute right-1 bottom-1 grid size-4.5 place-items-center bg-ground text-ok [--plate:currentColor]"
+          class="absolute right-1 bottom-1 grid size-4.5 place-items-center rounded-pill bg-ground/80 text-ok [--plate:currentColor]"
           aria-label="Complete"
         >
           <Icon name="check" size="sm" class="size-3" />
         </span>
       {:else if partial}
         <span
-          class="numeric absolute right-1 bottom-1 bg-ground px-1.5 py-px text-micro font-semibold text-ink"
+          class="numeric absolute right-1 bottom-1 rounded-pill bg-ground/80 px-1.5 py-px text-[0.625rem] font-semibold text-ink"
           aria-label={`${owned} of ${countable}`}>{owned}/{countable}</span
         >
       {/if}
     </span>
-    <span class="line-clamp-2 text-meta leading-tight font-semibold {owned > 0 ? 'text-ink' : 'text-ink-2'}">
+    <span class="line-clamp-2 text-[0.71875rem] leading-tight font-bold tracking-[-0.01em] {owned > 0 ? 'text-ink' : 'text-ink-2'}">
       {release.title}
     </span>
-    <span class="numeric -mt-0.5 truncate text-micro text-ink-3">{meta}</span>
+    <span class="numeric -mt-0.5 truncate text-[0.65625rem] text-ink-3">{meta}</span>
   </a>
   {#if wantable}
     <WantToggle
@@ -98,7 +99,7 @@
       title={release.title}
       {onwant}
       {onunwant}
-      class="absolute top-1 right-1 bg-ground"
+      class="absolute top-1 right-1 bg-ground/70 backdrop-blur-sm"
     />
   {/if}
 </div>

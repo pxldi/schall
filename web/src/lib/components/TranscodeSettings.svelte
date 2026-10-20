@@ -94,7 +94,7 @@
 {:else}
   <Card>
     <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Transcode after import</h2>
+      <h2 class="font-display text-lead font-bold text-ink">Transcode after import</h2>
       <!-- "off" before the setting is read is a claim about it, and a wrong one
            for somebody who turned it on. -->
       {#if $imports.isPending}
@@ -135,19 +135,19 @@
     <div class="flex flex-col">
       <button
         type="button"
-        class="group flex items-start gap-2.5 border-b border-rule py-2.5 text-left"
+        class="group flex items-start gap-2.5 border-b border-line-thin py-2.5 text-left"
         disabled={$imports.isPending || $savePolicy.isPending}
         onclick={() => $savePolicy.mutate({ when: 'lossless' })}
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-[15px] place-items-center transition {when === 'lossless'
-              ? 'bg-ink'
-              : 'border border-rule-strong group-hover:border-rule-strong'}"
+            class="grid size-[15px] place-items-center rounded-tight transition {when === 'lossless'
+              ? 'bg-accent'
+              : 'border border-line-thick group-hover:border-line-live'}"
           >
             {#if when === 'lossless'}<Icon name="check"
                 size={10}
-                class="text-ground" />{/if}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -167,13 +167,13 @@
       >
         <span class="mt-px grid size-6 shrink-0 place-items-center">
           <span
-            class="grid size-[15px] place-items-center transition {when === 'above_target'
-              ? 'bg-ink'
-              : 'border border-rule-strong group-hover:border-rule-strong'}"
+            class="grid size-[15px] place-items-center rounded-tight transition {when === 'above_target'
+              ? 'bg-accent'
+              : 'border border-line-thick group-hover:border-line-live'}"
           >
             {#if when === 'above_target'}<Icon name="check"
                 size={10}
-                class="text-ground" />{/if}
+                class="text-accent-ink" />{/if}
           </span>
         </span>
         <span class="flex min-w-0 flex-col gap-1">
@@ -211,7 +211,7 @@
 
   <Card>
     <div class="flex flex-wrap items-center gap-2.5">
-      <h2 class=" text-lead font-bold text-ink">Transcode the library</h2>
+      <h2 class="font-display text-lead font-bold text-ink">Transcode the library</h2>
       <Button
         variant="outline"
         size="sm"

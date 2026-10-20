@@ -27,7 +27,7 @@
 </script>
 
 <div
-  class="border-b border-rule {sticky ? 'bg-ground sticky top-[var(--topbar-height)] z-20' : ''}"
+  class="border-b border-line-thin {sticky ? 'shell-ground sticky top-[var(--topbar-height)] z-20' : ''}"
   role={label ? 'group' : undefined}
   aria-label={label}
 >

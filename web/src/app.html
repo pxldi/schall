@@ -2,34 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- `viewport-fit=cover` makes the `env(safe-area-inset-*)` values
-         readable on a phone with rounded corners. -->
+    <!-- `viewport-fit=cover` lets the page draw under the rounded corners and the
+         home indicator of a phone that has them. It is what makes the
+         `env(safe-area-inset-*)` values readable at all: without it they are
+         always zero, and the padding written against them does nothing. The
+         insets are then added back where something would otherwise sit under the
+         hardware — the top of the mobile header, the bottom of the drawer and of
+         the review answer bar. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#e4e2dc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0f12" />
+    <!-- The mark the app already wears, at the one size nothing controls. It is
+         drawn on transparency, so a browser puts it on its own tab colour and it
+         reads in a light chrome and a dark one alike. -->
     <link rel="icon" href="%sveltekit.assets%/logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="%sveltekit.assets%/logo.svg" />
-    <!-- The faces the first screen draws, asked for beside the stylesheet
-         instead of after it has been read. `crossorigin` is required even on
-         this server: a font is fetched anonymously, and a preload without it
-         is downloaded twice. -->
+    <!-- The one face the first screen draws, asked for here rather than left
+         to be found later. A browser does not know a font exists until it has
+         downloaded the stylesheet, read it, and met text that needs the font.
+         Naming the file here starts it downloading beside the stylesheet.
+
+         `crossorigin` is required even though the file is served from this
+         same server. A font is always fetched anonymously, so a preload without
+         it is treated as a different request and downloaded twice. -->
     <link
       rel="preload"
-      href="%sveltekit.assets%/fonts/barlow-latin-400.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="%sveltekit.assets%/fonts/barlow-latin-600.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="%sveltekit.assets%/fonts/martian-mono-latin-var.woff2"
+      href="%sveltekit.assets%/fonts/bricolage-grotesque-latin-var.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -38,26 +35,12 @@
       name="description"
       content="Schall keeps your self-hosted music collection complete."
     />
-    <!-- The theme is set before the first paint, so a light reader never sees
-         the dark ground flash (lib/theme.svelte.ts keeps it after that). -->
-    <script>
-      (function () {
-        var choice = null;
-        try {
-          choice = localStorage.getItem('schall:appearance');
-        } catch (error) {}
-        if (choice !== 'light' && choice !== 'dark') {
-          choice = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-        }
-        document.documentElement.dataset.theme = choice;
-      })();
-    </script>
+    <!-- The ground colour is inlined so a cold load paints it before the
+         bundle arrives. There is no splash: the owner found the breathing
+         wordmark worse than a plain ground (2026-09-08). -->
     <style>
       html {
-        background: #141414;
-      }
-      html[data-theme='light'] {
-        background: #e4e2dc;
+        background: #0d0f12;
       }
     </style>
     %sveltekit.head%

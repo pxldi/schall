@@ -562,7 +562,7 @@
         aria-label="Search releases"
         class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
       />
-      <span class="numeric bg-raised px-1.5 py-0.5 text-micro font-medium text-ink-3">
+      <span class="numeric rounded-row bg-surface-thick px-1.5 py-0.5 text-micro font-medium text-ink-3">
         /
       </span>
     </label>
@@ -573,12 +573,12 @@
        filter comes in on a link, so it has to name the artist an id cannot and
        offer the way back out to everybody. -->
   {#if artistId}
-    <div class="flex items-center gap-1.5 bg-raised py-1 pr-1 pl-2">
+    <div class="flex items-center gap-1.5 rounded-row bg-surface-thick py-1 pr-1 pl-2">
       <Icon name="artist" size={11} class="shrink-0 text-ink-4" />
       <span class="max-w-44 truncate text-meta font-medium text-ink">{artistName}</span>
       <button
         type="button"
-        class="grid size-4 shrink-0 place-items-center text-ink-3 transition hover:bg-raised hover:text-ink"
+        class="grid size-4 shrink-0 place-items-center rounded-row text-ink-3 transition hover:bg-surface-thick hover:text-ink"
         aria-label="Show every artist"
         onclick={clearArtist}
       >
@@ -615,7 +615,7 @@
   <Button
     variant="outline"
     size="sm"
-    class={selecting ? 'border-rule-strong bg-panel' : ''}
+    class={selecting ? 'border-line-thick bg-surface-regular' : ''}
     aria-pressed={selecting}
     onclick={() => setSelecting(!selecting)}
   >
@@ -762,11 +762,11 @@
   >
     <!-- The table's own box height, 70dvh, so the rows land in the space the
          wait held. 28 rows fill that box on a 4K viewport. -->
-    <div class="max-h-[70dvh] overflow-hidden border border-rule">
-      <div class="h-9 border-b border-rule" aria-hidden="true"></div>
+    <div class="max-h-[70dvh] overflow-hidden rounded-panel border border-line-thin">
+      <div class="h-9 border-b border-line-thin" aria-hidden="true"></div>
       {#each Array(28) as _, placeholderIndex (placeholderIndex)}
         <div
-          class="h-[3.46875rem] border-b border-rule px-3 py-2 last:border-b-0"
+          class="h-[3.46875rem] border-b border-line-thin px-3 py-2 last:border-b-0"
           aria-hidden="true"
         >
           <Skeleton class="h-full" />
@@ -795,7 +795,7 @@
          `scroll-pt-9` is the header's own height, so a row jumped to by a
          letter lands under the names rather than behind them. -->
     <Table.Root
-      wrapperClass="rise max-h-[70dvh] min-w-0 flex-1 scroll-pt-9 scroll-smooth border border-rule"
+      wrapperClass="rise max-h-[70dvh] min-w-0 flex-1 scroll-pt-9 scroll-smooth rounded-panel border border-line-thin"
     >
       <Table.Header>
         <!-- The row of column names, which are also the controls that sort by
@@ -830,7 +830,7 @@
           <Table.Head>
             <span class="flex h-full items-center gap-2">
               {@render Head('Release', 'title')}
-              <span class="h-3 w-px bg-rule"></span>
+              <span class="h-3 w-px bg-line-thin"></span>
               {@render Head('Artist', 'artist')}
             </span>
           </Table.Head>
@@ -885,7 +885,7 @@
                 <span
                   role="img"
                   aria-label={`Cover for ${release.title}`}
-                  class="grid size-10 shrink-0 place-items-center overflow-hidden"
+                  class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-row"
                 >
                   <Cover
                     src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
@@ -972,8 +972,8 @@
         {#each jumpLetters as letter (letter.key)}
           <button
             type="button"
-            class="numeric grid h-5 w-7 place-items-center text-meta font-semibold transition {letter.id
-              ? 'text-ink-2 hover:bg-raised hover:text-ink'
+            class="numeric grid h-5 w-7 place-items-center rounded-row text-meta font-semibold transition {letter.id
+              ? 'text-ink-2 hover:bg-surface-thick hover:text-ink'
               : 'text-ink-3'}"
             disabled={!letter.id}
             aria-label={`Jump to ${letter.key}`}
@@ -1032,11 +1032,11 @@
     class="grid size-6 place-items-center"
   >
     <span
-      class="grid size-[15px] place-items-center transition {checked
-        ? 'bg-ink'
-        : 'border border-rule-strong hover:border-rule-strong'}"
+      class="grid size-[15px] place-items-center rounded-tight transition {checked
+        ? 'bg-accent'
+        : 'border border-line-thick hover:border-line-live'}"
     >
-      {#if checked}<Icon name="check" size={10} class="text-ground" />{/if}
+      {#if checked}<Icon name="check" size={10} class="text-accent-ink" />{/if}
     </span>
   </span>
 {/snippet}

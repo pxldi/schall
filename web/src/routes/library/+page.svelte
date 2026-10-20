@@ -3,7 +3,8 @@
   import { page } from '$app/state';
   import { api } from '$lib/api';
   import { formatBytes, urlChoice } from '$lib/utils';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
+  import Hero from '$lib/components/Hero.svelte';
   import DuplicateRecordings from '$lib/components/DuplicateRecordings.svelte';
   import LibraryFiles from '$lib/components/LibraryFiles.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
@@ -47,14 +48,29 @@
   });
 
   // The counts beside the three view chips. Each is a cheap read of its own —
-  // the release total, the library summary, the held-twice total — and each
+  // the first eight releases (the print is made of them), the library summary, the held-twice total — and each
   // is kept under the query key its own view already reads by, so opening that
   // view never asks twice for what this row already knows.
   const releaseTotal = createQuery({
     queryKey: ['releases', 'library-head'],
-    queryFn: () => api.releases({ scope: 'library', limit: 1 })
+    queryFn: () => api.releases({ scope: 'library', limit: 8 })
   });
 
+  // The print is the first releases in the catalogue's own order, artist A to
+  // Z, inked from the first (ADR Duoton). Only cached covers are asked for,
+  // as the list below does; the rest are drawn as generated art.
+  usePagePrint(() => {
+    const items = $releaseTotal.data?.items;
+    if (!items) return undefined;
+    return {
+      covers: items.map((release) => ({
+        src: release.hasCover ? `${coverSrc(release.id)}?cached=1` : null,
+        seed: release.id,
+        inks: release.inks
+      })),
+      height: 15
+    };
+  });
   const librarySummary = createQuery({ queryKey: ['library'], queryFn: api.library });
   const heldTwiceTotal = createQuery({
     queryKey: ['library-duplicates', 'to-decide-total'],
@@ -84,13 +100,13 @@
 
 <!-- Only the size under the title: the release and file counts are on the
      chips below. -->
-<PageHeader title="Library">
+<Hero title="Library" section>
   {#snippet sub()}
     {#if $librarySummary.data}
       <span class="numeric">{formatBytes($librarySummary.data.totalSizeBytes)}</span>
     {/if}
   {/snippet}
-</PageHeader>
+</Hero>
 
 <!-- One page for the music, in the two shapes it comes in. They were two pages
      saying the same thing from either end: the catalogue is what the library is
@@ -114,7 +130,7 @@
 </ControlRail>
 
 {#if failedCount}
-  <div class="px-5 pb-2">
+  <div class="px-4 pb-2 sm:px-6">
     <ErrorNote error={failedCount.error} fallback="Counts didn't load." retry={retryCounts} />
   </div>
 {/if}

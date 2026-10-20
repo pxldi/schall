@@ -27,8 +27,8 @@
     avoidCollisions
     escapeKeydownBehavior="close"
     class={cn(
-      'overlay-panel z-50 min-w-[9rem] max-w-[calc(100vw-1.5rem)] overflow-hidden p-1',
-      'text-body text-ink outline-none',
+      'overlay-panel z-50 min-w-[9rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-panel p-1',
+      'text-dense-body text-ink outline-none',
       className
     )}
     {...rest}

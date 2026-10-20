@@ -95,12 +95,12 @@ describe('a picture that does not exist', () => {
     expect(draw({ src, fallback: '♪' }).image()).toBeNull();
   });
 
-  it('draws the placeholder square for a missing picture when given a seed', async () => {
+  it('draws generated art for a missing picture when given a seed', async () => {
     const first = draw({ src: '/api/v1/albums/no-art/cover', seed: 'no-art', fallback: 'NA' });
     await fireEvent.error(first.image()!);
     await tick();
 
-    expect(first.container.querySelector('[data-placeholder]')?.getAttribute('data-placeholder')).toBe('no-art');
+    expect(first.container.querySelector('canvas')?.getAttribute('data-generated')).toBe('no-art');
     expect(first.container.textContent).not.toContain('NA');
   });
 });

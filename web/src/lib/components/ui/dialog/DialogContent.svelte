@@ -9,7 +9,7 @@
   //
   // A `Portal` puts the panel at the end of the document instead of where the
   // trigger sits. A dialog opened from inside a table cell, a scrolling list or
-  // a panel that hides its overflow is otherwise clipped by whichever ancestor
+  // a panel with rounded corners is otherwise clipped by whichever ancestor
   // hides its overflow — the panel is drawn, and half of it is not on screen.
   //
   // Three behaviours are named rather than left to the default, because they
@@ -53,8 +53,8 @@
       // rather than growing past the window after the page's own scrollbar has
       // been locked away.
       'overlay-panel fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] max-w-md',
-      '-translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden',
-      'text-body text-ink outline-none',
+      '-translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-panel',
+      'text-dense-body text-ink outline-none',
       className
     )}
     {...rest}
@@ -62,7 +62,7 @@
     {@render children?.()}
     {#if showClose}
       <DialogPrimitive.Close
-        class="press tap absolute right-3 top-3 grid size-7 place-items-center text-ink-3 transition hover:bg-raised hover:text-ink"
+        class="press tap absolute right-3 top-3 grid size-7 place-items-center rounded-control text-ink-3 transition hover:bg-surface-thick hover:text-ink"
         aria-label="Close"
       >
         <Icon name="close" size={15} />

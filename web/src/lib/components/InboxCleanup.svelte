@@ -71,7 +71,7 @@
 
 <Card>
   <div class="flex flex-wrap items-center gap-2.5">
-    <h2 class=" text-lead font-bold text-ink">Clean the inbox</h2>
+    <h2 class="font-display text-lead font-bold text-ink">Clean the inbox</h2>
     <Button
       variant="outline"
       size="sm"
@@ -134,7 +134,7 @@
   {#if counted}
     <table class="w-full text-meta">
       <thead>
-        <tr class="border-b border-rule text-ink-3">
+        <tr class="border-b border-line-thin text-ink-3">
           <th scope="col" class="py-1 text-left font-medium">To delete</th>
           <th scope="col" class="py-1 text-right font-medium">Files</th>
           <th scope="col" class="py-1 text-right font-medium">Size</th>
@@ -142,14 +142,14 @@
       </thead>
       <tbody>
         {#each deleteClasses as row (row.class)}
-          <tr class="border-b border-rule">
+          <tr class="border-b border-line-thin">
             <td class="py-1 text-ink-2">{classNames[row.class]}</td>
             <td class="numeric py-1 text-right text-ink">{row.files.toLocaleString()}</td>
             <td class="numeric py-1 text-right text-ink">{formatBytes(row.bytes)}</td>
           </tr>
         {/each}
         {#each keptClasses as row (row.class)}
-          <tr class="border-b border-rule">
+          <tr class="border-b border-line-thin">
             <td class="py-1 text-ink-3">{classNames[row.class]} · kept</td>
             <td class="numeric py-1 text-right text-ink-3">{row.files.toLocaleString()}</td>
             <td class="numeric py-1 text-right text-ink-3">{formatBytes(row.bytes)}</td>

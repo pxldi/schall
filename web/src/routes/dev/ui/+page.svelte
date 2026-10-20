@@ -59,8 +59,8 @@
 
 <div class="mx-auto flex max-w-4xl flex-col gap-10 p-6">
   <header class="flex flex-col gap-1">
-    <h1 class=" text-title font-bold text-ink">Component gallery</h1>
-    <p class="text-body text-ink-3">
+    <h1 class="font-display text-dense-display font-bold text-ink">Component gallery</h1>
+    <p class="text-dense-body text-ink-3">
       Everything in <code class="numeric">lib/components/ui/</code>. Development only.
     </p>
   </header>
@@ -93,7 +93,7 @@
 
   <section class="flex flex-col gap-3">
     <h2 class="label">Checkbox</h2>
-    <div class="flex flex-col gap-2 text-body text-ink">
+    <div class="flex flex-col gap-2 text-dense-body text-ink">
       <label class="flex items-center gap-2">
         <Checkbox bind:checked />
         On
@@ -197,7 +197,7 @@
         {/snippet}
       </Popover.Trigger>
       <Popover.Content class="w-64">
-        <p class="text-body text-ink">
+        <p class="text-dense-body text-ink">
           A panel anchored to the control that opened it.
         </p>
       </Popover.Content>
@@ -288,7 +288,7 @@
 
   <section class="flex flex-col gap-3">
     <h2 class="label">Table</h2>
-    <div class="max-h-40 overflow-y-auto border border-rule">
+    <div class="max-h-40 overflow-y-auto rounded-panel border border-line-thin">
       <Table.Root>
         <Table.Header>
           <Table.Row>

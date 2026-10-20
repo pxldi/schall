@@ -29,7 +29,7 @@
     // decision is said here, on the button Bits UI draws in its place.
     'field flex w-full items-center justify-between gap-2 text-left font-sans',
     'data-placeholder:text-ink-4',
-    'transition hover:border-rule-strong',
+    'transition hover:border-line-thick',
     'disabled:pointer-events-none disabled:opacity-50',
     className
   )}

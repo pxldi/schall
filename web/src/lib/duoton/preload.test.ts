@@ -11,19 +11,19 @@ afterEach(() => {
 
 describe('a page change', () => {
   it('opens once the page data has arrived', async () => {
-    let answer!: (value: { title: string }) => void;
+    let answer!: (value: { inks: string }) => void;
     let opened = false;
     const loading = preloadPage({
       queryKey: ['preload', 'arrives'],
-      queryFn: () => new Promise<{ title: string }>((resolve) => (answer = resolve))
+      queryFn: () => new Promise<{ inks: string }>((resolve) => (answer = resolve))
     }).then(() => (opened = true));
 
     await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
     expect(opened).toBe(false);
-    answer({ title: 'Signal Fires' });
+    answer({ inks: '#0d1420' });
     await loading;
 
-    expect(queryClient.getQueryData(['preload', 'arrives'])).toEqual({ title: 'Signal Fires' });
+    expect(queryClient.getQueryData(['preload', 'arrives'])).toEqual({ inks: '#0d1420' });
   });
 
   it('opens on the placeholders when the data is slower than the wait', async () => {
@@ -42,5 +42,18 @@ describe('a page change', () => {
     await expect(
       preloadPage({ queryKey: ['preload', 'fails'], queryFn: () => Promise.reject(new Error('down')), retry: false })
     ).resolves.toBeUndefined();
+  });
+
+  // Waiting for the print pictures as well made a click feel ignored.
+  it('opens without waiting for the print pictures', async () => {
+    vi.useFakeTimers();
+    let opened = false;
+    void preloadPage({ queryKey: ['preload', 'print'], queryFn: () => Promise.resolve({}) }, () => ({
+      covers: ['an-album-whose-cover-never-lands']
+    })).then(() => (opened = true));
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(opened).toBe(true);
   });
 });

@@ -14,10 +14,11 @@
   import Icon from '$lib/components/Icon.svelte';
   import { api, type LabelListItem, type MonitorLevel } from '$lib/api';
   import { calendarDate } from '$lib/utils';
+  import BackLink from '$lib/components/BackLink.svelte';
   import Button from '$lib/components/Button.svelte';
   import Cover from '$lib/components/Cover.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { coverSrc } from '$lib/cover-size';
+  import Hero from '$lib/components/Hero.svelte';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
@@ -75,6 +76,21 @@
   const followedTotal = $derived($labels.data?.followedCount);
   const artistsTotal = $derived($dashboard.data?.artistCount);
 
+  // A strip of the labels' covers, one each, inked from the first (ADR Duoton).
+  usePagePrint(() => {
+    if (!$labels.data) return undefined;
+    return {
+      covers: items
+        .filter((label) => label.coverAlbumIds?.length)
+        .slice(0, 8)
+        .map((label) => ({
+          src: coverSrc(label.coverAlbumIds[0]),
+          seed: label.coverAlbumIds[0],
+          inks: label.coverInks
+        }))
+    };
+  });
+
   function invalidate() {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ['labels'] }),
@@ -120,7 +136,10 @@
 
 <svelte:head><title>Labels · Schall</title></svelte:head>
 
-<PageHeader title="Labels" path={[{ label: 'Artists', href: '/artists' }]}>
+<Hero title="Labels" size="xl">
+  {#snippet back()}
+    <BackLink fallback="/artists" label="Artists" />
+  {/snippet}
   {#snippet sub()}
     <!-- The counts hold their place while the list is read, as /artists does,
          so the line does not grow when they land. A failed read shows a dash. -->
@@ -161,7 +180,7 @@
       <Icon name="plus" size="sm" /> Follow label
     </Button>
   {/snippet}
-</PageHeader>
+</Hero>
 
 <ControlRail>
   <form class="w-full sm:w-56" onsubmit={(event) => event.preventDefault()}>
@@ -177,14 +196,14 @@
   </form>
 </ControlRail>
 
-<div class="flex flex-col gap-4 px-5 py-5">
+<div class="flex flex-col gap-4 px-4 sm:px-6 py-5">
   {#if $labels.isError}
     <ErrorNote error={$labels.error} retry={() => $labels.refetch()} />
   {:else}
     <Settle pending={$labels.isPending}>
       {#snippet placeholder()}
         <ul
-          class="max-h-[calc(100dvh-9rem)] flex flex-col divide-y divide-rule overflow-hidden"
+          class="max-h-[calc(100dvh-9rem)] flex flex-col divide-y divide-line-thin overflow-hidden"
           role="status"
           aria-label="Loading labels"
         >
@@ -217,7 +236,7 @@
         {/each}
 
         <div class="flex flex-col">
-          <div class={`grid ${COLUMNS} gap-x-4 border-b border-rule px-1 text-meta text-ink-3`}>
+          <div class={`grid ${COLUMNS} gap-x-4 border-b border-line-thin px-1 text-meta text-ink-3`}>
             <span></span>
             <span class="flex h-7 items-center">Label</span>
             <span class="flex h-7 items-center">Owned</span>
@@ -226,7 +245,7 @@
             <span class="flex h-7 items-center"></span>
           </div>
 
-          <ul class="flex flex-col divide-y divide-rule">
+          <ul class="flex flex-col divide-y divide-line-thin">
             {#each filtered as label (label.id)}
               <li class={`grid ${COLUMNS} min-h-[52px] items-center gap-x-4 px-1 py-2`}>
                 {#if confirming === label.id}
@@ -254,8 +273,8 @@
                   </div>
                 {:else}
                   <!-- The label's most-held cover. Only covers already cached
-                       are named, and a label with none gets the flat placeholder. -->
-                  <span class="size-[2.625rem] overflow-hidden rounded-cover" aria-hidden="true">
+                       are named, and a label with none gets generated art. -->
+                  <span class="size-[2.625rem] overflow-hidden rounded-row" aria-hidden="true">
                     <Cover
                       src={label.coverAlbumIds?.[0] ? coverSrc(label.coverAlbumIds[0]) : undefined}
                       seed={label.id}

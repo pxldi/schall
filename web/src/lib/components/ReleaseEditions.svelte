@@ -112,13 +112,13 @@
       <!-- Three blocks: most releases have one to six pressings, and forty
            boxes collapsing into two read as the page breaking. -->
       <div
-        class="flex flex-col border border-rule"
+        class="flex flex-col rounded-panel border border-line-thin"
         role="status"
         aria-label="Loading editions"
       >
         {#each Array(3) as _, placeholderIndex (placeholderIndex)}
           <div
-            class="h-28 border-b border-rule px-4 py-3 last:border-b-0"
+            class="h-28 border-b border-line-thin px-4 py-3 last:border-b-0"
             aria-hidden="true"
           >
             <Skeleton class="h-full" />
@@ -146,7 +146,7 @@
         <p class="text-body text-ink-2">MusicBrainz lists no pressings of this release.</p>
       </EmptyPanel>
     {:else}
-      <div class=" border border-rule">
+      <div class="rounded-panel border border-line-thin">
         {#each blocks as edition, index (edition.musicbrainzReleaseId)}
           {@const selected = edition.musicbrainzReleaseId === selectedId}
           <!-- The selected block keeps the surface every other block sits on. A
@@ -154,7 +154,7 @@
                under the contrast floor, and the tick and the word beside the
                title already say which one is chosen. -->
           <div
-            class="min-h-28 px-4 py-3 {index ? 'border-t border-rule' : ''}"
+            class="min-h-28 px-4 py-3 {index ? 'border-t border-line-thin' : ''}"
             aria-current={selected ? 'true' : undefined}
             data-edition="true"
           >
@@ -169,7 +169,7 @@
                 </span>
               {:else}
                 <button
-                  class="tap shrink-0 border border-rule px-2.5 py-1 text-meta text-ink-2 transition hover:bg-raised hover:text-ink disabled:opacity-50"
+                  class="tap shrink-0 rounded-control border border-line-thin px-2.5 py-1 text-meta text-ink-2 transition hover:bg-surface-thick hover:text-ink disabled:opacity-50"
                   disabled={pending}
                   onclick={() => onselect(edition.musicbrainzReleaseId)}
                 >
@@ -207,7 +207,7 @@
         <!-- The pressing in use is on screen and the rest are not. Said once, at
              the foot of the list, rather than in place of it. -->
         {#if error}
-          <div class="border-t border-rule px-4 py-3">
+          <div class="border-t border-line-thin px-4 py-3">
             <ErrorNote
               {error}
               bare

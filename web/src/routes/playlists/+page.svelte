@@ -5,16 +5,16 @@
   import { page } from '$app/state';
   import { api, type Playlist } from '$lib/api';
   import { isAuthError } from '$lib/errors';
-  import { coverSrc } from '$lib/cover-size';
+  import { coverSrc, usePagePrint } from '$lib/duoton';
   import { keepInUrl, urlChoice } from '$lib/utils';
-  import { playlistOrigin } from '$lib/playlists';
+  import { oncePerCover, playlistOrigin } from '$lib/playlists';
   import Button from '$lib/components/Button.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Cover from '$lib/components/Cover.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import ImportPlaylistFileModal from '$lib/components/ImportPlaylistFileModal.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Recommendations from '$lib/components/Recommendations.svelte';
@@ -76,14 +76,22 @@
   });
 
   const items = $derived($playlists.data?.items ?? []);
-  // Each playlist's cover is its first entry's release. One without a
-  // release yet draws the flat placeholder seeded with its own id.
+  // Each playlist's cover is its first entry's release (ADR Duoton). One
+  // without a release yet draws generated art seeded with its own id.
   function coverOf(playlist: Playlist) {
     return {
       src: playlist.coverReleaseId ? coverSrc(playlist.coverReleaseId) : null,
-      seed: playlist.id
+      seed: playlist.id,
+      inks: playlist.inks
     };
   }
+
+  // A strip of the lists' covers, in the inks of the first one, each release
+  // once.
+  const stripCovers = $derived(oncePerCover(items).slice(0, 6).map(coverOf));
+  usePagePrint(() =>
+    items.length ? { covers: stripCovers, inks: items[0].inks } : undefined
+  );
 
   const playlistSkeletonCount = $derived(Math.max($playlists.data?.items.length ?? 0, 4));
 
@@ -146,8 +154,9 @@
   onconfirm={() => removing && $remove.mutate(removing.id)}
 />
 
-<!-- The page's name, with the ways to follow a new playlist beside it. -->
-<PageHeader title="Playlists">
+<!-- The page's name over a strip of its playlists' covers, with the ways to
+     follow a new one beside it. -->
+<Hero title="Playlists" section>
   {#snippet actions()}
     <Button type="button" variant="outline" onclick={() => (fileModalOpen = true)}>
       <Icon name="upload" size="sm" />
@@ -177,7 +186,7 @@
       </Button>
     </form>
   {/snippet}
-</PageHeader>
+</Hero>
 
 <ControlRail>
   <Segmented
@@ -207,7 +216,7 @@
   </div>
 {/if}
 
-<div class="flex flex-col gap-4 px-5 py-5" class:hidden={view !== 'playlists'}>
+<div class="flex flex-col gap-4 px-4 sm:px-6 py-5" class:hidden={view !== 'playlists'}>
   {#if $follow.isError}
     <ErrorNote error={$follow.error} />
   {/if}
@@ -220,7 +229,7 @@
         <!-- The header strip and a covered row of the same height as the
              list's own, so the rows do not move down or grow when it lands. -->
         <div class="max-h-[calc(100dvh-11rem)] overflow-hidden">
-          <div class="h-7 border-b border-rule"></div>
+          <div class="h-7 border-b border-line-thin"></div>
           <SkeletonRows count={playlistSkeletonCount} cover label="Loading playlists" />
         </div>
       {/snippet}
@@ -238,21 +247,22 @@
              action column let a Spotify row's three buttons spill left over
              its owned count. -->
         <div class={`grid ${COLUMNS} gap-x-4`}>
-          <div class="col-span-full grid grid-cols-subgrid border-b border-rule px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
+          <div class="col-span-full grid grid-cols-subgrid border-b border-line-thin px-1 text-micro font-mono uppercase tracking-[0.08em] text-ink-3">
             <span class="flex h-7 items-center"></span>
             <span class="flex h-7 items-center">Playlist</span>
             <span class="flex h-7 items-center">Owned</span>
             <span class="flex h-7 items-center"></span>
           </div>
 
-          <ul class="col-span-full grid grid-cols-subgrid divide-y divide-rule">
+          <ul class="col-span-full grid grid-cols-subgrid divide-y divide-line-thin">
             {#each items as playlist (playlist.id)}
               {@const cover = coverOf(playlist)}
               <li class="col-span-full grid min-h-[52px] grid-cols-subgrid items-center px-1 py-2">
                 <Cover
                   src={cover.src ?? undefined}
                   seed={cover.seed}
-                  class="size-10 object-cover"
+                  inks={cover.inks}
+                  class="size-10 rounded-row object-cover"
                 />
                 <a
                   href={`/playlists/${playlist.id}`}
