@@ -982,3 +982,93 @@ describe('a follow that half lands', () => {
     );
   });
 });
+
+describe('the artist page cursor', () => {
+  const current = () =>
+    Array.from(
+      document.querySelectorAll('[data-release][data-cursor="true"], [data-recording][data-cursor="true"]')
+    ).map(
+      (node) => node.getAttribute('data-release') ?? node.getAttribute('data-recording')
+    );
+
+  it('walks the releases newest first and on into the popular tracks', async () => {
+    answeringReleases(
+      [
+        releaseRow('r1', 'Section.80', { firstReleaseDate: '2011-07-02' }),
+        releaseRow('r3', 'GNX', { firstReleaseDate: '2024-11-22' })
+      ],
+      [],
+      {
+        items: [
+          {
+            recordingId: 'c0ffee00-0000-4000-8000-000000000001',
+            title: 'HUMBLE.',
+            releaseTitle: 'DAMN.',
+            lengthMs: 177000,
+            listenCount: 900,
+            trackId: null,
+            albumId: null,
+            albumTitle: null,
+            hasCover: false,
+            held: false,
+            wantId: null,
+            wantStatus: null
+          }
+        ]
+      }
+    );
+    opened();
+    await screen.findByText('HUMBLE.');
+    await screen.findByText('GNX');
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(current()).toEqual(['r3']);
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(current()).toEqual(['r1']);
+    await fireEvent.keyDown(window, { key: 'j' });
+    expect(current()).toEqual(['c0ffee00-0000-4000-8000-000000000001']);
+  });
+
+  it('opens the release under the cursor with Enter', async () => {
+    const { goto } = await import('$app/navigation');
+    answeringReleases([releaseRow('r3', 'GNX', { firstReleaseDate: '2024-11-22' })]);
+    opened();
+    await screen.findByText('GNX');
+
+    await fireEvent.keyDown(window, { key: 'j' });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(goto).toHaveBeenCalledWith('/releases/r3');
+  });
+});
+
+describe('the follow buttons', () => {
+  it('follows an artist nobody follows at the default level when Follow is pressed', async () => {
+    const seen: { method: string; pathname: string; body?: string }[] = [];
+    answeringWithActions(detail({ followed: false }), seen);
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Follow' }));
+
+    await waitFor(() =>
+      expect(seen).toContainEqual(
+        expect.objectContaining({
+          method: 'PUT',
+          pathname: `/api/v1/artists/${artistID}/monitor`,
+          body: JSON.stringify({ level: 'main' })
+        })
+      )
+    );
+  });
+
+  it('asks before unfollowing when Unfollow is pressed', async () => {
+    const seen: { method: string; pathname: string }[] = [];
+    answeringWithActions(detail({ followed: true }), seen);
+    opened();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unfollow' }));
+
+    expect(await screen.findByText('Unfollow Talk Talk?')).toBeTruthy();
+    expect(seen.some((call) => call.method === 'DELETE')).toBe(false);
+  });
+});
