@@ -21,8 +21,12 @@
     onchange,
     label,
     quiet = false,
-    prefix
+    prefix,
+    class: className = ''
   }: {
+    // A width, for a list whose longest option would make the closed control
+    // wider than the room it has. The chosen name is cut with an ellipsis.
+    class?: string;
     options: Option[];
     value: string;
     onchange: (value: string) => void;
@@ -36,7 +40,7 @@
   } = $props();
 </script>
 
-<div class="relative inline-flex h-7 shrink-0 items-center gap-1.5">
+<div class="relative inline-flex h-7 shrink-0 items-center gap-1.5 {className}">
   {#if quiet && prefix}
     <span class="text-body text-ink-4">{prefix}</span>
   {/if}
@@ -44,8 +48,8 @@
     aria-label={label}
     onchange={(event) => onchange(event.currentTarget.value)}
     class={quiet
-      ? 'h-7 appearance-none bg-transparent py-0 pl-0 pr-4 text-body text-ink-2 outline-none transition hover:text-ink'
-      : 'h-full appearance-none border border-rule bg-raised py-0 pl-2.5 pr-6 text-body text-ink-2 outline-none transition hover:border-rule-strong hover:text-ink'}
+      ? 'h-7 min-w-0 appearance-none truncate bg-transparent py-0 pl-0 pr-4 text-body text-ink-2 outline-none transition hover:text-ink'
+      : 'h-full min-w-0 w-full appearance-none truncate border border-rule bg-raised py-0 pl-2.5 pr-6 text-body text-ink-2 outline-none transition hover:border-rule-strong hover:text-ink'}
   >
     {#each options as option (option.value)}
       <option value={option.value} selected={option.value === value}>{option.name}</option>

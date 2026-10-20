@@ -180,6 +180,11 @@ const pages: {
     ready: (page) => expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
   },
   {
+    name: 'library-files',
+    path: '/library?view=files',
+    ready: (page) => expect(page.locator('table:visible tbody tr').first()).toBeVisible()
+  },
+  {
     name: 'settings',
     path: '/settings/sources',
     ready: (page) => expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
@@ -206,9 +211,9 @@ for (const name of ['overview', 'artist', 'release', 'review', 'downloads']) {
   });
 }
 
-// The light theme follows the system, so the two redrawn pages are drawn in
-// it as well.
-for (const name of ['release', 'review']) {
+// The light theme follows the system, so the redrawn pages are drawn in it as
+// well.
+for (const name of ['release', 'review', 'library', 'settings']) {
   const { path, ready, mask } = pages.find((p) => p.name === name)!;
   test(`${name} in the light theme`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });

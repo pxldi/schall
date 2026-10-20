@@ -43,8 +43,8 @@ test.describe('the top strip', () => {
     );
   });
 
-  // The settings categories are listed once, in the section rail beside the
-  // content. The strip does not list them a second time.
+  // The settings categories are listed once, in the tab strip under the title.
+  // The top strip does not list them a second time.
   test('the settings categories are named once, not on the strip', async ({ page }) => {
     await page.goto('/settings/sources');
 
