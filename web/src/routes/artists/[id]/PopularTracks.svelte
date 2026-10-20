@@ -17,8 +17,8 @@
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { toStore } from 'svelte/store';
   import { api, type PopularTrack, type RemovedTracks } from '$lib/api';
-  import { glide } from '$lib/motion.svelte';
   import Cover from '$lib/components/Cover.svelte';
+  import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
@@ -28,25 +28,11 @@
   import { holding, quiet } from '$lib/vocabulary';
 
   // The artist's most listened recordings across ListenBrainz, in its order.
-  // The page's cursor can stand on a row (`cursorId`), so J and K walk from the
-  // releases into this list. Each row is matched to the catalogue by MusicBrainz recording ID alone, so
+  // The list scrolls inside its box, so the page beside it keeps its place.
+  // Each row is matched to the catalogue by MusicBrainz recording ID alone, so
   // a tick here means a file holds exactly that recording.
 
-  const COLUMNS = 'grid-cols-[1.75rem_1.75rem_minmax(0,1fr)_minmax(0,14rem)_1.5rem_1.25rem_3rem]';
-
-  let {
-    artistID,
-    artistName,
-    cursorId = '',
-    onpick
-  }: {
-    artistID: string;
-    artistName: string;
-    /** The recording the page's cursor is on, or empty. */
-    cursorId?: string;
-    /** Told when focus reaches a row, so the cursor follows the keyboard. */
-    onpick?: (recordingId: string) => void;
-  } = $props();
+  let { artistID, artistName }: { artistID: string; artistName: string } = $props();
 
   const queryClient = useQueryClient();
   const popular = createQuery(toStore(() => popularOptions(artistID)));
@@ -102,31 +88,30 @@
 </script>
 
 <!-- The section is drawn from the first frame, heading and all, so the column
-     holds its place while the counts are read. -->
+     beside the releases holds its place while the counts are read. -->
 <section class="flex min-w-0 flex-col" aria-labelledby="popular-heading">
-  <h2 id="popular-heading" class="label mx-5 border-b border-rule-strong pb-1.5">Popular</h2>
+  <h2
+    id="popular-heading"
+    class="border-b border-rule pb-1.5 text-body font-semibold text-ink"
+  >
+    Popular
+  </h2>
   {#if $popular.isError}
-    <ErrorNote error={$popular.error} retry={() => $popular.refetch()} class="mx-5 mt-2" />
+    <ErrorNote error={$popular.error} retry={() => $popular.refetch()} class="mt-2" />
   {:else}
     <Settle pending={$popular.isPending}>
       {#snippet placeholder()}
-        <SkeletonRows count={10} cover label="Loading popular tracks" class="px-2" />
+        <SkeletonRows count={10} cover label="Loading popular tracks" />
       {/snippet}
       {#if !$popular.data?.unavailable && $popular.data?.items.length}
-        <ol class="relative" use:glide={{ key: cursorId }}>
+        <ol class="popular-list max-h-[31rem] overflow-y-auto pt-1 pr-1">
           {#each $popular.data.items as track, index (track.recordingId)}
             {@const done = held(track)}
-            {@const here = track.recordingId === cursorId}
             <li
-              class="row want-row scroll-mt-24 scroll-mb-12 grid {COLUMNS} items-center gap-x-3 px-5 {here
-                ? 'on-ink'
-                : ''}"
-              data-recording={track.recordingId}
-              data-cursor={here}
-              onfocusin={() => onpick?.(track.recordingId)}
+              class="want-row grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.25rem_2.5rem] items-center gap-2 px-1.5 py-1"
             >
-              <span class="mono text-right text-meta {here ? '' : 'text-ink-4'}">{index + 1}</span>
-              <span class="block size-7 overflow-hidden rounded-cover bg-raised {done ? '' : 'opacity-60'}">
+              <span class="numeric text-right text-meta text-ink-4">{index + 1}</span>
+              <span class="size-10 overflow-hidden bg-raised {done ? '' : 'opacity-60'}">
                 <Cover
                   src={track.albumId && track.hasCover
                     ? `/api/v1/albums/${track.albumId}/cover?cached=1`
@@ -135,28 +120,26 @@
                   class="size-full object-cover"
                 />
               </span>
-              {#if track.albumId}
-                <a
-                  href={`/releases/${track.albumId}`}
-                  class="truncate text-body after:absolute after:inset-0 {here
-                    ? 'font-medium'
-                    : done
-                      ? ''
-                      : 'text-ink-3'}"
-                  title={track.title}>{track.title}</a
-                >
-              {:else}
-                <span
-                  class="truncate text-body {here ? 'font-medium' : done ? '' : 'text-ink-3'}"
-                  title={track.title}>{track.title}</span
-                >
-              {/if}
-              <span class="truncate text-meta {here ? '' : 'text-ink-4'}">
-                {track.albumTitle ?? track.releaseTitle}
+              <span class="min-w-0">
+                {#if track.albumId}
+                  <a
+                    href={`/releases/${track.albumId}`}
+                    class="block truncate text-body font-semibold hover:underline {done ? 'text-ink' : 'text-ink-2'}"
+                    title={track.title}>{track.title}</a
+                  >
+                {:else}
+                  <span
+                    class="block truncate text-body font-semibold {done ? 'text-ink' : 'text-ink-2'}"
+                    title={track.title}>{track.title}</span
+                  >
+                {/if}
+                <span class="block truncate text-meta text-ink-3">
+                  {track.albumTitle ?? track.releaseTitle}
+                </span>
               </span>
               <!-- The toggle of a held recording waits for the pointer, as on a
                    release page, because the mark beside it says it is here. -->
-              <span class="relative z-[2] flex items-center justify-center">
+              <span class="flex items-center justify-center">
                 {#if removable(track)}
                   <WantToggle
                     reveal={done ? 'all' : true}
@@ -178,26 +161,26 @@
                   <StateIcon icon="check" label={quiet(holding.complete)} role="ok" />
                 {/if}
               </span>
-              <span class="mono text-right text-meta {here ? '' : 'text-ink-3'}">{length(track.lengthMs)}</span>
+              <span class="numeric text-right text-meta text-ink-3">{length(track.lengthMs)}</span>
             </li>
           {/each}
         </ol>
         {#if $toggle.isError}
-          <ErrorNote error={$toggle.error} class="mx-5 mt-2" />
+          <ErrorNote error={$toggle.error} class="mt-2" />
         {:else if removed}
-          <p class="mx-5 mt-2 text-meta text-ink-3">{removed}.</p>
+          <p class="mt-2 text-meta text-ink-3">{removed}.</p>
         {/if}
       {:else}
-        <!-- Two lines under the heading and no panel of their own: the section's
-             rule already frames them. -->
-        <div class="mx-5 mt-3 flex flex-col gap-1">
-          <h3 class="text-body font-semibold text-ink">
-            {$popular.data?.unavailable ? 'Not available' : 'No listens yet'}
-          </h3>
-          <p class="text-meta leading-relaxed text-ink-3">
+        <EmptyPanel
+          role="idle"
+          level={3}
+          heading={$popular.data?.unavailable ? 'Not available' : 'No listens yet'}
+          class="mt-2"
+        >
+          <p class="text-meta leading-relaxed text-ink-2">
             {$popular.data?.unavailable || 'ListenBrainz has no listens for this artist.'}
           </p>
-        </div>
+        </EmptyPanel>
       {/if}
     </Settle>
   {/if}

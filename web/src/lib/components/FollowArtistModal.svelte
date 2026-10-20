@@ -1,11 +1,11 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { toStore } from 'svelte/store';
   import { fade } from 'svelte/transition';
   import { api, type ArtistSearchResult } from '$lib/api';
-  import { glide, motionMs } from '$lib/motion.svelte';
+  import { motionMs } from '$lib/motion.svelte';
   import Button from './Button.svelte';
   import CyclingPlaceholder from './CyclingPlaceholder.svelte';
   import ErrorNote from './ErrorNote.svelte';
@@ -105,29 +105,6 @@
   const inFlight = $derived($followArtist.isPending);
   const candidates = $derived($artistSearch.data?.items ?? []);
   const showingCandidates = $derived(debouncedArtistName.length >= 2 && !selectedArtist);
-
-  // The cursor over the candidates (ADR 0042): Up and Down in the field move one
-  // inverted row, and Enter takes it. Without a cursor Enter submits, as before.
-  let candidateAt = $state(-1);
-  $effect(() => {
-    void debouncedArtistName;
-    candidateAt = -1;
-  });
-
-  function fieldKeys(event: KeyboardEvent) {
-    if (!showingCandidates || candidates.length === 0) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const by = event.key === 'ArrowDown' ? 1 : -1;
-      candidateAt = candidateAt < 0 ? (by > 0 ? 0 : candidates.length - 1) : Math.min(Math.max(candidateAt + by, 0), candidates.length - 1);
-      void tick().then(() =>
-        panel?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-      );
-    } else if (event.key === 'Enter' && candidateAt >= 0) {
-      event.preventDefault();
-      select(candidates[candidateAt]);
-    }
-  }
 
   // Opening takes the page away and gives it back: the scroll is locked with its
   // gutter kept so nothing shifts sideways, the field takes focus because the
@@ -274,7 +251,7 @@
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={submit}>
         <!-- Pinned, so the way out stays reachable at any height. -->
         <div class="flex flex-none items-center gap-3 border-b border-rule px-4 py-3.5">
-          <h2 id="follow-title" class="text-lead font-semibold">
+          <h2 id="follow-title" class=" text-lead font-bold">
             Follow artist
           </h2>
           {#if showingCandidates && candidates.length > 0}
@@ -306,7 +283,6 @@
               id="artist-name"
               value={artistName}
               oninput={updateName}
-              onkeydown={fieldKeys}
               maxlength="200"
               autocomplete="off"
               data-inset="component"
@@ -352,13 +328,10 @@
                      rows to keep. -->
                 <SkeletonRows count={4} label="Searching artists" />
               {:else if candidates.length}
-                <div class="relative" use:glide={{ key: candidateAt }}>
-                {#each candidates as result, index (result.musicbrainzId)}
-                  {@const here = index === candidateAt}
+                {#each candidates as result (result.musicbrainzId)}
                   <button
                     type="button"
-                    class="row flex w-full items-center gap-3 px-3 py-1.5 text-left {here ? 'on-ink' : ''}"
-                    data-cursor={here}
+                    class="flex w-full items-center gap-3 border-b border-rule px-3 py-2 text-left transition last:border-b-0 hover:bg-raised focus:bg-raised focus:outline-none"
                     onclick={() => select(result)}
                   >
                     <span
@@ -378,13 +351,12 @@
                     </span>
                   </button>
                 {/each}
-              </div>
               {:else}
                 <p class="px-3 py-4 text-center text-body text-ink-3">No matching artists</p>
               {/if}
             </div>
           {:else if selectedArtist}
-            <p class="mt-2 text-meta text-ink-2">
+            <p class="mt-2 text-meta text-ok">
               Selected {selectedArtist.name}{selectedArtist.disambiguation
                 ? ` · ${selectedArtist.disambiguation}`
                 : ''}
@@ -430,7 +402,7 @@
           class="flex flex-none items-center justify-end gap-2 border-t border-rule px-4 py-3"
         >
           <Button type="button" variant="ghost" onclick={close} disabled={inFlight}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!selectedArtist || inFlight}>
+          <Button type="submit" disabled={!selectedArtist || inFlight}>
             {#if inFlight}
               <Icon name="busy" size={13} class="animate-spin" /> Following
             {:else}

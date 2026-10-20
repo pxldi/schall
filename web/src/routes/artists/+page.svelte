@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { SvelteMap } from 'svelte/reactivity';
 
-  // Outlives the page, so going back to the list finds as many rows as it left
+  // Outlives the page, so going back to the list finds as many cards as it left
   // and the browser can put the reader back where they had scrolled to.
   const grown = new SvelteMap<string, number>();
 </script>
@@ -15,18 +15,14 @@
     queryOptions,
     useQueryClient
   } from '@tanstack/svelte-query';
-  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import Icon from '$lib/components/Icon.svelte';
-  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, type ArtistListItem } from '$lib/api';
   import { isAuthError } from '$lib/errors';
-  import { useKeys } from '$lib/keys.svelte';
-  import { changed, glide, slideInto } from '$lib/motion.svelte';
-  import { STATE_TEXT, type StateRole } from '$lib/states';
   import { keepInUrl, urlChoice, urlText } from '$lib/utils';
   import Button from '$lib/components/Button.svelte';
+  import Chip from '$lib/components/Chip.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import ArtistArt from './ArtistArt.svelte';
@@ -42,10 +38,6 @@
 
   type Tab = '' | 'incomplete' | 'complete' | 'attention';
   type Sort = 'name' | 'least-complete' | 'most-missing';
-
-  // Portrait, name, followed, state, owned. The header row and every artist
-  // row use the same columns, so the list reads as a table without being one.
-  const COLUMNS = 'grid-cols-[1.75rem_minmax(0,1fr)_1.25rem_4.5rem_11rem]';
 
   const sorts: { value: Sort; label: string }[] = [
     { value: 'name', label: 'Name' },
@@ -181,9 +173,9 @@
     })
   );
   const artists = createQuery(toStore(() => artistOptions));
-  // Enough rows to fill a tall 4K window; the container clips whatever the
-  // viewport cannot show, so the count only has to be big.
-  const artistSkeletonCount = 60;
+  // Enough tiles to fill a 4K screen (23 columns of 9 rows); the container
+  // clips whatever the viewport cannot show, so the count only has to be big.
+  const artistSkeletonCount = 210;
 
   // /artists is the landing page, so the first-run guide lives here. Both
   // queries are the ones the rest of the application already uses.
@@ -221,63 +213,18 @@
 
   const shown = $derived($artists.data?.items ?? []);
 
-  // The first rows at once and the rest as the reader scrolls (lib/grow.ts).
+  // The first cards at once and the rest as the reader scrolls (lib/grow.ts).
   const listKey = $derived(JSON.stringify(artistOptions.queryKey));
   const drawn = $derived(shown.slice(0, grown.get(listKey) ?? GROW_STEP));
   function drawMore() {
     if (drawn.length < shown.length) grown.set(listKey, drawn.length + GROW_STEP);
   }
 
-  // The cursor (ADR 0042): none until the reader presses J or K or tabs onto a
-  // row, then one inverted block that glides between rows. It is kept by id, so
-  // a refetch that reorders the list does not move it to another artist.
-  let cursorId = $state('');
-  let list = $state<HTMLElement>();
-  $effect(() => {
-    void listKey;
-    cursorId = '';
-  });
-
-  function moveCursor(by: number) {
-    if (!drawn.length) return;
-    const at = drawn.findIndex((artist) => artist.id === cursorId);
-    const next = at < 0 ? 0 : Math.min(Math.max(at + by, 0), drawn.length - 1);
-    cursorId = drawn[next].id;
-    if (next === drawn.length - 1) drawMore();
-    void tick().then(() =>
-      list?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  useKeys(() => [
-    {
-      keys: ['j', 'k', 'arrowdown', 'arrowup'],
-      caps: ['j', 'k'],
-      verb: 'move',
-      order: 0,
-      enabled: () => drawn.length > 0,
-      run: (event) => moveCursor(event.key === 'j' || event.key === 'ArrowDown' ? 1 : -1)
-    },
-    ...(cursorId
-      ? [
-          {
-            keys: ['enter'],
-            verb: 'open',
-            order: 1,
-            run: () => void goto(`/artists/${cursorId}`)
-          }
-        ]
-      : [])
-  ]);
-
-  // The followed figure ticks when a follow lands, never on the first draw.
-  const followedTick = changed(() => followedCount);
-
   // An empty list under a search or a narrowed view is empty for a reason the
   // setup guide does not answer, so that panel still has its say.
   const narrowed = $derived(Boolean(search || tab || scope));
-  // The guide answers an empty page better than the generic panel does, so the
-  // panel stands down while the guide is up. Above the list rather than instead
+  // The guide answers an empty page better than the generic card does, so the
+  // card stands down while the guide is up. Above the grid rather than instead
   // of it, because a root or a scan can still be missing once artists exist.
   const guiding = $derived(setupKnown && !setUp && !narrowed);
   const followedTotal = $derived($artists.data?.followedCount);
@@ -305,35 +252,23 @@
     { value: 'attention', name: 'Needs attention', count: $artists.data?.attentionCount }
   ]);
 
-  // Four things a row can point at, in the order they are worth pointing at.
+  // Four things a card can point at, in the order they are worth pointing at.
   // A copy waiting for an ear is the only one asking the user for something, so
   // it comes first; a discography never fetched is last because it explains an
-  // empty row rather than reporting an event. The row draws the glyph and the
-  // words are its tooltip.
-  type Badge = {
-    label: string;
-    role: StateRole;
-    icon: 'listen' | 'download' | 'close' | 'info';
-    count?: number;
-  };
+  // empty card rather than reporting an event.
+  type Badge = { label: string; role: 'decide' | 'busy' | 'fail' | 'idle' };
   function badgeOf(artist: ArtistListItem): Badge | null {
     // An uploader on another service has no discography and never will, so
-    // "not scanned" would be a promise nothing is going to keep. The owned
-    // column already says "from SoundCloud".
+    // "not scanned" would be a promise nothing is going to keep. The card's
+    // second line already says "from SoundCloud", and a chip saying "not
+    // applicable" only raised the question of what did not apply.
     if (artist.source) return null;
     if (artist.reviewCount > 0) {
-      return {
-        label: artist.reviewCount === 1 ? 'review' : `review ${artist.reviewCount}`,
-        role: 'decide',
-        icon: 'listen',
-        count: artist.reviewCount > 1 ? artist.reviewCount : undefined
-      };
+      return { label: artist.reviewCount === 1 ? 'review' : `review ${artist.reviewCount}`, role: 'decide' };
     }
-    if (artist.refreshStatus === 'failed') return { label: 'failed', role: 'fail', icon: 'close' };
-    if (artist.inFlightCount > 0) return { label: 'downloading', role: 'busy', icon: 'download' };
-    // Not the busy glyph: "not scanned" is a state, and a spinner shape beside
-    // it read as work under way.
-    if (artist.releaseCount === 0) return { label: 'not scanned', role: 'idle', icon: 'info' };
+    if (artist.refreshStatus === 'failed') return { label: 'failed', role: 'fail' };
+    if (artist.inFlightCount > 0) return { label: 'downloading', role: 'busy' };
+    if (artist.releaseCount === 0) return { label: 'not scanned', role: 'idle' };
     return null;
   }
 
@@ -383,11 +318,7 @@
   {#snippet sub()}
     <span>
       {#if $dashboard.data}
-        <b
-          class="numeric font-semibold text-ink"
-          class:tick={followedTick.now}
-          onanimationend={followedTick.settle}>{followedCount.toLocaleString()}</b
-        > followed
+        <b class="numeric font-semibold text-ink">{followedCount.toLocaleString()}</b> followed
       {:else if $dashboard.isError}
         <!-- A failed read has no count to wait for; the skeleton would pulse forever. -->
         <b class="numeric font-semibold text-ink">–</b> followed
@@ -403,19 +334,19 @@
          line that counts this half. -->
     <a href="/artists/labels" class="transition hover:text-ink">
       <span class="underline underline-offset-3">
-        <!-- No labels followed is no count: "0 labels" read as a fact about
-             nothing. The link stays, as the way to follow one. -->
-        {#if labelsTotal}
-          <span class="numeric">{labelsTotal.toLocaleString()}</span>
-          {labelsTotal === 1 ? 'label' : 'labels'}
-        {:else}
-          Labels
-        {/if}
+      <!-- No labels followed is no count: "0 labels" read as a fact about
+           nothing. The link stays, as the way to follow one. -->
+      {#if labelsTotal}
+        <span class="numeric">{labelsTotal.toLocaleString()}</span>
+        {labelsTotal === 1 ? 'label' : 'labels'}
+      {:else}
+        Labels
+      {/if}
       </span>
     </a>
   {/snippet}
   {#snippet actions()}
-    <Button variant="primary" key="f" verb="follow artist" onclick={() => (showAddArtist = true)}>
+    <Button onclick={() => (showAddArtist = true)}>
       <Icon name="plus" size="sm" /> Follow artist
     </Button>
   {/snippet}
@@ -445,10 +376,10 @@
     variant="filter"
   />
 
-  <!-- Search, genre and sort stay on one line and wrap away from the tabs as
-       one group, so none of them is ever left alone on a row. -->
-  <div class="ml-auto flex items-center gap-x-4">
-    <form class="w-56" onsubmit={applySearch}>
+  <!-- Search, genre and sort wrap as one group, so the search box never sits
+       alone at the end of the first line with genre and sort under it. -->
+  <div class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
+    <form class="w-full sm:w-48" onsubmit={applySearch}>
       <label class="field flex w-full items-center gap-2">
         <Icon name="search" size="sm" class="shrink-0 text-ink-4" />
         <input
@@ -461,158 +392,79 @@
       </label>
     </form>
 
-    <PillSelect
-      options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
-      value={genre}
-      onchange={setGenre}
-      label="Which genre"
-      quiet
-      prefix="Genre"
-    />
+    <!-- Genre, sort and Clear filters move as one block, so a narrow window puts
+         the search box on one line and all of them on the next, never one alone. -->
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <PillSelect
+        options={genreChoices.map((choice) => ({ value: choice.value, name: choice.label }))}
+        value={genre}
+        onchange={setGenre}
+        label="Which genre"
+        quiet
+        prefix="Genre"
+      />
 
-    <PillSelect
-      options={sorts.map((option) => ({ value: option.value, name: option.label }))}
-      value={sort}
-      onchange={(value) => setSort(value as Sort)}
-      label="How to sort artists"
-      quiet
-      prefix="Sort"
-    />
+      <PillSelect
+        options={sorts.map((option) => ({ value: option.value, name: option.label }))}
+        value={sort}
+        onchange={(value) => setSort(value as Sort)}
+        label="How to sort artists"
+        quiet
+        prefix="Sort"
+      />
 
-    {#if hasFilters}
-      <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
-    {/if}
+      {#if hasFilters}
+        <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
+      {/if}
+    </div>
   </div>
 </ControlRail>
 
-<div class="flex flex-col gap-5 pb-8">
+<div class="flex flex-col gap-5 px-5 py-5">
   {#if guiding}
-    <div class="px-5 pt-5">
-      {@render Setup()}
-    </div>
+    {@render Setup()}
   {/if}
 
   {#if $artists.isError}
     <!-- The list of artists is read, not written, so asking again is the whole
          answer: the note asks by itself rather than printing a button. -->
-    <div class="px-5 pt-5">
-      <ErrorNote error={$artists.error} retry={() => $artists.refetch()} />
-    </div>
+    <ErrorNote error={$artists.error} retry={() => $artists.refetch()} />
   {:else}
     <Settle pending={$artists.isPending}>
       {#snippet placeholder()}
         <div
-          class="max-h-[calc(100dvh-16rem)] overflow-hidden"
+          class="max-h-[calc(100dvh-16rem)] grid grid-cols-2 gap-x-4 gap-y-5 overflow-hidden sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]"
           role="status"
           aria-label="Loading artists"
         >
           {#each Array(artistSkeletonCount) as _, placeholderIndex (placeholderIndex)}
-            <div class="h-9 border-b border-rule px-5 py-2" aria-hidden="true">
-              <Skeleton class="h-full" />
+            <div class="flex flex-col gap-2" aria-hidden="true">
+              <div
+                class="skeleton aspect-square rounded-cover"></div>
+              <span class="flex flex-col gap-1">
+                <Skeleton class="h-4 w-2/3" />
+                <Skeleton class="h-4 w-full" />
+              </span>
             </div>
           {/each}
         </div>
       {/snippet}
       {#if shown.length}
         <!-- Narrowing the list is a change worth seeing happen. Pressing Complete
-             swapped one set of rows for another between two frames, which reads as
+             swapped one set of cards for another between two frames, which reads as
              the page having been redrawn rather than as the list having answered.
 
              Keyed on what was narrowed and not on what was typed. A filter or a
              scope is one decision and gets one arrival; a search is a letter at a
              time, and animating that would put the list through twelve arrivals to
-             spell one artist's name. `.rise` is the same arriving step a row uses
+             spell one artist's name. `.rise` is the same arriving step a card uses
              anywhere else, and it holds still for anyone who asked for less
              motion. -->
         {#key `${tab}|${scope}|${sort}`}
-          <div class="rise">
-            <div
-              class="grid {COLUMNS} items-center gap-x-3 border-b border-rule-strong px-5 label h-7"
-              aria-hidden="true"
-            >
-              <span></span>
-              <span>Artist</span>
-              <span></span>
-              <span></span>
-              <span>Releases</span>
-            </div>
-            <div class="relative" bind:this={list} use:glide={{ key: `${cursorId}:${listKey}` }}>
-              {#each drawn as artist (artist.id)}
-                {@const here = artist.id === cursorId}
-                {@const badge = badgeOf(artist)}
-                <a
-                  href={`/artists/${artist.id}`}
-                  class="row grid {COLUMNS} scroll-mt-24 scroll-mb-12 items-center gap-x-3 px-5 {here
-                    ? 'on-ink'
-                    : ''}"
-                  data-artist={artist.id}
-                  data-cursor={here}
-                  aria-current={here ? 'true' : undefined}
-                  title={artist.releaseCount === 0
-                    ? `${artist.name} — discography not fetched`
-                    : `${artist.name} — ${artist.ownedReleaseCount} of ${artist.releaseCount} releases owned`}
-                  onfocus={() => (cursorId = artist.id)}
-                  animate:slideInto
-                >
-                  <span class="relative block size-7 overflow-hidden rounded-cover">
-                    <ArtistArt
-                      id={artist.id}
-                      hasImage={artist.hasImage}
-                      coverAlbumIds={artist.coverAlbumIds}
-                    />
-                  </span>
-
-                  <span class="truncate text-body {here ? 'font-medium' : ''}">{artist.name}</span>
-
-                  <span class="flex items-center justify-center text-ink-3">
-                    {#if artist.followed}
-                      <span title="Followed" class="flex">
-                        <Icon name="follow" size="sm" />
-                        <span class="sr-only">Followed</span>
-                      </span>
-                    {/if}
-                  </span>
-
-                  <!-- The glyph is the state and the words are its tooltip; the
-                       count is only for several copies waiting. -->
-                  <span class="flex items-center justify-end gap-2">
-                    {#if ['queued', 'running'].includes(artist.refreshStatus)}
-                      <span class="flex text-busy" title="Refreshing this artist's discography">
-                        <Icon name="busy" size="sm" class="animate-spin" />
-                        <span class="sr-only">Refreshing</span>
-                      </span>
-                    {/if}
-                    {#if badge}
-                      <span class="flex items-center gap-1 {STATE_TEXT[badge.role]}" title={badge.label}>
-                        <Icon name={badge.icon} size="sm" />
-                        {#if badge.count}<span class="mono text-micro">{badge.count}</span>{/if}
-                        <span class="sr-only">{badge.label}</span>
-                      </span>
-                    {/if}
-                  </span>
-
-                  <!-- Owned is always the bar and the fraction, never a percentage
-                       alone. An artist with no discography fetched yet, or one on a
-                       service MusicBrainz has never heard of, has no fraction to
-                       state — saying "0 of 0" would read as a complete answer to a
-                       question nothing has asked yet. -->
-                  <span class="flex min-w-0 items-center">
-                    {#if artist.source}
-                      <span class="truncate text-meta text-ink-3">from SoundCloud</span>
-                    {:else if artist.releaseCount === 0}
-                      <span class="truncate text-meta text-ink-3">discography not fetched</span>
-                    {:else}
-                      <OwnedBar
-                        owned={artist.ownedReleaseCount}
-                        total={artist.releaseCount}
-                        noun="releases"
-                        compact
-                      />
-                    {/if}
-                  </span>
-                </a>
-              {/each}
-            </div>
+          <div
+            class="rise grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]"
+          >
+            {#each drawn as artist (artist.id)}{@render Card(artist)}{/each}
           </div>
           {#if drawn.length < shown.length}
             <div use:nearEnd={{ drawn: drawn.length, more: drawMore }} aria-hidden="true"></div>
@@ -621,38 +473,36 @@
       {:else if !guiding}
         <!-- The heading is the whole message: it names what is absent, and the
              buttons under it are what to do about it. -->
-        <div class="px-5 pt-5">
-          <EmptyPanel
-            role="idle"
-            heading={search
-              ? 'No artists match that search'
-              : tab === 'complete'
-                ? 'No artist is complete yet'
-                : tab === 'incomplete'
-                  ? 'Nothing incomplete'
-                  : tab === 'attention'
-                    ? 'Nothing needs attention'
-                    : scope === 'followed'
-                      ? 'No artists followed'
-                      : scope === 'held'
-                        ? 'No artists in your library'
-                        : 'No artists yet'}
-          >
-            <div class="flex flex-wrap gap-2">
-              <Button class="w-fit" onclick={() => (showAddArtist = true)}>
-                <Icon name="plus" size="sm" /> Follow artist
-              </Button>
-              {#if tab}
-                <Button variant="outline" class="w-fit" onclick={() => setTab('')}>Show all</Button>
-              {/if}
-              {#if scope}
-                <Button variant="outline" class="w-fit" onclick={() => setScope('')}
-                  >Show everyone</Button
-                >
-              {/if}
-            </div>
-          </EmptyPanel>
-        </div>
+        <EmptyPanel
+          role="idle"
+          heading={search
+            ? 'No artists match that search'
+            : tab === 'complete'
+              ? 'No artist is complete yet'
+              : tab === 'incomplete'
+                ? 'Nothing incomplete'
+                : tab === 'attention'
+                  ? 'Nothing needs attention'
+                  : scope === 'followed'
+                    ? 'No artists followed'
+                    : scope === 'held'
+                      ? 'No artists in your library'
+                      : 'No artists yet'}
+        >
+          <div class="flex flex-wrap gap-2">
+            <Button class="w-fit" onclick={() => (showAddArtist = true)}>
+              <Icon name="plus" size="sm" /> Follow artist
+            </Button>
+            {#if tab}
+              <Button variant="outline" class="w-fit" onclick={() => setTab('')}>Show all</Button>
+            {/if}
+            {#if scope}
+              <Button variant="outline" class="w-fit" onclick={() => setScope('')}
+                >Show everyone</Button
+              >
+            {/if}
+          </div>
+        </EmptyPanel>
       {/if}
     </Settle>
   {/if}
@@ -717,4 +567,93 @@
       />
     {/if}
   </section>
+{/snippet}
+
+{#snippet Card(artist: ArtistListItem)}
+  {@const badge = badgeOf(artist)}
+  <a
+    href={`/artists/${artist.id}`}
+    class="group flex min-w-0 flex-col gap-2"
+    title={artist.releaseCount === 0
+      ? `${artist.name} — discography not fetched`
+      : `${artist.name} — ${artist.ownedReleaseCount} of ${artist.releaseCount} releases owned`}
+  >
+    <span
+      class="relative block aspect-square overflow-hidden rounded-cover"
+    >
+      <ArtistArt
+        id={artist.id}
+        hasImage={artist.hasImage}
+        coverAlbumIds={artist.coverAlbumIds}
+      />
+
+      {#if badge}
+        <!-- A chip anywhere else in Schall sits on the application's own dark
+             ground, and a tint of its role at 14% is enough to separate it from
+             that. Here it sits on a photograph of the artist, which is any
+             colour at all, and over a bright one the words disappeared. The
+             chip brings its own opaque ground so the role's colour reads on it
+             whatever the picture beneath is doing. -->
+        <Chip
+          role={badge.role}
+          dot={false}
+          class="absolute left-2 top-2 bg-ground"
+        >
+          <!-- Paired with a glyph, because no state may be readable by hue alone. -->
+          {#if badge.role === 'decide'}
+            <Icon name="listen" size="sm" />
+          {:else if badge.role === 'busy'}
+            <Icon name="download" size="sm" />
+          {:else if badge.role === 'fail'}
+            <Icon name="close" size="sm" />
+          {:else}
+            <!-- Not the busy glyph: "not scanned" is a state, and a spinner
+                 shape beside it read as work under way. -->
+            <Icon name="info" size="sm" />
+          {/if}
+          {badge.label}
+        </Chip>
+      {/if}
+
+      {#if ['queued', 'running'].includes(artist.refreshStatus)}
+        <span
+          class="absolute right-2 top-2 grid size-[18px] place-items-center bg-ground text-busy"
+          title="Refreshing this artist's discography"
+        >
+          <Icon name="busy" size="sm" class="animate-spin" />
+        </span>
+      {/if}
+    </span>
+
+    <span class="flex min-w-0 flex-col gap-1.5">
+      <span class="truncate text-body font-semibold text-ink">{artist.name}</span>
+      <!-- Owned is always the bar and the fraction, never a percentage alone.
+           An artist with no discography fetched yet, or one on a service
+           MusicBrainz has never heard of, has no fraction to state — saying
+           "0 of 0" would read as a complete answer to a question nothing has
+           asked yet.
+
+           The fraction is compact ("13/13") and the bar narrow, because the
+           check, the bar and the figure all have to sit on the one line a
+           card this narrow has room for. -->
+      {#if artist.source}
+        <span class="truncate text-meta text-ink-3">from SoundCloud</span>
+      {:else if artist.releaseCount === 0}
+        <span class="truncate text-meta text-ink-3">discography not fetched</span>
+      {:else}
+        <span class="flex items-center gap-1">
+          {#if artist.followed && artist.ownedReleaseCount === artist.releaseCount}
+            <Icon name="check" size="sm" class="shrink-0 text-ok" />
+          {/if}
+          <OwnedBar
+            owned={artist.ownedReleaseCount}
+            total={artist.releaseCount}
+            width={40}
+            noun="releases"
+            compact
+          />
+        </span>
+      {/if}
+    </span>
+  </a>
 {/snippet}

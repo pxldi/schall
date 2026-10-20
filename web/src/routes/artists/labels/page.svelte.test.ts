@@ -184,17 +184,3 @@ describe('a failed follow', () => {
     expect(await screen.findByText("MusicBrainz isn't answering.")).toBeTruthy();
   });
 });
-
-describe('the labels list cursor', () => {
-  it('opens the label under the cursor with Enter', async () => {
-    const { goto } = await import('$app/navigation');
-    answering({ items: [label()], total: 1, followedCount: 1 });
-    opened();
-    await screen.findByText('Warp Records');
-
-    await fireEvent.keyDown(window, { key: 'j' });
-    await fireEvent.keyDown(window, { key: 'Enter' });
-
-    expect(goto).toHaveBeenCalledWith('/artists/labels/l1');
-  });
-});

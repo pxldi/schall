@@ -9,7 +9,6 @@
     queryOptions,
     useQueryClient
   } from '@tanstack/svelte-query';
-  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import Icon from '$lib/components/Icon.svelte';
   import {
@@ -19,10 +18,7 @@
     type ReleaseCompleteness,
     type RemovedTracks
   } from '$lib/api';
-  import { coverSrc } from '$lib/cover-size';
   import { calendarDate, keepInUrl, removedSummary, urlChoice, wantedSummary } from '$lib/utils';
-  import { useKeys } from '$lib/keys.svelte';
-  import { glide } from '$lib/motion.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import { holding, progress, quiet } from '$lib/vocabulary';
@@ -30,16 +26,19 @@
   import Cover from '$lib/components/Cover.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import ControlRail from '$lib/components/ControlRail.svelte';
-  import OwnedBar from '$lib/components/OwnedBar.svelte';
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
+  import StateTag from '$lib/components/StateTag.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
   import PopularTracks, { popularOptions } from './PopularTracks.svelte';
-  import ReleaseRow from './ReleaseRow.svelte';
+  import ReleaseTile from './ReleaseTile.svelte';
 
   type Tile = 'owned' | 'partial' | 'missing' | 'dismissed' | 'unknown' | 'busy' | 'failed';
+  // What the header's follow control offers: every monitor level, plus the one
+  // value that means the artist is not followed at all.
+  type MonitorChoice = MonitorLevel | 'off';
 
   const queryClient = useQueryClient();
   const artistID = page.params.id ?? '';
@@ -75,8 +74,8 @@
   // it snap back rather than sit on an option the artist never left.
   let followControlReset = $state(0);
   // A discography arrives whole, and a prolific artist's singles run to
-  // hundreds. Each kind of release shows its newest eight, and "Show all"
-  // opens the rest of that kind in place. Which sections are open is the
+  // hundreds. Each kind of release is one row of its newest eight, and "Show
+  // all" opens the rest of that kind in place. Which rows are open is the
   // reader's, and it is not remembered: opening one is a glance, not a place to
   // come back to.
   const rowLength = 8;
@@ -95,11 +94,8 @@
   // The popular list is drawn only once the artist and the releases are in,
   // and it waits on ListenBrainz, so its read starts here beside theirs.
   void queryClient.prefetchQuery(popularOptions(artistID));
-  // The same read the list below makes, so the cursor knows how many rows the
-  // popular list has.
-  const popular = createQuery(toStore(() => popularOptions(artistID)));
 
-  // The address bar follows the list rather than leading it, so a reload and a
+  // The address bar follows the grid rather than leading it, so a reload and a
   // shared link open the releases that were being read rather than the first
   // page of everything.
   $effect(() => {
@@ -117,7 +113,7 @@
   //
   // Asking for the whole discography is what makes the grouping honest, and it
   // costs little: a release is a small row, the longest discography anybody has
-  // is a few hundred of them, and each section shows its first eight until
+  // is a few hundred of them, and each section shows its first eighteen until
   // somebody asks for the rest. Giving the index an album-type order instead
   // would be a schema decision, and it is not needed for this.
   //
@@ -170,7 +166,7 @@
   const wantMissing = createMutation({
     mutationFn: (on: boolean) => api.setArtistWantMissing(artistID, on),
     onSuccess: async () => {
-      // The release rows count the tracks still wanted, so they are read again too.
+      // The release tiles count the tracks still wanted, so they are read again too.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['artists'] }),
         queryClient.invalidateQueries({ queryKey: ['releases'] }),
@@ -206,7 +202,9 @@
 
   // Following an artist Schall already holds is a promotion: the artist is in
   // the catalogue because the library contains their music, and following them
-  // is the separate decision to keep their releases complete.
+  // is the separate decision to keep their releases complete. Picking a level
+  // above "Not following" follows at that level in one step, rather than
+  // following at the default and asking again for the level a moment later.
   const follow = createMutation({
     // The level is always sent. It used to be skipped for 'everything' because
     // that was the column default; new follows watch main releases now, and
@@ -246,12 +244,10 @@
     }
   });
 
-  // Follow, unfollow and the monitor level are one control: a single select
-  // whose value is either the artist's current monitor level or "off" when
-  // nothing is followed. "Not following" asks for confirmation rather than
-  // acting immediately. The Follow and Unfollow buttons in the title row are
-  // the quick way to the same two outcomes, at the default level.
-  type MonitorChoice = MonitorLevel | 'off';
+  // Follow, unfollow and the monitor level are one control: a single pill
+  // select whose value is either the artist's current monitor level or "off"
+  // when nothing is followed. "Not following" asks for confirmation rather
+  // than acting immediately, the way the standalone Following button used to.
   const monitorOptions: { value: MonitorChoice; name: string }[] = [
     { value: 'off', name: 'Not following' },
     { value: 'everything', name: 'Following · Everything' },
@@ -261,9 +257,6 @@
   ];
   const monitorValue = $derived($artist.data?.followed ? $artist.data.monitorLevel : 'off');
 
-  // Picking a level above "Not following" follows at that level in one step,
-  // rather than following at the default and asking again for the level a
-  // moment later.
   function chooseMonitor(next: string) {
     if (next === 'off') {
       confirmUnfollow = true;
@@ -362,8 +355,8 @@
   // holds the records an artist made as albums. A kind with nothing in it is
   // not drawn.
   //
-  // Newest first in every section, whether or not the library holds it, because
-  // the section is read as a timeline and its eight are the latest.
+  // Newest first in every row, whether or not the library holds it, because
+  // the row is read as a timeline and its eight are the latest.
   const kinds = ['Albums', 'EPs', 'Singles', 'Other'] as const;
   type Kind = (typeof kinds)[number];
   function kindOf(release: Release): Kind {
@@ -386,8 +379,6 @@
       }))
       .filter((section) => section.items.length > 0)
   );
-  const visibleOf = (section: { kind: Kind; items: Release[] }) =>
-    expanded.includes(section.kind) ? section.items : section.items.slice(0, rowLength);
 
   // What a release in Other is, said after its year, since the heading no
   // longer does.
@@ -452,85 +443,33 @@
       : ''
   );
 
-  // The tooltip of a release's row: the year and the state in words, in the
-  // colour-free form, since the row itself draws only the bar or a glyph.
-  function describe(release: Release): string {
+  // The card's second line and the colour it reads in: ink-3 for a plain fact,
+  // ink-2 for a partial release, fail for one missing outright. One function
+  // rather than two, so the word and its colour can never disagree about which
+  // state a release is in.
+  function describe(release: Release): { text: string; tone: string } {
     const year = release.firstReleaseDate ? release.firstReleaseDate.slice(0, 4) : '—';
     const state = tile(release);
-    if (state === 'unknown') return `${year} · no track list`;
-    if (state === 'failed') return `${year} · ${quiet(progress.failed)}`;
-    if (state === 'busy') return `${year} · ${quiet(progress.importing)}`;
-    if (state === 'dismissed') return `${year} · ${quiet(progress.dismissed)}`;
-    if (state === 'missing') return `${year} · ${quiet(holding.missing)}`;
-    // The row stays plain when nothing is watching the release, and on its own
-    // that says only that this one differs from the ones beside it. The word
-    // is what says how.
-    if (!release.monitored) return `${year} · unmonitored`;
-    if (state === 'partial') return `${year} · ${release.ownedTrackCount} of ${countable(release)}`;
-    return year;
+    if (state === 'unknown') return { text: `${year} · no track list`, tone: 'text-ink-3' };
+    if (state === 'failed') return { text: `${year} · ${quiet(progress.failed)}`, tone: 'text-fail' };
+    if (state === 'busy') return { text: `${year} · ${quiet(progress.importing)}`, tone: 'text-busy' };
+    if (state === 'dismissed') {
+      return { text: `${year} · ${quiet(progress.dismissed)}`, tone: 'text-ink-3' };
+    }
+    if (state === 'missing') return { text: `${year} · ${quiet(holding.missing)}`, tone: 'text-fail' };
+    // The tile stays plain when nothing is watching the release, and on its
+    // own that says only that this one differs from the ones beside it. The
+    // word is what says how.
+    if (!release.monitored) return { text: `${year} · unmonitored`, tone: 'text-ink-3' };
+    if (state === 'partial') {
+      return {
+        text: `${year} · ${release.ownedTrackCount} of ${countable(release)}`,
+        // Plain ink: the chrome never says what state a release is in.
+        tone: 'text-ink-2'
+      };
+    }
+    return { text: year, tone: 'text-ink-3' };
   }
-
-  // The cursor (ADR 0042): one inverted block that glides down the releases and
-  // on into the popular tracks, so J and K read the whole page. It is kept by
-  // an id with a kind in front, because a release and a recording are
-  // different things that could share one.
-  let cursorId = $state('');
-  $effect(() => {
-    void completeness;
-    cursorId = '';
-  });
-  const popularItems = $derived($popular.data?.unavailable ? [] : ($popular.data?.items ?? []));
-  const stops = $derived<{ id: string; href: string | null }[]>([
-    ...sections.flatMap((section) =>
-      visibleOf(section).map((release) => ({
-        id: `release:${release.id}`,
-        href: `/releases/${release.id}`
-      }))
-    ),
-    ...popularItems.map((track) => ({
-      id: `track:${track.recordingId}`,
-      href: track.albumId ? `/releases/${track.albumId}` : null
-    }))
-  ]);
-  const cursorStop = $derived(stops.find((stop) => stop.id === cursorId));
-
-  function moveCursor(by: number) {
-    if (!stops.length) return;
-    const at = stops.findIndex((stop) => stop.id === cursorId);
-    const next = at < 0 ? 0 : Math.min(Math.max(at + by, 0), stops.length - 1);
-    cursorId = stops[next].id;
-    void tick().then(() =>
-      document
-        .querySelector('[data-release][data-cursor="true"], [data-recording][data-cursor="true"]')
-        ?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  useKeys(() => [
-    {
-      keys: ['j', 'k', 'arrowdown', 'arrowup'],
-      caps: ['j', 'k'],
-      verb: 'move',
-      order: 0,
-      enabled: () => stops.length > 0,
-      run: (event) => moveCursor(event.key === 'j' || event.key === 'ArrowDown' ? 1 : -1)
-    },
-    ...(cursorStop?.href
-      ? [
-          {
-            keys: ['enter'],
-            verb: 'open',
-            order: 1,
-            run: () => void goto(cursorStop.href ?? '')
-          }
-        ]
-      : [])
-  ]);
-
-  // The artist's picture, or the cover of the release they hold most of when
-  // there is none. The picture is asked for, and the cover only once it turns
-  // out there is no picture.
-  let portraitMissing = $state(false);
 </script>
 
 <svelte:head><title>{$artist.data?.name ?? 'Artist'} · Schall</title></svelte:head>
@@ -545,408 +484,353 @@
     {#snippet placeholder()}
       {@render ArtistSkeleton()}
     {/snippet}
-    {#if $artist.data}
-      {@const data = $artist.data}
-      <div class="grid items-start lg:grid-cols-[minmax(0,1fr)_21.25rem]">
-        <div class="flex min-w-0 flex-col pb-8">
-          <PageHeader title={data.name} path={[{ label: 'Artists', href: '/artists' }]}>
-            {#snippet sub()}
-              <span>
-                {#if countedReleases}
-                  <b class="numeric font-semibold text-ink">{ownedCount}</b>
-                  of <b class="numeric font-semibold text-ink">{countedReleases}</b>
-                  {basis} owned
-                {:else if dismissedReleaseCount}
-                  everything else dismissed
-                {:else}
-                  <span class="numeric text-ink-3">—</span> {basis} owned
-                {/if}
-              </span>
-              {#if countedReleases && dismissedReleaseCount}
-                <span>{dismissedReleaseCount} dismissed</span>
-              {/if}
-              <!-- Releases the catalogue knows about and has no tracklist for yet.
-                   They are neither owned nor missing, and without this the header's
-                   denominator looks smaller than the list below it. -->
-              {#if loadingReleases > 0}
-                <span class="numeric">
-                  {loadingReleases}
-                  {loadingReleases === 1 ? 'release' : 'releases'} still loading
-                </span>
-              {/if}
-            {/snippet}
-            {#snippet actions()}
-              <!-- The one primary press is following, for an artist who is not
-                   followed, and adding what is missing once they are. -->
-              {#if !data.followed}
-                <Button
-                  variant="primary"
-                  key="f"
-                  verb="follow"
-                  disabled={$follow.isPending}
-                  onclick={() => $follow.mutate('main')}
-                >
-                  <Icon
-                    name={$follow.isPending ? 'busy' : 'follow'}
-                    size="sm"
-                    class={$follow.isPending ? 'animate-spin' : ''}
-                  />
-                  Follow
-                </Button>
-              {:else if confirmUnfollow}
-                <Button variant="danger" disabled={$unfollow.isPending} onclick={() => $unfollow.mutate()}>
-                  <Icon name="unfollow" size="sm" />
-                  {$unfollow.isPending ? 'Unfollowing…' : 'Unfollow'}
-                </Button>
-                <Button variant="ghost" disabled={$unfollow.isPending} onclick={keepFollowing}>
-                  Keep following
-                </Button>
-              {:else}
-                <Button variant="outline" key="u" verb="unfollow" onclick={() => (confirmUnfollow = true)}>
-                  <Icon name="unfollow" size="sm" />
-                  Unfollow
-                </Button>
-              {/if}
+  {#if $artist.data}
+  <PageHeader title={$artist.data.name} path={[{ label: 'Artists', href: '/artists' }]}>
+    {#snippet sub()}
+      <span>
+        {#if countedReleases}
+          <b class="numeric font-semibold text-ink">{ownedCount}</b>
+          of <b class="numeric font-semibold text-ink">{countedReleases}</b>
+          {basis} owned
+        {:else if dismissedReleaseCount}
+          everything else dismissed
+        {:else}
+          <span class="numeric text-ink-3">—</span> {basis} owned
+        {/if}
+      </span>
+      {#if countedReleases && dismissedReleaseCount}
+        <span>{dismissedReleaseCount} dismissed</span>
+      {/if}
+      <!-- Releases the catalogue knows about and has no tracklist for yet.
+           They are neither owned nor missing, and without this the header's
+           denominator looks smaller than the grid below it. -->
+      {#if loadingReleases > 0}
+        <span class="numeric">
+          {loadingReleases}
+          {loadingReleases === 1 ? 'release' : 'releases'} still loading
+        </span>
+      {/if}
+      <!-- What MusicBrainz's community voted this artist is. Display only, so
+           it is words in the line rather than chips to press. -->
+      {#if $artist.data.genres?.length}
+        <span>{$artist.data.genres.slice(0, 3).join(', ')}</span>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      <!-- Follow, unfollow and how much to monitor are one control: a single
+           select rather than a Following button beside a separate level picker
+           competing for the same decision. -->
+      {#key `${monitorValue}:${followControlReset}`}
+        <PillSelect
+          options={monitorOptions}
+          value={monitorValue}
+          onchange={chooseMonitor}
+          label="Follow this artist"
+        />
+      {/key}
 
-              <Button
-                variant="outline"
-                key="r"
-                verb="refresh"
-                disabled={$refresh.isPending || refreshing}
-                onclick={() => $refresh.mutate()}
-              >
-                <Icon name="refresh" size="sm" class={refreshing ? 'animate-spin' : ''} />
-                {refreshing ? 'Refreshing' : 'Refresh'}
-              </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={$refresh.isPending || refreshing}
+        onclick={() => $refresh.mutate()}
+      >
+        <Icon name="refresh" size="sm" class={refreshing ? 'animate-spin' : ''} />
+        {refreshing ? 'Refreshing' : 'Refresh'}
+      </Button>
 
-              <!-- Once the standing want is on there is nothing left to press: the
-                   button is replaced by what it did, and by the one control that
-                   undoes it. -->
-              {#if standing}
-                <Chip role="ok">Missing on wishlist</Chip>
-                <Button
-                  variant="ghost"
-                  key="w"
-                  verb="stop adding"
-                  disabled={$wantMissing.isPending}
-                  onclick={() => $wantMissing.mutate(false)}
-                >
-                  {$wantMissing.isPending ? 'Removing…' : 'Remove'}
-                </Button>
-              {:else if missingCount > 0}
-                <Button
-                  variant={data.followed ? 'primary' : 'outline'}
-                  key="w"
-                  verb="add missing"
-                  disabled={$wantMissing.isPending}
-                  onclick={() => $wantMissing.mutate(true)}
-                >
-                  {#if $wantMissing.isPending}
-                    <Icon name="busy" size="sm" class="animate-spin" />
-                  {:else}
-                    <Icon name="want" size="sm" />
-                  {/if}
-                  Add {missingCount} missing
-                </Button>
-              {/if}
-            {/snippet}
-          </PageHeader>
-
-          {#if confirmUnfollow && data.followed}
-            <!-- The question sits under the title row, where the buttons that
-                 answer it have taken the place of Unfollow. -->
-            <div class="flex flex-col gap-1 border-b border-rule px-5 py-3">
-              <h2 class="text-lead font-semibold text-ink">Unfollow {data.name}?</h2>
-              <p class="text-body text-ink-2">
-                Schall stops watching for their new releases. Your files stay.
-              </p>
-            </div>
-          {/if}
-
-          <!-- The answer sits under the button that asked, because "wanted 3 across 7
-               releases" is what somebody pressing it needs to see and a page-level
-               toast would say it somewhere else. -->
-          {#if $wantMissing.isError || $wantMissing.data?.wantMissing}
-            <div class="max-w-prose border-b border-rule px-5 py-2.5">
-              {#if $wantMissing.isError}
-                <!-- Bare: this strip is already the band under the button, and a tinted
-                     badge inside it would be a second surface in the same row. -->
-                <ErrorNote error={$wantMissing.error} bare />
-              {:else if $wantMissing.data}
-                <p class="max-w-prose text-body text-ink-3">
-                  {wantedSummary($wantMissing.data)}
-                  {#if $wantMissing.data.releases}
-                    · across {$wantMissing.data.releases}
-                    {$wantMissing.data.releases === 1 ? 'release' : 'releases'}
-                  {/if}
-                </p>
-              {/if}
-            </div>
-          {/if}
-
-          <div class="pt-3.5">
-            <ControlRail label="Which releases to show">
-              <Segmented
-                options={tabs}
-                value={completeness}
-                onchange={(value) => show(value as '' | ReleaseCompleteness)}
-                label="Which releases to show"
-                pending={$artist.isPending}
-              />
-            </ControlRail>
-          </div>
-
-          <div class="flex flex-col gap-4 pt-4">
-            {#each [$unfollow.error, $follow.error, $setMonitor.error, $refresh.error] as error, errorIndex (errorIndex)}
-              {#if error}
-                <!-- Follow, unfollow, monitor and refresh are all things a person
-                     pressed, so none of them asks again by itself. -->
-                <div class="px-5"><ErrorNote {error} /></div>
-              {/if}
-            {/each}
-
-            {#if data.refreshStatus === 'failed'}
-              <!-- `refreshError` is the text the last metadata refresh left behind: a
-                   Go sentence stored on the artist, not something thrown at a request.
-                   It reads the same way as any other failure, so it goes through the
-                   same note. -->
-              <div class="px-5"><ErrorNote error={data.refreshError ?? 'Refresh failed.'} /></div>
-            {/if}
-
-            {#if $releases.isError}
-              <div class="px-5"><ErrorNote error={$releases.error} retry={() => $releases.refetch()} /></div>
-            {/if}
-            <!-- The list polls while a refresh runs, so one failed poll leaves the
-                 releases already drawn under the note rather than wiping them. -->
-            {#if !$releases.isError || $releases.data}
-              <Settle pending={$releases.isPending}>
-                {#snippet placeholder()}
-                  {@render ReleaseSkeleton()}
-                {/snippet}
-                {#if sections.length}
-                  <div class="flex flex-col gap-6">
-                    {#each sections as section (section.kind)}
-                      {@const open = expanded.includes(section.kind)}
-                      <section class="flex flex-col" aria-label={section.kind}>
-                        <div class="mx-5 flex items-baseline gap-2.5 border-b border-rule-strong pb-1.5">
-                          <h2 class="label">{section.kind}</h2>
-                          <span class="mono text-micro text-ink-4">{section.items.length}</span>
-                          {#if section.items.length > rowLength}
-                            <button
-                              class="tap ml-auto inline-flex w-fit items-center gap-1 text-meta font-medium text-ink-3 transition hover:text-ink"
-                              aria-expanded={open}
-                              onclick={() =>
-                                (expanded = open
-                                  ? expanded.filter((kind) => kind !== section.kind)
-                                  : [...expanded, section.kind])}
-                            >
-                              {open ? 'Show less' : `Show all ${section.items.length}`}
-                              <Icon name={open ? 'chevron-up' : 'chevron-right'} size="sm" />
-                            </button>
-                          {/if}
-                        </div>
-
-                        <div class="relative" use:glide={{ key: cursorId }}>
-                          {#each visibleOf(section) as release (release.id)}
-                            <ReleaseRow
-                              {release}
-                              meta={meta(release, section.kind)}
-                              state={release.albumType === 'other'
-                                ? `${describe(release)} · listed as Other`
-                                : describe(release)}
-                              tile={tile(release)}
-                              owned={release.ownedTrackCount}
-                              countable={countable(release)}
-                              wanted={releaseWanted(release)}
-                              wantable={release.trackCount > 0 && tile(release) !== 'busy'}
-                              here={cursorId === `release:${release.id}`}
-                              onfocus={() => (cursorId = `release:${release.id}`)}
-                              onwant={() => $toggleRelease.mutateAsync({ kind: 'want', id: release.id })}
-                              onunwant={() => $toggleRelease.mutateAsync({ kind: 'remove', id: release.id })}
-                            />
-                          {/each}
-                        </div>
-                      </section>
-                    {/each}
-                    {#if $toggleRelease.isError}
-                      <div class="px-5"><ErrorNote error={$toggleRelease.error} /></div>
-                    {:else if removed}
-                      <p class="px-5 text-meta text-ink-3">{removed}.</p>
-                    {/if}
-                  </div>
-                {:else}
-                  <div class="px-5">
-                    <EmptyPanel
-                      role={refreshing ? 'busy' : 'idle'}
-                      heading={refreshing
-                        ? 'Building the discography'
-                        : releaseCount
-                          ? 'Nothing in this filter'
-                          : 'No releases yet'}
-                    >
-                      {#if !refreshing && releaseCount}
-                        <p class="text-body leading-relaxed text-ink-2">
-                          {releaseCount} releases known · none {filterName.toLocaleLowerCase()}
-                        </p>
-                      {/if}
-                      {#if !refreshing && !releaseCount}
-                        <Button class="w-fit" disabled={$refresh.isPending} onclick={() => $refresh.mutate()}>
-                          <Icon name="refresh" size="sm" /> Refresh discography
-                        </Button>
-                      {/if}
-                    </EmptyPanel>
-                  </div>
-                {/if}
-              </Settle>
-            {/if}
-
-            <div class="pt-2">
-              <PopularTracks
-                {artistID}
-                artistName={data.name}
-                cursorId={cursorId.startsWith('track:') ? cursorId.slice(6) : ''}
-                onpick={(recordingId) => (cursorId = `track:${recordingId}`)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <!-- The inspector: the picture, whether the artist is followed, and the
-             facts as keys and values. -->
-        <aside
-          class="flex min-w-0 flex-col gap-5 border-rule bg-panel p-5 max-lg:border-t lg:sticky lg:top-10 lg:max-h-[calc(100dvh-4.5rem)] lg:min-h-[calc(100dvh-4.5rem)] lg:overflow-y-auto lg:border-l"
-          aria-label="About this artist"
+      <!-- Once the standing want is on there is nothing left to press: the
+           button is replaced by what it did, and by the one control that
+           undoes it. -->
+      {#if standing}
+        <Chip role="ok">Missing on wishlist</Chip>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={$wantMissing.isPending}
+          onclick={() => $wantMissing.mutate(false)}
         >
-          <span class="block aspect-square w-full max-w-[18.75rem] overflow-hidden rounded-cover">
-            {#if !portraitMissing}
-              <Cover
-                eager
-                src={`/api/v1/artists/${artistID}/image`}
-                seed={artistID}
-                onmissing={() => (portraitMissing = true)}
-                class="size-full object-cover"
-              />
-            {:else}
-              <Cover
-                eager
-                src={data.leadAlbumId ? coverSrc(data.leadAlbumId) : undefined}
-                seed={artistID}
-                class="size-full object-cover"
-              />
-            {/if}
-          </span>
-
-          <dl class="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-body">
-            <dt class="label pt-0.5">Following</dt>
-            <dd class="text-ink-2">
-              <!-- Not following is said here once. The summary under it says why
-                   the artist is in the catalogue at all. -->
-              {#key `${monitorValue}:${followControlReset}`}
-                <PillSelect
-                  options={monitorOptions}
-                  value={monitorValue}
-                  onchange={chooseMonitor}
-                  label="Follow this artist"
-                />
-              {/key}
-              {#if !data.followed}
-                <span class="mt-1.5 block text-meta text-ink-3">
-                  {data.catalogueSummary ?? 'Here because you have their music.'}
-                </span>
-              {/if}
-            </dd>
-
-            <dt class="label pt-0.5">Owned</dt>
-            <dd class="text-ink-2">
-              {#if countedReleases}
-                <OwnedBar owned={ownedCount} total={countedReleases} noun={basis} />
-              {:else}
-                <span class="text-ink-4">No releases counted</span>
-              {/if}
-            </dd>
-
-            <dt class="label pt-0.5">Updated</dt>
-            <dd class="flex items-center gap-1.5 text-meta text-ink-2">
-              {#if refreshing}
-                <Icon name="busy" size="sm" class="animate-spin text-busy" /> Refreshing
-              {:else if data.lastRefreshedAt}
-                <span class="mono">{calendarDate(data.lastRefreshedAt)}</span>
-              {:else}
-                not refreshed yet
-              {/if}
-            </dd>
-
-            {#if data.genres?.length}
-              <!-- What MusicBrainz's community voted this artist is. Display only,
-                   so it is words rather than chips to press. -->
-              <dt class="label pt-0.5">Genre</dt>
-              <dd class="text-meta text-ink-2">{data.genres.slice(0, 3).join(', ')}</dd>
-            {/if}
-          </dl>
-
-          <!-- Who this is, from Wikipedia. Collapsed, because somebody on this page is
-               usually here for the music rather than the reading; and behind a
-               disclosure rather than trimmed, so the words stay in the product without
-               being the first thing on it. The attribution is not chrome: Wikipedia
-               text is CC BY-SA and the line under it satisfies the licence. An artist
-               no encyclopaedia has heard of shows nothing at all. -->
-          {#if data.biography}
-            <details class="group border-t border-rule pt-3">
-              <summary
-                class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
-              >
-                About
-                <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
-              </summary>
-              <p class="reveal mt-2 text-body leading-relaxed text-ink-2">
-                {data.biography}
-              </p>
-              {#if data.biographySourceUrl}
-                <p class="mt-1.5 text-meta text-ink-4">
-                  From
-                  <a
-                    href={data.biographySourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    class="underline transition hover:text-ink">Wikipedia</a
-                  >
-                </p>
-              {/if}
-            </details>
+          {$wantMissing.isPending ? 'Removing…' : 'Remove'}
+        </Button>
+      {:else if missingCount > 0}
+        <Button size="sm" disabled={$wantMissing.isPending} onclick={() => $wantMissing.mutate(true)}>
+          {#if $wantMissing.isPending}
+            <Icon name="busy" size="sm" class="animate-spin" />
+          {:else}
+            <Icon name="want" size="sm" />
           {/if}
-        </aside>
+          Add {missingCount} missing
+        </Button>
+      {/if}
+    {/snippet}
+  </PageHeader>
+
+  <!-- Who this is, from Wikipedia. Collapsed, because somebody on this page is
+       usually here for the music rather than the reading; and behind a
+       disclosure rather than trimmed, so the words stay in the product without
+       being the first thing on it. The attribution is not chrome: Wikipedia
+       text is CC BY-SA and the line under it satisfies the licence. An artist
+       no encyclopaedia has heard of shows nothing at all. -->
+  {#if $artist.data.biography}
+    <details class="group px-5 pb-3">
+      <summary
+        class="tap-tall inline-flex w-fit cursor-pointer list-none items-center gap-1 text-meta text-ink-3 transition hover:text-ink-2 [&::-webkit-details-marker]:hidden"
+      >
+        About
+        <Icon name="chevron-right" size="sm" class="transition-transform group-open:rotate-90" />
+      </summary>
+      <p class="reveal mt-2 max-w-prose text-body leading-relaxed text-ink-2">
+        {$artist.data.biography}
+      </p>
+      {#if $artist.data.biographySourceUrl}
+        <p class="mt-1.5 text-meta text-ink-4">
+          From
+          <a
+            href={$artist.data.biographySourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            class="underline transition hover:text-ink">Wikipedia</a
+          >
+        </p>
+      {/if}
+    </details>
+  {/if}
+
+  <!-- The answer sits under the button that asked, because "wanted 3 across 7
+       releases" is what somebody pressing it needs to see and a page-level
+       toast would say it somewhere else. -->
+  {#if $wantMissing.isError || $wantMissing.data?.wantMissing}
+    <div class="max-w-prose border-b border-rule px-5 py-2.5">
+      {#if $wantMissing.isError}
+        <!-- Bare: this strip is already the band under the button, and a tinted
+             badge inside it would be a second surface in the same row. -->
+        <ErrorNote error={$wantMissing.error} bare />
+      {:else if $wantMissing.data}
+        <p class="max-w-prose text-body text-ink-3">
+          {wantedSummary($wantMissing.data)}
+          {#if $wantMissing.data.releases}
+            · across {$wantMissing.data.releases}
+            {$wantMissing.data.releases === 1 ? 'release' : 'releases'}
+          {/if}
+        </p>
+      {/if}
+    </div>
+  {/if}
+
+  <ControlRail label="Which releases to show">
+    <Segmented
+      options={tabs}
+      value={completeness}
+      onchange={(value) => show(value as '' | ReleaseCompleteness)}
+      label="Which releases to show"
+      pending={$artist.isPending}
+    />
+
+    <span class="ml-auto text-meta font-medium text-ink-4">
+      {$artist.data.lastRefreshedAt
+        ? `updated ${calendarDate($artist.data.lastRefreshedAt)}`
+        : 'not refreshed yet'}
+    </span>
+  </ControlRail>
+
+  <div class="flex flex-col gap-4 px-5 py-5">
+    {#if confirmUnfollow && $artist.data.followed}
+      <div class="flex flex-col gap-3 bg-panel p-4">
+        <h2 class=" text-lead font-bold text-ink">
+          Unfollow {$artist.data.name}?
+        </h2>
+        <p class="text-body leading-relaxed text-ink-2">
+          Schall stops watching for their new releases. Your files stay.
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <Button disabled={$unfollow.isPending} onclick={() => $unfollow.mutate()}>
+            <Icon name="unfollow" size="sm" />
+            {$unfollow.isPending ? 'Unfollowing…' : 'Unfollow'}
+          </Button>
+          <Button variant="ghost" disabled={$unfollow.isPending} onclick={keepFollowing}>
+            Keep following
+          </Button>
+        </div>
       </div>
     {/if}
+
+    {#each [$unfollow.error, $follow.error, $setMonitor.error, $refresh.error] as error, errorIndex (errorIndex)}
+      {#if error}
+        <!-- Follow, unfollow, monitor and refresh are all things a person
+             pressed, so none of them asks again by itself. -->
+        <ErrorNote {error} />
+      {/if}
+    {/each}
+
+    {#if !$artist.data.followed}
+      <div class="flex flex-col gap-1.5 bg-panel p-4">
+        <span class="text-body font-semibold text-ink">
+          {$artist.data.catalogueSummary ?? 'Here because you have their music.'}
+        </span>
+        <!-- Not following is said once, by the follow control beside the
+             title. A second sentence here repeated it. -->
+      </div>
+    {/if}
+
+    {#if $artist.data.refreshStatus === 'failed'}
+      <!-- `refreshError` is the text the last metadata refresh left behind: a
+           Go sentence stored on the artist, not something thrown at a request.
+           It reads the same way as any other failure, so it goes through the
+           same note. -->
+      <ErrorNote error={$artist.data.refreshError ?? 'Refresh failed.'} />
+    {/if}
+
+    {#if $releases.isError}
+      <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
+    {/if}
+    <!-- The list polls while a refresh runs, so one failed poll leaves the
+         releases already drawn under the note rather than wiping them. -->
+    {#if !$releases.isError || $releases.data}
+    <Settle pending={$releases.isPending}>
+      {#snippet placeholder()}
+        {@render ReleaseSkeleton()}
+      {/snippet}
+    {#if sections.length}
+      <div class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <div class="flex min-w-0 flex-col gap-5">
+          {#each sections as section (section.kind)}
+            {@const open = expanded.includes(section.kind)}
+            {@const visible = open ? section.items : section.items.slice(0, rowLength)}
+            <section class="flex flex-col gap-2.5" aria-label={section.kind}>
+              <div class="flex items-baseline gap-2.5 border-b border-rule pb-1.5">
+                <h2 class="text-body font-semibold text-ink">
+                  {section.kind}
+                  <span class="numeric text-meta font-normal text-ink-4">{section.items.length}</span>
+                </h2>
+                {#if section.items.length > rowLength}
+                  <button
+                    class="tap inline-flex w-fit items-center gap-1 text-meta font-medium text-ink-3 transition hover:text-ink"
+                    aria-expanded={open}
+                    onclick={() =>
+                      (expanded = open
+                        ? expanded.filter((kind) => kind !== section.kind)
+                        : [...expanded, section.kind])}
+                  >
+                    {open ? 'Show less' : `Show all ${section.items.length}`}
+                    <Icon name={open ? 'chevron-up' : 'chevron-right'} size="sm" />
+                  </button>
+                {/if}
+              </div>
+
+              <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+                {#each visible as release (release.id)}
+                  <ReleaseTile
+                    {release}
+                    meta={meta(release, section.kind)}
+                    state={release.albumType === 'other'
+                      ? `${describe(release).text} · listed as Other`
+                      : describe(release).text}
+                    owned={release.ownedTrackCount}
+                    countable={countable(release)}
+                    wanted={releaseWanted(release)}
+                    wantable={release.trackCount > 0 && tile(release) !== 'busy'}
+                    onwant={() => $toggleRelease.mutateAsync({ kind: 'want', id: release.id })}
+                    onunwant={() => $toggleRelease.mutateAsync({ kind: 'remove', id: release.id })}
+                  />
+                {/each}
+              </div>
+            </section>
+          {/each}
+          {#if $toggleRelease.isError}
+            <ErrorNote error={$toggleRelease.error} />
+          {:else if removed}
+            <p class="text-meta text-ink-3">{removed}.</p>
+          {/if}
+        </div>
+
+        <aside class="min-w-0 xl:sticky xl:top-[calc(var(--topbar-height)+1rem)]">
+          <PopularTracks {artistID} artistName={$artist.data.name} />
+        </aside>
+      </div>
+
+    {:else}
+      <EmptyPanel
+        role={refreshing ? 'busy' : 'idle'}
+        heading={refreshing
+          ? 'Building the discography'
+          : releaseCount
+            ? 'Nothing in this filter'
+            : 'No releases yet'}
+      >
+        {#if !refreshing && releaseCount}
+          <p class="text-body leading-relaxed text-ink-2">
+            {releaseCount} releases known · none {filterName.toLocaleLowerCase()}
+          </p>
+        {/if}
+        {#if !refreshing && !releaseCount}
+          <Button
+            class="w-fit"
+            disabled={$refresh.isPending}
+            onclick={() => $refresh.mutate()}
+          >
+            <Icon name="refresh" size="sm" /> Refresh discography
+          </Button>
+        {/if}
+      </EmptyPanel>
+    {/if}
+    </Settle>
+    {/if}
+  </div>
+  {/if}
   </Settle>
 {/if}
 
 {#snippet ReleaseSkeleton()}
-  <div class="flex max-h-[calc(100dvh-30rem)] flex-col overflow-hidden" role="status" aria-label="Loading releases">
-    <div class="mx-5 pb-1.5"><Skeleton class="h-3 w-16" /></div>
-    {#each Array(10) as _, placeholderIndex (placeholderIndex)}
-      <div class="h-9 border-b border-rule px-5 py-2" aria-hidden="true">
-        <Skeleton class="h-full" />
+  <!-- The same grid the releases land in, aside and all, so the popular tracks
+       column does not push in from the side at xl when they arrive. -->
+  <div
+    class="grid items-start gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
+    role="status"
+    aria-label="Loading releases"
+  >
+    <section class="max-h-[calc(100dvh-30rem)] flex min-w-0 flex-col gap-3 overflow-hidden">
+      <Skeleton class="h-3 w-16" />
+      <div class="flex flex-wrap gap-x-3.5 gap-y-4">
+        {#each Array(32) as _, placeholderIndex (placeholderIndex)}
+          <div class="flex w-19 flex-col gap-1" aria-hidden="true">
+            <Skeleton shape="block" class="size-19" />
+            <Skeleton class="h-3 w-full" />
+            <Skeleton class="h-2.5 w-2/3" />
+          </div>
+        {/each}
       </div>
-    {/each}
+    </section>
+    <aside class="hidden min-w-0 flex-col xl:flex" aria-hidden="true">
+      <div class="border-b border-rule pb-1.5"><Skeleton class="h-4 w-20" /></div>
+      <SkeletonRows count={10} cover />
+    </aside>
   </div>
 {/snippet}
 
 {#snippet ArtistSkeleton()}
-  <div role="status" aria-label="Loading artist page" class="grid lg:grid-cols-[minmax(0,1fr)_21.25rem]">
-    <!-- The frame the artist draws: the title spot and the list on the left, the
-         inspector on the right. -->
-    <div class="flex min-w-0 flex-col gap-2 pt-3.5" aria-hidden="true">
-      <div class="flex flex-col gap-2 px-5">
-        <Skeleton class="h-3 w-40" />
-        <Skeleton class="h-8 w-96 max-w-full" />
-        <Skeleton class="h-4 w-56" />
-      </div>
-      <div class="mt-4">
-        {@render ReleaseSkeleton()}
-      </div>
-    </div>
-    <div class="hidden border-l border-rule bg-panel p-5 lg:block" aria-hidden="true">
-      <Skeleton shape="cover" class="w-[18.75rem]" />
+  <div role="status" aria-label="Loading artist page">
+    <!-- The same box the hero fills, so nothing moves when the artist lands. -->
+    <section
+      class="flex flex-col justify-end gap-3 px-5 pb-4"
+      style="min-height: calc(var(--print-height) - var(--topbar-height));"
+      aria-hidden="true"
+    >
+      <Skeleton class="h-16 w-96 max-w-full" />
+      <Skeleton class="h-4 w-56" />
+    </section>
+
+    <ControlRail label="Which releases to show">
+      <Segmented
+        options={filters.map((entry) => ({ value: entry.key, name: entry.name }))}
+        value=""
+        onchange={() => {}}
+        label="Which releases to show"
+        pending
+      />
+    </ControlRail>
+
+    <div class="flex flex-col gap-4 px-5 py-5">
+      {@render ReleaseSkeleton()}
     </div>
   </div>
 {/snippet}

@@ -137,9 +137,7 @@ const pages: {
           level: 1,
           name: seeded.artists.incomplete.name
         })
-      ).toBeVisible(),
-    // The inspector's refresh date is the day the fixture was seeded.
-    mask: (page) => [page.getByLabel('About this artist').locator('dt:has-text("Updated") + dd')]
+      ).toBeVisible()
   },
   {
     name: 'release',
