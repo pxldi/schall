@@ -22,9 +22,9 @@
 </script>
 
 <div
-  class="flex flex-wrap items-center gap-x-3 gap-y-2 border px-3.5 py-3 {active
-    ? 'border-rule-strong'
-    : 'border-rule'}"
+  class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-3 {active
+    ? 'border border-rule bg-panel'
+    : 'border border-rule'}"
 >
   <span class:complete class="step-number">
     {#if complete}<Icon name="check" size={13} />{:else}{number}{/if}

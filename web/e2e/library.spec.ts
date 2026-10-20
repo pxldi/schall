@@ -98,29 +98,28 @@ function shownTable(page: import('@playwright/test').Page) {
 }
 
 test('the column names stay put while the rows run under them', async ({ page }) => {
-  // A short window, so the seeded list is taller than the page and has
-  // somewhere to scroll to.
-  await page.setViewportSize({ width: 1440, height: 600 });
   await page.goto('/library?view=files');
   const table = shownTable(page);
   await expect(table.locator('tbody tr').first()).toBeVisible();
 
-  // The page scrolls, and the column names stick under the top strip: a sticky
-  // header is held against the nearest thing that scrolls, and that is the
-  // document. What is checked is where the layout engine puts the header.
-  const header = table.locator('thead th').first();
-  const strip = await page.locator('header').first().boundingBox();
+  // The table scrolls inside its own box rather than on the page. That is what
+  // the column names are held against: a header sticks to the nearest thing
+  // that scrolls, and if that thing is the whole document it slides away with
+  // the rows.
+  const box = table.locator('xpath=..');
+  const header = table.locator('thead');
   const before = await header.boundingBox();
   const firstRowBefore = await table.locator('tbody tr').first().boundingBox();
 
-  await page.evaluate(() => window.scrollTo(0, 400));
-  // A page that did not move proves nothing about a header that did not move.
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await box.evaluate((node) => node.scrollTo(0, 240));
+  const scrolled = await box.evaluate((node) => node.scrollTop);
+  // A box that did not move proves nothing about a header that did not move.
+  expect(scrolled).toBeGreaterThan(0);
 
   const after = await header.boundingBox();
   const firstRowAfter = await table.locator('tbody tr').first().boundingBox();
 
-  expect(before!.y).toBeGreaterThan(strip!.y + strip!.height);
-  expect(Math.round(after!.y)).toBe(Math.round(strip!.y + strip!.height));
+  expect(Math.round(after!.y)).toBe(Math.round(before!.y));
   expect(firstRowAfter!.y).toBeLessThan(firstRowBefore!.y);
 });
+

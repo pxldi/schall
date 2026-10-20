@@ -531,31 +531,3 @@ describe('CommandPalette, focus', () => {
     expect(document.activeElement).toBe(document.body);
   });
 });
-
-// The marked row is the one the cursor block sits behind (ADR 0042), so it
-// carries `data-cursor` for the glide to find, and only one row does.
-describe('the cursor in the results', () => {
-  function cursors() {
-    return Array.from(document.querySelectorAll('[role="option"][data-cursor="true"]')).map(
-      (row) => row.id
-    );
-  }
-
-  it('is on the marked row alone', async () => {
-    mount();
-    await ask('radiohead');
-    await answered();
-
-    expect(cursors()).toEqual(['palette-artists-a1']);
-  });
-
-  it('follows the arrow keys', async () => {
-    mount();
-    const box = await ask('radiohead');
-    await answered();
-
-    await fireEvent.keyDown(box, { key: 'ArrowDown' });
-
-    expect(cursors()).toEqual(['palette-view-all-artists']);
-  });
-});

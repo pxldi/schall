@@ -1,7 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, keepPreviousData, useQueryClient } from '@tanstack/svelte-query';
   import { goto } from '$app/navigation';
@@ -11,20 +10,18 @@
   import Button from '$lib/components/Button.svelte';
   import { holding, progress, quiet } from '$lib/vocabulary';
   import Cover from '$lib/components/Cover.svelte';
+  import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import ErrorNote from '$lib/components/ErrorNote.svelte';
-  import Keycap from '$lib/components/Keycap.svelte';
   import OwnedBar from '$lib/components/OwnedBar.svelte';
   import Pager from '$lib/components/Pager.svelte';
   import PillSelect from '$lib/components/PillSelect.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Settle from '$lib/components/Settle.svelte';
-  import StateIcon from '$lib/components/StateIcon.svelte';
   import StateMark from '$lib/components/StateMark.svelte';
+  import StateTag from '$lib/components/StateTag.svelte';
+  import * as Table from '$lib/components/ui/table';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { useKeys } from '$lib/keys.svelte';
-  import { glide } from '$lib/motion.svelte';
-  import type { IconName } from '$lib/icons';
 
   const queryClient = useQueryClient();
 
@@ -223,24 +220,23 @@
 
   // What the Status column draws: a tick for a release held in full, a dash
   // for one an "owned" artist tracks none of, nothing for an ordinary gap the
-  // Owned column already draws, and a glyph for what ownership cannot explain.
-  // The word is the glyph's tooltip.
+  // Owned column already draws, and a tag for what ownership cannot explain —
+  // its tone says how that reads (neutral for a plain fact, warn for a data
+  // problem, broken for a failure).
   type Standing =
     | { kind: 'tick' }
     | { kind: 'dash' }
     | { kind: 'none' }
-    | { kind: 'state'; icon: IconName; role: 'idle' | 'decide' | 'busy' | 'fail'; label: string };
+    | { kind: 'tag'; tone: 'neutral' | 'attention' | 'broken' | 'warn'; label: string };
 
   function statusOf(release: Release): Standing {
     if (release.trackRefreshStatus === 'failed') {
-      return { kind: 'state', icon: 'close', role: 'fail', label: quiet(progress.failed) };
+      return { kind: 'tag', tone: 'broken', label: quiet(progress.failed) };
     }
     if (['queued', 'running'].includes(release.trackRefreshStatus)) {
-      return { kind: 'state', icon: 'busy', role: 'busy', label: quiet(progress.importing) };
+      return { kind: 'tag', tone: 'neutral', label: quiet(progress.importing) };
     }
-    if (release.trackCount === 0) {
-      return { kind: 'state', icon: 'alert', role: 'decide', label: 'no track list' };
-    }
+    if (release.trackCount === 0) return { kind: 'tag', tone: 'warn', label: 'no track list' };
     // A dismissal leaves the denominator: the user decided not to want the
     // track, and a release whose every gap was decided about is not missing.
     // At 'owned' the denominator is what the library maps — the same rule the
@@ -256,9 +252,7 @@
     // Every gap decided about by hand leaves nothing left to call missing. A
     // dismissal is not visible anywhere else in the row, so it still gets a
     // tag.
-    if (countable === 0) {
-      return { kind: 'state', icon: 'minus', role: 'idle', label: quiet(progress.dismissed) };
-    }
+    if (countable === 0) return { kind: 'tag', tone: 'neutral', label: quiet(progress.dismissed) };
     // A plain gap, whole or partial, is exactly what the Owned column's bar
     // already draws in the same two figures. Repeating it as a tag beside the
     // bar said nothing the bar had not already said, so ownership alone draws
@@ -485,6 +479,13 @@
     return typeNames[value.toLowerCase()] ?? value[0].toUpperCase() + value.slice(1);
   }
 
+  function shortcut(event: KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    if (event.key !== '/' || target?.tagName === 'INPUT' || target?.tagName === 'SELECT') return;
+    event.preventDefault();
+    searchBox?.focus();
+  }
+
   // The A–Z rail: twenty-seven buttons beside the list that jump to the first
   // row starting with that letter.
   //
@@ -539,94 +540,20 @@
 
   function jumpTo(id: string) {
     if (!id) return;
-    const found = shown.findIndex((release) => release.id === id);
-    if (found >= 0) at = found;
     document.getElementById(`release-${id}`)?.scrollIntoView({ block: 'start' });
   }
-
-  // The cursor (ADR 0042): the row J and K move and Enter opens. It starts on
-  // the first row and goes back there whenever the list is asked a new question.
-  let at = $state(0);
-  let list = $state<HTMLElement>();
-  let searchForm = $state<HTMLElement>();
-  const active = $derived(view === 'releases');
-
-  $effect(() => {
-    void [artistId, scope, search, status, sort, descending, offset];
-    at = 0;
-  });
-
-  $effect(() => {
-    if (at > 0 && at >= shown.length) at = Math.max(0, shown.length - 1);
-  });
-
-  function move(by: number) {
-    if (shown.length === 0) return;
-    at = Math.min(Math.max(at + by, 0), shown.length - 1);
-    void tick().then(() =>
-      list?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  // All three views stay mounted, so only the one showing answers keys. Space
-  // ticks a row while Select is on, and is left to the page otherwise.
-  useKeys(() =>
-    active
-      ? [
-          {
-            keys: ['j', 'k', 'arrowdown', 'arrowup'],
-            caps: ['j', 'k'],
-            verb: 'move',
-            order: 0,
-            enabled: () => shown.length > 0,
-            run: (event) => move(['k', 'arrowup'].includes(event.key.toLowerCase()) ? -1 : 1)
-          },
-          {
-            keys: ['enter'],
-            verb: 'open',
-            order: 1,
-            enabled: () => Boolean(shown[at]),
-            run: () => {
-              const release = shown[at];
-              if (release) void goto(`/releases/${release.id}`);
-            }
-          },
-          ...(selecting
-            ? [
-                {
-                  keys: [' '],
-                  verb: 'tick',
-                  order: 2,
-                  enabled: () => Boolean(shown[at]),
-                  run: () => {
-                    const release = shown[at];
-                    if (release) toggleSelected(release.id);
-                  }
-                }
-              ]
-            : []),
-          {
-            keys: ['f'],
-            verb: 'search',
-            element: () => searchForm,
-            run: () => searchBox?.focus()
-          }
-        ]
-      : []
-  );
 </script>
 
-<!-- Everything a reader can turn about the catalogue itself is one band: search,
-     the artist filter, the status tabs, scope, sort, Select and Find missing.
-     It wraps onto a second line by itself when the window is too narrow to hold
-     them all. -->
-<div
-  role="group"
-  aria-label="Release filters"
-  class="flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-rule px-5 py-2"
->
-  <form bind:this={searchForm} class="w-48" onsubmit={applySearch}>
-    <label class="field flex h-7 w-full items-center gap-2">
+<svelte:window onkeydown={shortcut} />
+
+<!-- The page's own top row is the view chips alone, sticky, above this one.
+     Everything a reader can turn about the catalogue itself — search, the
+     artist filter, the status chips, scope, sort, Select and Find missing —
+     is one band here, and it wraps onto a second line by itself when the
+     window is too narrow to hold them all. -->
+<ControlRail label="Which releases to show" sticky={false}>
+  <form class="w-full sm:w-48" onsubmit={applySearch}>
+    <label class="field flex w-full items-center gap-2">
       <Icon name="search" size={13} class="shrink-0 text-ink-4" />
       <input
         bind:this={searchBox}
@@ -635,7 +562,9 @@
         aria-label="Search releases"
         class="min-w-0 flex-1 bg-transparent font-sans text-meta text-ink outline-none placeholder:text-ink-4"
       />
-      {#if active}<Keycap key="f" />{/if}
+      <span class="numeric bg-raised px-1.5 py-0.5 text-micro font-medium text-ink-3">
+        /
+      </span>
     </label>
   </form>
 
@@ -644,12 +573,12 @@
        filter comes in on a link, so it has to name the artist an id cannot and
        offer the way back out to everybody. -->
   {#if artistId}
-    <div class="flex h-7 items-center gap-1.5 border border-rule-strong pr-1 pl-2">
+    <div class="flex items-center gap-1.5 bg-raised py-1 pr-1 pl-2">
       <Icon name="artist" size={11} class="shrink-0 text-ink-4" />
       <span class="max-w-44 truncate text-meta font-medium text-ink">{artistName}</span>
       <button
         type="button"
-        class="grid size-5 shrink-0 place-items-center text-ink-3 transition hover:bg-raised hover:text-ink"
+        class="grid size-4 shrink-0 place-items-center text-ink-3 transition hover:bg-raised hover:text-ink"
         aria-label="Show every artist"
         onclick={clearArtist}
       >
@@ -667,63 +596,69 @@
     variant="filter"
   />
 
-  {#if hasFilters}
-    <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
-  {/if}
+  <PillSelect
+    options={scopeChoices}
+    value={scope}
+    onchange={(next) => setScope(next as 'library' | 'followed' | '')}
+    label="How far the list reaches"
+  />
 
-  <!-- Scope, sort and the two selection buttons stay together on the right, and
-       wrap as one group when the window is too narrow for the row. -->
-  <div class="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
-    <PillSelect
-      options={scopeChoices}
-      value={scope}
-      onchange={(next) => setScope(next as 'library' | 'followed' | '')}
-      label="How far the list reaches"
-      class="w-44"
-    />
+  <PillSelect
+    options={sortChoices}
+    value={sortValue}
+    onchange={applySort}
+    label="Sort by"
+    quiet
+    prefix="Sort"
+  />
 
-    <PillSelect options={sortChoices} value={sortValue} onchange={applySort} label="Sort by" class="w-36" />
+  <Button
+    variant="outline"
+    size="sm"
+    class={selecting ? 'border-rule-strong bg-panel' : ''}
+    aria-pressed={selecting}
+    onclick={() => setSelecting(!selecting)}
+  >
+    Select
+  </Button>
 
-    <div class="flex items-center gap-1.5">
-      <Button
-        size="sm"
-        key={active ? 's' : undefined}
-        verb="select"
-        aria-pressed={selecting}
-        onclick={() => setSelecting(!selecting)}
-      >
-        Select
-      </Button>
-      <!-- What the Missing page was an entry to, done in place: narrow to the
-           releases with gaps, and start picking which of them one source search
-           should cover. -->
-      <Button
-        size="sm"
-        key={active ? 'm' : undefined}
-        verb="find missing"
-        onclick={() => {
-          setStatus('missing');
-          setSelecting(true);
-        }}
-      >
-        <Icon name="search" size={13} /> Find missing
-      </Button>
-    </div>
+  <!-- The count that stood here said the same number as the filter strip a few
+       inches to its left. Every one of those chips carries its own count, and
+       the chosen one is the count of what is on screen — "6 in view" beside a
+       chip reading "All 6", and with a filter chosen, the filter's own figure
+       and then the All chip's figure again. -->
+  <div class="flex items-center gap-3">
+    <!-- What the Missing page was an entry to, done in place: narrow to the
+         releases with gaps, and start picking which of them one source search
+         should cover. -->
+    <Button
+      class="shrink-0"
+      onclick={() => {
+        setStatus('missing');
+        setSelecting(true);
+      }}
+    >
+      <Icon name="search" size={13} /> Find missing
+    </Button>
   </div>
-</div>
 
-{#if selected.length || $sourceRun.isError || refused || (outcome && !selected.length)}
-  <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-5 py-2">
-    {#if selected.length}
-      <span class="mono text-meta text-ink-2">{selected.length} selected</span>
+  {#if selected.length}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span class="numeric text-meta font-medium text-ink-2">{selected.length} selected</span>
       <button
         class="text-meta font-medium text-ink-3 transition hover:text-ink"
         onclick={() => (selected = [])}
       >
         Clear
       </button>
-      <label class="flex cursor-pointer items-center gap-2 py-1 text-meta font-medium text-ink-2">
-        <input type="checkbox" bind:checked={autoRequest} class="check cursor-pointer" />
+      <label
+        class="flex cursor-pointer items-center gap-2 py-1 text-meta font-medium text-ink-2"
+      >
+        <input
+          type="checkbox"
+          bind:checked={autoRequest}
+          class="check cursor-pointer"
+        />
         Request confirmed matches
       </label>
       <!-- The three decisions a selection can be given, beside the one it
@@ -731,296 +666,375 @@
            track-scoped decision the release page records and is taken back one
            track at a time, and the other two only ask for work that already
            runs on its own. -->
-      <div class="ml-auto flex flex-wrap items-center gap-1.5">
-        <Button variant="outline" size="sm" disabled={deciding} onclick={() => $rematching.mutate()}>
-          {#if $rematching.isPending}
-            <Icon name="busy" size={13} class="animate-spin" />
-          {:else}
-            <Icon name="refresh" size={13} />
-          {/if}
-          Match again
-        </Button>
-        <Button variant="outline" size="sm" disabled={deciding} onclick={() => $retrying.mutate()}>
-          {#if $retrying.isPending}
-            <Icon name="busy" size={13} class="animate-spin" />
-          {:else}
-            <Icon name="undo" size={13} />
-          {/if}
-          Try again
-        </Button>
-        <Button variant="outline" size="sm" disabled={deciding} onclick={() => $ignoring.mutate()}>
-          {#if $ignoring.isPending}
-            <Icon name="busy" size={13} class="animate-spin" />
-          {:else}
-            <Icon name="hide" size={13} />
-          {/if}
-          Ignore
-        </Button>
-        <Button variant="primary" size="sm" disabled={deciding} onclick={() => $sourceRun.mutate()}>
-          {#if $sourceRun.isPending}
-            <Icon name="busy" size={13} class="animate-spin" />
-          {:else}
-            <Icon name="search" size={13} />
-          {/if}
-          Find sources for {selected.length}
-        </Button>
-      </div>
-    {/if}
+      <Button variant="outline" size="sm" disabled={deciding} onclick={() => $rematching.mutate()}>
+        {#if $rematching.isPending}
+          <Icon name="busy" size={13} class="animate-spin" />
+        {:else}
+          <Icon name="refresh" size={13} />
+        {/if}
+        Match again
+      </Button>
+      <Button variant="outline" size="sm" disabled={deciding} onclick={() => $retrying.mutate()}>
+        {#if $retrying.isPending}
+          <Icon name="busy" size={13} class="animate-spin" />
+        {:else}
+          <Icon name="undo" size={13} />
+        {/if}
+        Try again
+      </Button>
+      <Button variant="outline" size="sm" disabled={deciding} onclick={() => $ignoring.mutate()}>
+        {#if $ignoring.isPending}
+          <Icon name="busy" size={13} class="animate-spin" />
+        {:else}
+          <Icon name="hide" size={13} />
+        {/if}
+        Ignore
+      </Button>
+      <Button size="sm" disabled={deciding} onclick={() => $sourceRun.mutate()}>
+        {#if $sourceRun.isPending}
+          <Icon name="busy" size={13} class="animate-spin" />
+        {:else}
+          <Icon name="search" size={13} />
+        {/if}
+        Find sources for {selected.length}
+      </Button>
+    </div>
+  {/if}
 
-    <!-- Reported where it was caused: the button that failed is in this band,
-         and the selection it would have run is still standing. The band stays
-         and the note goes in it bare, so the reader keeps the one fact the band
-         was drawn for: the press had no effect at all. -->
-    {#if $sourceRun.isError}
-      <StatusBadge class="basis-full items-start">
-        <ErrorNote error={$sourceRun.error} bare class="min-w-0 flex-1" />
-        <span class="shrink-0 text-meta text-ink-3">nothing queued</span>
-      </StatusBadge>
-    {/if}
+  <!-- Reported where it was caused rather than at the top of the page: the
+       button that failed is in this bar, and the selection it would have run is
+       still standing. -->
+  <!-- The band stays and the note goes in it bare, so the reader keeps the one
+       fact the band was drawn for: the press had no effect at all. -->
+  {#if $sourceRun.isError}
+    <StatusBadge class="basis-full items-start">
+      <ErrorNote error={$sourceRun.error} bare class="min-w-0 flex-1" />
+      <span class="shrink-0 text-meta text-ink-3">nothing queued</span>
+    </StatusBadge>
+  {/if}
 
-    {#if refused}
-      <StatusBadge class="basis-full items-start">
-        <ErrorNote error={refused} bare class="min-w-0 flex-1" />
-        <span class="shrink-0 text-meta text-ink-3">nothing changed</span>
-      </StatusBadge>
-    {/if}
+  {#if hasFilters}
+    <Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>
+  {/if}
 
-    <!-- What the press came to, in the band it was pressed in. It stays until
-         the next selection, because the reader pressed a button about forty
-         rows and the answer is the only place they learn how much of it was
-         already decided. -->
-    {#if outcome && !selected.length}
-      <StatusBadge class="basis-full">
-        <span class="text-meta leading-relaxed text-ink">{outcome}</span>
-        <button
-          class="ml-auto shrink-0 text-meta font-medium text-ink-3 transition hover:text-ink"
-          onclick={() => (outcome = '')}
-        >
-          Dismiss
-        </button>
-      </StatusBadge>
-    {/if}
-  </div>
-{/if}
+  {#if refused}
+    <StatusBadge class="basis-full items-start">
+      <ErrorNote error={refused} bare class="min-w-0 flex-1" />
+      <span class="shrink-0 text-meta text-ink-3">nothing changed</span>
+    </StatusBadge>
+  {/if}
+
+  <!-- What the press came to, in the bar it was pressed in. It stays until the
+       next selection, because the reader pressed a button about forty rows and
+       the answer is the only place they learn how much of it was already
+       decided. -->
+  {#if outcome && !selected.length}
+    <StatusBadge class="basis-full">
+      <span class="text-meta leading-relaxed text-ink">{outcome}</span>
+      <button
+        class="ml-auto shrink-0 text-meta font-medium text-ink-3 transition hover:text-ink"
+        onclick={() => (outcome = '')}
+      >
+        Dismiss
+      </button>
+    </StatusBadge>
+  {/if}
+</ControlRail>
 
 {#if $releases.isError && !$releases.data}
-  <div class="px-5 py-6">
+  <div class="px-6 py-6">
     <!-- Only a read, so the note asks again by itself. -->
     <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
   </div>
 {:else}
   {#if $releases.isError}
     <!-- A failed refetch keeps the rows it already had; the note sits above them. -->
-    <div class="px-5 pt-2">
+    <div class="px-4 pt-2 sm:px-6">
       <ErrorNote error={$releases.error} retry={() => $releases.refetch()} />
     </div>
   {/if}
   <Settle pending={$releases.isPending}>
     {#snippet placeholder()}
-      <div class="px-5" role="status" aria-label="Loading releases">
-        <div class="max-h-[70dvh] overflow-hidden">
-          <div class="h-7 border-b border-rule-strong" aria-hidden="true"></div>
-          {#each Array(20) as _, placeholderIndex (placeholderIndex)}
-            <div class="h-9 border-b border-rule py-1.5" aria-hidden="true">
-              <Skeleton class="h-full" />
-            </div>
-          {/each}
+      <div
+    class="px-4 sm:px-6 py-1"
+    role="status"
+    aria-label="Loading releases"
+  >
+    <!-- The table's own box height, 70dvh, so the rows land in the space the
+         wait held. 28 rows fill that box on a 4K viewport. -->
+    <div class="max-h-[70dvh] overflow-hidden border border-rule">
+      <div class="h-9 border-b border-rule" aria-hidden="true"></div>
+      {#each Array(28) as _, placeholderIndex (placeholderIndex)}
+        <div
+          class="h-[3.46875rem] border-b border-rule px-3 py-2 last:border-b-0"
+          aria-hidden="true"
+        >
+          <Skeleton class="h-full" />
         </div>
+      {/each}
+    </div>
       </div>
     {/snippet}
-    {#if shown.length}
-      <!-- The catalogue, and the letters that jump into it. The list is one
-           object in its motion as well as in its rules: it arrives once, when
-           the skeleton gives way to rows or a search that found nothing starts
-           finding something, and never on a refetch that already has rows to
-           show. The cursor is the one inverted block under the rows. -->
-      <div class="flex items-start gap-4 px-5">
-        <div class="rise relative min-w-0 flex-1" bind:this={list} use:glide={{ key: at }}>
-          <table class="w-full border-separate border-spacing-0 text-left text-body text-ink [&_td]:border-b [&_td]:border-rule [&_th]:border-b [&_th]:border-rule-strong">
-            <thead>
-              <tr>
-                {#if selecting}
-                  <th class="sticky top-10 z-[2] w-9 bg-ground px-2.5">
-                    <button
-                      type="button"
-                      class="flex h-full items-center"
-                      onclick={toggleAll}
-                      aria-pressed={allSelected}
-                      aria-label={allSelected ? 'Clear the selection' : 'Select every release on this page'}
-                    >
-                      {@render Box(allSelected)}
-                    </button>
-                  </th>
-                {/if}
-                <th class="label sticky top-10 z-[2] h-7 bg-ground px-2.5 text-left">
-                  {@render Head('Release', 'title')}
-                </th>
-                <th class="label sticky top-10 z-[2] h-7 bg-ground px-2.5 text-left">
-                  {@render Head('Artist', 'artist')}
-                </th>
-                <th class="label sticky top-10 z-[2] h-7 w-20 bg-ground px-2.5 text-right">
-                  <span class="inline-flex">{@render Head('Year', 'year')}</span>
-                </th>
-                <th class="label sticky top-10 z-[2] h-7 w-24 bg-ground px-2.5 text-left">Type</th>
-                <th class="label sticky top-10 z-[2] h-7 w-56 bg-ground px-2.5 text-left">
-                  {@render Head('Owned', 'owned')}
-                </th>
-                <th class="label sticky top-10 z-[2] h-7 w-16 bg-ground px-2.5 text-left">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each shown as release, index (release.id)}
-                {@const current = statusOf(release)}
-                {@const picked = selected.includes(release.id)}
-                {@const here = index === at}
-                <tr
-                  id={`release-${release.id}`}
-                  data-cursor={here}
-                  data-selected={picked ? '' : undefined}
-                  aria-current={here ? 'true' : undefined}
-                  class="row scroll-mt-12 scroll-mb-10 {here ? 'on-ink' : picked ? 'bg-panel' : ''}"
-                  onclick={() => (at = index)}
-                >
-                  {#if selecting}
-                    <td class="w-9 px-2.5">
-                      <button
-                        type="button"
-                        class="tap flex items-center disabled:opacity-40"
-                        disabled={!picked && atCap}
-                        onclick={() => toggleSelected(release.id)}
-                        aria-pressed={picked}
-                        aria-label={`Select ${release.title}`}
-                      >
-                        {@render Box(picked)}
-                      </button>
-                    </td>
-                  {/if}
+  {#if shown.length}
+  <!-- The catalogue, and the letters that jump into it.
 
-                  <!-- Cached covers only, and only where the row says one is
-                       cached: a page of releases asks this installation for the
-                       pictures it holds and nobody for the rest. A release with
-                       no picture gets generated art in the same slot. -->
-                  <td class="h-9 w-[34%] max-w-0 px-2.5">
-                    <a href={`/releases/${release.id}`} class="flex min-w-0 items-center gap-2.5">
-                      <span
-                        role="img"
-                        aria-label={`Cover for ${release.title}`}
-                        class="grid size-6 shrink-0 place-items-center overflow-hidden"
-                      >
-                        <Cover
-                          src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
-                          seed={release.id}
-                          class="size-full object-cover"
-                        />
-                      </span>
-                      <span class="truncate text-body font-medium">{release.title}</span>
-                    </a>
-                  </td>
-                  <td class="w-[24%] max-w-0 truncate px-2.5 text-meta text-ink-3">
-                    {release.artistName}
-                  </td>
-                  <td class="mono px-2.5 text-right text-meta text-ink-2">{year(release)}</td>
-                  <td class="px-2.5 text-meta text-ink-3">{formatType(release.albumType)}</td>
-                  <td class="px-2.5">
-                    {#if (release.artistMonitorLevel === 'owned' ? release.ownedTrackCount : release.trackCount - release.dismissedTrackCount) > 0}
-                      {@const countable =
-                        release.artistMonitorLevel === 'owned'
-                          ? release.ownedTrackCount
-                          : release.trackCount - release.dismissedTrackCount}
-                      <OwnedBar owned={release.ownedTrackCount} total={countable} width={94} noun="tracks" />
-                    {:else}
-                      <span class="mono text-meta text-ink-4">—</span>
-                    {/if}
-                  </td>
-                  <td class="px-2.5">
-                    <!-- A release the library holds in full needs a tick and
-                         nothing else. An ordinary gap needs nothing: the Owned
-                         column already draws it. A glyph is left for what that
-                         column cannot say, a data problem or a failed refresh,
-                         or a dismissal, which leaves no gap to draw. -->
-                    {#if current.kind === 'tick'}
-                      <span class="inline-flex" title="Complete"><StateMark role="ok" /></span>
-                    {:else if current.kind === 'dash'}
-                      <span class="mono text-meta text-ink-4" aria-label="none held">—</span>
-                    {:else if current.kind === 'state'}
-                      <StateIcon icon={current.icon} role={current.role} label={current.label} />
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+       A hairline between rows rather than a border around each: the rows are one
+       list, not a stack of cards.
 
-        <!-- The letters, beside the list rather than over it. Only drawn when
-             they would tell the truth: the rail reads A at the top and Z at the
-             bottom, so it stands only while the list is in that order, and it
-             jumps within the rows that are here. -->
-        {#if jumpLetters.length > 0}
-          <div
-            class="sticky top-14 hidden w-7 shrink-0 flex-col items-center gap-px md:flex"
-            role="group"
-            aria-label="Jump to a letter"
-          >
-            {#each jumpLetters as letter (letter.key)}
+       The arriving step is drawn on the list and never on a row. A list is one
+       object here in its motion as well as in its rules, and it says so once:
+       five hundred rows arriving one behind another is nausea, and five hundred
+       rows arriving on every background refresh is worse. This runs when the
+       skeleton is replaced by rows and when a search that found nothing starts
+       finding something, and at no other time — a refetch that already has rows
+       to show never rebuilds this. -->
+  <div class="flex items-start gap-4 px-4 sm:px-6 py-1">
+    <!-- The scroll happens in the table's own box rather than on the page. A
+         sticky header sticks to the nearest thing that scrolls, and if that
+         thing is the whole document the column names slide away with the rows.
+         `scroll-pt-9` is the header's own height, so a row jumped to by a
+         letter lands under the names rather than behind them. -->
+    <Table.Root
+      wrapperClass="rise max-h-[70dvh] min-w-0 flex-1 scroll-pt-9 scroll-smooth border border-rule"
+    >
+      <Table.Header>
+        <!-- The row of column names, which are also the controls that sort by
+             them. On a touch screen each name is given the height a fingertip
+             needs and the row grows to hold it, rather than each name wearing
+             an invisible 44px box: those boxes reached up out of this row and
+             took presses aimed at the button above it. A control that is only
+             sometimes the one you pressed is worse than a small one.
+
+             The height is asked for on the buttons and not on the row. This is
+             a real table row now, and `min-height` does nothing to one: the
+             browser sizes a row from the cells inside it. `.sort-row`, which
+             set that height when this was a flex box, is not used here. -->
+        <Table.Row class="hover:bg-transparent">
+          {#if selecting}
+            <Table.Head class="w-9">
               <button
                 type="button"
-                class="mono grid h-5 w-7 place-items-center text-meta font-semibold transition {letter.id
-                  ? 'text-ink-2 hover:bg-raised hover:text-ink'
-                  : 'text-ink-4'}"
-                disabled={!letter.id}
-                aria-label={`Jump to ${letter.key}`}
-                onclick={() => jumpTo(letter.id)}
+                class="flex h-full items-center pointer-coarse:min-h-11"
+                onclick={toggleAll}
+                aria-pressed={allSelected}
+                aria-label={allSelected ? 'Clear the selection' : 'Select every release on this page'}
               >
-                {letter.key}
+                {@render Box(allSelected)}
               </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-
-      <Pager {total} {offset} {pageSize} keys={active} onchange={(next) => changePage(next)} />
-    {:else}
-      <div class="px-5 py-5">
-        <EmptyPanel role="idle" heading={scopeTotal ? 'Nothing in this filter' : 'No releases match'}>
-          <p class="text-body leading-relaxed text-ink-2">
-            {#if scopeTotal}
-              None of {scopeTotal.toLocaleString()} releases are
-              <span class="text-ink">{filterName.toLocaleLowerCase()}</span>.
-            {:else if search}
-              Try a shorter search or a wider view.
-            {:else if scope}
-              Nothing followed or owned here. Choose Everything in the catalogue to see more.
-            {:else if artistId}
-              No releases by <span class="text-ink">{artistName}</span> yet. Refresh them from their page.
-            {:else}
-              Follow an artist to start.
-            {/if}
-          </p>
-          {#if noReleasesMatch && filesMatching > 0}
-            <p class="text-body leading-relaxed text-ink-2">
-              {plural(filesMatching, 'file matches', 'files match')} this search.
-              <a
-                href="/library?view=files&q={encodeURIComponent(search)}"
-                onclick={() => onviewfiles?.()}
-                class="text-ink underline underline-offset-2"
-              >
-                Open Files
-              </a>
-            </p>
+            </Table.Head>
           {/if}
-        </EmptyPanel>
+          <!-- The artist stacks under the release title in the one row density
+               the board draws, so it has no column of its own to be sorted
+               from. The order is still the reader's to choose, so both
+               controls stand in the one header the two names share. -->
+          <Table.Head>
+            <span class="flex h-full items-center gap-2">
+              {@render Head('Release', 'title')}
+              <span class="h-3 w-px bg-rule"></span>
+              {@render Head('Artist', 'artist')}
+            </span>
+          </Table.Head>
+          <Table.Head numeric>{@render Head('Year', 'year')}</Table.Head>
+          <Table.Head>Type</Table.Head>
+          <Table.Head>{@render Head('Owned', 'owned')}</Table.Head>
+          <Table.Head>Status</Table.Head>
+        </Table.Row>
+      </Table.Header>
+
+      <Table.Body>
+        {#each shown as release (release.id)}
+          {@const current = statusOf(release)}
+          {@const picked = selected.includes(release.id)}
+          <!-- Pointing at a row lifts it onto a raised surface and takes its
+               hairline down, and the row below a hairline is the one that draws
+               it, so the rule above a pointed-at row is taken down by its
+               neighbour. The border turns transparent rather than being
+               removed: a border that stops existing is a pixel of height the
+               row loses, and the list under the pointer would step. -->
+          <Table.Row
+            id={`release-${release.id}`}
+            selected={picked}
+            class="group hover:border-transparent [&:has(+tr:hover)]:border-transparent"
+          >
+            {#if selecting}
+              <Table.Cell class="w-9">
+                <button
+                  type="button"
+                  class="tap flex items-center disabled:opacity-40"
+                  disabled={!picked && atCap}
+                  onclick={() => toggleSelected(release.id)}
+                  aria-pressed={picked}
+                  aria-label={`Select ${release.title}`}
+                >
+                  {@render Box(picked)}
+                </button>
+              </Table.Cell>
+            {/if}
+
+            <!-- The release title wraps. It is the thing being identified, and
+                 a name cut off in the middle is a name the reader has to hover
+                 to read. Everything beside it is metadata and takes the
+                 ellipsis instead. -->
+            <Table.Cell class="min-w-56">
+              <a href={`/releases/${release.id}`} class="tap-tall flex min-w-0 items-center gap-3">
+                <!-- Cached covers only, and only where the row says one is
+                     cached: a page of a hundred rows asks this installation
+                     for the pictures it holds and nobody for the rest. A
+                     release with no picture gets generated art in the same
+                     slot (ADR Duoton), so no title creeps left. -->
+                <span
+                  role="img"
+                  aria-label={`Cover for ${release.title}`}
+                  class="grid size-10 shrink-0 place-items-center overflow-hidden"
+                >
+                  <Cover
+                    src={release.hasCover ? `/api/v1/albums/${release.id}/cover?cached=1` : undefined}
+                    seed={release.id}
+                    class="size-full object-cover"
+                  />
+                </span>
+                <span class="min-w-0">
+                  <span class="block text-body font-medium text-ink">{release.title}</span>
+                  <!-- Ink 4 clears the contrast floor up to the regular
+                       surface and no further, and a pointed-at or selected row
+                       is drawn on a thicker one — so the quiet line promotes. -->
+                  <span
+                    class="mt-0.5 block max-w-64 truncate text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
+                  >
+                    {release.artistName}
+                  </span>
+                </span>
+              </a>
+            </Table.Cell>
+
+            <Table.Cell numeric class="text-meta font-medium text-ink-2">
+              {year(release)}
+            </Table.Cell>
+            <Table.Cell class="text-meta font-medium text-ink-3">
+              {formatType(release.albumType)}
+            </Table.Cell>
+            <Table.Cell>
+              {#if (release.artistMonitorLevel === 'owned' ? release.ownedTrackCount : release.trackCount - release.dismissedTrackCount) > 0}
+                {@const countable =
+                  release.artistMonitorLevel === 'owned'
+                    ? release.ownedTrackCount
+                    : release.trackCount - release.dismissedTrackCount}
+                <OwnedBar owned={release.ownedTrackCount} total={countable} width={94} noun="tracks" />
+              {:else}
+                <span
+                  class="numeric text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
+                >
+                  —
+                </span>
+              {/if}
+            </Table.Cell>
+            <Table.Cell>
+              <!-- A release the library holds in full needs no word, only the
+                   tick every board draws for "owned". An ordinary gap, whole
+                   or partial, needs none either: the Owned column already
+                   draws it. A hairline tag is left for what that column
+                   cannot say — a data problem or a failed refresh — or for a
+                   dismissal, which leaves no gap for that column to draw. A
+                   release an "owned" artist tracks none of was never open to
+                   begin with, so it is drawn as a gap rather than as a
+                   word. -->
+              {#if current.kind === 'tick'}
+                <StateMark role="ok"><Icon name="check" size={10} /></StateMark>
+              {:else if current.kind === 'dash'}
+                <span
+                  class="numeric text-meta text-ink-4 transition group-hover:text-ink-3 group-data-selected:text-ink-3"
+                  aria-label="none held"
+                >
+                  —
+                </span>
+              {:else if current.kind === 'tag'}
+                <StateTag
+                  tone={current.tone}
+                >{current.label}</StateTag>
+              {/if}
+            </Table.Cell>
+          </Table.Row>
+        {/each}
+      </Table.Body>
+    </Table.Root>
+
+    <!-- The letters, beside the list rather than over it.
+         Only drawn when they would tell the truth: the rail reads A at the top
+         and Z at the bottom, so it stands only while the list is in that order,
+         and it jumps within the rows that are here — the catalogue is paged on
+         the server and a letter cannot reach a row this page never asked for. -->
+    {#if jumpLetters.length > 0}
+      <div
+        class="sticky top-2 hidden w-7 shrink-0 flex-col items-center gap-px md:flex"
+        role="group"
+        aria-label="Jump to a letter"
+      >
+        {#each jumpLetters as letter (letter.key)}
+          <button
+            type="button"
+            class="numeric grid h-5 w-7 place-items-center text-meta font-semibold transition {letter.id
+              ? 'text-ink-2 hover:bg-raised hover:text-ink'
+              : 'text-ink-3'}"
+            disabled={!letter.id}
+            aria-label={`Jump to ${letter.key}`}
+            onclick={() => jumpTo(letter.id)}
+          >
+            {letter.key}
+          </button>
+        {/each}
       </div>
     {/if}
+  </div>
+
+  <div class="px-4 sm:px-6">
+    <Pager {total} {offset} {pageSize} onchange={(next) => changePage(next)} />
+  </div>
+  {:else}
+  <div class="px-6 py-6">
+    <EmptyPanel
+      role="idle"
+      heading={scopeTotal ? 'Nothing in this filter' : 'No releases match'}
+    >
+      <p class="text-body leading-relaxed text-ink-2">
+        {#if scopeTotal}
+          None of {scopeTotal.toLocaleString()} releases are
+          <span class="text-ink">{filterName.toLocaleLowerCase()}</span>.
+        {:else if search}
+          Try a shorter search or a wider view.
+        {:else if scope}
+          Nothing followed or owned here. Choose Everything in the catalogue to see more.
+        {:else if artistId}
+          No releases by <span class="text-ink">{artistName}</span> yet. Refresh them from their page.
+        {:else}
+          Follow an artist to start.
+        {/if}
+      </p>
+      {#if noReleasesMatch && filesMatching > 0}
+        <p class="text-body leading-relaxed text-ink-2">
+          {plural(filesMatching, 'file matches', 'files match')} this search.
+          <a
+            href="/library?view=files&q={encodeURIComponent(search)}"
+            onclick={() => onviewfiles?.()}
+            class="text-ink underline underline-offset-2"
+          >
+            Open Files
+          </a>
+        </p>
+      {/if}
+    </EmptyPanel>
+  </div>
+  {/if}
   </Settle>
 {/if}
 
 {#snippet Box(checked: boolean)}
-  <span class="grid size-6 place-items-center">
+  <span
+    class="grid size-6 place-items-center"
+  >
     <span
       class="grid size-[15px] place-items-center transition {checked
         ? 'bg-ink'
-        : 'border border-rule-strong hover:border-ink-3'}"
+        : 'border border-rule-strong hover:border-rule-strong'}"
     >
       {#if checked}<Icon name="check" size={10} class="text-ground" />{/if}
     </span>
@@ -1029,7 +1043,7 @@
 
 {#snippet Head(label: string, key: Sort)}
   <button
-    class="label inline-flex h-full items-center gap-1.5 transition hover:text-ink"
+    class="label inline-flex h-full items-center gap-1.5 transition hover:text-ink pointer-coarse:min-h-11"
     onclick={() => pick(key)}
   >
     {label}

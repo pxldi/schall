@@ -14,15 +14,13 @@
   // that is a comparison of stored numbers nobody should have to do by hand,
   // but removing music is the one thing here that cannot be undone and it never
   // happens on its own.
-  import { tick } from 'svelte';
   import { toStore } from 'svelte/store';
   import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { api, type DuplicateCopy, type DuplicateRecording } from '$lib/api';
   import { formatBytes, formatDuration } from '$lib/utils';
   import { listening } from '$lib/preview.svelte';
-  import { useKeys } from '$lib/keys.svelte';
-  import { glide } from '$lib/motion.svelte';
   import Button from '$lib/components/Button.svelte';
+  import ControlRail from '$lib/components/ControlRail.svelte';
   import EmptyPanel from '$lib/components/EmptyPanel.svelte';
   import Settle from '$lib/components/Settle.svelte';
   import SkeletonRows from '$lib/components/SkeletonRows.svelte';
@@ -31,10 +29,6 @@
   import ErrorNote from '$lib/components/ErrorNote.svelte';
   import TranscodeChip from '$lib/components/TranscodeChip.svelte';
   import KeepOneCopyDialog from '$lib/components/KeepOneCopyDialog.svelte';
-
-  // All three library views stay mounted, so `active` says whether this one is
-  // showing. Only the one showing answers keys.
-  let { active = true }: { active?: boolean } = $props();
 
   const views = ['to-decide', 'kept'] as const;
   type View = (typeof views)[number];
@@ -285,64 +279,9 @@
     }
     $remove.mutate(fileIds);
   }
-
-  // The cursor (ADR 0042): the group J and K move between, and Space plays the
-  // copy Schall says to keep, or the first one where it says none. Deleting is
-  // never a key: it is a button, asked about again before it happens.
-  let at = $state(0);
-  let list = $state<HTMLElement>();
-
-  $effect(() => {
-    void [view, offset];
-    at = 0;
-  });
-
-  $effect(() => {
-    if (at > 0 && at >= recordings.length) at = Math.max(0, recordings.length - 1);
-  });
-
-  function move(by: number) {
-    if (recordings.length === 0) return;
-    at = Math.min(Math.max(at + by, 0), recordings.length - 1);
-    void tick().then(() =>
-      list?.querySelector('[data-cursor="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    );
-  }
-
-  function listen() {
-    const copies = recordings[at]?.copies ?? [];
-    const copy = copies.find((candidate) => candidate.keeper) ?? copies[0];
-    if (copy) hear(copy.id);
-  }
-
-  useKeys(() =>
-    active
-      ? [
-          {
-            keys: ['j', 'k', 'arrowdown', 'arrowup'],
-            caps: ['j', 'k'],
-            verb: 'move',
-            order: 0,
-            enabled: () => recordings.length > 0,
-            run: (event) => move(['k', 'arrowup'].includes(event.key.toLowerCase()) ? -1 : 1)
-          },
-          {
-            keys: [' '],
-            verb: 'play',
-            order: 1,
-            enabled: () => recordings.length > 0,
-            run: listen
-          }
-        ]
-      : []
-  );
 </script>
 
-<div
-  role="group"
-  aria-label="Which duplicates to look at"
-  class="flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-rule px-5 py-2"
->
+<ControlRail label="Which duplicates to look at" sticky={false}>
   <Segmented
     options={[
       { value: 'to-decide', name: 'To decide', count: $toDecide.data?.total },
@@ -352,18 +291,9 @@
     onchange={(value) => setView(value as View)}
     label="Which duplicates to look at"
   />
+</ControlRail>
 
-  <!-- Deleting is permanent, so the one thing worth saying is what Schall will
-       and will not offer to delete. Why an album copy and a single land here,
-       and what happens when nothing separates two copies, are the mechanism:
-       the rows themselves say which case each group is. -->
-  <p class="min-w-0 text-meta text-ink-3">
-    These songs are on disk more than once. Schall only offers to delete a copy it can prove is
-    worse.
-  </p>
-</div>
-
-<div class="flex flex-col gap-2 px-5 pt-3">
+<div class="flex flex-col gap-4 px-6 py-4">
   {#if shown.error}
     <ErrorNote error={shown.error} retry={() => void shown.refetch()} />
   {/if}
@@ -371,89 +301,90 @@
     <ErrorNote error={failure} />
   {/if}
 
-  <!-- One <audio> element for the whole page. Where this one points is the copy
-       that is sounding. -->
+  <!-- One <audio> element for the whole page. Where this one points is the
+       copy that is sounding. -->
   <audio bind:this={audio} class="hidden" preload="none" onended={() => (sounding = '')}></audio>
 
-  {#if stranded.length > 0}
-    <!-- The library has let these go and the disc still has them. Nothing else
-         on this screen would ever mention them again: they have no library
-         row, and their recording is no longer held twice. -->
-    <div class="flex flex-col gap-2 border-b border-rule pb-2.5">
-      <div class="flex flex-wrap items-center gap-2.5">
+  <section class="flex flex-col gap-2.5">
+    <!-- Deleting is permanent, so the one thing worth saying is what Schall
+         will and will not offer to delete. Why an album copy and a single land
+         here, and what happens when nothing separates two copies, are the
+         mechanism: the rows themselves say which case each group is. -->
+    <p class="max-w-[64ch] text-meta leading-5 text-ink-2">
+      These songs are on disk more than once. Schall only offers to delete a copy it can
+      prove is worse.
+    </p>
+
+    {#if stranded.length > 0}
+      <!-- The library has let these go and the disc still has them. Nothing
+           else on this screen would ever mention them again: they have no
+           library row, and their recording is no longer held twice. -->
+      <div class="flex flex-col gap-2 border border-rule bg-panel px-3 py-2.5">
+        <div class="flex flex-wrap items-center gap-2.5">
+          <span class="min-w-0 flex-1 text-meta text-ink-2">
+            {stranded.length}
+            {stranded.length === 1 ? 'file' : 'files'} left the library but couldn't be deleted.
+            Still on disk.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            class="shrink-0"
+            disabled={busy}
+            onclick={() => $retry.mutate()}
+          >
+            Try again
+          </Button>
+        </div>
+        {#each stranded as file (file.path)}
+          <div class="flex flex-wrap items-baseline gap-x-3">
+            <span class="numeric min-w-0 flex-1 truncate text-meta text-ink-3" title={file.path}>
+              {file.path}
+            </span>
+            {#if file.reason}
+              <span class="truncate text-meta text-ink-3">{file.reason}</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    {#if spare.length > 0}
+      <div class="flex flex-wrap items-center gap-2.5 border border-rule bg-panel px-3 py-2.5">
         <span class="min-w-0 flex-1 text-meta text-ink-2">
-          {stranded.length}
-          {stranded.length === 1 ? 'file' : 'files'} left the library but couldn't be deleted.
-          Still on disk.
+          {spare.length}
+          {spare.length === 1 ? 'copy on this page is' : 'copies on this page are'} worse than one
+          you have. Deleting can't be undone.
         </span>
         <Button
-          variant="outline"
+          variant={confirming === 'all' ? 'danger' : 'outline'}
           size="sm"
           class="shrink-0"
           disabled={busy}
-          onclick={() => $retry.mutate()}
+          onclick={() => press('all', spare)}
         >
-          Try again
+          {confirming === 'all' ? 'Confirm delete' : `Delete ${spare.length}`}
         </Button>
       </div>
-      {#each stranded as file (file.path)}
-        <div class="flex flex-wrap items-baseline gap-x-3">
-          <span class="mono min-w-0 flex-1 truncate text-meta text-ink-3" title={file.path}>
-            {file.path}
-          </span>
-          {#if file.reason}
-            <span class="truncate text-meta text-ink-3">{file.reason}</span>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  {/if}
+    {/if}
 
-  {#if spare.length > 0}
-    <div class="flex flex-wrap items-center gap-2.5 border-b border-rule pb-2.5">
-      <span class="min-w-0 flex-1 text-meta text-ink-2">
-        {spare.length}
-        {spare.length === 1 ? 'copy on this page is' : 'copies on this page are'} worse than one
-        you have. Deleting can't be undone.
-      </span>
-      <Button
-        variant={confirming === 'all' ? 'danger' : 'outline'}
-        size="sm"
-        class="shrink-0"
-        disabled={busy}
-        onclick={() => press('all', spare)}
-      >
-        {confirming === 'all' ? 'Confirm delete' : `Delete ${spare.length}`}
-      </Button>
-    </div>
-  {/if}
-</div>
-
-<Settle pending={shown.isPending}>
-  {#snippet placeholder()}
-    <div class="px-5 pt-3">
-      <SkeletonRows count={6} label="Loading duplicates" />
-    </div>
-  {/snippet}
-  <div class="px-5">
-    <div class="relative" bind:this={list} use:glide={{ key: at }}>
-      {#each recordings as recording, index (recording.recordingId)}
-        {@const here = index === at}
-        <!-- The hairline sits on the whole group, so the copies inside it read as
-             one entry. Comparing the copies is the rows themselves: each names
-             its own format, its path, its length and size, and offers Play and
-             Keep this. The cursor is the group, drawn as one inverted block. -->
-        <div
-          data-cursor={here}
-          data-recording={recording.recordingId}
-          aria-current={here ? 'true' : undefined}
-          class="row flex flex-col px-3 py-2.5 {here ? 'on-ink' : ''}"
-          onclick={() => (at = index)}
-          role="presentation"
-        >
+    <Settle pending={shown.isPending}>
+      {#snippet placeholder()}
+        <SkeletonRows count={6} label="Loading duplicates" />
+      {/snippet}
+    <div class="flex flex-col">
+      {#each recordings as recording (recording.recordingId)}
+        <!-- The hairline sits on the whole group, so the copies inside it read
+             as one entry rather than as rows of their own. Comparing the
+             copies is the rows themselves: each names its own format, its
+             path, its length and size, and offers Play and Keep this — there
+             is no separate view to open first. -->
+        <div class="flex flex-col border-b border-rule px-3 py-2.5 last:border-b-0">
           <div class="flex items-baseline gap-2 pb-1.5">
-            <span class="min-w-0 flex-1 truncate text-lead font-semibold">{name(recording)}</span>
-            <span class="mono text-meta text-ink-3">{recording.copies.length} copies</span>
+            <span class="min-w-0 flex-1 truncate text-lead font-semibold text-ink">{name(recording)}</span>
+            <span class="numeric text-meta text-ink-3">
+              {recording.copies.length} copies
+            </span>
           </div>
 
           {#if recording.verdict}
@@ -465,8 +396,8 @@
               class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1 md:grid md:grid-cols-[16px_70px_minmax(0,1fr)_60px_84px_auto] md:items-center md:gap-y-0"
               class:opacity-55={copy.redundant}
             >
-              <!-- A filled square on the copy Schall can prove is the better one;
-                   an empty one everywhere else, including a group nothing
+              <!-- A filled dot on the copy Schall can prove is the better one;
+                   an empty ring everywhere else, including a group nothing
                    separates. -->
               <span class="hidden size-4 shrink-0 place-items-center md:grid" aria-hidden="true">
                 <span
@@ -475,11 +406,13 @@
                     : 'border-rule-strong bg-transparent'}"
                 ></span>
               </span>
-              <span class="mono shrink-0 border border-rule-strong px-1.5 py-[2px] text-center text-micro font-medium text-ink-2">
+              <span
+                class="numeric shrink-0 bg-panel px-1.5 py-[3px] text-center text-micro font-medium text-ink-2"
+              >
                 {copy.format || 'file'}
               </span>
               <span class="min-w-0 flex-1">
-                <span class="mono block truncate text-meta text-ink-2" title={copy.path}>
+                <span class="numeric block truncate text-meta text-ink-2" title={copy.path}>
                   {copy.path}
                 </span>
                 <span class="mt-0.5 block truncate text-meta text-ink-3">
@@ -488,18 +421,19 @@
                 <!-- A copy whose sound stops where a lossy encoder would have
                      stopped it. It is quality and not identity: both copies are
                      the same recording, and this one was squeezed before it was
-                     put in the container it is in. Nothing above reads it, so it
-                     is here for the person deciding. -->
+                     put in the container it is in. Nothing above reads it —
+                     which copy Schall says to keep is decided on the stored
+                     numbers alone — so it is here for the person deciding. -->
                 {#if copy.transcodeSuspected}
                   <span class="mt-1 block">
                     <TranscodeChip cutoffHz={copy.spectralCutoffHz} />
                   </span>
                 {/if}
               </span>
-              <span class="mono text-right text-meta text-ink-2">
+              <span class="numeric text-right text-meta text-ink-2">
                 {formatDuration(copy.durationMs)}
               </span>
-              <span class="mono text-right text-meta text-ink-2">
+              <span class="numeric text-right text-meta text-ink-2">
                 {formatBytes(copy.sizeBytes)}
               </span>
               <span class="flex shrink-0 items-center justify-end gap-1">
@@ -524,9 +458,9 @@
             </div>
           {/each}
 
-          <!-- The recording's own decision, under its copies rather than beside
-               its title: keeping one deletes the rest, and the note and the
-               button that does it stand together. -->
+          <!-- The recording's own decision, under its copies rather than
+               beside its title: keeping one deletes the rest, and the note
+               and the button that does it stand together. -->
           <div class="flex flex-wrap items-center gap-2.5 pt-1.5">
             {#if view === 'kept'}
               <Button variant="ghost" size="sm" disabled={busy} onclick={() => $answer.mutate({ recordingId: recording.recordingId, keep: false })}>
@@ -554,10 +488,11 @@
           </div>
         </div>
       {:else}
-        <!-- An empty list and a failed request are different claims. The ErrorNote
-             above reports the failure; this renders nothing so "No recording is
-             on disc twice" does not also appear. Nothing held twice is nothing
-             left to do; nothing kept on purpose is nothing yet. -->
+        <!-- An empty list and a failed request are different claims. The
+             ErrorNote above reports the failure; this renders nothing so
+             "No recording is on disc twice" does not also appear. -->
+        <!-- Nothing held twice is nothing left to do; nothing kept on purpose
+             is nothing yet. -->
         {#if !shown.isError}
           <EmptyPanel
             role={view === 'kept' ? 'idle' : 'ok'}
@@ -566,10 +501,11 @@
         {/if}
       {/each}
     </div>
-  </div>
+    </Settle>
 
-  <Pager total={shown.data?.total ?? 0} {offset} {pageSize} keys={active} onchange={changePage} />
-</Settle>
+    <Pager total={shown.data?.total ?? 0} {offset} {pageSize} onchange={changePage} />
+  </section>
+</div>
 
 {#if chosen}
   <KeepOneCopyDialog
